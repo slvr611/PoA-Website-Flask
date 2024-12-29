@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Flask App{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+	<header>
+		<nav class="navbar">
+			<div class="nav-left">
+				<a href="{{ url_for('home') }}" class="{% if request.path == '/' %}active{% endif %}">Home</a>
+				
+				{% for route in navbarPages.keys() %}
+					<a href="/{{ route }}" {% if request.path == route %}class="active"{% endif %}>{{ navbarPages[route]["pluralName"] }}</a>
+				{% endfor %}
+				
+			</div>
+			<div class="nav-right">
+				{% if g.user %}
+					<a href="{{ url_for('logout') }}">Logout</a>
+					<a href="{{ url_for('profile') }}">
+						<img src="{{ g.user.avatar_url }}" alt="User Avatar">
+					</a>
+				{% else %}
+					<a href="{{ url_for('login') }}">Login</a>
+				{% endif %}
+			</div>
+		</nav>
+	</header>
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+</body>
+</html>

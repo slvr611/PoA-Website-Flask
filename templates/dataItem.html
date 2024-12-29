@@ -1,0 +1,12 @@
+{% extends "layout.html" %}
+
+{% block title %}Home{% endblock %}
+
+{% block content %}
+<div class="container">
+	{% if g.user.isAdmin %}
+		<a href="{{ request.path }}/edit">Edit</a>
+	{% endif %}
+	<h1>{{ item.name }}:</h1>
+</div>
+{% endblock %}

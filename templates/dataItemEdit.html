@@ -1,0 +1,10 @@
+{% extends "layout.html" %}
+
+{% block title %}Home{% endblock %}
+
+{% block content %}
+<div class="container">
+	<a href="{{ request.path.replace('/edit', '') }}">Back to View</a></br>
+	<h1>{{ item.name }}:</h1>
+</div>
+{% endblock %}

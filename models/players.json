@@ -1,0 +1,24 @@
+{
+  "$jsonSchema": {
+    "bsonType": "object",
+    "required": ["id", "name", "avatar_url", "isAdmin"],
+    "properties": {
+      "id": {
+        "bsonType": "string",
+        "description": "Unique identifier for the user"
+      },
+      "name": {
+        "bsonType": "string",
+        "description": "The user's display name"
+      },
+      "avatar_url": {
+        "bsonType": "string",
+        "description": "URL to the user's avatar image"
+      },
+      "isAdmin": {
+        "bsonType": "boolean",
+        "description": "Indicates if the user is an administrator"
+      }
+    }
+  }
+}

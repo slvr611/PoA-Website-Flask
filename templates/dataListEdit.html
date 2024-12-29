@@ -1,0 +1,17 @@
+{% extends "layout.html" %}
+
+{% block title %}Home{% endblock %}
+
+{% block content %}
+<div class="container">
+	<a href="{{ request.path.replace('/edit', '') }}">Back to View</a></br>
+	<a href="{{ request.path.replace('/edit', '/new') }}">New</a>
+	<h1>{{ title }}:</h1>
+	<ul>
+		{% for item in items %}
+			<li><a href="{{ request.path.replace('/edit', '') }}/{{item.name }}">{{ item.name }}</a> 
+			<a href="{{ request.path.replace('/edit', '') }}/{{ item.name }}/delete">delete</a></li>
+		{% endfor %}
+	</ul>
+</div>
+{% endblock %}
