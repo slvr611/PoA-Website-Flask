@@ -12,8 +12,8 @@
 			<div class="nav-left">
 				<a href="{{ url_for('home') }}" class="{% if request.path == '/' %}active{% endif %}">Home</a>
 				
-				{% for route in navbarPages.keys() %}
-					<a href="/{{ route }}" {% if request.path == route %}class="active"{% endif %}>{{ navbarPages[route]["pluralName"] }}</a>
+				{% for category in navbarPages %}
+					<a href="/{{ category }}" {% if request.path == category %}class="active"{% endif %}>{{ category_data[category]["pluralName"] }}</a>
 				{% endfor %}
 				
 			</div>
@@ -30,6 +30,15 @@
 		</nav>
 	</header>
     <main>
+		{% with messages = get_flashed_messages() %}
+		  {% if messages %}
+			<ul class=flashes>
+			{% for message in messages %}
+			  <li>{{ message }}</li>
+			{% endfor %}
+			</ul>
+		  {% endif %}
+		{% endwith %}
         {% block content %}{% endblock %}
     </main>
 </body>

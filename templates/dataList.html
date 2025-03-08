@@ -10,7 +10,13 @@
 	<h1>{{ title }}:</h1>
 	<ul>
 		{% for item in items %}
-			<li><a href="{{ request.path }}/{{ item.name }}">{{ item.name }}</a></li>
+			{% if item.name %}
+                {# If there's a name, use it in the URL #}
+                <li><a href="{{ request.path }}/{{ item.name }}">{{ item.name }}</a></li>
+            {% else %}
+                {# Otherwise, use the _id #}
+                <li><a href="{{ request.path }}/{{ item._id|string }}">{{ item._id }}</a></li>
+            {% endif %}
 		{% endfor %}
 	</ul>
 </div>

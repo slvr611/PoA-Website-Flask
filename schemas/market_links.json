@@ -1,0 +1,18 @@
+{
+  "$jsonSchema": {
+    "bsonType": "object",
+    "required": ["member", "market"],
+    "properties": {
+      "member": {
+        "bsonType": "object",
+        "label": "Member",
+        "description": "The member of the market"
+      },
+	  "market": {
+        "bsonType": "object",
+        "label": "Market",
+        "description": "The market"
+      }
+    }
+  }
+}

@@ -1,0 +1,49 @@
+{% extends "layout.html" %}
+
+{% block title %}Home{% endblock %}
+
+{% block content %}
+<div class="container">
+	<a href="{{ request.path.replace('/new', '') }}">Back to View</a></br>
+	<h1>{{ title }}:</h1>
+	<form method="POST" action="{{ request.path }}/save">
+        {% for field, attributes in schema.properties.items() %}
+			{% if not attributes.calculated %}
+				<div>
+					<label for="{{ field }}">{{ attributes.label }}</label>
+					{% if attributes.bsonType == "string" %}
+						<input type="text" id="{{ field }}" name="{{ field }}"
+						   {% if field in schema.required %} required {% endif %}>
+					{% elif attributes.bsonType == "number" %}
+						<input type="number" id="{{ field }}" name="{{ field }}"
+						   {% if field in schema.required %} required {% endif %}>
+					{% elif attributes.bsonType == "boolean" %}
+						<input type="checkbox" id="{{ field }}" name="{{ field }}"
+						   {% if field in schema.required %} required {% endif %}>
+					{% elif attributes.bsonType == "object" %}
+						<select id="{{ field }}" name="{{ field }}">
+							<option value="" selected>
+								{{ attributes.get("noneResult", "None") }}
+							</option>
+							{% for option in dropdown_options[field] %}
+								<option value="{{ option['_id'] }}">
+									{{ option['name'] }}
+								</option>
+							{% endfor %}
+						</select>
+					{% elif attributes.bsonType == "enum" %}
+							<select id="{{ field }}" name="{{ field }}">
+								{% for option in attributes.enum %}
+									<option value="{{ option }}">
+										{{ option }}
+									</option>
+								{% endfor %}
+							</select>
+					{% endif %}
+				</div>
+			{% endif %}
+        {% endfor %}
+        <button type="submit">Create</button>
+    </form>
+</div>
+{% endblock %}

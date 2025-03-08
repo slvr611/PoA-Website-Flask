@@ -1,0 +1,25 @@
+{
+  "$jsonSchema": {
+    "bsonType": "object",
+    "required": ["name", "effect"],
+    "properties": {
+      "name": {
+        "bsonType": "string",
+        "label": "Name",
+        "description": "The name of the spell"
+      },
+      "effect": {
+        "bsonType": "string",
+        "label": "Effect",
+        "description": "The spell's effects"
+      },
+      "creator": {
+        "bsonType": "object",
+        "label": "Creator",
+        "description": "The spell's creator",
+        "noneResult": "Unknown",
+		"collection": "characters"
+      }
+    }
+  }
+}

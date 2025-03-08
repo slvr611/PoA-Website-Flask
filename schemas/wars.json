@@ -1,0 +1,22 @@
+{
+  "$jsonSchema": {
+    "bsonType": "object",
+    "required": ["name"],
+    "properties": {
+      "name": {
+        "bsonType": "string",
+        "label": "Name",
+        "description": "The name of the war"
+      },
+      "participants": {
+        "bsonType": "array",
+		"label": "Participants",
+        "description": "The Nations and Mercenary companies involved in the war",
+		"linkCollection": "war_links",
+		"linkQueryTarget": "war",
+		"collection": "nations",
+		"queryTarget": "participant"
+      }
+    }
+  }
+}

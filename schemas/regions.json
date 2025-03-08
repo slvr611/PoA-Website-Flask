@@ -1,0 +1,57 @@
+{
+  "$jsonSchema": {
+    "bsonType": "object",
+    "required": ["name"],
+    "properties": {
+      "name": {
+        "bsonType": "string",
+		"label": "Name",
+        "description": "The name of the region"
+      },
+      "current_event": {
+        "bsonType": "object",
+		"label": "Current Event",
+        "description": "The current event of the region",
+		"collection": "events"
+      },
+      "events": {
+        "bsonType": "array",
+		"label": "Events",
+        "description": "All events that have ocurred in the region",
+		"collection": "events",
+		"queryTargetAttribute": "target"
+      },
+	  "nations": {
+        "bsonType": "array",
+		"label": "Nations",
+        "description": "Nations currently located in this region",
+		"collection": "nations",
+		"queryTargetAttribute": "region"
+      },
+	  "merchants": {
+        "bsonType": "array",
+		"label": "Merchants",
+        "description": "Merchants currently located in this region"
+      },
+	  "mercenaries": {
+        "bsonType": "array",
+		"label": "Mercenaries",
+        "description": "Mercenaries currently located in this region",
+		"collection": "mercenaries",
+		"queryTargetAttribute": "region"
+      },
+	  "characters": {
+        "bsonType": "array",
+		"label": "Characters",
+        "description": "Characters currently located in this region",
+		"collection": "characters",
+		"queryTargetAttribute": "region"
+      },
+	  "wars": {
+        "bsonType": "array",
+		"label": "Wars",
+        "description": "Wars currently being fought in this region"
+      }
+    }
+  }
+}

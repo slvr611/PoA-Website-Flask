@@ -1,0 +1,28 @@
+{
+  "$jsonSchema": {
+    "bsonType": "object",
+    "required": ["name", "market_head"],
+    "properties": {
+      "name": {
+        "bsonType": "string",
+        "label": "Name",
+        "description": "The name of the market"
+      },
+      "market_head": {
+        "bsonType": "object",
+        "label": "Market Head",
+        "description": "The nation that currently heads up the market",
+		"collection": "nations"
+      },
+      "members": {
+        "bsonType": "array",
+		"label": "Members",
+        "description": "Nations currently members of this market",
+		"linkCollection": "market_links",
+		"linkQueryTarget": "market",
+		"collection": "nations",
+		"queryTarget": "member"
+      }
+    }
+  }
+}

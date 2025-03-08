@@ -5,6 +5,68 @@
 {% block content %}
 <div class="container">
 	<a href="{{ request.path.replace('/edit', '') }}">Back to View</a></br>
-	<h1>{{ item.name }}:</h1>
+	<h1>{{ title }}:</h1>
+	<form method="POST" action="{{ request.path }}/save">
+        {% for field, attributes in schema.properties.items() %}
+            <div>
+                <label for="{{ field }}">{{ attributes.label }}</label>
+				{% if attributes.static or attributes.calculated %}
+					{% if attributes.type == "string" or attributes.bsonType == "string" %}
+						{% if attributes.image %}
+							<img src="{{ item[field] }}" alt="{{ attributes.label }}" style="border-radius: 50%; width: 100px; height: 100px;">
+						{% else %}
+							{{ item[field] }}
+						{% endif %}
+				    {% elif attributes.type == "number" or attributes.bsonType == "number" %}
+						{{ item[field] }}
+					{% elif attributes.type == "boolean" or attributes.bsonType == "boolean" %}
+						{{ item[field] }}
+					{% endif %}
+				{% else %}
+					{% if attributes.bsonType == "string" %}
+						<input type="text" id="{{ field }}" name="{{ field }}" value="{{ item[field] }}"
+						   {% if field in schema.required %} required {% endif %}>
+					{% elif attributes.bsonType == "number" %}
+						<input type="number" id="{{ field }}" name="{{ field }}" value="{{ item[field] }}"
+						   {% if field in schema.required %} required {% endif %}>
+					{% elif attributes.bsonType == "boolean" %}
+						<input type="checkbox" id="{{ field }}" name="{{ field }}" value="{{ item[field] }}"
+						   {% if field in schema.required %} required {% endif %}>
+				    {% elif attributes.bsonType == "object" %}
+						<select id="{{ field }}" name="{{ field }}">
+							<option value="" {% if not item.get(field) %}selected{% endif %}>
+								{{ attributes.get("noneResult", "None") }}
+							</option>
+							{% for option in dropdown_options[field] %}
+								<option value="{{ option['_id'] }}" {% if item.get(field)|string == option['_id']|string %}selected{% endif %}>
+									{{ option['name'] }}
+								</option>
+							{% endfor %}
+						</select>
+					{% elif attributes.bsonType == "enum" %}
+						<select id="{{ field }}" name="{{ field }}">
+							{% for option in attributes.enum %}
+								<option value="{{ option }}" {% if item.get(field) == option %}selected{% endif %}>
+									{{ option }}
+								</option>
+							{% endfor %}
+						</select>
+					{% elif attributes.bsonType == "array" %}
+						<div>
+                            {% for option in dropdown_options[field] %}
+                                <input type="checkbox"
+                                       id="{{ field }}_{{ option['_id'] }}"
+                                       name="{{ field }}"
+                                       value="{{ option['_id'] }}"
+                                       {% if option['_id']|string in linked_objects[field]|string %}checked{% endif %}>
+                                <label for="{{ field }}_{{ option['_id'] }}">{{ option['name'] }}</label>
+                            {% endfor %}
+                        </div>
+					{% endif %}
+				{% endif %}
+            </div>
+        {% endfor %}
+        <button type="submit">Save</button>
+    </form>
 </div>
 {% endblock %}

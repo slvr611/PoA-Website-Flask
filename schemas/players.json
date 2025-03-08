@@ -1,0 +1,42 @@
+{
+  "$jsonSchema": {
+    "bsonType": "object",
+    "required": ["id", "name", "avatar_url", "isAdmin"],
+    "properties": {
+      "id": {
+        "bsonType": "string",
+		"label": "ID",
+        "description": "Unique identifier for the user",
+		"hidden": true,
+		"static": true
+      },
+      "name": {
+        "bsonType": "string",
+		"label": "Username",
+        "description": "The user's display name",
+		"static": true
+      },
+      "avatar_url": {
+        "bsonType": "string",
+		"label": "Avatar",
+        "description": "URL to the user's avatar image",
+		"static": true,
+		"image": true
+      },
+      "isAdmin": {
+        "bsonType": "boolean",
+		"label": "Is Admin?",
+        "description": "Indicates if the user is an administrator",
+		"hidden": true,
+		"static": true
+      },
+	  "characters": {
+        "bsonType": "array",
+		"label": "Characters",
+        "description": "The list of characters this player is currently playing",
+		"collection": "characters",
+		"queryTargetAttribute": "player"
+      }
+    }
+  }
+}

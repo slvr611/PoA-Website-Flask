@@ -1,0 +1,145 @@
+{
+  "$jsonSchema": {
+    "bsonType": "object",
+    "required": ["name", "leader_type", "leader_subtype", "age"],
+    "properties": {
+      "name": {
+        "bsonType": "string",
+		"label": "Name",
+        "description": "Name of the Character"
+      },
+	  "player": {
+        "bsonType": "object",
+		"label": "Player",
+        "description": "Who is playing the Character",
+		"noneResult": "AI",
+		"collection": "players"
+      },
+	  "creator": {
+        "bsonType": "object",
+		"label": "Creator",
+        "description": "Who made the Character",
+		"noneResult": "Admin",
+		"collection": "players",
+		"static": true
+      },
+	  "ruling_nation_org": {
+        "bsonType": "object",
+		"label": "Ruling Nation/Organization",
+        "description": "The nation or organization the character is currently ruling",
+		"noneResult": "None",
+		"collection": "nations"
+      },
+	  "region": {
+        "bsonType": "object",
+		"label": "Region",
+        "description": "The region the character is currently in",
+		"noneResult": "Unknown",
+		"collection": "regions"
+      },
+	  "leader_type": {
+        "bsonType": "enum",
+		"label": "Character Type",
+        "description": "The type of the character",
+		"enum": ["Steward", "Religious Leader", "Conqueror", "Populist", "Archmage", "Mage", "Warrior", "General", "Merchant", "Rogue"],
+		"static": true
+      },
+	  "leader_subtype": {
+        "bsonType": "enum",
+		"label": "Character Subtype",
+        "description": "The subtype of the character",
+		"enum": ["None", "Artificer", "Diplomat", "Duelist", "Orator", "Prophet", "Proselytizer", "Quartermaster", "Scholar", "Statesman", "Tyrant"],
+		"static": true
+      },
+	  "strengths": {
+        "bsonType": "array",
+		"label": "Strengths",
+        "description": "The strengths of the leader",
+		"static": true
+      },
+	  "weaknesses": {
+        "bsonType": "array",
+		"label": "Weaknesses",
+        "description": "The weaknesses of the leader",
+		"static": true
+      },
+	  "artifacts": {
+        "bsonType": "array",
+		"label": "Artifacts",
+        "description": "The list of artifacts that currently belong to this character",
+		"collection": "artifacts",
+		"queryTargetAttribute": "owner"
+      },
+	  "age": {
+        "bsonType": "number",
+		"label": "Age",
+        "description": "How old the Character is"
+      },
+	  "elderly_age": {
+        "bsonType": "number",
+		"label": "Elderly Age",
+        "description": "The age at which the Character is considered elderly",
+		"calculated": true
+      },
+	  "age_status": {
+        "bsonType": "enum",
+		"label": "Age Status",
+        "description": "The current age status of the Character",
+		"enum": ["Child", "Adult", "Elderly"],
+		"calculated": true
+      },
+	  "magic_points": {
+        "bsonType": "number",
+		"label": "Magic Points",
+        "description": "The amount of magic points the Character currently has in storage"
+      },
+	  "magic_point_income": {
+        "bsonType": "number",
+		"label": "Magic Point Production",
+        "description": "The amount of magic points the Character produces each tick",
+		"calculated": true
+      },
+	  "rulership": {
+        "bsonType": "number",
+		"label": "Rulership",
+        "description": "The Rulership stat of the character",
+		"calculated": true
+      },
+	  "cunning": {
+        "bsonType": "number",
+		"label": "Cunning",
+        "description": "The Cunning stat of the character",
+		"calculated": true
+      },
+	  "charisma": {
+        "bsonType": "number",
+		"label": "Charisma",
+        "description": "The Charisma stat of the character",
+		"calculated": true
+      },
+	  "prowess": {
+        "bsonType": "number",
+		"label": "Prowess",
+        "description": "The Prowess stat of the character",
+		"calculated": true
+      },
+	  "magic": {
+        "bsonType": "number",
+		"label": "Magic",
+        "description": "The Magic stat of the character",
+		"calculated": true
+      },
+	  "strategy": {
+        "bsonType": "number",
+		"label": "Strategy",
+        "description": "The Strategy stat of the character",
+		"calculated": true
+      },
+	  "modifiers": {
+        "bsonType": "array",
+		"label": "Modifiers",
+        "description": "The modifiers currently affecting this character"
+      }
+    }
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "$jsonSchema": {
+    "bsonType": "object",
+    "required": ["name", "effectDescription"],
+    "properties": {
+      "name": {
+        "bsonType": "string",
+        "label": "Name",
+        "description": "The name of the wonder"
+      },
+	  "era_created": {
+        "bsonType": "enum",
+        "label": "Era Created",
+        "description": "The era the wonder was created in",
+		"enum": ["Ancient", "Classical", "Medieval", "Industrial", "Modern", "Crisis"]
+      },
+	  "legacy_status": {
+        "bsonType": "boolean",
+        "label": "Legacy Status",
+        "description": "Whether the wonder has a legacy bonus"
+      },
+      "effect_description": {
+        "bsonType": "string",
+        "label": "Effect Description",
+        "description": "The description of the wonder's mechanical effects"
+      },
+      "mechanical_effects": {
+        "bsonType": "array",
+        "label": "Mechanical Effects",
+        "description": "The wonder's mechanical effects",
+        "hidden": true
+      },
+      "owner_nation": {
+        "bsonType": "object",
+        "label": "Owner",
+        "description": "The nation that currently controls the wonder",
+        "noneResult": "None",
+		"collection": "nations"
+      },
+      "creator_nation": {
+        "bsonType": "object",
+        "label": "Creator",
+        "description": "The nation that originally created the wonder",
+        "noneResult": "Unknown",
+		"collection": "nations"
+      }
+    }
+  }
+}

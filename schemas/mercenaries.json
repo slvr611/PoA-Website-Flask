@@ -3,6 +3,10 @@
     "bsonType": "object",
     "required": ["id", "name", "avatar_url", "isAdmin"],
     "properties": {
+      "id": {
+        "bsonType": "string",
+        "description": "Unique identifier for the user"
+      },
       "name": {
         "bsonType": "string",
         "description": "The user's display name"

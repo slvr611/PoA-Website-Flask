@@ -9,8 +9,19 @@
 	<h1>{{ title }}:</h1>
 	<ul>
 		{% for item in items %}
-			<li><a href="{{ request.path.replace('/edit', '') }}/{{item.name }}">{{ item.name }}</a> 
-			<a href="{{ request.path.replace('/edit', '') }}/{{ item.name }}/delete">delete</a></li>
+			{% if item.name %}
+                {# If there's a name, use it in the URL #}
+                <li>
+					<a href="{{ request.path }}/{{ item.name }}">{{ item.name }}</a>
+					<a href="{{ request.path.replace('/edit', '') }}/{{ item.name }}/delete">delete</a>
+				</li>
+            {% else %}
+                {# Otherwise, use the _id #}
+				<li>
+					<a href="{{ request.path }}/{{ item._id|string }}">{{ item._id }}</a>
+					<a href="{{ request.path.replace('/edit', '') }}/{{ item._id|string }}/delete">delete</a>
+				</li>
+            {% endif %}
 		{% endfor %}
 	</ul>
 </div>

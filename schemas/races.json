@@ -1,0 +1,44 @@
+{
+  "$jsonSchema": {
+    "bsonType": "object",
+    "required": ["name", "positive_trait", "negative_trait", "preferred_terrain"],
+    "properties": {
+      "name": {
+        "bsonType": "string",
+		"label": "Name",
+        "description": "The race's name"
+      },
+      "founding_nation": {
+        "bsonType": "object",
+		"label": "Founding Nation",
+        "description": "The first nation of this race",
+		"collection": "nations"
+      },
+      "positive_trait": {
+        "bsonType": "enum",
+		"label": "Positive Trait",
+        "description": "The positive trait associated with this race",
+		"enum": ["Airborne", "Abstemious", "Aggressive", "Charismatic", "Courageous", "Curious", "Docile", "Fecund", "Industrious", "Lucky", "Magical", "Semi-Aquatic", "Sturdy", "Swift", "Venerable"]
+      },
+	  "negative_trait": {
+        "bsonType": "enum",
+		"label": "Negative Trait",
+        "description": "The negative trait associated with this race",
+		"enum": ["Acrophobia", "Clumsy", "Craven", "Dim", "Fleeting", "Frail", "Hydrophobic", "Infertile", "Insatiable", "Irksome", "Meek", "Mundane", "Rowdy", "Slow", "Unlucky"]
+      },
+	  "preferred_terrain": {
+        "bsonType": "enum",
+		"label": "Preferred Terrain",
+        "description": "The preferred terrain of this race",
+		"enum": ["Plains", "Tundra", "Desert", "Forest", "River", "Dense Forest", "Marsh", "Hill", "Mountain", "Hazardous"]
+      },
+	  "pops": {
+        "bsonType": "array",
+		"label": "Pops",
+        "description": "Pops that have this race",
+		"collection": "pops",
+		"queryTargetAttribute": "race"
+      }
+    }
+  }
+}
