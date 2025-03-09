@@ -1,6 +1,7 @@
 from flask import Flask, redirect, url_for, session, request, render_template, g, flash, abort
 from flask_discord import DiscordOAuth2Session, requires_authorization, Unauthorized
 from flask_pymongo import PyMongo
+from pymongo import ASCENDING, DESCENDING
 from dotenv import load_dotenv
 from jsonschema import validate, ValidationError
 from bson import ObjectId
@@ -110,7 +111,7 @@ def get_data_on_item(data_type, item_ref):
 def data_list(data_type):
     schema, db = get_data_on_category(data_type)
     
-    items = list(db.find())
+    items = list(db.find().sort("name", ASCENDING))
 
     return render_template(
         "dataList.html",
@@ -124,7 +125,7 @@ def data_list(data_type):
 def data_list_edit(data_type):
     schema, db = get_data_on_category(data_type)
     
-    items = list(db.find())
+    items = list(db.find().sort("name", ASCENDING))
 
     return render_template(
         "dataListEdit.html",
