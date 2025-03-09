@@ -477,7 +477,7 @@ def logout():
 def profile():
     if(g.user is None):
         return redirect(url_for("home"))
-    return render_template("profile.html")
+    return redirect("/players/" + g.user["name"])
 
 # Helper function to save user to MongoDB
 def save_user_to_db(user):

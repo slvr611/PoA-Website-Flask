@@ -19,31 +19,22 @@
 		</h1>
 		<table class="info-table">
 			{% for field, properties in schema.properties.items() %}
-				{% if not properties.hidden and not (properties.hideIfNone is defined and (item.get(properties.hideIfNone) is none or item.get(properties.hideIfNone) == "" or not item.get(properties.hideIfNone))) %}
-					{% if properties.bsonType == "string" or properties.bsonType == "enum" or properties.bsonType == "date"%}
-						{% if properties.image %}
-							<tr>
+				{% if not properties.hidden
+				and not (properties.hideIfNone is defined and (item.get(properties.hideIfNone) is none or item.get(properties.hideIfNone) == "" or not item.get(properties.hideIfNone)))
+				and not (properties.bsonType == "array" and not (field in linked_objects and linked_objects[field] is not none)) %}
+					<tr>
+						<th><strong>{{ properties.label }}:</strong></th>
+						{% if properties.bsonType == "string" or properties.bsonType == "enum" or properties.bsonType == "date"%}
+							{% if properties.image %}
 								<td><img src="{{ item[field] }}" alt="{{ properties.label }}" style="border-radius: 50%; width: 100px; height: 100px;"></td>
-							</tr>
-						{% else %}
-							<tr>
-								<th><strong>{{ properties.label }}:</strong></th>
+							{% else %}
 								<td>{{ item[field] }}</td>
-							</tr>
-						{% endif %}
-					{% elif properties.bsonType == "number" %}
-						<tr>
-							<th><strong>{{ properties.label }}:</strong></th>
+							{% endif %}
+						{% elif properties.bsonType == "number" %}
 							<td>{{ item[field] }}</td>
-						</tr>
-					{% elif properties.bsonType == "boolean" %}
-						<tr>
-							<th><strong>{{ properties.label }}:</strong></th>
+						{% elif properties.bsonType == "boolean" %}
 							<td>{{ item[field] }}</td>
-						</tr>
-					{% elif properties.bsonType == "linked_object" %}
-						<tr>
-							<th><strong>{{ properties.label }}:</strong></th>
+						{% elif properties.bsonType == "linked_object" %}
 							<td>
 								{% if field in linked_objects and linked_objects[field] is not none %}
 									<a href="{{ linked_objects[field]["link"] }}">{{ linked_objects[field]["name"] }}</a>
@@ -51,15 +42,9 @@
 									{{ properties.get("noneResult", "None") }}
 								{% endif %}
 							</td>
-						</tr>
-					{% elif properties.bsonType == "object" %}
-						<tr>
-							<th><strong>{{ properties.label }}:</strong></th>
+						{% elif properties.bsonType == "object" %}
 							<td>{{ item[field] }}</td>
-						</tr>
-					{% elif properties.bsonType == "array" and field in linked_objects and linked_objects[field] is not none %}
-						<tr>
-							<th><strong>{{ properties.label }}:</strong></th>
+						{% elif properties.bsonType == "array" %}
 							<td>
 								<ul>
 									{% for item in linked_objects[field] %}
@@ -67,8 +52,8 @@
 									{% endfor %}
 								</ul>
 							</td>
-						</tr>
-					{% endif %}
+						{% endif %}
+					</tr>
 				{% endif %}
 			{% endfor %}
 		</table>
