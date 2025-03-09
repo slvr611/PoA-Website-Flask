@@ -198,12 +198,47 @@ def data_item_new_approve(data_type):
 
 #######################################################
 
+@app.route("/changes/<item_ref>")
+def change_item(item_ref):
+    schema, db, item = get_data_on_item("changes", item_ref)
+    
+    linked_objects = get_linked_objects(schema["properties"].items(), item)
+    
+    if item["target_collection"] != None and item["target"] != None:
+        obj = mongo.db[item["target_collection"]].find_one({"_id": item["target"]}, {"name": 1, "_id": 1})
+        if "name" in obj:
+            linked_objects["target"] = {"name": obj["name"], "link": f"/{item["target_collection"]}/{obj['name']}"}
+        else:
+            linked_objects["target"] = {"name": obj["_id"], "link": f"/{item["target_collection"]}/{obj['_id']}"}
+            
+    print(linked_objects)
+    
+    return render_template(
+        "dataItem.html",
+        title=item_ref,
+        schema=schema,
+        item=item,
+        linked_objects=linked_objects
+    )
+
 @app.route("/<data_type>/<item_ref>")
 def data_item(data_type, item_ref):
     schema, db, item = get_data_on_item(data_type, item_ref)
     
+    linked_objects = get_linked_objects(schema["properties"].items(), item)
+    
+    return render_template(
+        "dataItem.html",
+        title=item_ref,
+        schema=schema,
+        item=item,
+        linked_objects=linked_objects
+    )
+
+def get_linked_objects(properties, item):
     linked_objects = {}
-    for field, attributes in schema["properties"].items():
+    
+    for field, attributes in properties:
         if attributes.get("collection") != None:
             related_collection = attributes.get("collection")
             
@@ -236,17 +271,11 @@ def data_item(data_type, item_ref):
                     linked_object = mongo.db[related_collection].find_one({"_id": object_id_to_find})
                     
                     if linked_object is not None:
-                        linked_object["link"] = "/" + related_collection + "/" + linked_object["name"]
+                        linked_object["link"] = "/" + related_collection + "/" + linked_object["name"] #TODO:  Update this to support ids
                     
                     linked_objects[field] = linked_object
     
-    return render_template(
-        "dataItem.html",
-        title=item_ref,
-        schema=schema,
-        item=item,
-        linked_objects=linked_objects
-    )
+    return linked_objects
 
 #######################################################
 
@@ -361,11 +390,13 @@ def request_change(data_type, item_id, before_data, after_data, reason, requeste
     changes_coll = mongo.db.changes
     now = datetime.utcnow()
     
-    differential = compute_differential(before_data, after_data)
+    before_data, after_data = keep_only_differences(before_data, after_data)
+    
+    differential = calculate_int_changes(before_data, after_data)
     
     change_doc = {
         "target_collection": data_type,
-        "target_id": item_id,
+        "target": item_id,
         "time_requested": now,
         "requester": requester,
         "before_requested_data": before_data,
@@ -383,7 +414,17 @@ def request_change(data_type, item_id, before_data, after_data, reason, requeste
 def approve_change(data_type, item_name):
     return
 
-def compute_differential(before_data, after_data):
+def keep_only_differences(before_data, after_data):
+    new_before = {}
+    new_after = {}
+    
+    for key in set(before_data.keys()) & set(after_data.keys()):
+        if(before_data[key] != after_data[key]):
+            new_before[key] = before_data[key]
+            new_after[key] = after_data[key]
+    return new_before, new_after
+
+def calculate_int_changes(before_data, after_data):
     diff = {}
     for key in set(before_data.keys()) | set(after_data.keys()):
         before_val = before_data.get(key)
