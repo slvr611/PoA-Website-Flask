@@ -32,7 +32,7 @@
 					{% elif attributes.bsonType == "boolean" %}
 						<input type="checkbox" id="{{ field }}" name="{{ field }}" value="{{ item[field] }}"
 						   {% if field in schema.required %} required {% endif %}>
-				    {% elif attributes.bsonType == "object" %}
+				    {% elif attributes.bsonType == "linked_object" %}
 						<select id="{{ field }}" name="{{ field }}">
 							<option value="" {% if not item.get(field) %}selected{% endif %}>
 								{{ attributes.get("noneResult", "None") }}
@@ -66,6 +66,10 @@
 				{% endif %}
             </div>
         {% endfor %}
+		
+		<label for="reason">Reason</label>
+		<input type="text" id="reason" name="reason" value="" required >
+		
         <button type="submit">Save</button>
     </form>
 </div>

@@ -36,7 +36,7 @@
 		"mod_info": true
       },
       "region": {
-        "bsonType": "object",
+        "bsonType": "linked_object",
 		"label": "Region",
         "description": "The region the nation is in",
 		"collection": "regions"
@@ -159,25 +159,25 @@
 		"calculated": true
       },
 	  "primary_race": {
-        "bsonType": "object",
+        "bsonType": "linked_object",
 		"label": "Primary Race",
         "description": "The primary race of the nation",
 		"collection": "races"
       },
 	  "primary_culture": {
-        "bsonType": "object",
+        "bsonType": "linked_object",
 		"label": "Primary Culture",
         "description": "The primary culture of the nation",
 		"collection": "cultures"
       },
 	  "primary_religion": {
-        "bsonType": "object",
+        "bsonType": "linked_object",
 		"label": "Primary Religion",
         "description": "The primary religion of the nation",
 		"collection": "religions"
       },
 	  "overlord": {
-        "bsonType": "object",
+        "bsonType": "linked_object",
 		"label": "Overlord",
         "description": "The overlord of the nation",
 		"noneResult":"Independent",

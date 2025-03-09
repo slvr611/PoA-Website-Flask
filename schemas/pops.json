@@ -4,25 +4,25 @@
     "required": ["nation", "race", "culture", "religion"],
     "properties": {
       "nation": {
-        "bsonType": "object",
+        "bsonType": "linked_object",
 		"label": "Nation",
         "description": "The nation the pop is a part of",
 		"collection": "nations"
       },
 	  "race": {
-        "bsonType": "object",
+        "bsonType": "linked_object",
 		"label": "Race",
         "description": "The race of the pop",
 		"collection": "races"
       },
 	  "culture": {
-        "bsonType": "object",
+        "bsonType": "linked_object",
 		"label": "Culture",
         "description": "The culture of the pop",
 		"collection": "cultures"
       },
 	  "religion": {
-        "bsonType": "object",
+        "bsonType": "linked_object",
 		"label": "Religion",
         "description": "The religion of the pop",
 		"collection": "religions"

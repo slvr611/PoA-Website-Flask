@@ -9,7 +9,7 @@
         "description": "The name of the market"
       },
       "market_head": {
-        "bsonType": "object",
+        "bsonType": "linked_object",
         "label": "Market Head",
         "description": "The nation that currently heads up the market",
 		"collection": "nations"

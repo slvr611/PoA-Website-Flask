@@ -4,12 +4,12 @@
     "required": ["nation_1", "nation_2"],
     "properties": {
       "nation_1": {
-        "bsonType": "object",
+        "bsonType": "linked_object",
         "label": "Nation 1",
         "description": "The first nation of the relation"
       },
 	  "nation_2": {
-        "bsonType": "object",
+        "bsonType": "linked_object",
         "label": "Nation 2",
         "description": "The second nation of the relation"
       }

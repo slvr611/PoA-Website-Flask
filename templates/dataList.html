@@ -4,7 +4,7 @@
 
 {% block content %}
 <div class="container">
-	{% if g.user.isAdmin %}
+	{% if g.user.is_admin %}
 		<a href="{{ request.path }}/edit">Edit</a>
 	{% endif %}
 	<h1>{{ title }}:</h1>

@@ -14,7 +14,7 @@
         "description": "The naming scheme of this culture"
       },
       "founding_nation": {
-        "bsonType": "object",
+        "bsonType": "linked_object",
 		"label": "Founding Nation",
         "description": "The first nation of this culture",
 		"collection": "nations"

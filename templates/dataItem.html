@@ -4,7 +4,7 @@
 
 {% block content %}
 <div class="container">
-	{% if g.user.isAdmin %}
+	{% if g.user.is_admin %}
 		<a href="{{ request.path }}/edit">Edit</a>
 	{% endif %}
 	<h1>
@@ -19,7 +19,7 @@
 	<ul>
         {% for field, properties in schema.properties.items() %}
 			{% if not properties.hidden and not (properties.hideIfNone is defined and (item.get(properties.hideIfNone) is none or item.get(properties.hideIfNone) == "" or not item.get(properties.hideIfNone))) %}
-				{% if properties.bsonType == "string" or properties.bsonType == "enum" %}
+				{% if properties.bsonType == "string" or properties.bsonType == "enum" or properties.bsonType == "date"%}
                     {% if properties.image %}
 						<li>
 							<img src="{{ item[field] }}" alt="{{ properties.label }}" style="border-radius: 50%; width: 100px; height: 100px;">
@@ -40,7 +40,7 @@
 						<strong>{{ properties.label }}:</strong>
 						{{ item[field] }}
 					</li>
-				{% elif properties.bsonType == "object" %}
+				{% elif properties.bsonType == "linked_object" %}
                     <li>
 						<strong>{{ properties.label }}:</strong>
 						{% if field in linked_objects and linked_objects[field] is not none %}
@@ -48,6 +48,11 @@
 						{% else %}
 							{{ properties.get("noneResult", "None") }}
 						{% endif %}
+					</li>
+				{% elif properties.bsonType == "object" %}
+                    <li>
+						<strong>{{ properties.label }}:</strong>
+						{{ item[field] }}
 					</li>
 				{% elif properties.bsonType == "array" and field in linked_objects and linked_objects[field] is not none %}
                     <li>

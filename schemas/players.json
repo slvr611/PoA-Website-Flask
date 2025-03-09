@@ -1,7 +1,6 @@
 {
   "$jsonSchema": {
     "bsonType": "object",
-    "required": ["id", "name", "avatar_url", "isAdmin"],
     "properties": {
       "id": {
         "bsonType": "string",
@@ -23,12 +22,21 @@
 		"static": true,
 		"image": true
       },
-      "isAdmin": {
+      "is_admin": {
         "bsonType": "boolean",
 		"label": "Is Admin?",
         "description": "Indicates if the user is an administrator",
-		"hidden": true,
 		"static": true
+      },
+	  "is_rp_mod": {
+        "bsonType": "boolean",
+		"label": "Is RP Mod?",
+        "description": "Indicates if the user is an RP Mod"
+      },
+	  "is_website_helper": {
+        "bsonType": "boolean",
+		"label": "Is Website Helper?",
+        "description": "Indicates if the user is a website helper"
       },
 	  "characters": {
         "bsonType": "array",

@@ -31,14 +31,14 @@
         "hidden": true
       },
       "owner_nation": {
-        "bsonType": "object",
+        "bsonType": "linked_object",
         "label": "Owner",
         "description": "The nation that currently controls the wonder",
         "noneResult": "None",
 		"collection": "nations"
       },
       "creator_nation": {
-        "bsonType": "object",
+        "bsonType": "linked_object",
         "label": "Creator",
         "description": "The nation that originally created the wonder",
         "noneResult": "Unknown",

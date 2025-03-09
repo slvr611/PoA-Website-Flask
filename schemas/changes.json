@@ -10,7 +10,7 @@
 		"static": true
       },
 	  "target": {
-        "bsonType": "object",
+        "bsonType": "linked_object",
         "label": "Target",
         "description": "The object on which the changes are happening",
 		"static": true
@@ -32,18 +32,20 @@
         "description": "The time the change was reverted"
       },
 	  "requester": {
-        "bsonType": "object",
+        "bsonType": "linked_object",
         "label": "Requester",
         "description": "The user that requested the change",
+		"noneResult": "None",
+		"collection": "players",
 		"static": true
       },
 	  "approver": {
-        "bsonType": "object",
+        "bsonType": "linked_object",
         "label": "Approver",
         "description": "The user that approved the change"
       },
 	  "reverter": {
-        "bsonType": "object",
+        "bsonType": "linked_object",
         "label": "Reverter",
         "description": "The user that reverted the change"
       },

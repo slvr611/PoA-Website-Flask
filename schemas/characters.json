@@ -1,7 +1,7 @@
 {
   "$jsonSchema": {
     "bsonType": "object",
-    "required": ["name", "leader_type", "leader_subtype", "age"],
+    "required": ["name", "age"],
     "properties": {
       "name": {
         "bsonType": "string",
@@ -9,14 +9,14 @@
         "description": "Name of the Character"
       },
 	  "player": {
-        "bsonType": "object",
+        "bsonType": "linked_object",
 		"label": "Player",
         "description": "Who is playing the Character",
 		"noneResult": "AI",
 		"collection": "players"
       },
 	  "creator": {
-        "bsonType": "object",
+        "bsonType": "linked_object",
 		"label": "Creator",
         "description": "Who made the Character",
 		"noneResult": "Admin",
@@ -24,18 +24,39 @@
 		"static": true
       },
 	  "ruling_nation_org": {
-        "bsonType": "object",
+        "bsonType": "linked_object",
 		"label": "Ruling Nation/Organization",
         "description": "The nation or organization the character is currently ruling",
 		"noneResult": "None",
 		"collection": "nations"
       },
 	  "region": {
-        "bsonType": "object",
+        "bsonType": "linked_object",
 		"label": "Region",
         "description": "The region the character is currently in",
 		"noneResult": "Unknown",
 		"collection": "regions"
+      },
+	  "race": {
+        "bsonType": "linked_object",
+		"label": "Race",
+        "description": "The race of the character",
+		"noneResult": "Unknown",
+		"collection": "races"
+      },
+	  "culture": {
+        "bsonType": "linked_object",
+		"label": "Culture",
+        "description": "The culture of the character",
+		"noneResult": "Unknown",
+		"collection": "cultures"
+      },
+	  "religion": {
+        "bsonType": "linked_object",
+		"label": "Religion",
+        "description": "The religion of the character",
+		"noneResult": "Unknown",
+		"collection": "religions"
       },
 	  "leader_type": {
         "bsonType": "enum",

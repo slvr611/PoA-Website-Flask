@@ -9,7 +9,7 @@
         "description": "The name of the region"
       },
       "current_event": {
-        "bsonType": "object",
+        "bsonType": "linked_object",
 		"label": "Current Event",
         "description": "The current event of the region",
 		"collection": "events"

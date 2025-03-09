@@ -20,14 +20,14 @@
         "hidden": true
       },
       "owner": {
-        "bsonType": "object",
+        "bsonType": "linked_object",
         "label": "Owner",
         "description": "The artifact's owner",
         "noneResult": "Lost",
 		"collection": "characters"
       },
       "creator": {
-        "bsonType": "object",
+        "bsonType": "linked_object",
         "label": "Creator",
         "description": "The artifact's creator",
         "noneResult": "Unknown",

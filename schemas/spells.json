@@ -14,7 +14,7 @@
         "description": "The spell's effects"
       },
       "creator": {
-        "bsonType": "object",
+        "bsonType": "linked_object",
         "label": "Creator",
         "description": "The spell's creator",
         "noneResult": "Unknown",

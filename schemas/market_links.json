@@ -4,12 +4,12 @@
     "required": ["member", "market"],
     "properties": {
       "member": {
-        "bsonType": "object",
+        "bsonType": "linked_object",
         "label": "Member",
         "description": "The member of the market"
       },
 	  "market": {
-        "bsonType": "object",
+        "bsonType": "linked_object",
         "label": "Market",
         "description": "The market"
       }

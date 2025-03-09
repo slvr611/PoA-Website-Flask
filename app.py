@@ -300,7 +300,7 @@ def data_item_edit_request(data_type, item_ref):
     before_data = item
     after_data = form_data
     
-    requester = g.user["id"]
+    requester = mongo.db.players.find_one({"id": g.user["id"]})["_id"]
     
     change_id = request_change(
         data_type=data_type,
@@ -338,7 +338,7 @@ def data_item_edit_approve(data_type, item_ref):
     before_data = item
     after_data = form_data
     
-    requester = g.user["id"]
+    requester = mongo.db.players.find_one({"id": g.user["id"]})["_id"]
     
     change_id = request_change(
         data_type=data_type,
@@ -418,6 +418,10 @@ def login():
 
 @app.route("/auth/discord/callback")
 def callback():
+    
+    state = request.args.get("state")
+    print("Received state:", state)  # Debug: Check the JWT format
+    
     try:
         discord.callback()
     except Exception as e:
@@ -432,7 +436,7 @@ def callback():
             'id': user['id'],
             'name': user['name'],
             'avatar_url': user['avatar_url'],
-            'isAdmin': user['isAdmin']
+            'is_admin': user['is_admin']
         }
     except Exception as e:
         print(f"Error fetching user: {e}")
@@ -484,7 +488,9 @@ def save_user_to_db(user):
             "id": str(user.id),
             "name": user.name,
             "avatar_url": user.avatar_url,
-            "isAdmin": False
+            "is_admin": False,
+            "is_rp_mod": False,
+            "is_website_helper": False,
         })
         print(f"Player {user.name} added to database.")
     else:
