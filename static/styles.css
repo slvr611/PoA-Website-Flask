@@ -1,17 +1,32 @@
 /* styles.css */
 
+.nav-right {
+    display: flex;
+    align-items: center; /* Centers vertically */
+    justify-content: center;
+    position: relative;
+}
+
+.nav-right img {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 2px solid #e0e0e0; /* Proper outline */
+    box-shadow: 0px 0px 5px rgba(255, 255, 255, 0.2); /* Subtle glow effect */
+}
+
 body {
     font-family: Arial, sans-serif;
-    background-color: #f4f4f4;
-    color: #333;
+    background-color: #121212;
+    color: #e0e0e0;
     margin: 0;
     padding: 0;
 }
 
 header {
-    background-color: #7289da;
-    color: white;
-    padding: 1rem;
+    background: #222;
+    color: #fff;
+    padding: 20px;
     text-align: center;
 }
 
@@ -19,45 +34,76 @@ header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background-color: #7289da;
+    background-color: #333;
     padding: 0.5rem 1rem;
 }
 
 .navbar a {
-    color: white;
+    color: #e0e0e0;
     text-decoration: none;
     padding: 0.5rem 1rem;
     border-radius: 4px;
-    transition: background-color 0.3s;
+	transition: background-color 0.3s, transform 0.1s;
+    display: inline-block;
 }
 
-.navbar a.active {
-    background-color: #5b6db3;
-    font-weight: bold;
-}
-
+.navbar a.active,
 .navbar a:hover {
-    background-color: #5b6db3;
+    background-color: #444;
+    transform: scale(1.05);
 }
 
-.navbar .nav-left {
-    display: flex;
-    align-items: center;
+a {
+    color: #8ab4f8; /* Light blue for better contrast */
+    text-decoration: none;
 }
 
-.navbar .nav-right {
-    display: flex;
-    align-items: center;
+a:hover {
+    color: #c3dbff; /* Slightly lighter blue on hover */
+    text-decoration: underline;
 }
 
-.navbar .nav-right img {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    cursor: pointer;
+a:visited {
+    color: #8ab4f8; /* Keep it the same as normal links */
 }
 
 .container {
-    padding: 2rem;
-    text-align: center;
+    width: 80%;
+    margin: auto;
+    overflow: hidden;
+}
+
+.content {
+    background: #1e1e1e;
+    padding: 20px;
+    margin-top: 20px;
+    border-radius: 8px;
+    color: #e0e0e0;
+}
+
+h1, h2 {
+    color: #fff;
+}
+
+.info-table {
+    max-width: 100%;
+    border-collapse: collapse;
+}
+
+.info-table th, .info-table td {
+    border: 1px solid #444;
+    padding: 8px;
+}
+
+.info-table th {
+    background-color: #333;
+    color: white;
+    text-align: right;
+}
+
+.info-table td {
+    background-color: #222;
+    color: #e0e0e0;
+    text-align: left;
+    width: 70%;
 }

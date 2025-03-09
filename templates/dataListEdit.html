@@ -7,22 +7,22 @@
 	<a href="{{ request.path.replace('/edit', '') }}">Back to View</a></br>
 	<a href="{{ request.path.replace('/edit', '/new') }}">New</a>
 	<h1>{{ title }}:</h1>
-	<ul>
+	<table class="info-table">
 		{% for item in items %}
 			{% if item.name %}
                 {# If there's a name, use it in the URL #}
-                <li>
-					<a href="{{ request.path }}/{{ item.name }}">{{ item.name }}</a>
-					<a href="{{ request.path.replace('/edit', '') }}/{{ item.name }}/delete">delete</a>
-				</li>
+                <tr>
+					<th><a href="{{ request.path }}/{{ item.name }}">{{ item.name }}</a></th>
+					<td><a href="{{ request.path.replace('/edit', '') }}/{{ item.name }}/delete">delete</a></td>
+				</tr>
             {% else %}
                 {# Otherwise, use the _id #}
-				<li>
-					<a href="{{ request.path }}/{{ item._id|string }}">{{ item._id }}</a>
-					<a href="{{ request.path.replace('/edit', '') }}/{{ item._id|string }}/delete">delete</a>
-				</li>
+				<tr>
+					<th><a href="{{ request.path }}/{{ item._id|string }}">{{ item._id }}</a></th>
+					<td><a href="{{ request.path.replace('/edit', '') }}/{{ item._id|string }}/delete">delete</a></td>
+				</tr>
             {% endif %}
 		{% endfor %}
-	</ul>
+	</table>
 </div>
 {% endblock %}
