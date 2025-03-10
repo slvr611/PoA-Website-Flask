@@ -1,12 +1,12 @@
 {% extends "layout.html" %}
 
-{% block title %}Home{% endblock %}
+{% block title %}Edit {{ item["name"] }}{% endblock %}
 
 {% block content %}
 <div class="container">
 	<a href="{{ request.path.replace('/edit', '') }}">Back to View</a></br>
 	<h1>{{ title }}:</h1>
-	<form method="POST" action="{{ request.path }}/save">
+	<form method="POST" action="{{ request.path }}/request">
 		<table class="info-table">
 			{% for field, attributes in schema.properties.items() %}
 					<tr>
@@ -77,7 +77,10 @@
 		
 		</table>
 		
-        <button type="submit">Save</button>
+        <button type="submit" formaction="{{ request.path }}/request">Request</button>
+		{% if g.user.is_admin %}
+			<button type="submit" formaction="{{ request.path }}/save">Save</button>
+		{% endif %}
     </form>
 </div>
 {% endblock %}

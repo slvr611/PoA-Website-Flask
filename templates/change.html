@@ -1,6 +1,6 @@
 {% extends "layout.html" %}
 
-{% block title %}Home{% endblock %}
+{% block title %}Change {{ item["_id"] }}{% endblock %}
 
 {% block content %}
 <div class="container">
@@ -46,8 +46,8 @@
 			{% elif item["status"] == "Approved" %}
 				{% set player_label = schema.properties.approver.label %}
 				{% set player_object = linked_objects["approver"] %}
-				{% set time_label = schema.properties.time_approved.label %}
-				{% set time_data = item["time_approved"] %}
+				{% set time_label = schema.properties.time_implemented.label %}
+				{% set time_data = item["time_implemented"] %}
 				{% set changes_label = "Changes" %}
 				{% set before_data = item["before_implemented_data"] %}
 				{% set after_data = item["after_implemented_data"] %}
@@ -81,8 +81,11 @@
 				<th><strong>{{ schema.properties.request_reason.label }}:</strong></th>
 				<td>{{ item["request_reason"] }}</td>
 			</tr>
-			
 		</table>
+		
+		{% if item["status"] == "Pending" %}
+			<a href="{{ request.path }}/approve">Approve</a>
+		{% endif %}
 		
 		<details>
 			<summary>Show Detailed Changes</summary>

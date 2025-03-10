@@ -9,25 +9,25 @@ from datetime import datetime
 import os
 import json
 
-# Load environment variables from .env file
+#Load environment variables from .env file
 load_dotenv()
 
-# Initialize the Flask app
+#Initialize the Flask app
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "supersecretkey")
 
-# Discord OAuth configuration
+#Discord OAuth configuration
 app.config["DISCORD_CLIENT_ID"] = os.getenv("DISCORD_CLIENT_ID")
 app.config["DISCORD_CLIENT_SECRET"] = os.getenv("DISCORD_CLIENT_SECRET")
 app.config["DISCORD_REDIRECT_URI"] = os.getenv("DISCORD_REDIRECT_URI", "http://localhost:5000/auth/discord/callback")
 
 discord = DiscordOAuth2Session(app)
 
-# MongoDB configuration
+#MongoDB configuration
 app.config["MONGO_URI"] = os.getenv("MONGO_URI", "mongodb://localhost:27017/flask_discord_app")
 mongo = PyMongo(app)
 
-# Constants
+#Constants
 navbarPages = ["nations", "regions", "races", "cultures", "religions", "merchants", "mercenaries", "characters", "artifacts", "spells", "wonders", "markets", "wars", "changes"]
 
 category_data = {
@@ -68,12 +68,12 @@ for data_type in category_data:
 def inject_navbar_pages():
     return {'navbarPages': navbarPages, 'category_data': category_data}
 
-# Middleware
+#Middleware
 @app.before_request
 def load_user():
     g.user = session.get('user', None)
 
-# Routes
+#Routes
 @app.route("/")
 def home():
     return render_template("index.html")
@@ -97,7 +97,7 @@ def get_data_on_item(data_type, item_ref):
         obj_id = ObjectId(item_ref)
         item = db.find_one({"_id": obj_id})
     except:
-        # Not a valid ObjectId, fallback to name
+        #If not a valid ObjectId, fallback to name
         item = db.find_one({"name": item_ref})
     
     if not item:
@@ -170,7 +170,7 @@ def data_item_new_request(data_type):
         flash("Name must be unique!")
         return redirect("/" + data_type + "/new")
     
-    db.insert_one(form_data) #Replace with a call to the request change function
+    db.insert_one(form_data) #TODO: Replace with a call to the request change function
     flash(data_type + " created successfully!")
     
     return redirect("/" + data_type)
@@ -191,7 +191,7 @@ def data_item_new_approve(data_type):
         flash("Name must be unique!")
         return redirect("/" + data_type + "/new")
     
-    db.insert_one(form_data) #Replace with a call to the request change function and approve change function
+    db.insert_one(form_data) #TODO: Replace with a call to the request change function and approve change function
     flash(data_type + " created successfully!")
     
     return redirect("/" + data_type)
@@ -225,6 +225,18 @@ def change_item(item_ref):
         linked_objects=linked_objects,
         target_schema=target_schema
     )
+
+@app.route("/changes/<item_ref>/approve")
+def approve_change(item_ref):
+    schema, db, item = get_data_on_item("changes", item_ref)
+    
+    try:
+        obj_id = ObjectId(item_ref)
+        approve_change(obj_id)
+    except Exception as e:
+        print(f"Error converting {object_id_to_find} to ObjectId: {e}")
+    
+    return redirect("/changes")
 
 @app.route("/<data_type>/<item_ref>")
 def data_item(data_type, item_ref):
@@ -324,7 +336,7 @@ def data_item_edit_request(data_type, item_ref):
         validate(instance=form_data, schema=schema)
     except ValidationError as e:
         flash(f"Validation Error: {e.message}")
-        return redirect(f"/{data_type}/{item_ref}/edit")
+        return redirect("/" + data_type + "/" + item_ref + "/edit")
     
     if "name" in form_data and form_data["name"] != item_ref and db.find_one({"name": form_data["name"]}):
         flash("Name must be unique!")
@@ -335,15 +347,12 @@ def data_item_edit_request(data_type, item_ref):
     before_data = item
     after_data = form_data
     
-    requester = mongo.db.players.find_one({"id": g.user["id"]})["_id"]
-    
     change_id = request_change(
         data_type=data_type,
         item_id=item_id,
         before_data=before_data,
         after_data=after_data,
-        reason=reason,
-        requester=requester
+        reason=reason
     )
     
     flash(f"Change request #{change_id} created and awaits admin approval.")
@@ -373,26 +382,31 @@ def data_item_edit_approve(data_type, item_ref):
     before_data = item
     after_data = form_data
     
-    requester = mongo.db.players.find_one({"id": g.user["id"]})["_id"]
-    
     change_id = request_change(
         data_type=data_type,
         item_id=item_id,
         before_data=before_data,
         after_data=after_data,
-        reason=reason,
-        requester=requester
+        reason=reason
     )
     
-    flash(f"Change request #{change_id} created and awaits admin approval.")
+    approve_change(change_id)
+    
+    flash(f"Change request #{change_id} created and approved.")
     
     return redirect("/" + data_type)
 
 #######################################################
 
-# Helper function to request a change
-def request_change(data_type, item_id, before_data, after_data, reason, requester):
-    changes_coll = mongo.db.changes
+#Helper function to request a change
+def request_change(data_type, item_id, before_data, after_data, reason):
+    requester = mongo.db.players.find_one({"id": g.user["id"]})["_id"]
+    if requester is None:
+        return None
+    
+    #TODO: Check requester perms
+    
+    changes_collection = mongo.db.changes
     now = datetime.utcnow()
     
     before_data, after_data = keep_only_differences(before_data, after_data)
@@ -407,17 +421,55 @@ def request_change(data_type, item_id, before_data, after_data, reason, requeste
         "before_requested_data": before_data,
         "after_requested_data": after_data,
         "differential_data": differential,
-        "before_implemented_data": None,
-        "after_change_data": None,
         "request_reason": reason,
         "status": "Pending"
     }
     
-    result = changes_coll.insert_one(change_doc)
+    result = changes_collection.insert_one(change_doc)
     return result.inserted_id
 
-def approve_change(data_type, item_name):
-    return
+#Returns true if worked ok, if rejected returns false
+def approve_change(change_id):
+    approver = mongo.db.players.find_one({"id": g.user["id"]})["_id"]
+    if approver is None:
+        return None
+    
+    changes_collection = mongo.db.changes
+    now = datetime.utcnow()
+    
+    change = changes_collection.find_one({"_id": change_id})
+    target_collection = category_data[change["target_collection"]]["database"]
+    target = target_collection.find_one({"_id": change["target"]})
+    
+    before_requested_data = change["before_requested_data"]
+    after_requested_data = change["after_requested_data"]
+    
+    if check_no_other_changes(before_requested_data, after_requested_data, target):
+        
+        #TODO: Check for whether after_requested needs to be updated using differential because before_requested changed (I hope this makes sense to future Orion) also update before requested for the sake of the logs
+        
+        before_data = before_requested_data
+        after_data = after_requested_data
+        
+        target_collection.update_one(
+            {"_id": change["target"]},
+            {"$set": after_data}
+        )
+        
+        changes_collection.update_one(
+            {"_id": change_id},
+            {"$set": {
+            "status": "Approved",
+            "time_implemented": now,
+            "approver": approver,
+            "before_implemented_data": before_data,
+            "after_implemented_data": after_data,
+            }}
+        )
+        
+        return True
+    
+    return False
 
 def keep_only_differences(before_data, after_data):
     new_before = {}
@@ -438,6 +490,18 @@ def calculate_int_changes(before_data, after_data):
             diff[key] = {after_val - before_val}
     return diff
 
+#Returns true if no other changes have been made that will interfere with approving a change
+def check_no_other_changes(before_data, after_data, current_data):
+    for key in before_data:
+        if key not in after_data or key not in current_data:
+            return False
+        before_val = before_data.get(key)
+        after_val = after_data.get(key)
+        current_val = current_data.get(key)
+        if before_val != current_val and after_val != current_val and not isinstance(before_val, int) and not isinstance(after_val, int) and not isinstance(current_val, int):
+            return False
+    return True
+
 #######################################################
 
 @app.route("/<data_type>/<item_ref>/delete")
@@ -452,7 +516,6 @@ def data_item_delete(data_type, item_ref):
         db.delete_one({"_id": obj_id})
         flash(f"Item with ID #{item_ref} deleted.")
 
-    # Pass data to the template
     return redirect("/" + data_type)
 
 #######################################################
@@ -467,7 +530,6 @@ def login():
 def callback():
     
     state = request.args.get("state")
-    print("Received state:", state)  # Debug: Check the JWT format
     
     try:
         discord.callback()
@@ -525,7 +587,7 @@ def profile():
         return redirect(url_for("home"))
     return redirect("/players/" + g.user["name"])
 
-# Helper function to save user to MongoDB
+#Helper function to save user to MongoDB
 def save_user_to_db(user):
     db = mongo.db
     
