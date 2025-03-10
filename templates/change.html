@@ -1,0 +1,132 @@
+{% extends "layout.html" %}
+
+{% block title %}Home{% endblock %}
+
+{% block content %}
+<div class="container">
+	<div class="content">
+		<h1>
+			{{ item._id }}:
+		</h1>
+		<table class="info-table">
+			<tr>
+				<th><strong>{{ schema.properties.target.label }}:</strong></th>
+				<td>
+					{% if "target" in linked_objects and linked_objects["target"] is not none %}
+						<a href="{{ linked_objects["target"]["link"] }}">{{ linked_objects["target"]["name"] }}</a>
+					{% else %}
+						{{ properties.get("noneResult", "None") }}
+					{% endif %}
+				</td>
+			</tr>
+			<tr>
+				<th><strong>Target Type:</strong></th>
+				<td>{{ item["target_collection"] }}</td>
+			</tr>
+			<tr>
+				<th><strong>{{ schema.properties.status.label }}:</strong></th>
+				<td>{{ item["status"] }}</td>
+			</tr>
+			
+			{% set player_label = None %}
+			{% set player_object = None %}
+			{% set time_label = None %}
+			{% set time_data = None %}
+			{% set changes_label = "Requested Changes" %}
+			{% set before_data = None %}
+			{% set after_data = None %}
+			{% if item["status"] == "Pending" %}
+				{% set player_label = schema.properties.requester.label %}
+				{% set player_object = linked_objects["requester"] %}
+				{% set time_label = schema.properties.time_requested.label %}
+				{% set time_data = item["time_requested"] %}
+				{% set changes_label = "Requested Changes" %}
+				{% set before_data = item["before_requested_data"] %}
+				{% set after_data = item["after_requested_data"] %}
+			{% elif item["status"] == "Approved" %}
+				{% set player_label = schema.properties.approver.label %}
+				{% set player_object = linked_objects["approver"] %}
+				{% set time_label = schema.properties.time_approved.label %}
+				{% set time_data = item["time_approved"] %}
+				{% set changes_label = "Changes" %}
+				{% set before_data = item["before_implemented_data"] %}
+				{% set after_data = item["after_implemented_data"] %}
+			{% elif item["status"] == "Reverted" %}
+				{% set player_label = schema.properties.reverter.label %}
+				{% set player_object = linked_objects["reverter"] %}
+				{% set time_label = schema.properties.time_reverted.label %}
+				{% set time_data = item["time_reverted"] %}
+				{% set changes_label = "Reverted Changes" %}
+				{% set before_data = item["before_reverted_data"] %}
+				{% set after_data = item["after_reverted_data"] %}
+			{% endif %}
+			
+			<tr>
+				<th><strong>{{ player_label }}:</strong></th>
+				<td><a href="{{ player_object["link"] }}">{{ player_object["name"] }}</a></td>
+			</tr>
+			<tr>
+				<th><strong>{{ time_label }}:</strong></th>
+				<td>{{ time_data }}</td>
+			</tr>
+			<tr>
+				<th><strong>{{ changes_label }}:</strong></th>
+				<td>
+					{% for key, data in before_data.items() %}
+						{{ target_schema.properties[key]["label"] }}: {{ data }} -> {{ after_data[key] }}</br>
+					{% endfor %}
+				</td>
+			</tr>
+			<tr>
+				<th><strong>{{ schema.properties.request_reason.label }}:</strong></th>
+				<td>{{ item["request_reason"] }}</td>
+			</tr>
+			
+		</table>
+		
+		<details>
+			<summary>Show Detailed Changes</summary>
+			<table class="info-table">
+				{% for field, properties in schema.properties.items() %}
+					{% if not properties.hidden
+					and not (properties.hideIfNone is defined and (item.get(properties.hideIfNone) is none or item.get(properties.hideIfNone) == "" or not item.get(properties.hideIfNone)))
+					and not (properties.bsonType == "array" and not (field in linked_objects and linked_objects[field] is not none)) %}
+						<tr>
+							<th><strong>{{ properties.label }}:</strong></th>
+							{% if properties.bsonType == "string" or properties.bsonType == "enum" or properties.bsonType == "date"%}
+								{% if properties.image %}
+									<td><img src="{{ item[field] }}" alt="{{ properties.label }}" style="border-radius: 50%; width: 100px; height: 100px;"></td>
+								{% else %}
+									<td>{{ item[field] }}</td>
+								{% endif %}
+							{% elif properties.bsonType == "number" %}
+								<td>{{ item[field] }}</td>
+							{% elif properties.bsonType == "boolean" %}
+								<td>{{ item[field] }}</td>
+							{% elif properties.bsonType == "linked_object" %}
+								<td>
+									{% if field in linked_objects and linked_objects[field] is not none %}
+										<a href="{{ linked_objects[field]["link"] }}">{{ linked_objects[field]["name"] }}</a>
+									{% else %}
+										{{ properties.get("noneResult", "None") }}
+									{% endif %}
+								</td>
+							{% elif properties.bsonType == "object" %}
+								<td>{{ item[field] }}</td>
+							{% elif properties.bsonType == "array" %}
+								<td>
+									<ul>
+										{% for item in linked_objects[field] %}
+											<li><a href="{{ item["link"] }}">{{ item["name"] }}</a></li>
+										{% endfor %}
+									</ul>
+								</td>
+							{% endif %}
+						</tr>
+					{% endif %}
+				{% endfor %}
+			</table>
+		</details>
+	</div>
+</div>
+{% endblock %}

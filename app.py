@@ -202,6 +202,11 @@ def data_item_new_approve(data_type):
 def change_item(item_ref):
     schema, db, item = get_data_on_item("changes", item_ref)
     
+    target_schema = None
+    
+    if item["target_collection"] in category_data:
+        target_schema = category_data[item["target_collection"]]["schema"]
+    
     linked_objects = get_linked_objects(schema["properties"].items(), item)
     
     if item["target_collection"] != None and item["target"] != None:
@@ -211,14 +216,14 @@ def change_item(item_ref):
         else:
             linked_objects["target"] = {"name": obj["_id"], "link": f"/{item["target_collection"]}/{obj['_id']}"}
             
-    print(linked_objects)
     
     return render_template(
-        "dataItem.html",
+        "change.html",
         title=item_ref,
         schema=schema,
         item=item,
-        linked_objects=linked_objects
+        linked_objects=linked_objects,
+        target_schema=target_schema
     )
 
 @app.route("/<data_type>/<item_ref>")
