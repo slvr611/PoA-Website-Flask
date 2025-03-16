@@ -475,10 +475,10 @@ def keep_only_differences(before_data, after_data):
     new_before = {}
     new_after = {}
     
-    for key in set(before_data.keys()) & set(after_data.keys()):
-        if(before_data[key] != after_data[key]):
-            new_before[key] = before_data[key]
-            new_after[key] = after_data[key]
+    for key in set(after_data.keys()):
+        if(before_data.get(key) != after_data.get(key)):
+            new_before[key] = before_data.get(key)
+            new_after[key] = after_data.get(key)
     return new_before, new_after
 
 def calculate_int_changes(before_data, after_data):
