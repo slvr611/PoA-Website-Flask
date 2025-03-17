@@ -9,19 +9,23 @@
 	<h1>{{ title }}:</h1>
 	<table class="info-table">
 		{% for item in items %}
-			{% if item.name %}
-                {# If there's a name, use it in the URL #}
-                <tr>
+			<tr>
+				{% if item.name %}
 					<th><a href="{{ request.path }}/{{ item.name }}">{{ item.name }}</a></th>
-					<td><a href="{{ request.path.replace('/edit', '') }}/{{ item.name }}/delete">delete</a></td>
-				</tr>
-            {% else %}
-                {# Otherwise, use the _id #}
-				<tr>
+	            {% else %}
 					<th><a href="{{ request.path }}/{{ item._id|string }}">{{ item._id }}</a></th>
-					<td><a href="{{ request.path.replace('/edit', '') }}/{{ item._id|string }}/delete">delete</a></td>
-				</tr>
-            {% endif %}
+	            {% endif %}
+	            <td>
+	            	<form method="POST" action="{{ request.path.replace('/edit', '') }}/{{ item.name }}/delete/request">
+	            		<label for="reason">Reason</label>
+						<input type="text" id="reason" name="reason" value="" required >
+			            <button type="submit" formaction="{{ request.path.replace('/edit', '') }}/{{ item.name }}/delete/request">Request Delete</button>
+						{% if g.user.is_admin %}
+							<button type="submit" formaction="{{ request.path.replace('/edit', '') }}/{{ item.name }}/delete/save">Immediate Delete</button>
+						{% endif %}
+					</form>
+				</td>
+            </tr>
 		{% endfor %}
 	</table>
 </div>

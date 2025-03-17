@@ -15,7 +15,7 @@
 					{% if "target" in linked_objects and linked_objects["target"] is not none %}
 						<a href="{{ linked_objects["target"]["link"] }}">{{ linked_objects["target"]["name"] }}</a>
 					{% else %}
-						{{ properties.get("noneResult", "None") }}
+						{{ schema.properties.get("noneResult", "None") }}
 					{% endif %}
 				</td>
 			</tr>
@@ -73,7 +73,7 @@
 				<th><strong>{{ changes_label }}:</strong></th>
 				<td>
 					{% for key, data in before_data.items() %}
-						{{ target_schema.properties[key]["label"] }}: {{ data }} -> {{ after_data[key] }}</br>
+						{{ target_schema.properties[key]["label"] }}: {{ before_data[key] }} -> {{ after_data[key] }}</br>
 					{% endfor %}
 				</td>
 			</tr>

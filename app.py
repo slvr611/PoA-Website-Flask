@@ -170,8 +170,19 @@ def data_item_new_request(data_type):
         flash("Name must be unique!")
         return redirect("/" + data_type + "/new")
     
-    db.insert_one(form_data) #TODO: Replace with a call to the request change function
-    flash(data_type + " created successfully!")
+    reason = form_data.get("reason", "No Reason Given")
+    after_data = form_data
+    
+    change_id = request_change(
+        data_type=data_type,
+        item_id=None,
+        change_type="Add",
+        before_data={},
+        after_data=after_data,
+        reason=reason
+    )
+    
+    flash(f"Create request #{change_id} created and awaits admin approval.")
     
     return redirect("/" + data_type)
 
@@ -191,8 +202,21 @@ def data_item_new_approve(data_type):
         flash("Name must be unique!")
         return redirect("/" + data_type + "/new")
     
-    db.insert_one(form_data) #TODO: Replace with a call to the request change function and approve change function
-    flash(data_type + " created successfully!")
+    reason = form_data.get("reason", "No Reason Given")
+    after_data = form_data
+    
+    change_id = request_change(
+        data_type=data_type,
+        item_id=None,
+        change_type="Add",
+        before_data={},
+        after_data=after_data,
+        reason=reason
+    )
+    
+    approve_change(change_id)
+    
+    flash(f"Create request #{change_id} created and approved.")
     
     return redirect("/" + data_type)
 
@@ -211,10 +235,13 @@ def change_item(item_ref):
     
     if item["target_collection"] != None and item["target"] != None:
         obj = mongo.db[item["target_collection"]].find_one({"_id": item["target"]}, {"name": 1, "_id": 1})
-        if "name" in obj:
-            linked_objects["target"] = {"name": obj["name"], "link": f"/{item["target_collection"]}/{obj['name']}"}
+        if obj is not None:
+            if "name" in obj:
+                linked_objects["target"] = {"name": obj["name"], "link": f"/{item["target_collection"]}/{obj['name']}"}
+            else:
+                linked_objects["target"] = {"name": obj["_id"], "link": f"/{item["target_collection"]}/{obj['_id']}"}
         else:
-            linked_objects["target"] = {"name": obj["_id"], "link": f"/{item["target_collection"]}/{obj['_id']}"}
+            linked_objects["target"] = {"name": item["target"]}
             
     
     return render_template(
@@ -350,6 +377,7 @@ def data_item_edit_request(data_type, item_ref):
     change_id = request_change(
         data_type=data_type,
         item_id=item_id,
+        change_type="Update",
         before_data=before_data,
         after_data=after_data,
         reason=reason
@@ -385,6 +413,7 @@ def data_item_edit_approve(data_type, item_ref):
     change_id = request_change(
         data_type=data_type,
         item_id=item_id,
+        change_type="Update",
         before_data=before_data,
         after_data=after_data,
         reason=reason
@@ -399,7 +428,7 @@ def data_item_edit_approve(data_type, item_ref):
 #######################################################
 
 #Helper function to request a change
-def request_change(data_type, item_id, before_data, after_data, reason):
+def request_change(data_type, item_id, change_type, before_data, after_data, reason):
     requester = mongo.db.players.find_one({"id": g.user["id"]})["_id"]
     if requester is None:
         return None
@@ -408,8 +437,12 @@ def request_change(data_type, item_id, before_data, after_data, reason):
     
     changes_collection = mongo.db.changes
     now = datetime.utcnow()
+
+    after_data.pop("reason", None)
+    before_data.pop("_id", None)
+    after_data.pop("_id", None) #Delete the reason and id so that they don't show up in the final change log
     
-    before_data, after_data = keep_only_differences(before_data, after_data)
+    before_data, after_data = keep_only_differences(before_data, after_data, change_type)
     
     differential = calculate_int_changes(before_data, after_data)
     
@@ -418,6 +451,7 @@ def request_change(data_type, item_id, before_data, after_data, reason):
         "target": item_id,
         "time_requested": now,
         "requester": requester,
+        "change_type": change_type,
         "before_requested_data": before_data,
         "after_requested_data": after_data,
         "differential_data": differential,
@@ -439,26 +473,16 @@ def approve_change(change_id):
     
     change = changes_collection.find_one({"_id": change_id})
     target_collection = category_data[change["target_collection"]]["database"]
-    target = target_collection.find_one({"_id": change["target"]})
-    
-    before_requested_data = change["before_requested_data"]
-    after_requested_data = change["after_requested_data"]
-    
-    if check_no_other_changes(before_requested_data, after_requested_data, target):
-        
-        #TODO: Check for whether after_requested needs to be updated using differential because before_requested changed (I hope this makes sense to future Orion) also update before requested for the sake of the logs
-        
-        before_data = before_requested_data
-        after_data = after_requested_data
-        
-        target_collection.update_one(
-            {"_id": change["target"]},
-            {"$set": after_data}
-        )
-        
+
+    if change["change_type"] == "Add":
+        before_data = change["before_requested_data"]
+        after_data = change["after_requested_data"]
+
+        inserted_item_id = target_collection.insert_one(after_data).inserted_id
         changes_collection.update_one(
             {"_id": change_id},
             {"$set": {
+            "target": inserted_item_id,
             "status": "Approved",
             "time_implemented": now,
             "approver": approver,
@@ -468,17 +492,60 @@ def approve_change(change_id):
         )
         
         return True
+
+    else: #Not add means it's update or remove, which means there's a target ahead of time
+        target = target_collection.find_one({"_id": change["target"]})
+        
+        before_requested_data = change["before_requested_data"]
+        after_requested_data = change["after_requested_data"]
+        
+        if check_no_other_changes(before_requested_data, after_requested_data, target):
+            
+            #TODO: Check for whether after_requested needs to be updated using differential because before_requested changed (I hope this makes sense to future Orion) also update before requested for the sake of the logs
+            
+            before_data = before_requested_data
+            after_data = after_requested_data
+            
+            if change["change_type"] == "Update":
+                target_collection.update_one(
+                    {"_id": change["target"]},
+                    {"$set": after_data}
+                )
+            else: #Not update means its remove
+                target_collection.delete_one(
+                    {"_id": change["target"]}
+                )
+            
+            changes_collection.update_one(
+                {"_id": change_id},
+                {"$set": {
+                "status": "Approved",
+                "time_implemented": now,
+                "approver": approver,
+                "before_implemented_data": before_data,
+                "after_implemented_data": after_data,
+                }}
+            )
+            
+            return True
     
     return False
 
-def keep_only_differences(before_data, after_data):
+def keep_only_differences(before_data, after_data, change_type):
     new_before = {}
     new_after = {}
     
-    for key in set(after_data.keys()):
-        if(before_data.get(key) != after_data.get(key)):
+    if change_type == "Remove":
+        for key in set(before_data.keys()):
             new_before[key] = before_data.get(key)
             new_after[key] = after_data.get(key)
+
+    else:
+        for key in set(after_data.keys()):
+            if(before_data.get(key) != after_data.get(key)):
+                new_before[key] = before_data.get(key)
+                new_after[key] = after_data.get(key)
+
     return new_before, new_after
 
 def calculate_int_changes(before_data, after_data):
@@ -504,17 +571,53 @@ def check_no_other_changes(before_data, after_data, current_data):
 
 #######################################################
 
-@app.route("/<data_type>/<item_ref>/delete")
-def data_item_delete(data_type, item_ref):
+@app.route("/<data_type>/<item_ref>/delete/request", methods=["POST"])
+def data_item_delete_request(data_type, item_ref):
     schema, db, item = get_data_on_item(data_type, item_ref)
+
+    form_data = request.form.to_dict()
     
-    if "name" in item:
-        db.delete_one({"name": item_ref})
-        flash(f"Item named #{item_ref} deleted.")
-    else:
-        obj_id = ObjectId(item_ref)
-        db.delete_one({"_id": obj_id})
-        flash(f"Item with ID #{item_ref} deleted.")
+    item_id = item["_id"]
+    reason = form_data.get("reason", "No Reason Given")
+    before_data = item
+    after_data = form_data
+    
+    change_id = request_change(
+        data_type=data_type,
+        item_id=item_id,
+        change_type="Remove",
+        before_data=before_data,
+        after_data=after_data,
+        reason=reason
+    )
+    
+    flash(f"Delete request #{change_id} created and awaits admin approval.")
+
+    return redirect("/" + data_type)
+
+@app.route("/<data_type>/<item_ref>/delete/save", methods=["POST"])
+def data_item_delete_save(data_type, item_ref):
+    schema, db, item = get_data_on_item(data_type, item_ref)
+
+    form_data = request.form.to_dict()
+    
+    item_id = item["_id"]
+    reason = form_data.get("reason", "No Reason Given")
+    before_data = item
+    after_data = form_data
+    
+    change_id = request_change(
+        data_type=data_type,
+        item_id=item_id,
+        change_type="Remove",
+        before_data=before_data,
+        after_data=after_data,
+        reason=reason
+    )
+    
+    approve_change(change_id)
+    
+    flash(f"Delete request #{change_id} created and approved.")
 
     return redirect("/" + data_type)
 
