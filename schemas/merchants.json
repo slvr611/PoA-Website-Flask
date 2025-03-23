@@ -2,6 +2,7 @@
   "$jsonSchema": {
     "bsonType": "object",
     "required": ["name", "reputation"],
+	"laws": ["reputation"],
     "properties": {
       "name": {
         "bsonType": "string",
@@ -19,7 +20,25 @@
         "bsonType": "enum",
 		"label": "Reputation",
         "description": "The merchant company's reputation",
-		"enum": ["Poor", "Acceptable", "Great", "Flawless"]
+		"enum": ["Poor", "Acceptable", "Great", "Flawless"],
+		"laws":{
+			"Poor": {
+				"hostile_encounter_chance": 0.5,
+				"income": 75
+			},
+			"Acceptable": {
+				"hostile_encounter_chance": 0.35,
+				"income": 150
+			},
+			"Great": {
+				"hostile_encounter_chance": 0.30,
+				"income": 225
+			},
+			"Flawless": {
+				"hostile_encounter_chance": 0.20,
+				"income": 300
+			}
+		}
       },
 	  "hostile_encounter_chance": {
         "bsonType": "number",
@@ -48,19 +67,22 @@
         "bsonType": "number",
 		"label": "Trade Distance",
         "description": "The distance at which the merchant company can trade with other nations or merchant companies",
-		"calculated": true
+		"calculated": true,
+		"base_value": 15
       },
 	  "import_capacity": {
         "bsonType": "number",
 		"label": "Import Capacity",
         "description": "The amount of resources the merchant company can import each session",
-		"calculated": true
+		"calculated": true,
+		"base_value": 9
       },
 	  "export_capacity": {
         "bsonType": "number",
 		"label": "Export Capacity",
         "description": "The amount of resources the merchant company can export each session",
-		"calculated": true
+		"calculated": true,
+		"base_value": 9
       },
 	  "resource_storage": {
         "bsonType": "array",

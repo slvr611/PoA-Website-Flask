@@ -2,6 +2,9 @@
   "$jsonSchema": {
     "bsonType": "object",
     "required": ["name", "region", "primary_race", "primary_culture", "primary_religion", "government_type", "succession_type", "foreign_acceptance", "origin"],
+	"laws": ["stability", "government_type", "succession_type", "nomad_camp_type", "conscription_type", "military_funding",
+		"magic_stance", "citizenship_stance", "foreign_acceptance", "subject_stance", "land_doctrine", "naval_doctrine",
+		"diplomatic_stance", "scientific_stance", "economy_type", "expansion_stance", "mercenary_law", "consumption_stance", "tax_stance", "justice_stance"],
     "properties": {
       "name": {
         "bsonType": "string",
@@ -45,24 +48,56 @@
         "bsonType": "number",
 		"label": "Administration",
         "description": "The nation's level of administration",
-		"calculated": true
+		"calculated": true,
+		"base_value": 1
       },
 	  "effective_territory": {
         "bsonType": "number",
 		"label": "Effective Territory",
         "description": "The nation's maximum territory they can hold before they start suffering penalties",
-		"calculated": true
+		"calculated": true,
+		"base_value": 10
       },
 	  "current_territory": {
         "bsonType": "number",
 		"label": "Current Territory",
         "description": "The amount of territory the nation currently holds"
       },
+	  "road_capacity": {
+        "bsonType": "number",
+		"label": "Road Capacity",
+        "description": "The nation's maximum road capacity that can be used before they start suffering penalties",
+		"calculated": true,
+		"base_value": 6
+      },
+	  "road_usage": {
+        "bsonType": "number",
+		"label": "Road Usage",
+        "description": "The amount of road capacity the nation is currently using"
+      },
 	  "stability": {
         "bsonType": "enum",
 		"label": "Stability",
         "description": "The nation's level of stability",
-		"enum": ["Fragile", "Unsettled", "Balanced", "Stable", "United"]
+		"enum": ["Fragile", "Unsettled", "Balanced", "Stable", "United"],
+		"laws": {
+			"Fragile": {
+				"civil_war_chance": 0.2,
+				"karma": -2
+			},
+			"Unsettled": {
+				"karma": -2
+			},
+			"Balanced": {},
+			"Stable": {
+				"stability_loss_chance": 0.15,
+				"karma": 2
+			},
+			"United": {
+				"stability_loss_chance": 0.35,
+				"karma": 2
+			}
+		}
       },
 	  "stability_gain_chance": {
         "bsonType": "number",
@@ -75,6 +110,13 @@
 		"label": "Stability Loss Chance",
         "description": "The nation's percentage chance of losing a level of stability each tick",
 		"calculated": true
+      },
+	  "stability_loss_chance_on_leader_death": {
+        "bsonType": "number",
+		"label": "Stability Loss Chance On Leader Death",
+        "description": "The nation's percentage chance of losing a level of stability when their leader dies",
+		"calculated": true,
+		"hidden":true
       },
 	  "infamy": {
         "bsonType": "number",
@@ -122,15 +164,17 @@
         "bsonType": "number",
 		"label": "Money Capacity",
         "description": "The amount of money the nation can hold",
-		"calculated": true
+		"calculated": true,
+		"base_value": 6000
       },
 	  "money_income": {
         "bsonType": "number",
 		"label": "Money Income",
         "description": "The amount of money the nation gains each tick",
-		"calculated": true
+		"calculated": true,
+		"base_value": 150
       },
-	  "total_karma": {
+	  "karma": {
         "bsonType": "number",
 		"label": "Total Karma",
         "description": "The total amount of Karma the nation has",
@@ -150,13 +194,15 @@
         "bsonType": "number",
 		"label": "Migration Distance",
         "description": "The distance this nation can migrate each session",
-		"calculated": true
+		"calculated": true,
+		"base_value": 3
       },
 	  "stationary_delay": {
         "bsonType": "number",
 		"label": "Stationary Delay",
         "description": "The amount of sessions a nomadic nation can stay in once place before suffering penalties",
-		"calculated": true
+		"calculated": true,
+		"base_value": 2
       },
 	  "primary_race": {
         "bsonType": "linked_object",
@@ -224,6 +270,7 @@
 		"label": "Concessions Amount",
         "description": "Number of resources demanded each time concessions are demanded",
 		"calculated": true,
+		"base_value": 4,
 		"hideIfNone": "overlord"
       },
 	  "vassals": {
@@ -264,114 +311,512 @@
 		"collection": "pops",
 		"queryTargetAttribute": "nation"
       },
+	  "unique_minority_count": {
+        "bsonType": "number",
+		"label": "Unique Minority Count",
+        "description": "The amount of unique minorities the nation has",
+		"calculated": true,
+		"hidden": true
+	  },
+	  "district_slots": {
+        "bsonType": "number",
+		"label": "District Slots",
+        "description": "The amount of districts the nation can have",
+		"calculated": true,
+		"base_value": 3
+      },
 	  "government_type": {
         "bsonType": "enum",
 		"label": "Government Type",
         "description": "The type of government of the nation",
 		"enum": ["Autocracy", "Representative Council", "City State", "Trade Federation", "Untamed Lords", "Far Travelers",
-			"Iron-Fisted Dictatorship", "Imperial Council", "Sacred Vicar", "Great Khanate", "World Warden"]
+			"Iron-Fisted Dictatorship", "Imperial Council", "Sacred Vicar", "Great Khanate", "World Warden"],
+		"laws":{
+			"Autocracy": {
+				"district_slots": 1,
+				"repeat_stability_loss": 0.5,
+				"city_slots": 3
+			},
+			"Representative Council": {
+				"mimimum_weaknesses": -1,
+				"maximum_weaknesses": 1,
+				"city_slots": 3
+			},
+			"City State": {
+				"defensive_pact_slots": 1,
+				"effective_territory": -6,
+				"city_slots": 1
+			},
+			"Trade Federation": {
+				"trade_slots_per_admin": 1,
+				"city_slots": 4
+			},
+			"Untamed Lords": {
+				"effective_territory": 6
+			},
+			"Far Travelers": {
+				"effective_territory": 3
+			},
+			"Iron-Fisted Dictatorship": {
+				"resource_production": 1,
+				"high_stability_strength": 4,
+				"low_stability_strength": -4,
+				"city_slots": 5
+			},
+			"Imperial Council": {
+				"unit_money_production": 30,
+				"unit_trade_slots": 1,
+				"unit_trade_range": 1,
+				"city_slots": 5
+			},
+			"Sacred Vicar": {
+				"city_slots": 5
+			},
+			"Great Khanate:": {
+				"morale": 2,
+				"effective_territory_per_tributary": 6
+			},
+			"World Warden": {
+				"migration_distance": 6,
+				"effective_territory": 3
+			}
+		}
       },
 	  "succession_type": {
         "bsonType": "enum",
 		"label": "Succession Type",
         "description": "The way the next leader of the nation is selected",
-		"enum": ["Strength", "Inherited", "Elected"]
+		"enum": ["Strength", "Inherited", "Elected"],
+		"laws": {
+			"Strength": {
+				"stability_loss_chance_on_leader_death": 1
+			},
+			"Inherited": {
+				"stability_loss_chance_on_leader_death": 0.75
+			},
+			"Elected": {
+				"stability_loss_chance_on_leader_death": 0.5
+			}
+		}
       },
-	  "foreign_acceptance": {
-        "bsonType": "enum",
+	  "nomad_camp_type": {
+		"bsonType": "enum",
 		"label": "Foreign Acceptance",
-        "description": "How minority cultures and religions living in the nation are handled",
-		"enum": ["Oppression", "Integration", "Harmony"]
-      },
+        "description": "The type of camp a nomadic nation currently has",
+		"enum": ["None", "Caravan", "Canvass", "Encampment", "Hearth"],
+		"laws": {
+			"None": {},
+			"Caravan": {
+				"trade_slots": 3,
+				"money_production": 120,
+				"strength": -1,
+				"morale": -1
+			},
+			"Canvass": {
+				"production_of_available_nodes": 1
+			},
+			"Encampment": {
+				"strength": 1,
+				"morale": 1,
+				"unit_mount_consumption": -1,
+				"chance_to_lose_stability": 0.2,
+				"chance_to_lose_stability_while_at_war": -0.1
+			},
+			"Hearth": {
+				"food_consumption": -3,
+				"hunter_food_production": 2,
+				"hunter_food_production_from_dock_or_farm": 1,
+				"resource_production": -1,
+				"food_production": 1,
+				"research_production": 1
+			}
+		}
+	  },
 	  "conscription_type": {
         "bsonType": "enum",
 		"label": "Conscription Type",
         "description": "How much of the nation's population can be mobilized during a war",
-		"enum": ["Moderate", "Low", "High", "Very High", "Total", "Rebellion"]
+		"enum": ["Moderate", "Low", "High", "Very High", "Total", "Rebellion"],
+		"laws": {
+			"Moderate": {
+				"recruit_percentage": 0.3
+			},
+			"Low": {
+				"recruit_percentage": 0.2,
+				"strength": 1,
+				"karma": 2
+			},
+			"High": {
+				"recruit_percentage": 0.4,
+				"strength": -1
+			},
+			"Very High": {
+				"recruit_percentage": 0.5,
+				"strength": -2,
+				"karma": -2
+			},
+			"Total": {
+				"recruit_percentage": 0.65,
+				"strength": -4,
+				"karma": -2
+			},
+			"Rebellion": {
+				"recruit_percentage": 0.5
+			}
+		}
       },
 	  "military_funding": {
         "bsonType": "enum",
 		"label": "Military Funding",
         "description": "How well funded the nation's military is",
-		"enum": ["Substandard", "Standard", "Substantial"]
+		"enum": ["Substandard", "Standard", "Substantial"],
+		"laws": {
+			"Minimal": {
+				"unit_food_consumption": -1,
+				"strength": -8
+			},
+			"Substandard": {
+				"unit_food_consumption": -0.5,
+				"strength": -4
+			},
+			"Standard": {},
+			"Substantial": {
+				"unit_food_consumption": 1,
+				"strength": 2
+			},
+			"Extreme": {
+				"unit_food_consumption": 2,
+				"strength": 4
+			}
+		}
       },
 	  "magic_stance": {
         "bsonType": "enum",
 		"label": "Magic Stance",
         "description": "The nation's stance towards magic",
-		"enum": ["Bureaucracy", "Creation", "Military", "Persecution", "Manifest"]
+		"enum": ["Bureaucracy", "Creation", "Military", "Persecution", "Manifest"],
+		"laws": {
+			"Bureaucracy": {
+				"administrator_magic_production": 0.33334
+			},
+			"Creation": {},
+			"Military": {},
+			"Persecution": {
+				"cannot_create_magical_units": true
+			},
+			"Manifest": {
+				"karma_per_magic_node": 2,
+				"magic_node_value": -1
+			}
+		}
       },
-	  "diplomatic_stance": {
+	  "citizenship_stance": {
         "bsonType": "enum",
-		"label": "Diplomatic Stance",
-        "description": "The nation's default stance towards interacting with its neighbors",
-		"enum": ["Cooperative", "Expansionist", "Belligerent", "Isolated"]
-      },
-	  "mercenary_law": {
+		"label": "Citizenship Stance",
+        "description": "How easy it is to get citizenship in the nation",
+		"enum": ["None", "Free", "Open", "Restricted", "Closed"],
+		"laws": {
+			"None": {},
+			"Free": {
+				"stability_loss_chance": 0.05
+			},
+			"Open": {
+				"stability_loss_chance": 0.05
+			},
+			"Restricted": {
+				"stability_loss_chance": -0.1
+			},
+			"Closed": {
+				"stability_loss_chance": -0.2
+			}
+		}
+	  },
+	  "foreign_acceptance": {
         "bsonType": "enum",
-		"label": "Mercenary Law",
-        "description": "The degree to which the nation's military is geared to employ mercenaries",
-		"enum": ["No Mercenaries", "Some Mercenaries", "Mercenary Reliance", "Mercenary Military"]
-      },
-	  "land_doctrine": {
-        "bsonType": "enum",
-		"label": "Land Doctrine",
-        "description": "The nation's general approach to land based warfare",
-		"enum": ["Standard", "Nomadic", "Shock", "Volley", "Safeguard", "Ambush"]
-      },
-	  "naval_doctrine": {
-        "bsonType": "enum",
-		"label": "Naval Doctrine",
-        "description": "The nation's general approach to aquatic warfare",
-		"enum": ["Standard", "Skirmish", "Fleet", "Transport"]
-      },
-	  "economy_type": {
-        "bsonType": "enum",
-		"label": "Economy Type",
-        "description": "The direction the nation's economy is specialized in",
-		"enum": ["Standard", "Conquest", "Construction", "Production", "Commerce"]
-      },
-	  "scientific_stance": {
-        "bsonType": "enum",
-		"label": "Scientific Stance",
-        "description": "The degree to which the nation is geared towards technological development",
-		"enum": ["Puritanical", "Conservative", "Pragmatic", "Progressive", "Radical", "Revolutionary"]
+		"label": "Foreign Acceptance",
+        "description": "How minority cultures and religions living in the nation are handled",
+		"enum": ["Oppression", "Integration", "Acceptance", "Harmony"],
+		"laws": {
+			"Oppression": {
+				"stability_loss_chance_per_unique_minority": 0.05,
+				"max_stability_loss_chance_per_unique_minority": 0.5,
+				"homogeneous_stability_gain_chance": 0.25
+			},
+			"Integration": {
+				"stability_loss_chance_per_unique_minority": 0.03,
+				"max_stability_loss_chance_per_unique_minority": 0.3
+			},
+			"Acceptance": {
+				"stability_gain_chance_per_unique_minority": 0.02,
+				"max_stability_gain_chance_per_unique_minority": 0.3
+			},
+			"Harmony": {
+				"stability_gain_chance_per_unique_minority": 0.05,
+				"max_stability_gain_chance_per_unique_minority": 0.3
+			}
+		}
       },
 	  "subject_stance": {
         "bsonType": "enum",
 		"label": "Subject Stance",
         "description": "The way the nation tends to interact with its vassals",
-		"enum": ["Suppression", "Balanced", "Benevolence"]
+		"enum": ["Suppression", "Balanced", "Benevolence"],
+		"laws": {
+			"Suppression": {
+				"vassals_concessions_chance": -1
+			},
+			"Balanced": {},
+			"Benevolence": {
+				"vassals_rebellion_chance_above_rebellious": -1,
+				"vassals_concessions_qty_mult": 2
+			}
+		}
+      },
+	  "land_doctrine": {
+        "bsonType": "enum",
+		"label": "Land Doctrine",
+        "description": "The nation's general approach to land based warfare",
+		"enum": ["Standard", "Nomadic", "Shock", "Volley", "Safeguard", "Militia", "Ambush"],
+		"laws": {
+			"Standard": {},
+			"Nomadic": {
+				"land_unit_speed": 1
+			},
+			"Shock": {
+				"land_attack_during_first_session": 2,
+				"land_defense_after_first_session": -4
+			},
+			"Volley": {
+				"land_unit_speed_mult": 0.5,
+				"land_unit_range_when_stationary": 1
+			},
+			"Safeguard": {
+				"land_defense_against_ranged": 2,
+				"land_defense_when_in_defensive_war": 1,
+				"land_attack_when_in_offensive_war": -4
+			},
+			"Militia": {},
+			"Ambush": {
+				"land_attack_vs_damaged_units": 2,
+				"land_non_ruler_unit_speed": 1,
+				"land_cavalry_unit_speed": -1,
+				"land_unit_hp_mult": 0.75
+			}
+		}
+      },
+	  "naval_doctrine": {
+        "bsonType": "enum",
+		"label": "Naval Doctrine",
+        "description": "The nation's general approach to aquatic warfare",
+		"enum": ["Standard", "Skirmish", "Fleet", "Transport"],
+		"laws": {
+			"Standard": {},
+			"Skirmish": {},
+			"Fleet": {},
+			"Transport": {}
+		}
+      },
+	  "diplomatic_stance": {
+        "bsonType": "enum",
+		"label": "Diplomatic Stance",
+        "description": "The nation's default stance towards interacting with its neighbors",
+		"enum": ["Cooperative", "Expansionist", "Belligerent", "Isolated"],
+		"laws": {
+			"Cooperative": {
+				"defensive_pact_slots": 1
+			},
+			"Expansionist": {
+				"effective_territory": 3
+			},
+			"Belligerent": {},
+			"Isolated": {
+				"defensive_pact_slots": -1
+			}
+		}
+      },
+	  "scientific_stance": {
+        "bsonType": "enum",
+		"label": "Scientific Stance",
+        "description": "The degree to which the nation is geared towards technological development",
+		"enum": ["Puritanical", "Conservative", "Pragmatic", "Progressive", "Radical", "Revolutionary"],
+		"laws": {
+			"Puritanical": {
+				"karma": 4,
+				"stability_gain_chance": 0.25,
+				"locks_researcher": true
+			},
+			"Conservative": {
+				"karma": 2,
+				"stability_gain_chance": 0.1
+			},
+			"Pragmatic": {
+				"research_production": 1
+			},
+			"Progressive": {
+				"research_production": 2,
+				"stability_loss_chance": 0.15,
+				"karma": -2
+			},
+			"Radical": {
+				"research_production": 4,
+				"stability_loss_chance": 0.2,
+				"karma": -4,
+				"job_resource_production": -1,
+				"researcher_resource_production": 1
+			},
+			"Revolutionary": {
+				"research_production": 4,
+				"stability_loss_chance": 0.3,
+				"karma": -4,
+				"job_resource_production_mult": 0.5,
+				"researcher_resource_production_mult": 2,
+				"node_value": -1
+			}
+		}
+      },
+	  "economy_type": {
+        "bsonType": "enum",
+		"label": "Economy Type",
+        "description": "The direction the nation's economy is specialized in",
+		"enum": ["None", "Conquest", "Construction", "Production", "Commerce"],
+		"laws": {
+			"None": {},
+			"Conquest": {
+				"harvester_resource_production": -1,
+				"miner_resource_production": -1
+			},
+			"Construction": {
+				"chance_to_lose_stability": 0.15
+			},
+			"Production": {
+				"harvester_resource_consumption": -1,
+				"miner_resource_consumption": -1
+			},
+			"Commerce": {
+				"stability_gain_chance_per_road_capacity_used": 0.01,
+				"maximum_markets": 1
+			}
+		}
       },
 	  "expansion_stance": {
         "bsonType": "enum",
 		"label": "Expansion Control Stance",
         "description": "The nation's default stance towards unregulated expansion",
-		"enum": ["Limitless", "Free", "Restricted", "Controlled"]
+		"enum": ["Limitless", "Free", "Restricted", "Controlled"],
+		"laws": {
+			"Limitless": {
+				"passive_expansion_chance": 0.6
+			},
+			"Free": {
+				"passive_expansion_chance": 0.4
+			},
+			"Restricted": {
+				"passive_expansion_chance": 0.3,
+				"stability_loss_chance": 0.1
+			},
+			"Controlled": {
+				"passive_expansion_chance": 0.2,
+				"stability_loss_chance": 0.2
+			}
+		}
+      },
+	  "mercenary_law": {
+        "bsonType": "enum",
+		"label": "Mercenary Law",
+        "description": "The degree to which the nation's military is geared to employ mercenaries",
+		"enum": ["No Mercenaries", "Some Mercenaries", "Mercenary Reliance", "Mercenary Military"],
+		"laws": {
+			"No Mercenaries": {
+				"mercenary_limit_mult": 0
+			},
+			"Some Mercenaries": {
+				"mercenary_limit_mult": 0.5
+			},
+			"Mercenary Reliance": {
+				"mercenary_limit_mult": 0.75,
+				"national_unit_strength": -1
+			},
+			"Mercenary Military": {
+				"mercenary_limit_mult": 1.25,
+				"national_unit_strength": -2,
+				"mercenary_unit_strength": 1
+			}
+		}
       },
 	  "consumption_stance": {
         "bsonType": "enum",
 		"label": "Consumption Stance",
         "description": "The nation's stance towards whether food should be distributed in abundance or rationed",
-		"enum": ["Indulgence", "Comfort", "Standard", "Rationing"]
-      },
-	  "social_structure": {
-        "bsonType": "enum",
-		"label": "Social Structure",
-        "description": "How the nation's social structure is organized",
-		"enum": ["Anarchic", "Equal", "Stratified", "Hierarchical"]
+		"enum": ["None", "Indulgence", "Comfort", "Standard", "Rationing"],
+		"laws": {
+			"None": {},
+			"Indulgence": {
+				"food_consumption_per_pop": 0.5,
+				"stability_gain_chance": 0.4
+			},
+			"Comfort": {
+				"food_consumption_per_pop": 0.3334,
+				"stability_gain_chance": 0.25
+			},
+			"Standard": {
+				"stability_gain_chance": 0.05
+			},
+			"Rationing": {
+				"mercenary_limit_mult": 1.25,
+				"national_unit_strength": -2,
+				"mercenary_unit_strength": 1
+			}
+		}
       },
 	  "tax_stance": {
         "bsonType": "enum",
 		"label": "Tax Stance",
         "description": "The nation's tax rate",
-		"enum": ["Subsidized", "None", "Low", "Moderate", "High", "Oppressive"]
+		"enum": ["None", "Subsidized", "No Taxes", "Low", "Moderate", "High", "Oppressive"],
+		"laws": {
+			"None": {},
+			"Subsidized": {
+				"money_production_per_pop": -18,
+				"stability_gain_chance_per_pop": 0.01
+			},
+			"No Taxes": {
+				"money_production_per_pop": -9,
+				"stability_gain_chance_per_pop": 0.01
+			},
+			"Low": {
+				"money_production_per_pop": 6
+			},
+			"Moderate": {
+				"money_production_per_pop": 12,
+				"stability_loss_chance_per_pop": 0.01
+			},
+			"High": {
+				"money_production_per_pop": 18,
+				"stability_loss_chance_per_pop": 0.02
+			},
+			"Oppressive": {
+				"money_production_per_pop": 24,
+				"stability_loss_chance_per_pop": 0.03
+			}
+		}
       },
 	  "justice_stance": {
         "bsonType": "enum",
 		"label": "Justice Stance",
         "description": "The nation's stance on handling criminals",
-		"enum": ["Reformation", "Standard", "Punishment"]
+		"enum": ["None", "Reformation", "Standard", "Punishment"],
+		"laws": {
+			"None": {},
+			"Reformation": {
+				"stability_gain_chance_per_positive_karma": 0.03,
+				"max_stability_gain_chance_per_positive_karma": 0.3
+			},
+			"Standard": {},
+			"Punishment": {
+				"stability_loss_chance_per_negative_karma": 0.05,
+				"max_stability_loss_chance_per_negative_karma": 0.5
+			}
+		}
       },
 	  "city_slots": {
         "bsonType": "number",
@@ -383,19 +828,22 @@
         "bsonType": "number",
 		"label": "Defensive Pact Slots",
         "description": "The number of defensive pacts the nation can support",
-		"calculated": true
+		"calculated": true,
+		"base_value": 1
       },
 	  "military_alliance_slots": {
         "bsonType": "number",
 		"label": "Military Alliance Slots",
         "description": "The number of military alliances the nation can support",
-		"calculated": true
+		"calculated": true,
+		"base_value": 1
       },
 	  "origin": {
         "bsonType": "enum",
 		"label": "Origin",
         "description": "The origin the nation selected at creation",
-		"enum": ["(T) Default", "(T) Fragile Unification", "(T) Fragmented", "(T) Strange Outsiders", "(T) Survivors", "(T) Fortunate",
+		"enum": ["Unknown",
+			"(T) Default", "(T) Fragile Unification", "(T) Fragmented", "(T) Strange Outsiders", "(T) Survivors", "(T) Fortunate",
 			"(A) Default", "(A) Conquest State", "(A) Protected Scion", "(A) Artificer State", "(A) Recent Subjugation",
 			"(C) Aspiring Allies", "(C) Enlightened Defeat", "(C) Loyal Vassal", "(C) Fleeing Victims", "(C) Local Bully"]
       },
@@ -497,13 +945,15 @@
         "bsonType": "number",
 		"label": "Total Export Slots",
         "description": "The total number of export slots the nation has available each session, before accounting for ongoing trades",
-		"calculated": true
+		"calculated": true,
+		"base_value": 3
       },
 	  "total_import_slots": {
         "bsonType": "number",
 		"label": "Total Import Slots",
         "description": "The total number of import slots the nation has available each session, before accounting for ongoing trades",
-		"calculated": true
+		"calculated": true,
+		"base_value": 3
       },
 	  "remaining_export_slots": {
         "bsonType": "number",
@@ -531,7 +981,7 @@
 		"collection": "trades",
 		"queryTargetAttribute": "importing_nation"
       },
-	  "ongoing_modifiers": {
+	  "modifiers": {
         "bsonType": "array",
 		"label": "Ongoing Modifiers",
         "description": "The ongoing modifiers currently affecting this nation"

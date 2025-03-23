@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from jsonschema import validate, ValidationError
 from bson import ObjectId
 from datetime import datetime
+import math
 import os
 import json
 
@@ -270,6 +271,9 @@ def data_item(data_type, item_ref):
     schema, db, item = get_data_on_item(data_type, item_ref)
     
     linked_objects = get_linked_objects(schema["properties"].items(), item)
+    
+    calcuated_fields = calculate_all_fields(item, schema)
+    item.update(calcuated_fields)
     
     return render_template(
         "dataItem.html",
@@ -714,6 +718,224 @@ def save_user_to_db(user):
             }}
         )
         print(f"Player {user.name} updated in database.")
+
+##############################################################
+
+def collect_all_adjustments(target, schema):
+    return collect_modifiers(target), collect_laws(target, schema), collect_districts(target, schema), collect_jobs_assigned(target, schema), collect_job_details(target, schema)
+
+def collect_modifiers(target):
+    return target.get("modifiers", [])
+
+def collect_laws(target, schema):
+    collected_laws = []
+    
+    schema_properties = schema.get("properties", {})
+    
+    laws_list = schema.get("laws", [])
+    for law_name in laws_list:
+        current_law_list = schema_properties.get(law_name, {}).get("laws", {})
+        target_law = target.get(law_name, "")
+        result = current_law_list.get(target_law, None)
+        if result is not None:
+            collected_laws.append(result)
+    
+    return collected_laws
+
+def collect_districts(target, schema):
+    return [] #TODO: Implement this
+    
+def collect_jobs_assigned(target, schema):
+    return {} #TODO: Implement this
+
+def collect_job_details(target, schema):
+    return {} #TODO: Implement this
+    
+
+##############################################################
+
+def sum_modifier_totals(modifiers):
+    modifier_totals = {}
+    
+    for modifier in modifiers:
+        field = modifier["field"]
+        modifier_totals[field] = modifier_totals.get(field, 0) + modifier["value"]
+    
+    return modifier_totals
+
+def sum_law_totals(laws):
+    law_totals = {}
+    
+    print(laws)
+    
+    for law in laws:
+        for target, value in law.items():
+            law_totals[target] = law_totals.get(target, 0) + value
+    
+    return law_totals
+
+def sum_district_totals(districts):
+    district_totals = {}
+    
+    for district in districts:
+        for target, value in district.items():
+            district_totals[target] = district_totals.get(target, 0) + value
+    
+    return district_totals
+
+#jobs_assigned is a dictionary of jobs as keys, and the amount assigned as the value
+#job_details is a dictionary with jobs as keys, and the a dictionary of the modifiers that are applied per worker in the job as values
+def sum_job_totals(jobs_assigned, job_details):
+    job_totals = {}
+    
+    for job, assigned in jobs_assigned.items():
+        job_detail = job_details.get(job, 0)
+        for field, value in job_detail.items():
+            job_totals[field] = job_totals.get(field, 0) + (value * assigned)
+    
+    return job_totals
+
+##############################################################
+
+def calculate_all_fields(target, schema):
+    modifiers, laws, districts, jobs_assigned, job_details = collect_all_adjustments(target, schema)
+    
+    schema_properties = schema.get("properties", {})
+    
+    modifier_totals = sum_modifier_totals(modifiers)
+    law_totals = sum_law_totals(laws)
+    district_totals = sum_district_totals(districts)
+    job_totals = sum_job_totals(jobs_assigned, job_details)
+    
+    calculated_values = {}
+    
+    for field, field_schema in schema_properties.items():
+        if isinstance(field_schema, dict) and field_schema.get("calculated"):
+            base_value = field_schema.get("base_value", 0)
+            calculated_values[field] = compute_field(field, target, base_value, field_schema, modifier_totals, district_totals, law_totals, job_totals)
+    
+    return calculated_values
+
+def compute_field(field, target, base_value, field_schema, modifier_totals, district_totals, law_totals, job_totals):
+    modifier_total = modifier_totals.get(field, 0)
+    law_total = law_totals.get(field, 0)
+    job_total = job_totals.get(field, 0)
+    
+    compute_func = CUSTOM_COMPUTE_FUNCTIONS.get(field, compute_field_default)
+    
+    return compute_func(field, target, base_value, field_schema, modifier_totals, district_totals, law_totals, job_totals)
+
+##############################################################
+
+def compute_field_default(field, target, base_value, field_schema, modifier_totals, district_totals, law_totals, job_totals):
+
+    value = base_value + modifier_totals.get(field, 0) + district_totals.get(field, 0) + law_totals.get(field, 0) + job_totals.get(field, 0)
+    
+    return value
+
+##############################################################
+
+def compute_field_effective_territory(field, target, base_value, field_schema, modifier_totals, district_totals, law_totals, job_totals):
+    administration = target.get("administration", 0)
+    
+    value = base_value + modifier_totals.get(field, 0) + district_totals.get(field, 0) + law_totals.get(field, 0) + job_totals.get(field, 0) + (field_schema.get("effective_territory_per_admin", 0) * administration)
+    
+    return value
+
+def compute_field_road_capacity(field, target, base_value, field_schema, modifier_totals, district_totals, law_totals, job_totals):
+    administration = target.get("administration", 0)
+    
+    value = base_value + modifier_totals.get(field, 0) + district_totals.get(field, 0) + law_totals.get(field, 0) + job_totals.get(field, 0) + (field_schema.get("road_capacity_per_admin", 0) * administration)
+    
+    return value
+    
+def compute_field_karma(field, target, base_value, field_schema, modifier_totals, district_totals, law_totals, job_totals):
+    rolling_karma = int(target.get("rolling_karma", 0))
+    temporary_karma = int(target.get("temporary_karma", 0))
+    
+    value = base_value + modifier_totals.get(field, 0) + district_totals.get(field, 0) + law_totals.get(field, 0) + job_totals.get(field, 0) + rolling_karma + temporary_karma
+    
+    return value
+
+def compute_disobey_chance(field, target, base_value, field_schema, modifier_totals, district_totals, law_totals, job_totals):
+    compliance = target.get("compliance", "None")
+    
+    match compliance:
+        case "Rebellious":
+            return 0.5
+        case "Defiant":
+            return 0.25
+        case "Neutral":
+            return 0.15
+        case "Compliant":
+            return 0.1
+    
+    return 0
+
+def compute_rebellion_chance(field, target, base_value, field_schema, modifier_totals, district_totals, law_totals, job_totals):
+    compliance = target.get("compliance", "None")
+    
+    match compliance:
+        case "Rebellious":
+            return 0.25
+        case "Defiant":
+            return 0.15
+        case "Neutral":
+            return 0.05
+    
+    return 0
+
+def compute_concessions_chance(field, target, base_value, field_schema, modifier_totals, district_totals, law_totals, job_totals):
+    compliance = target.get("compliance", "None")
+    
+    match compliance:
+        case "Rebellious":
+            return 0.5
+        case "Defiant":
+            return 0.4
+        case "Neutral":
+            return 0.3
+        case "Compliant":
+            return 0.2
+        case "Loyal":
+            return 0.1
+    
+    return 0
+
+def compute_pop_count(field, target, base_value, field_schema, modifier_totals, district_totals, law_totals, job_totals):
+    #TODO: Add the database to arguments so this can be calculated
+    
+    return 0
+
+def compute_district_slots(field, target, base_value, field_schema, modifier_totals, district_totals, law_totals, job_totals):
+    pop_count = target.get("pop_count", 0)
+    
+    value = base_value + modifier_totals.get(field, 0) + district_totals.get(field, 0) + law_totals.get(field, 0) + job_totals.get(field, 0) + math.floor(pop_count / 5)
+    
+    return value
+
+def compute_unit_capacity(field, target, base_value, field_schema, modifier_totals, district_totals, law_totals, job_totals):
+    pop_count = target.get("pop_count", 0)
+    
+    unit_cap_from_pops = math.ceil(pop_count * (modifier_totals.get("recruit_percentage", 0) + district_totals.get("recruit_percentage", 0) + law_totals.get("recruit_percentage", 0) + job_totals.get("recruit_percentage", 0)))
+    
+    value = base_value + modifier_totals.get(field, 0) + district_totals.get(field, 0) + law_totals.get(field, 0) + job_totals.get(field, 0) + unit_cap_from_pops
+    
+    return value
+
+##############################################################
+
+CUSTOM_COMPUTE_FUNCTIONS = {
+    "effective_territory": compute_field_effective_territory,
+    "road_capacity": compute_field_road_capacity,
+    "karma": compute_field_karma,
+    "disobey_chance": compute_disobey_chance,
+    "rebellion_chance": compute_rebellion_chance,
+    "concessions_chance": compute_concessions_chance,
+    "pop_count": compute_pop_count,
+    "land_unit_capacity": compute_unit_capacity,
+    "naval_unit_capacity": compute_unit_capacity
+}
 
 ##############################################################
 
