@@ -1,0 +1,402 @@
+{
+	"ancient_artifactory": {
+		"display_name": "Ancient Artifactory",
+		"type": "artifactory",
+		"cost": {
+			"stone": 4,
+			"wood": 4,
+			"magic": 3,
+			"bronze": 1
+		},
+		"modifiers": {
+			"magic_consumption": 1,
+			"artifact_death_loss_chance": -0.05,
+			"minimum_artifact_death_loss_chance": 0.1
+		},
+		"synergy_requirement": "magic",
+		"synergy_node_active": true,
+		"synergy_modifiers": {
+			"artifact_death_loss_chance": -0.05
+		},
+		"count": 1
+	},
+	"ancient_barrows": {
+		"display_name": "Ancient Barrows",
+		"type": "barrows",
+		"cost": {
+			"stone": 5,
+			"magic": 4
+		},
+		"modifiers": {
+			"magic_consumption": 1
+		},
+		"synergy_requirement": "magic",
+		"synergy_node_active": true,
+		"synergy_modifiers": {
+			"ignore_magic_cost": true
+		},
+		"count": 1
+	},
+	"ancient_cache": {
+		"display_name": "Ancient Cache",
+		"type": "cache",
+		"cost": {
+			"stone": 4,
+			"wood": 3,
+			"bronze": 1
+		},
+		"modifiers": {
+			"wood_storage": 5,
+			"stone_storage": 5,
+			"mount_storage": 5,
+			"bronze_storage": 5
+		},
+		"synergy_requirement": "stone",
+		"synergy_node_active": true,
+		"synergy_modifiers": {
+			"wood_storage": 5,
+			"stone_storage": 5,
+			"mount_storage": 5,
+			"bronze_storage": 5
+		},
+		"count": 1
+	},
+	"ancient_center": {
+		"display_name": "Ancient Center",
+		"type": "center",
+		"cost": {
+			"stone": 4,
+			"wood": 3,
+			"food": 2
+		},
+		"modifiers": {
+			"wood_consumption": 1,
+			"administration": 1
+		},
+		"synergy_requirement": "wood",
+		"synergy_node_active": true,
+		"synergy_modifiers": {
+			"adminstration": 1
+		},
+		"count": 1
+	},
+	"ancient_church": {
+		"display_name": "Ancient Church",
+		"type": "church",
+		"cost": {
+			"stone": 2,
+			"wood": 3,
+			"bronze": 1
+		},
+		"modifiers": {
+		},
+		"synergy_requirement": "wood",
+		"synergy_node_active": true,
+		"synergy_modifiers": {
+		},
+		"count": 1
+	},
+	"ancient_dock": {
+		"display_name": "Ancient Dock",
+		"type": "dock",
+		"cost": {
+			"stone": 3,
+			"wood": 5,
+			"food": 2
+		},
+		"modifiers": {
+			"wood_consumption": 1,
+			"food_production": 1
+		},
+		"synergy_requirement": "food",
+		"synergy_node_active": true,
+		"synergy_modifiers": {
+			"food": 1
+		},
+		"count": 1
+	},
+	"ancient_forge": {
+		"display_name": "Ancient Forge",
+		"type": "forge",
+		"cost": {
+			"stone": 6,
+			"wood": 2,
+			"bronze": 2
+		},
+		"modifiers": {
+			"stone_consumption": 1,
+			"bronze_production": 1,
+			"metallurgist_bronze_production": 1
+		},
+		"synergy_requirement": "bronze",
+		"synergy_node_active": true,
+		"synergy_modifiers": {
+			"bronze_production": 1
+		},
+		"count": 1
+	},
+	"ancient_fort": {
+		"display_name": "Ancient Fort",
+		"type": "fort",
+		"cost": {
+			"stone": 5,
+			"wood": 3
+		},
+		"alt_cost": {
+			"stone": 5,
+			"bronze": 1
+		},
+		"modifiers": {
+			"stone_consumption": 1
+		},
+		"synergy_requirement": "stone",
+		"synergy_node_active": true,
+		"synergy_modifiers": {
+			"ignore_stone_cost": true
+		},
+		"count": 1
+	},
+	"ancient_granary": {
+		"display_name": "Ancient Granary",
+		"type": "granary",
+		"cost": {
+			"stone": 2,
+			"wood": 5
+		},
+		"modifiers": {
+			"food_storage": 5
+		},
+		"synergy_requirement": "food",
+		"synergy_node_active": true,
+		"synergy_modifiers": {
+			"food_storage": 5
+		},
+		"count": 1
+	},
+	"ancient_homes": {
+		"display_name": "Ancient Homes",
+		"type": "homes",
+		"cost": {
+			"stone": 3,
+			"wood": 5,
+			"bronze": 2
+		},
+		"modifiers": {
+			"wood_consumption": 1,
+			"effective_pop_capacity": 2
+		},
+		"synergy_requirement": "food",
+		"synergy_node_active": true,
+		"synergy_modifiers": {
+			"effective_pop_capacity": 1
+		},
+		"count": 1
+	},
+	"ancient_hospital": {
+		"display_name": "Ancient Hospital",
+		"type": "hospital",
+		"cost": {
+			"stone": 3,
+			"wood": 4,
+			"food": 2,
+			"bronze": 1
+		},
+		"modifiers": {
+			"food_consumption": 1
+		},
+		"synergy_requirement": "food",
+		"synergy_node_active": true,
+		"synergy_modifiers": {
+		},
+		"count": 1
+	},
+	"ancient_farms": {
+		"display_name": "Ancient Farms",
+		"type": "farms",
+		"cost": {
+			"stone": 2,
+			"wood": 6,
+			"food": 4
+		},
+		"modifiers": {
+			"wood_consumption": 1,
+			"food_production": 2
+		},
+		"synergy_requirement": "food",
+		"synergy_node_active": true,
+		"synergy_modifiers": {
+			"food_production": 1
+		},
+		"count": 1
+	},
+	"ancient_fishery": {
+		"display_name": "Ancient Fishery",
+		"type": "fishery",
+		"cost": {
+			"wood": 5,
+			"food": 5
+		},
+		"modifiers": {
+			"wood_consumption": 1,
+			"fisherman_food_production": 1
+		},
+		"synergy_requirement": "food",
+		"synergy_node_active": true,
+		"synergy_modifiers": {
+			"food_production": 1
+		},
+		"count": 1
+	},
+	"ancient_magic_site": {
+		"display_name": "Ancient Magic Site",
+		"type": "magic_site",
+		"cost": {
+			"magic": 4,
+			"stone": 3
+		},
+		"modifiers": {
+			"stone_consumption": 1,
+			"magic_production": 1
+		},
+		"synergy_requirement": "magic",
+		"synergy_node_active": true,
+		"synergy_modifiers": {
+			"magic_production": 1
+		},
+		"count": 1
+	},
+	"ancient_market": {
+		"display_name": "Ancient Market",
+		"type": "market",
+		"cost": {
+			"wood": 5,
+			"stone": 2,
+			"food": 3
+		},
+		"modifiers": {
+			"mount_consumption": 1,
+			"trade_distance": 3,
+			"import_capacity": 1,
+			"export_capacity": 1,
+			"money_production": 100
+		},
+		"synergy_requirement": "luxury",
+		"synergy_node_active": false,
+		"synergy_modifiers": {
+			"money_production": 150
+		},
+		"count": 1
+	},
+	"ancient_mill": {
+		"display_name": "Ancient Mill",
+		"type": "mill",
+		"cost": {
+			"wood": 4,
+			"stone": 2,
+			"food": 6
+		},
+		"modifiers": {
+			"wood_consumption": 1,
+			"food_production_per_stockpiled_food": 5,
+			"max_food_production_per_stockpiled_food": 5
+		},
+		"synergy_requirement": "food",
+		"synergy_node_active": true,
+		"synergy_modifiers": {
+			"food_storage": 5
+		},
+		"count": 1
+	},
+	"ancient_quarry": {
+		"display_name": "Ancient Quarry",
+		"type": "quarry",
+		"cost": {
+			"wood": 4,
+			"stone": 3
+		},
+		"modifiers": {
+			"stone_production": 1
+		},
+		"synergy_requirement": "stone",
+		"synergy_node_active": true,
+		"synergy_modifiers": {
+			"stone_district_discount": 0.2,
+			"stone_city_discount": 0.2
+		},
+		"count": 1
+	},
+	"ancient_ranch": {
+		"display_name": "Ancient Ranch",
+		"type": "ranch",
+		"cost": {
+			"wood": 5,
+			"food": 3,
+			"mount": 2
+		},
+		"modifiers": {
+			"mount_production": 2,
+			"food_production": 1
+		},
+		"synergy_requirement": "mount",
+		"synergy_node_active": true,
+		"synergy_modifiers": {
+			"mount_production": 1
+		},
+		"count": 1
+	},
+	"ancient_sawmill": {
+		"display_name": "Ancient Sawmill",
+		"type": "sawmill",
+		"cost": {
+			"wood": 5,
+			"stone": 2
+		},
+		"modifiers": {
+			"wood_production": 1
+		},
+		"synergy_requirement": "wood",
+		"synergy_node_active": true,
+		"synergy_modifiers": {
+			"wood_district_discount": 0.2,
+			"wood_city_discount": 0.2
+		},
+		"count": 1
+	},
+	"ancient_school": {
+		"display_name": "Ancient School",
+		"type": "school",
+		"cost": {
+			"wood": 8,
+			"stone": 2,
+			"bronze": 1
+		},
+		"modifiers": {
+			"wood_consumption": 1,
+			"research_production": 1
+		},
+		"synergy_requirement": "research",
+		"synergy_node_active": true,
+		"synergy_modifiers": {
+		},
+		"count": 1
+	},
+	"ancient_workshop": {
+		"display_name": "Ancient Workshop",
+		"type": "workshop",
+		"cost": {
+			"wood": 2,
+			"food": 1,
+			"stone": 1,
+			"bronze": 1
+		},
+		"modifiers": {
+			"wood_consumption": 1
+		},
+		"synergy_requirement": "research",
+		"synergy_node_active": true,
+		"synergy_modifiers": {
+			"mundane_unit_strength": 1
+		},
+		"count": 1
+	}
+}

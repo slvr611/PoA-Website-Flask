@@ -401,7 +401,7 @@
       },
 	  "nomad_camp_type": {
 		"bsonType": "enum",
-		"label": "Foreign Acceptance",
+		"label": "Nomad Camp Type",
         "description": "The type of camp a nomadic nation currently has",
 		"enum": ["None", "Caravan", "Canvass", "Encampment", "Hearth"],
 		"laws": {

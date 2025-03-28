@@ -57,13 +57,19 @@ category_data = {
     "changes": {"pluralName": "Changes", "singularName": "Change", "database": mongo.db.changes}
 }
 
-def load_schema(file_path):
+json_files = ["jobs", "districts"]
+json_data = {}
+
+def load_json(file_path):
     with open(file_path, "r") as file:
-        schema = json.load(file)
-    return schema["$jsonSchema"]
+        json_data = json.load(file)
+    return json_data
 
 for data_type in category_data:
-    category_data[data_type]["schema"] = load_schema("schemas/" + data_type + ".json")
+    category_data[data_type]["schema"] = load_json("json-data/schemas/" + data_type + ".json")["$jsonSchema"]
+
+for file in json_files:
+    json_data["file"] = load_json("json-data/" + file + ".json")
 
 @app.context_processor
 def inject_navbar_pages():
@@ -766,8 +772,6 @@ def sum_modifier_totals(modifiers):
 def sum_law_totals(laws):
     law_totals = {}
     
-    print(laws)
-    
     for law in laws:
         for target, value in law.items():
             law_totals[target] = law_totals.get(target, 0) + value
@@ -903,9 +907,12 @@ def compute_concessions_chance(field, target, base_value, field_schema, modifier
     return 0
 
 def compute_pop_count(field, target, base_value, field_schema, modifier_totals, district_totals, law_totals, job_totals):
-    #TODO: Add the database to arguments so this can be calculated
+    pop_database = category_data["pops"]["database"]
+    target_id = str(target["_id"])
     
-    return 0
+    pop_count = pop_database.count_documents({"nation": target_id})
+    
+    return pop_count
 
 def compute_district_slots(field, target, base_value, field_schema, modifier_totals, district_totals, law_totals, job_totals):
     pop_count = target.get("pop_count", 0)

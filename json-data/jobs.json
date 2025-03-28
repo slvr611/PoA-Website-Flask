@@ -1,0 +1,125 @@
+{
+	"artificer": {
+		"display_name": "Artificer",
+		"requirements":{
+			"district": "artifactory"
+		},
+		"production": {
+			"artifact_rolls": 2
+		}
+	},
+	"apprentice": {
+		"display_name": "Apprentice",
+		"requirements":{
+			"district": "barrows"
+		},
+		"production": {
+			"nation_magic_spell_rolls": 2
+		}
+	},
+	"brewer": {
+		"display_name": "Brewer",
+		"requirements":{
+			"district": "brewery"
+		},
+		"upkeep": {
+			"food": 1
+		},
+		"production": {
+			"chance_to_gain_stability": 0.1
+		}
+	},
+	"bureaucrat": {
+		"display_name": "Bureaucrat",
+		"requirements":{
+			"district": "center"
+		},
+		"upkeep": {
+			"wood": 1
+		},
+		"production": {
+			"administration": 1
+		}
+	},
+	"farmer": {
+		"display_name": "Farmer",
+		"requirements":{
+			"district": "farm"
+		},
+		"upkeep": {
+			"wood": 1
+		},
+		"production": {
+			"food": 4
+		}
+	},
+	"fisherman": {
+		"display_name": "Fisherman",
+		"requirements":{
+			"district": "dock"
+		},
+		"production": {
+			"food": 3
+		}
+	},
+	"harvester": {
+		"display_name": "Harvester",
+		"upkeep": {
+			"stone": 1
+		},
+		"production": {
+			"wood": 3
+		}
+	},
+	"hunter": {
+		"display_name": "Hunter",
+		"production": {
+			"food": 2
+		}
+	},
+	"merchant": {
+		"display_name": "Merchant",
+		"upkeep": {
+			"mount": 1
+		},
+		"production": {
+			"trade distance": 4,
+			"import_capacity": 2,
+			"export_capacity": 2
+		}
+	},
+	"metallurgist": {
+		"display_name": "Metallurgist",
+		"upkeep": {
+			"stone": 1
+		},
+		"production": {
+			"bronze": 1
+		}
+	},
+	"miner": {
+		"display_name": "Miner",
+		"upkeep": {
+			"wood": 1
+		},
+		"production": {
+			"stone": 3
+		}
+	},
+	"mystic": {
+		"display_name": "Mystic",
+		"production": {
+			"magic": 1
+		}
+	},
+	"researcher": {
+		"display_name": "Researcher",
+		"upkeep": {
+			"stone": 1,
+			"bronze": 1
+		},
+		"production": {
+			"research": 1
+		}
+	}
+}
