@@ -9,6 +9,7 @@ from datetime import datetime
 import math
 import os
 import json
+import copy
 
 #Load environment variables from .env file
 load_dotenv()
@@ -69,7 +70,21 @@ for data_type in category_data:
     category_data[data_type]["schema"] = load_json("json-data/schemas/" + data_type + ".json")["$jsonSchema"]
 
 for file in json_files:
-    json_data["file"] = load_json("json-data/" + file + ".json")
+    json_data[file] = load_json("json-data/" + file + ".json")
+
+general_resources = [
+    {"key": "food", "name": "Food", "base_storage": 20},
+    {"key": "wood", "name": "Wood", "base_storage": 15},
+    {"key": "stone", "name": "Stone", "base_storage": 15},
+    {"key": "mounts", "name": "Mounts", "base_storage": 10},
+    {"key": "research", "name": "Research", "base_storage": 0},
+    {"key": "magic", "name": "Magic", "base_storage": 10}
+]
+
+unique_resources = [
+    {"key": "bronze", "name": "Bronze", "base_storage": 5},
+    {"key": "iron", "name": "Iron", "base_storage": 0},
+]
 
 @app.context_processor
 def inject_navbar_pages():
@@ -272,6 +287,32 @@ def approve_change(item_ref):
     
     return redirect("/changes")
 
+@app.route("/nations/<item_ref>")
+def nation_item(item_ref):
+    schema, db, nation = get_data_on_item("nations", item_ref)
+    
+    linked_objects = get_linked_objects(schema["properties"].items(), nation)
+    
+    calculated_fields = calculate_all_fields(nation, schema)
+    nation.update(calculated_fields)
+    
+    print(calculated_fields)
+    
+    if "jobs" not in nation:
+        nation["jobs"] = {}
+    
+    return render_template(
+        "nation.html",
+        title=item_ref,
+        schema=schema,
+        nation=nation,
+        linked_objects=linked_objects,
+        general_resources=general_resources,
+        unique_resources=unique_resources,
+        districts_config=json_data["districts"]
+    )
+
+
 @app.route("/<data_type>/<item_ref>")
 def data_item(data_type, item_ref):
     schema, db, item = get_data_on_item(data_type, item_ref)
@@ -332,6 +373,35 @@ def get_linked_objects(properties, item):
     return linked_objects
 
 #######################################################
+
+@app.route("/nations/<item_ref>/edit", methods=["GET"])
+def edit_nation(item_ref):
+    schema, db, item = get_data_on_item("nations", item_ref)
+    
+    dropdown_options = {}
+    for field, attributes in schema["properties"].items():
+        if attributes.get("collection") != None:
+            related_collection = attributes.get("collection")
+            dropdown_options[field] = list(mongo.db[related_collection].find({}, {"name": 1, "_id": 1}))
+    
+    linked_objects = {}
+    for field, attributes in schema["properties"].items():
+        if attributes.get("collection") != None and attributes.get("queryTargetAttribute") != None:
+            related_collection = attributes.get("collection")
+            query_target = attributes.get("queryTargetAttribute")
+            item_id = str(item["_id"])
+            linked_objects[field] = list(mongo.db[related_collection].find({query_target: item_id}, {"name": 1, "_id": 1}))
+    
+    template = render_template(
+        "dataItemEdit.html",
+        title="Edit " + item_ref,
+        schema=schema,
+        item=item,
+        dropdown_options=dropdown_options,
+        linked_objects=linked_objects
+    )
+    return template
+
 
 @app.route("/<data_type>/<item_ref>/edit", methods=["GET"])
 def data_item_edit(data_type, item_ref):
@@ -727,9 +797,6 @@ def save_user_to_db(user):
 
 ##############################################################
 
-def collect_all_adjustments(target, schema):
-    return collect_modifiers(target), collect_laws(target, schema), collect_districts(target, schema), collect_jobs_assigned(target, schema), collect_job_details(target, schema)
-
 def collect_modifiers(target):
     return target.get("modifiers", [])
 
@@ -749,14 +816,73 @@ def collect_laws(target, schema):
     return collected_laws
 
 def collect_districts(target, schema):
-    return [] #TODO: Implement this
+    district_names = target.get("districts", [])
+    
+    district_values = []
+    
+    for name in district_names:
+        district_values.append(json_data["districts"].get(name, {}).get("modifiers", {}))
+    
+    return district_values
     
 def collect_jobs_assigned(target, schema):
     return {} #TODO: Implement this
 
-def collect_job_details(target, schema):
-    return {} #TODO: Implement this
+def calculate_job_details(target, modifier_totals, district_totals, law_totals):
+    job_details = json_data["jobs"]
+    district_details = json_data["districts"]
     
+    modifier_sources = [modifier_totals, district_totals, law_totals]
+    
+    districts = target.get("districts", [])
+    
+    district_types = []
+    
+    for district in districts:
+        district_types.append(district_details.get(district, {}).get("type", ""))
+    
+    new_job_details = {}
+    
+    for job, details in job_details.items():
+        if not "requirements" in details or ("district" in details["requirements"] and details["requirements"]["district"] in district_types): #TODO: Account for non-district requirements
+            new_details = copy.deepcopy(details)
+            for source in modifier_sources:
+                for modifier, value in source.items():
+                    if modifier.startswith(job):
+                        if modifier.endswith("production"):
+                            resource = modifier.replace(job + "_", "").replace("_production", "")
+                            new_val = new_details.get("production", {}).get(resource, 0) + value
+                            if new_val > 0:
+                                new_details["production"][resource] = new_val
+                            elif resource in new_details["production"]:
+                                new_details["production"].pop(resource)
+                        elif modifier.endswith("upkeep"):
+                            resource = modifier.replace(job + "_", "").replace("_upkeep", "")
+                            new_val = new_details.get("upkeep", {}).get(resource, 0) + value
+                            if new_val > 0:
+                                new_details["upkeep"][resource] = new_val
+                            elif resource in new_details["upkeep"]:
+                                new_details["upkeep"].pop(resource)
+                    elif modifier.startswith("job"):
+                        if modifier.endswith("production"):
+                            resource = modifier.replace("job_", "").replace("_production", "")
+                            new_val = new_details.get("production", {}).get(resource, 0) + value
+                            if new_val > 0:
+                                new_details["production"][resource] = new_val
+                            elif resource in new_details["production"]:
+                                new_details["production"].pop(resource)
+                        elif modifier.endswith("upkeep"):
+                            resource = modifier.replace("job_", "").replace("_upkeep", "")
+                            new_val = new_details.get("upkeep", {}).get(resource, 0) + value
+                            if new_val > 0:
+                                new_details["upkeep"][resource] = new_val
+                            elif resource in new_details["upkeep"]:
+                                new_details["upkeep"].pop(resource)
+            new_job_details[job] = new_details
+    
+    print(new_job_details)
+    
+    return new_job_details
 
 ##############################################################
 
@@ -785,7 +911,7 @@ def sum_district_totals(districts):
         for target, value in district.items():
             district_totals[target] = district_totals.get(target, 0) + value
     
-    return district_totals
+    return district_totals    
 
 #jobs_assigned is a dictionary of jobs as keys, and the amount assigned as the value
 #job_details is a dictionary with jobs as keys, and the a dictionary of the modifiers that are applied per worker in the job as values
@@ -797,26 +923,37 @@ def sum_job_totals(jobs_assigned, job_details):
         for field, value in job_detail.items():
             job_totals[field] = job_totals.get(field, 0) + (value * assigned)
     
-    return job_totals
+    return job_totals    
 
 ##############################################################
 
-def calculate_all_fields(target, schema):
-    modifiers, laws, districts, jobs_assigned, job_details = collect_all_adjustments(target, schema)
-    
+def calculate_all_fields(target, schema):    
     schema_properties = schema.get("properties", {})
     
+    modifiers = collect_modifiers(target)
     modifier_totals = sum_modifier_totals(modifiers)
+    
+    laws = collect_laws(target, schema)
     law_totals = sum_law_totals(laws)
+    
+    print(law_totals)
+    
+    districts = collect_districts(target, schema)
     district_totals = sum_district_totals(districts)
+    
+    #TODO: Racial traits and other assorted modifier locations like artifacts and wonders
+    
+    jobs_assigned = collect_jobs_assigned(target, schema)
+    job_details = calculate_job_details(target, modifier_totals, district_totals, law_totals)
     job_totals = sum_job_totals(jobs_assigned, job_details)
     
-    calculated_values = {}
+    calculated_values = {"job_details": job_details}
     
     for field, field_schema in schema_properties.items():
         if isinstance(field_schema, dict) and field_schema.get("calculated"):
             base_value = field_schema.get("base_value", 0)
             calculated_values[field] = compute_field(field, target, base_value, field_schema, modifier_totals, district_totals, law_totals, job_totals)
+            target[field] = calculated_values[field]
     
     return calculated_values
 
@@ -929,6 +1066,69 @@ def compute_unit_capacity(field, target, base_value, field_schema, modifier_tota
     value = base_value + modifier_totals.get(field, 0) + district_totals.get(field, 0) + law_totals.get(field, 0) + job_totals.get(field, 0) + unit_cap_from_pops
     
     return value
+    
+def compute_resource_production(field, target, base_value, field_schema, modifier_totals, district_totals, law_totals, job_totals):
+    production_dict = {}
+    
+    all_resources = general_resources + unique_resources
+
+    for resource in all_resources:
+        specific_resource_production = 0
+        modifiers_to_check = [resource["key"] + "_production", "resource_production"]
+        for modifier in modifiers_to_check:
+            specific_resource_production += modifier_totals.get(modifier, 0) + district_totals.get(modifier, 0) + law_totals.get(modifier, 0) + job_totals.get(modifier, 0)
+        production_dict[resource["key"]] = specific_resource_production
+    
+    return production_dict
+
+def compute_resource_consumption(field, target, base_value, field_schema, modifier_totals, district_totals, law_totals, job_totals):
+    consumption_dict = {}
+    
+    pop_count = target.get("pop_count", 0)
+    
+    all_resources = general_resources + unique_resources
+    
+    for resource in all_resources:
+        specific_resource_consumption = 0
+        modifiers_to_check = [resource["key"] + "_consumption", "resource_consumption"]
+        for modifier in modifiers_to_check:
+            specific_resource_consumption += modifier_totals.get(modifier, 0) + district_totals.get(modifier, 0) + law_totals.get(modifier, 0) + job_totals.get(modifier, 0)
+        
+        if resource["key"] == "food":
+            specific_resource_consumption += pop_count
+        
+        specific_resource_consumption = max(specific_resource_consumption, 0)
+        
+        consumption_dict[resource["key"]] = specific_resource_consumption
+    
+    return consumption_dict
+
+def compute_resource_excess(field, target, base_value, field_schema, modifier_totals, district_totals, law_totals, job_totals):
+    excess_dict = {}
+    
+    production_dict = target.get("resource_production", {})
+    consumption_dict = target.get("resource_consumption", {})
+    
+    all_resources = general_resources + unique_resources
+    
+    for resource in all_resources:
+        excess_dict[resource["key"]] = production_dict.get(resource["key"], 0) - consumption_dict.get(resource["key"], 0)
+    
+    return excess_dict
+
+def compute_resource_storage_capacity(field, target, base_value, field_schema, modifier_totals, district_totals, law_totals, job_totals):
+    storage_dict = {}
+    
+    all_resources = general_resources + unique_resources
+    
+    for resource in all_resources:
+        specific_resource_storage = resource["base_storage"]
+        modifiers_to_check = [resource["key"] + "_storage", "resource_storage"]
+        for modifier in modifiers_to_check:
+            specific_resource_storage += modifier_totals.get(modifier, 0) + district_totals.get(modifier, 0) + law_totals.get(modifier, 0) + job_totals.get(modifier, 0)
+        storage_dict[resource["key"]] = specific_resource_storage
+    
+    return storage_dict
 
 ##############################################################
 
@@ -940,8 +1140,13 @@ CUSTOM_COMPUTE_FUNCTIONS = {
     "rebellion_chance": compute_rebellion_chance,
     "concessions_chance": compute_concessions_chance,
     "pop_count": compute_pop_count,
+    "district_slots": compute_district_slots,
     "land_unit_capacity": compute_unit_capacity,
-    "naval_unit_capacity": compute_unit_capacity
+    "naval_unit_capacity": compute_unit_capacity,
+    "resource_production": compute_resource_production,
+    "resource_consumption": compute_resource_consumption,
+    "resource_excess": compute_resource_excess,
+    "resource_capacity": compute_resource_storage_capacity
 }
 
 ##############################################################

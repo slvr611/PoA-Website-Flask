@@ -1,0 +1,398 @@
+{% extends "layout.html" %}
+
+{% block title %}{{ nation["name"] }}{% endblock %}
+
+{% block content %}
+<div class="nation-page-container">
+	<div class="header-bar">
+		<h1>{{ nation.name }}</h1>
+		{% if g.user.is_admin %}
+			<a href="{{ request.path }}/edit" class="edit-button">Edit</a>
+		{% endif %}
+		<div class="nation-summary">
+			<span>{{ schema.properties.region.label }}: {% if nation.region is not none %}{{ nation.region }}{% else %}{{schema.properties.region.noneResult}}{% endif %}</span>
+			<span>{{ schema.properties.pop_count.label }}: {{ nation.pop_count }}</span>
+			{% if nation.empire %}
+				<span>Empire</span>
+				<span>{{ schema.properties.prestige.label }}: {{ nation.prestige }}</span>
+			{% endif %}
+			{% if "rulers" in linked_objects and linked_objects["rulers"] is not none %}
+				<span>
+					{{ schema.properties.rulers.label }}:
+					{% for ruler in linked_objects["rulers"] %}
+						<a href="/characters/{{ ruler.name }}">{{ ruler.name }}</a>{% if not loop.last %}, {% endif %}
+					{% endfor %}
+				</span>
+			{% endif %}
+		</div>
+	</div>
+	
+	<div class="main-columns">
+		<div class="info-column">
+			<h2>General</h2>
+			<table class="info-table">
+				<tr>
+					<th>{{ schema.properties.stability.label }}:</th>
+					<td>{{ nation.stability }}</td>
+				</tr>
+				<tr>
+					<th>{{ schema.properties.stability_gain_chance.label }}:</th>
+					<td>{{ nation.stability_gain_chance }}</td>
+				</tr>
+				<tr>
+					<th>{{ schema.properties.stability_loss_chance.label }}:</th>
+					<td>{{ nation.stability_loss_chance }}</td>
+				</tr>
+				<tr>
+					<th>{{ schema.properties.infamy.label }}:</th>
+					<td>{{ nation.infamy }}</td>
+				</tr>
+				<tr>
+					<th>{{ schema.properties.karma.label }}:</th>
+					<td>{{ nation.karma }}</td>
+				</tr>
+			</table>
+		</div>
+		<div class="info-column">
+			<h2>Income</h2>
+			<table class="info-table">
+				<tr>
+					<th>{{ schema.properties.money.label }}:</th>
+					<td>{{ nation.money }}</td>
+				</tr>
+				<tr>
+					<th>{{ schema.properties.money_capacity.label }}:</th>
+					<td>{{ nation.money_capacity }}</td>
+				</tr>
+				<tr>
+					<th>{{ schema.properties.money_income.label }}:</th>
+					<td>{{ nation.money_income }}</td>
+				</tr>
+			</table>
+		</div>
+		<div class="info-column">
+			<h2>Demographics</h2>
+			<table class="info-table">
+				<tr>
+					<th>{{ schema.properties.primary_race.label }}:</th>
+					<td>{{ nation.primary_race }}</td>
+				</tr>
+				<tr>
+					<th>{{ schema.properties.primary_culture.label }}:</th>
+					<td>{{ nation.primary_culture }}</td>
+				</tr>
+				<tr>
+					<th>{{ schema.properties.primary_religion.label }}:</th>
+					<td>{{ nation.primary_religion }}</td>
+				</tr>
+				<tr>
+					<th>{{ schema.properties.unique_minority_count.label }}:</th>
+					<td>{{ nation.unique_minority_count }}</td>
+				</tr>
+			</table>
+		</div>
+		<div class="info-column">
+			<h2>Government & Laws</h2>
+			<table class="info-table">
+				<tr>
+					<th>{{ schema.properties.government_type.label }}:</th>
+					<td>{{ nation.government_type }}</td>
+				</tr>
+				<tr>
+					<th>{{ schema.properties.succession_type.label }}:</th>
+					<td>{{ nation.succession_type }}</td>
+				</tr>
+				{% if false %} <!-- TODO: Add check for nomad type -->
+					<tr>
+						<th>{{ schema.properties.succession_type.label }}:</th>
+						<td>{{ nation.succession_type }}</td>
+					</tr>
+				{% endif %}
+				<tr>
+					<th>{{ schema.properties.conscription_type.label }}:</th>
+					<td>{{ nation.conscription_type }}</td>
+				</tr>
+				<tr>
+					<th>{{ schema.properties.military_funding.label }}:</th>
+					<td>{{ nation.military_funding }}</td>
+				</tr>
+				<tr>
+					<th>{{ schema.properties.magic_stance.label }}:</th>
+					<td>{{ nation.magic_stance }}</td>
+				</tr>
+				<tr>
+					<th>{{ schema.properties.citizenship_stance.label }}:</th>
+					<td>{{ nation.citizenship_stance }}</td>
+				</tr>
+				<tr>
+					<th>{{ schema.properties.foreign_acceptance.label }}:</th>
+					<td>{{ nation.foreign_acceptance }}</td>
+				</tr>
+				<tr>
+					<th>{{ schema.properties.subject_stance.label }}:</th>
+					<td>{{ nation.subject_stance }}</td>
+				</tr>
+				<tr>
+					<th>{{ schema.properties.land_doctrine.label }}:</th>
+					<td>{{ nation.land_doctrine }}</td>
+				</tr>
+				<tr>
+					<th>{{ schema.properties.naval_doctrine.label }}:</th>
+					<td>{{ nation.naval_doctrine }}</td>
+				</tr>
+				<tr>
+					<th>{{ schema.properties.diplomatic_stance.label }}:</th>
+					<td>{{ nation.diplomatic_stance }}</td>
+				</tr>
+				<tr>
+					<th>{{ schema.properties.scientific_stance.label }}:</th>
+					<td>{{ nation.scientific_stance }}</td>
+				</tr>
+				<tr>
+					<th>{{ schema.properties.economy_type.label }}:</th>
+					<td>{{ nation.economy_type }}</td>
+				</tr>
+				<tr>
+					<th>{{ schema.properties.expansion_stance.label }}:</th>
+					<td>{{ nation.expansion_stance }}</td>
+				</tr>
+				<tr>
+					<th>{{ schema.properties.mercenary_law.label }}:</th>
+					<td>{{ nation.mercenary_law }}</td>
+				</tr>
+				<tr>
+					<th>{{ schema.properties.consumption_stance.label }}:</th>
+					<td>{{ nation.consumption_stance }}</td>
+				</tr>
+				<tr>
+					<th>{{ schema.properties.tax_stance.label }}:</th>
+					<td>{{ nation.tax_stance }}</td>
+				</tr>
+				<tr>
+					<th>{{ schema.properties.justice_stance.label }}:</th>
+					<td>{{ nation.justice_stance }}</td>
+				</tr>
+			</table>
+		</div>
+		<div class="info-column">
+			<h2>Administration & Holdings</h2>
+			<table class="info-table">
+				<tr>
+					<th>{{ schema.properties.administration.label }}:</th>
+					<td>{{ nation.administration }}</td>
+				</tr>
+				<tr>
+					<th>{{ schema.properties.current_territory.label }}:</th>
+					<td>{{ nation.current_territory }}</td>
+				</tr>
+				<tr>
+					<th>{{ schema.properties.effective_territory.label }}:</th>
+					<td>{{ nation.effective_territory }}</td>
+				</tr>
+				<tr>
+					<th>{{ schema.properties.road_usage.label }}:</th>
+					<td>{{ nation.road_usage }}</td>
+				</tr>
+				<tr>
+					<th>{{ schema.properties.road_capacity.label }}:</th>
+					<td>{{ nation.road_capacity }}</td>
+				</tr>
+				<tr>
+					<th>{{ schema.properties.cities.label }}:</th>
+					<td>{{ nation.cities }}</td>
+				</tr>
+				<tr>
+					<th>{{ schema.properties.city_slots.label }}:</th>
+					<td>{{ nation.city_slots }}</td>
+				</tr>
+			</table>
+		</div>
+		{% if "overlord" in nation and nation["overlord"] is not none %}
+			<div class="info-column">
+				<h2>Vassalship</h2>
+				<table class="info-table">
+					<tr>
+						<th>{{ schema.properties.overlord.label }}:</th>
+						<td>{{ nation.overlord }}</td>
+					</tr>
+					<tr>
+						<th>{{ schema.properties.vassal_type.label }}:</th>
+						<td>{{ nation.vassal_type }}</td>
+					</tr>
+					<tr>
+						<th>{{ schema.properties.compliance.label }}:</th>
+						<td>{{ nation.compliance }}</td>
+					</tr>
+					<tr>
+						<th>{{ schema.properties.disobey_chance.label }}:</th>
+						<td>{{ nation.disobey_chance }}</td>
+					</tr>
+					<tr>
+						<th>{{ schema.properties.rebellion_chance.label }}:</th>
+						<td>{{ nation.rebellion_chance }}</td>
+					</tr>
+					<tr>
+						<th>{{ schema.properties.concessions_chance.label }}:</th>
+						<td>{{ nation.concessions_chance }}</td>
+					</tr>
+					<tr>
+						<th>{{ schema.properties.concessions_qty.label }}:</th>
+						<td>{{ nation.concessions_qty }}</td>
+					</tr>
+				</table>
+			</div>
+		{% endif %}
+		{% if "vassals" in linked_objects and linked_objects["vassals"] is not none %} <!-- TODO: Fix this -->
+			<div class="info-column">
+				<h2>Vassals</h2>
+				<table class="info-table">
+					<tr>
+						<th>{{ schema.properties.vassals.label }}:</th>
+						<td>TBA</td>
+					</tr>
+				</table>
+			</div>
+		{% endif %}
+	</div>
+	
+	<section class="resources-section">
+		<h2>Resources</h2>
+		<table class="resources-table">
+			<!-- First, a header row for the “General Resources” label -->
+			<thead>
+				<tr class="resources-header-row">
+					<th colspan="6" class="resources-header">General Resources</th>
+				</tr>
+				<tr>
+					<th>Resource</th>
+					<th>Production</th>
+					<th>Consumption</th>
+					<th>Excess</th>
+					<th>Storage</th>
+					<th>Storage Capacity</th>
+				</tr>
+			</thead>
+			<tbody>
+				{% for resource in general_resources %}
+					<tr>
+						<td>{{ resource.name }}</td>
+						<td>{{ nation.get("resource_production", {}).get(resource["key"], 0) }}</td>
+						<td>{{ nation.get("resource_consumption", {}).get(resource["key"], 0) }}</td>
+						{% set excess_value = nation.get("resource_excess", {}).get(resource["key"], 0) %}
+						{% if excess_value < 0 %}
+							<td class="excess-negative">{{ excess_value }}</td>
+						{% elif excess_value > 0 %}
+							<td class="excess-positive">{{ excess_value }}</td>
+						{% else %}
+							<td>{{ excess_value }}</td>
+						{% endif %}
+						<td>{{ nation.get("resource_storage", {}).get(resource["key"], 0) }}</td>
+						<td>{{ nation.get("resource_capacity", {}).get(resource["key"], 0) }}</td>
+					</tr>
+				{% endfor %}
+			</tbody>
+			<!-- A second header row for the “Unique Resources” label -->
+			<thead>
+				<tr class="resources-header-row">
+					<th colspan="6" class="resources-header">Unique Resources</th>
+				</tr>
+				<tr>
+					<th>Resource</th>
+					<th>Production</th>
+					<th>Consumption</th>
+					<th>Excess</th>
+					<th>Storage</th>
+					<th>Storage Capacity</th>
+				</tr>
+			</thead>
+			<tbody>
+				{% for resource in unique_resources %}
+					<tr>
+						<td>{{ resource.name }}</td>
+						<td>{{ nation.get("resource_production", {}).get(resource["key"], 0) }}</td>
+						<td>{{ nation.get("resource_consumption", {}).get(resource["key"], 0) }}</td>
+						{% set excess_value = nation.get("resource_excess", {}).get(resource["key"], 0) %}
+						{% if excess_value < 0 %}
+							<td class="excess-negative">{{ excess_value }}</td>
+						{% elif excess_value > 0 %}
+							<td class="excess-positive">{{ excess_value }}</td>
+						{% else %}
+							<td>{{ excess_value }}</td>
+						{% endif %}
+						<td>{{ nation.get("resource_storage", {}).get(resource["key"], 0) }}</td>
+						<td>{{ nation.get("resource_capacity", {}).get(resource["key"], 0) }}</td>
+					</tr>
+				{% endfor %}
+			</tbody>
+		</table>
+	</section>
+	
+	<section class="jobs-section">
+		<h2>Jobs</h2>
+		<table class="jobs-table">
+			<thead>
+				<tr>
+					<th>Job</th>
+					<th>Assigned Pops</th>
+					<th>Upkeep</th>
+					<th>Production</th>
+				</tr>
+			</thead>
+			<tbody>
+				{% for job_key, job in nation.job_details.items() %}
+					<tr>
+						<td>{{ job.display_name }}</td>
+						<td>{{ nation.jobs[job_key] if job_key in nation.jobs else 0 }}</td>
+						<td>
+							{% if "upkeep" in job %}
+								{% for resource, cost in job.upkeep.items() %}
+									{{ resource }}: {{ cost }}<br>
+								{% endfor %}
+							{% endif %}
+						</td>
+						<td>
+							{% if "production" in job %}
+								{% for resource, prod in job.production.items() %}
+									{{ resource }}: {{ prod }}<br>
+								{% endfor %}
+							{% endif %}
+						</td>
+					</tr>
+				{% endfor %}
+			</tbody>
+		</table>
+	</section>
+	
+	<section class="districts-section">
+		<h2>Districts</h2>
+		<p>{{ schema.properties.district_slots.label }}: {{ nation.district_slots }}</p>
+		<div class="districts-grid">
+			{% for i in range(0, 3 + (nation.pop_count // 5)) %}
+				<div class="district-slot">
+					{% if nation.districts | length > i and nation.districts[i] %}
+						{% set district = districts_config[nation.districts[i]] %}
+						<h3>{{ district.display_name }}</h3>
+						<p>Type: {{ district.type }}</p>
+						<p>
+							Cost:
+							{% for resource, cost in district.cost.items() %}
+								{{ resource }}: {{ cost }}<br>
+							{% endfor %}
+						</p>
+						<p>
+							Modifiers:
+							{% for mod, value in district.modifiers.items() %}
+								{{ mod }}: {{ value }}<br>
+							{% endfor %}
+						</p>
+					{% else %}
+						<div class="empty-slot">
+							<p>Empty Slot</p>
+						</div>
+					{% endif %}
+				</div>
+			{% endfor %}
+		</div>
+	</section>
+</div>
+{% endblock %}

@@ -85,25 +85,250 @@ h1, h2 {
     color: #fff;
 }
 
-.info-table {
-    max-width: 100%;
+/* Jobs table styling */
+.jobs-table {
+    width: 70%;
     border-collapse: collapse;
+    margin-top: 2rem;
 }
 
-.info-table th, .info-table td {
-    border: 1px solid #444;
+.jobs-table thead th {
+    background-color: #333;
+    color: #fff;
     padding: 8px;
+    border: 1px solid #444;
+    text-align: left;
+}
+
+.jobs-table tbody td {
+    background-color: #222;
+    color: #e0e0e0;
+    padding: 8px;
+    border: 1px solid #444;
+}
+
+/* Alternate row background */
+.jobs-table tbody tr:nth-child(even) {
+    background-color: #1e1e1e;
+}
+
+/* Hover effect */
+.jobs-table tbody tr:hover {
+    background-color: #2a2a2a;
+}
+
+/* Nation Page Container */
+.nation-page-container {
+  width: 80%;
+  margin: 0 auto;
+  padding-bottom: 2rem;
+  color: #e0e0e0;
+}
+
+/* Header / Title Bar */
+.header-bar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 1rem 0;
+  border-bottom: 1px solid #444;
+  padding-bottom: 1rem;
+}
+.header-bar h1 {
+  margin: 0;
+  font-size: 2rem;
+}
+.nation-summary {
+  margin-top: 0.5rem;
+  font-size: 0.9rem;
+  color: #8ab4f8;
+}
+.edit-button {
+  margin-top: 0.5rem;
+  background-color: #444;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  color: #8ab4f8;
+  text-decoration: none;
+  transition: background-color 0.3s, transform 0.1s;
+}
+.edit-button:hover {
+  background-color: #555;
+  transform: scale(1.05);
+}
+
+/* General Overview Section */
+.general-overview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin: 1rem 0;
+}
+
+/* Government & Policies Section */
+.gov-policies {
+  margin: 1rem 0;
+  background-color: #1e1e1e;
+  padding: 1rem;
+  border-radius: 8px;
+}
+.gov-policies h2 {
+  margin-top: 0;
+}
+
+/* Job Assignments Section */
+.jobs-section {
+  margin: 2rem 0;
+}
+.jobs-section h2 {
+  margin-bottom: 1rem;
+}
+
+.nation-summary span {
+  display: inline-block;
+  margin-right: 1rem;
+  font-size: 0.9rem;
+}
+
+.nation-summary a {
+  color: #8ab4f8;
+  text-decoration: none;
+}
+
+.nation-summary a:hover {
+  text-decoration: underline;
+  color: #c3dbff;
+}
+
+.main-columns {
+  display: flex;
+  flex-wrap: wrap; /* ensures wrapping on narrow screens */
+  gap: 1rem;
+}
+
+/* Each column gets a background and a bit of padding */
+.info-column {
+  flex: 1 1 26%; /* each column roughly half the width */
+  background-color: #1e1e1e;
+  padding: 1rem;
+  border-radius: 8px;
+}
+
+/* Make the tables more compact */
+.info-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0; /* remove extra margins if desired */
+}
+
+.info-table th,
+.info-table td {
+  border: 1px solid #444;
+  padding: 6px;
+  vertical-align: middle;
 }
 
 .info-table th {
-    background-color: #333;
-    color: white;
-    text-align: right;
+  background-color: #333;
+  color: #fff;
+  text-align: right;
+  width: 40%;
 }
 
 .info-table td {
-    background-color: #222;
-    color: #e0e0e0;
-    text-align: left;
-    width: 70%;
+  background-color: #222;
+  color: #e0e0e0;
+  text-align: left;
+  width: 60%;
+}
+
+/* Districts Grid Container */
+.districts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+/* District Slot */
+.district-slot {
+  background-color: #1e1e1e;
+  border: 1px solid #444;
+  border-radius: 8px;
+  padding: 1rem;
+  text-align: center;
+}
+
+.district-slot h3 {
+  margin: 0.5rem 0;
+  font-size: 1.1rem;
+  color: #fff;
+}
+
+.district-slot p {
+  margin: 0.3rem 0;
+  font-size: 0.9rem;
+  color: #e0e0e0;
+}
+
+/* Empty Slot styling */
+.empty-slot {
+  font-style: italic;
+  color: #888;
+}
+
+/* For the select inputs on the edit page */
+.district-slot select {
+  width: 100%;
+  padding: 0.5rem;
+  border-radius: 4px;
+  background-color: #222;
+  color: #e0e0e0;
+  border: 1px solid #444;
+}
+
+.resources-section {
+  margin-top: 2rem;
+}
+
+.resources-section h2 {
+  margin-bottom: 1rem;
+}
+
+.resources-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 1rem;
+}
+
+.resources-table th,
+.resources-table td {
+  border: 1px solid #444;
+  padding: 8px;
+  text-align: center;
+  background-color: #222;
+  color: #e0e0e0;
+}
+
+.resources-table th {
+  background-color: #333;
+  color: #fff;
+}
+
+.resources-header-row th {
+  background-color: #555; /* Distinguish section headers */
+  font-weight: bold;
+  font-size: 1rem;
+}
+
+/* Example highlight for negative excess */
+.resources-table td.excess-negative {
+  background-color: #451b1b; /* dark red background */
+  color: #ff9f9f;            /* lighter red text */
+}
+
+/* Example highlight for positive excess */
+.resources-table td.excess-positive {
+  background-color: #1b4522; /* dark green background */
+  color: #afffbd;            /* light green text */
 }

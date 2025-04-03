@@ -313,7 +313,7 @@
       },
 	  "unique_minority_count": {
         "bsonType": "number",
-		"label": "Unique Minority Count",
+		"label": "Minority Count",
         "description": "The amount of unique minorities the nation has",
 		"calculated": true,
 		"hidden": true
@@ -689,8 +689,8 @@
 				"chance_to_lose_stability": 0.15
 			},
 			"Production": {
-				"harvester_resource_consumption": -1,
-				"miner_resource_consumption": -1
+				"harvester_stone_upkeep": -1,
+				"miner_wood_upkeep": -1
 			},
 			"Commerce": {
 				"stability_gain_chance_per_road_capacity_used": 0.01,
@@ -824,6 +824,11 @@
         "description": "The number of cities the nation's government can support without penalties",
 		"calculated": true
       },
+	  "cities": {
+        "bsonType": "number",
+		"label": "Cities",
+        "description": "The number of cities the nation currently controls"
+      },
 	  "defensive_pact_slots": {
         "bsonType": "number",
 		"label": "Defensive Pact Slots",
@@ -875,30 +880,30 @@
         "description": "The naval units the nation has recruited"
       },
 	  "resource_production": {
-        "bsonType": "array",
+        "bsonType": "object",
 		"label": "Resource Production",
         "description": "The gross resource production of the nation",
 		"calculated": true
       },
 	  "resource_consumption": {
-        "bsonType": "array",
+        "bsonType": "object",
 		"label": "Resource Consumption",
         "description": "The resource consumption of the nation",
 		"calculated": true
       },
 	  "resource_excess": {
-        "bsonType": "array",
+        "bsonType": "object",
 		"label": "Resource Excess",
         "description": "The net resource production of the nation",
 		"calculated": true
       },
 	  "resource_storage": {
-        "bsonType": "array",
+        "bsonType": "object",
 		"label": "Resource Storage",
         "description": "The resource reserves of the nation"
       },
 	  "resource_capacity": {
-        "bsonType": "array",
+        "bsonType": "object",
 		"label": "Resource Capacity",
         "description": "The resource reserves of the nation",
 		"calculated": true

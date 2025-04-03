@@ -20,9 +20,9 @@
 		},
 		"count": 1
 	},
-	"ancient_barrows": {
-		"display_name": "Ancient Barrows",
-		"type": "barrows",
+	"ancient_barrow": {
+		"display_name": "Ancient Barrow",
+		"type": "barrow",
 		"cost": {
 			"stone": 5,
 			"magic": 4

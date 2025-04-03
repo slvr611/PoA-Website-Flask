@@ -11,7 +11,7 @@
 	"apprentice": {
 		"display_name": "Apprentice",
 		"requirements":{
-			"district": "barrows"
+			"district": "barrow"
 		},
 		"production": {
 			"nation_magic_spell_rolls": 2
