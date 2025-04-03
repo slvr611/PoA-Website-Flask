@@ -87,7 +87,7 @@ h1, h2 {
 
 /* Jobs table styling */
 .jobs-table {
-    width: 70%;
+    width: 100%;
     border-collapse: collapse;
     margin-top: 2rem;
 }
