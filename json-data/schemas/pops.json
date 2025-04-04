@@ -2,7 +2,7 @@
   "$jsonSchema": {
     "bsonType": "object",
     "required": ["nation", "race", "culture", "religion"],
-	"preview": ["race", "culture", "religion"],
+	"preview": ["nation", "race", "culture", "religion"],
     "properties": {
       "nation": {
         "bsonType": "linked_object",

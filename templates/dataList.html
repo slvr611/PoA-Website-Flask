@@ -13,10 +13,10 @@
 			<tr>
 				{% if item.name %}
 					{# If there's a name, use it in the URL #}
-					<td><a href="{{ request.path }}/{{ item.name }}">{{ item.name }}</a></td>
+					<td><a href="{{ request.path }}/item/{{ item.name }}">{{ item.name }}</a></td>
 				{% else %}
 					{# Otherwise, use the _id #}
-					<td><a href="{{ request.path }}/{{ item._id|string }}">{{ item._id }}</a></td>
+					<td><a href="{{ request.path }}/item/{{ item._id|string }}">{{ item._id }}</a></td>
 				{% endif %}
 				{% for preview_category in schema.preview %}
 					<td>{{ item.get(preview_category, "None") }}</td>

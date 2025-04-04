@@ -850,7 +850,7 @@
 		"enum": ["Unknown",
 			"(T) Default", "(T) Fragile Unification", "(T) Fragmented", "(T) Strange Outsiders", "(T) Survivors", "(T) Fortunate",
 			"(A) Default", "(A) Conquest State", "(A) Protected Scion", "(A) Artificer State", "(A) Recent Subjugation",
-			"(C) Aspiring Allies", "(C) Enlightened Defeat", "(C) Loyal Vassal", "(C) Fleeing Victims", "(C) Local Bully"]
+			"(C) Aspiring Allies", "(C) Shattered Dominion", "(C) Enlightened Defeat", "(C) Loyal Vassal", "(C) Fleeing Victims", "(C) Local Bully"]
       },
 	  "jobs": {
         "bsonType": "array",

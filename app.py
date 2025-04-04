@@ -1,6 +1,7 @@
 from flask import Flask, redirect, url_for, session, request, render_template, g, flash, abort
 from flask_discord import DiscordOAuth2Session, requires_authorization, Unauthorized
 from flask_pymongo import PyMongo
+from werkzeug.routing import BaseConverter
 from pymongo import ASCENDING, DESCENDING
 from dotenv import load_dotenv
 from jsonschema import validate, ValidationError
@@ -30,8 +31,6 @@ app.config["MONGO_URI"] = os.getenv("MONGO_URI", "mongodb://localhost:27017/flas
 mongo = PyMongo(app)
 
 #Constants
-navbarPages = ["nations", "regions", "races", "cultures", "religions", "merchants", "mercenaries", "characters", "artifacts", "spells", "wonders", "markets", "wars", "changes"]
-
 category_data = {
     "nations": {"pluralName": "Nations", "singularName": "Nation", "database": mongo.db.nations},
     "regions": {"pluralName": "Regions", "singularName": "Region", "database": mongo.db.regions},
@@ -89,7 +88,7 @@ unique_resources = [
 
 @app.context_processor
 def inject_navbar_pages():
-    return {'navbarPages': navbarPages, 'category_data': category_data}
+    return {'category_data': category_data}
 
 #Middleware
 @app.before_request
@@ -246,7 +245,7 @@ def data_item_new_approve(data_type):
 
 #######################################################
 
-@app.route("/changes/<item_ref>")
+@app.route("/changes/item/<item_ref>")
 def change_item(item_ref):
     schema, db, item = get_data_on_item("changes", item_ref)
     
@@ -261,9 +260,9 @@ def change_item(item_ref):
         obj = mongo.db[item["target_collection"]].find_one({"_id": item["target"]}, {"name": 1, "_id": 1})
         if obj is not None:
             if "name" in obj:
-                linked_objects["target"] = {"name": obj["name"], "link": f"/{item["target_collection"]}/{obj['name']}"}
+                linked_objects["target"] = {"name": obj["name"], "link": f"/{item["target_collection"]}/item/{obj['name']}"}
             else:
-                linked_objects["target"] = {"name": obj["_id"], "link": f"/{item["target_collection"]}/{obj['_id']}"}
+                linked_objects["target"] = {"name": obj["_id"], "link": f"/{item["target_collection"]}/item/{obj['_id']}"}
         else:
             linked_objects["target"] = {"name": item["target"]}
             
@@ -277,7 +276,7 @@ def change_item(item_ref):
         target_schema=target_schema
     )
 
-@app.route("/changes/<item_ref>/approve")
+@app.route("/changes/item/<item_ref>/approve")
 def approve_change(item_ref):
     schema, db, item = get_data_on_item("changes", item_ref)
     
@@ -289,7 +288,7 @@ def approve_change(item_ref):
     
     return redirect("/changes")
 
-@app.route("/nations/<item_ref>")
+@app.route("/nations/item/<item_ref>")
 def nation_item(item_ref):
     schema, db, nation = get_data_on_item("nations", item_ref)
     
@@ -313,7 +312,7 @@ def nation_item(item_ref):
     )
 
 
-@app.route("/<data_type>/<item_ref>")
+@app.route("/<data_type>/item/<item_ref>")
 def data_item(data_type, item_ref):
     schema, db, item = get_data_on_item(data_type, item_ref)
     
@@ -357,9 +356,9 @@ def get_linked_objects(schema, item, preview=None):
                     for obj in related_items:
                         object_to_add = {}
                         if "name" in obj:
-                            object_to_add = {"name": obj["name"], "link": f"/{related_collection}/{obj['name']}"}
+                            object_to_add = {"name": obj["name"], "link": f"/{related_collection}/item/{obj['name']}"}
                         else:
-                            object_to_add = {"name": obj["_id"], "link": f"/{related_collection}/{obj['_id']}"}
+                            object_to_add = {"name": obj["_id"], "link": f"/{related_collection}/item/{obj['_id']}"}
                         if attributes.get("preview", None) is not None:
                             preview_schema = category_data[attributes.get("collection")]["schema"]
                             object_to_add["linked_objects"] = get_linked_objects(preview_schema, obj, field_preview)
@@ -379,7 +378,7 @@ def get_linked_objects(schema, item, preview=None):
                     linked_object = mongo.db[related_collection].find_one({"_id": object_id_to_find})
                     
                     if linked_object is not None:
-                        linked_object["link"] = "/" + related_collection + "/" + linked_object["name"] #TODO:  Update this to support ids
+                        linked_object["link"] = "/" + related_collection + "/item/" + linked_object["name"] #TODO:  Update this to support ids
                     
                     linked_objects[field] = linked_object
     
@@ -387,7 +386,7 @@ def get_linked_objects(schema, item, preview=None):
 
 #######################################################
 
-@app.route("/nations/<item_ref>/edit", methods=["GET"])
+@app.route("/nations/edit/<item_ref>", methods=["GET"])
 def edit_nation(item_ref):
     schema, db, item = get_data_on_item("nations", item_ref)
     
@@ -416,7 +415,7 @@ def edit_nation(item_ref):
     return template
 
 
-@app.route("/<data_type>/<item_ref>/edit", methods=["GET"])
+@app.route("/<data_type>/edit/<item_ref>", methods=["GET"])
 def data_item_edit(data_type, item_ref):
     schema, db, item = get_data_on_item(data_type, item_ref)
     
@@ -446,7 +445,7 @@ def data_item_edit(data_type, item_ref):
 
 
 
-@app.route("/<data_type>/<item_ref>/edit/request", methods=["POST"])
+@app.route("/<data_type>/edit/<item_ref>/request", methods=["POST"])
 def data_item_edit_request(data_type, item_ref):
     schema, db, item = get_data_on_item(data_type, item_ref)
     
@@ -482,7 +481,7 @@ def data_item_edit_request(data_type, item_ref):
 
 
 
-@app.route("/<data_type>/<item_ref>/edit/save", methods=["POST"])
+@app.route("/<data_type>/edit/<item_ref>/save", methods=["POST"])
 def data_item_edit_approve(data_type, item_ref):
     schema, db, item = get_data_on_item(data_type, item_ref)
     
@@ -664,7 +663,7 @@ def check_no_other_changes(before_data, after_data, current_data):
 
 #######################################################
 
-@app.route("/<data_type>/<item_ref>/delete/request", methods=["POST"])
+@app.route("/<data_type>/delete/<item_ref>/request", methods=["POST"])
 def data_item_delete_request(data_type, item_ref):
     schema, db, item = get_data_on_item(data_type, item_ref)
 
@@ -688,7 +687,7 @@ def data_item_delete_request(data_type, item_ref):
 
     return redirect("/" + data_type)
 
-@app.route("/<data_type>/<item_ref>/delete/save", methods=["POST"])
+@app.route("/<data_type>/delete/<item_ref>/save", methods=["POST"])
 def data_item_delete_save(data_type, item_ref):
     schema, db, item = get_data_on_item(data_type, item_ref)
 

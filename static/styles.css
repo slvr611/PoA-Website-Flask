@@ -38,6 +38,62 @@ header {
     padding: 0.5rem 1rem;
 }
 
+.nav-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+}
+
+/* Each top-level item */
+.nav-item {
+  position: relative;
+  margin-right: 1rem;
+}
+
+/* Links for top-level items */
+.nav-item a {
+  color: #8ab4f8;
+  text-decoration: none;
+  padding: 0.5rem 1rem;
+  display: block;
+  transition: background-color 0.3s, transform 0.1s;
+}
+
+/* Hover/Active styling for top-level links */
+.nav-item a:hover,
+.nav-item a.active {
+  background-color: #444;
+  transform: scale(1.05);
+}
+
+/* Dropdown content container - initially hidden */
+.dropdown-content {
+  display: none;
+  position: absolute;
+  top: 100%; /* Place below the parent */
+  left: 0;
+  background-color: #333;
+  min-width: 160px;
+  z-index: 1000;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid #444;
+  border-radius: 4px;
+}
+
+/* Each dropdown item */
+.dropdown-content li a {
+  padding: 0.5rem 1rem;
+  white-space: nowrap;
+}
+
+/* Show dropdown on hover */
+.nav-item:hover .dropdown-content {
+  display: block;
+}
+
 .navbar a {
     color: #8ab4f8;
     text-decoration: none;
@@ -232,14 +288,14 @@ h1, h2 {
   background-color: #333;
   color: #fff;
   text-align: right;
-  width: 40%;
+  width: 30%;
 }
 
 .info-table td {
   background-color: #222;
   color: #e0e0e0;
   text-align: left;
-  width: 60%;
+  width: 70%;
 }
 
 /* Districts Grid Container */

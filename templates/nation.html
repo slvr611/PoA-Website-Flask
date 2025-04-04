@@ -7,10 +7,16 @@
 	<div class="header-bar">
 		<h1>{{ nation.name }}</h1>
 		{% if g.user.is_admin %}
-			<a href="{{ request.path }}/edit" class="edit-button">Edit</a>
+			<a href="{{ request.path.replace("item", "edit") }}" class="edit-button">Edit</a>
 		{% endif %}
 		<div class="nation-summary">
-			<span>{{ schema.properties.region.label }}: {% if nation.region is not none %}{{ nation.region }}{% else %}{{schema.properties.region.noneResult}}{% endif %}</span>
+			<span>{{ schema.properties.region.label }}: 
+				{% if linked_objects["region"] %}
+					<td><a href="{{ linked_objects["region"]["link"] }}">{{ linked_objects["region"]["name"] }}</a></td>
+				{% else %}
+					None
+				{% endif %}
+			</span>
 			<span>{{ schema.properties.pop_count.label }}: {{ nation.pop_count }}</span>
 			{% if nation.empire %}
 				<span>Empire</span>

@@ -18,7 +18,7 @@
         "bsonType": "enum",
 		"label": "Positive Trait",
         "description": "The positive trait associated with this race",
-		"enum": ["Airborne", "Abstemious", "Aggressive", "Charismatic", "Courageous", "Curious", "Docile", "Fecund", "Industrious", "Lucky", "Magical", "Semi-Aquatic", "Sturdy", "Swift", "Venerable"]
+		"enum": ["Airborne", "Abstemious", "Aggressive", "Aquatic", "Charismatic", "Courageous", "Curious", "Docile", "Fecund", "Industrious", "Lucky", "Magical", "Semi-Aquatic", "Sturdy", "Swift", "Venerable"]
       },
 	  "negative_trait": {
         "bsonType": "enum",
