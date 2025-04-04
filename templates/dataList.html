@@ -10,13 +10,18 @@
 	<h1>{{ title }}:</h1>
 	<table class="info-table">
 		{% for item in items %}
-			{% if item.name %}
-                {# If there's a name, use it in the URL #}
-                <tr><td><a href="{{ request.path }}/{{ item.name }}">{{ item.name }}</a></td></tr>
-            {% else %}
-                {# Otherwise, use the _id #}
-                <tr><td><a href="{{ request.path }}/{{ item._id|string }}">{{ item._id }}</a></td></tr>
-            {% endif %}
+			<tr>
+				{% if item.name %}
+					{# If there's a name, use it in the URL #}
+					<td><a href="{{ request.path }}/{{ item.name }}">{{ item.name }}</a></td>
+				{% else %}
+					{# Otherwise, use the _id #}
+					<td><a href="{{ request.path }}/{{ item._id|string }}">{{ item._id }}</a></td>
+				{% endif %}
+				{% for preview_category in schema.preview %}
+					<td>{{ item.get(preview_category, "None") }}</td>
+				{% endfor %}
+			</tr>
 		{% endfor %}
 	</table>
 </div>

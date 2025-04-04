@@ -309,14 +309,14 @@
 		"label": "Pops",
         "description": "The list of pops in the nation",
 		"collection": "pops",
-		"queryTargetAttribute": "nation"
+		"queryTargetAttribute": "nation",
+		"preview": ["race", "culture", "religion"]
       },
 	  "unique_minority_count": {
         "bsonType": "number",
 		"label": "Minority Count",
         "description": "The amount of unique minorities the nation has",
-		"calculated": true,
-		"hidden": true
+		"calculated": true
 	  },
 	  "district_slots": {
         "bsonType": "number",

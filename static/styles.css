@@ -332,3 +332,31 @@ h1, h2 {
   background-color: #1b4522; /* dark green background */
   color: #afffbd;            /* light green text */
 }
+
+.pops-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1rem;
+}
+
+.pops-table th,
+.pops-table td {
+  border: 1px solid #444;
+  padding: 6px;
+  text-align: left;
+  background-color: #222;
+  color: #e0e0e0;
+}
+
+.pops-table th {
+  background-color: #333;
+  color: #fff;
+}
+
+.pops-table thead {
+  background-color: #333;
+}
+
+.pops-table tr:nth-child(even) {
+  background-color: #1e1e1e;
+}

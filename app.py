@@ -40,6 +40,7 @@ category_data = {
     "religions": {"pluralName": "Religions", "singularName": "Religion", "database": mongo.db.religions},
     "merchants": {"pluralName": "Merchants", "singularName": "Merchant", "database": mongo.db.merchants},
     "mercenaries": {"pluralName": "Mercenaries", "singularName": "Mercenary", "database": mongo.db.mercenaries},
+    "factions": {"pluralName": "Factions", "singularName": "Faction", "database": mongo.db.factions},
     "characters": {"pluralName": "Characters", "singularName": "Character", "database": mongo.db.characters},
     "players": {"pluralName": "Players", "singularName": "Player", "database": mongo.db.players},
     "artifacts": {"pluralName": "Artifacts", "singularName": "Artifact", "database": mongo.db.artifacts},
@@ -138,7 +139,8 @@ def data_list(data_type):
     return render_template(
         "dataList.html",
         title=category_data[data_type]["pluralName"],
-        items=items
+        items=items,
+        schema=schema
     )
 
 #######################################################
@@ -253,7 +255,7 @@ def change_item(item_ref):
     if item["target_collection"] in category_data:
         target_schema = category_data[item["target_collection"]]["schema"]
     
-    linked_objects = get_linked_objects(schema["properties"].items(), item)
+    linked_objects = get_linked_objects(schema, item)
     
     if item["target_collection"] != None and item["target"] != None:
         obj = mongo.db[item["target_collection"]].find_one({"_id": item["target"]}, {"name": 1, "_id": 1})
@@ -291,12 +293,10 @@ def approve_change(item_ref):
 def nation_item(item_ref):
     schema, db, nation = get_data_on_item("nations", item_ref)
     
-    linked_objects = get_linked_objects(schema["properties"].items(), nation)
+    linked_objects = get_linked_objects(schema, nation)
     
     calculated_fields = calculate_all_fields(nation, schema)
     nation.update(calculated_fields)
-    
-    print(calculated_fields)
     
     if "jobs" not in nation:
         nation["jobs"] = {}
@@ -317,7 +317,7 @@ def nation_item(item_ref):
 def data_item(data_type, item_ref):
     schema, db, item = get_data_on_item(data_type, item_ref)
     
-    linked_objects = get_linked_objects(schema["properties"].items(), item)
+    linked_objects = get_linked_objects(schema, item)
     
     calcuated_fields = calculate_all_fields(item, schema)
     item.update(calcuated_fields)
@@ -330,27 +330,40 @@ def data_item(data_type, item_ref):
         linked_objects=linked_objects
     )
 
-def get_linked_objects(properties, item):
+def get_linked_objects(schema, item, preview=None):
+    properties = schema.get("properties", {})
     linked_objects = {}
-    
-    for field, attributes in properties:
+        
+    for field, attributes in properties.items():
         if attributes.get("collection") != None:
             related_collection = attributes.get("collection")
             
             if attributes.get("queryTargetAttribute") != None:
                 query_target = attributes.get("queryTargetAttribute")
                 item_id = str(item["_id"])
-
-                related_items = list(mongo.db[related_collection].find({query_target: item_id}, {"name": 1, "_id": 1}))
+                
+                query_dict = {"name": 1, "_id": 1}
+                
+                field_preview = attributes.get("preview", None)
+                
+                if field_preview is not None:
+                    for preview_item in field_preview:
+                        query_dict[preview_item] = 1
+                
+                related_items = list(mongo.db[related_collection].find({query_target: item_id}, query_dict))
                 
                 if related_items:
                     linked_objects[field] = []
                     for obj in related_items:
+                        object_to_add = {}
                         if "name" in obj:
-                            linked_objects[field].append({"name": obj["name"], "link": f"/{related_collection}/{obj['name']}"})
+                            object_to_add = {"name": obj["name"], "link": f"/{related_collection}/{obj['name']}"}
                         else:
-                            linked_objects[field].append({"name": obj["_id"], "link": f"/{related_collection}/{obj['_id']}"})
-                        
+                            object_to_add = {"name": obj["_id"], "link": f"/{related_collection}/{obj['_id']}"}
+                        if attributes.get("preview", None) is not None:
+                            preview_schema = category_data[attributes.get("collection")]["schema"]
+                            object_to_add["linked_objects"] = get_linked_objects(preview_schema, obj, field_preview)
+                        linked_objects[field].append(object_to_add)
             
             else:
                 if field in item:
@@ -880,8 +893,6 @@ def calculate_job_details(target, modifier_totals, district_totals, law_totals):
                                 new_details["upkeep"].pop(resource)
             new_job_details[job] = new_details
     
-    print(new_job_details)
-    
     return new_job_details
 
 ##############################################################
@@ -935,8 +946,6 @@ def calculate_all_fields(target, schema):
     
     laws = collect_laws(target, schema)
     law_totals = sum_law_totals(laws)
-    
-    print(law_totals)
     
     districts = collect_districts(target, schema)
     district_totals = sum_district_totals(districts)
@@ -1051,6 +1060,27 @@ def compute_pop_count(field, target, base_value, field_schema, modifier_totals, 
     
     return pop_count
 
+def compute_minority_count(field, target, base_value, field_schema, modifier_totals, district_totals, law_totals, job_totals):
+    pop_database = category_data["pops"]["database"]
+    target_id = str(target["_id"])
+    
+    minority_count = 0
+    
+    known_cultures = [target.get("primary_culture", "")]
+    known_religions = [target.get("primary_religion", "")]
+    
+    relevant_pops = list(pop_database.find({"nation": target_id}))
+    
+    for pop in relevant_pops:
+        if not pop.get("culture", "") in known_cultures:
+            known_cultures.append(pop.get("culture", ""))
+            minority_count += 1
+        if not pop.get("religion", "") in known_religions:
+            known_religions.append(pop.get("religion", ""))
+            minority_count += 1
+    
+    return minority_count
+
 def compute_district_slots(field, target, base_value, field_schema, modifier_totals, district_totals, law_totals, job_totals):
     pop_count = target.get("pop_count", 0)
     
@@ -1140,6 +1170,7 @@ CUSTOM_COMPUTE_FUNCTIONS = {
     "rebellion_chance": compute_rebellion_chance,
     "concessions_chance": compute_concessions_chance,
     "pop_count": compute_pop_count,
+    "unique_minority_count": compute_minority_count,
     "district_slots": compute_district_slots,
     "land_unit_capacity": compute_unit_capacity,
     "naval_unit_capacity": compute_unit_capacity,

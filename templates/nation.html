@@ -54,6 +54,39 @@
 			</table>
 		</div>
 		<div class="info-column">
+			<h2>Administration & Holdings</h2>
+			<table class="info-table">
+				<tr>
+					<th>{{ schema.properties.administration.label }}:</th>
+					<td>{{ nation.administration }}</td>
+				</tr>
+				<tr>
+					<th>{{ schema.properties.current_territory.label }}:</th>
+					<td>{{ nation.current_territory }}</td>
+				</tr>
+				<tr>
+					<th>{{ schema.properties.effective_territory.label }}:</th>
+					<td>{{ nation.effective_territory }}</td>
+				</tr>
+				<tr>
+					<th>{{ schema.properties.road_usage.label }}:</th>
+					<td>{{ nation.road_usage }}</td>
+				</tr>
+				<tr>
+					<th>{{ schema.properties.road_capacity.label }}:</th>
+					<td>{{ nation.road_capacity }}</td>
+				</tr>
+				<tr>
+					<th>{{ schema.properties.cities.label }}:</th>
+					<td>{{ nation.cities }}</td>
+				</tr>
+				<tr>
+					<th>{{ schema.properties.city_slots.label }}:</th>
+					<td>{{ nation.city_slots }}</td>
+				</tr>
+			</table>
+		</div>
+		<div class="info-column">
 			<h2>Income</h2>
 			<table class="info-table">
 				<tr>
@@ -75,20 +108,78 @@
 			<table class="info-table">
 				<tr>
 					<th>{{ schema.properties.primary_race.label }}:</th>
-					<td>{{ nation.primary_race }}</td>
+					{% if linked_objects["primary_race"] %}
+						<td><a href="{{ linked_objects["primary_race"]["link"] }}">{{ linked_objects["primary_race"]["name"] }}</a></td>
+					{% else %}
+						None
+					{% endif %}
 				</tr>
 				<tr>
 					<th>{{ schema.properties.primary_culture.label }}:</th>
-					<td>{{ nation.primary_culture }}</td>
+					{% if linked_objects["primary_culture"] %}
+						<td><a href="{{ linked_objects["primary_culture"]["link"] }}">{{ linked_objects["primary_culture"]["name"] }}</a></td>
+					{% else %}
+						None
+					{% endif %}
 				</tr>
 				<tr>
 					<th>{{ schema.properties.primary_religion.label }}:</th>
-					<td>{{ nation.primary_religion }}</td>
+					{% if linked_objects["primary_religion"] %}
+						<td><a href="{{ linked_objects["primary_religion"]["link"] }}">{{ linked_objects["primary_religion"]["name"] }}</a></td>
+					{% else %}
+						None
+					{% endif %}
 				</tr>
 				<tr>
 					<th>{{ schema.properties.unique_minority_count.label }}:</th>
 					<td>{{ nation.unique_minority_count }}</td>
 				</tr>
+			</table>
+		<h3>Population Details</h3>
+			<table class="pops-table">
+				<thead>
+					<tr>
+						<th>#</th>
+						<th>Race</th>
+						<th>Culture</th>
+						<th>Religion</th>
+					</tr>
+				</thead>
+				<tbody>
+					{% for pop in linked_objects["pops"] %}
+						<tr>
+							<!-- If there's no separate name/ID, just show the loop index -->
+							<td><a href="{{ pop["link"] }}">{{ loop.index }}</a></td>
+
+							<!-- Link to Race detail page -->
+							<td>
+							{% if pop["linked_objects"]["race"] %}
+								<a href="{{ pop["linked_objects"]["race"]["link"] }}">{{ pop["linked_objects"]["race"]["name"] }}</a>
+							{% else %}
+								None
+							{% endif %}
+							</td>
+
+							<!-- Link to Culture detail page -->
+							<td>
+							{% if pop["linked_objects"]["culture"] %}
+								<a href="{{ pop["linked_objects"]["culture"]["link"] }}">{{ pop["linked_objects"]["culture"]["name"] }}</a>
+							{% else %}
+								None
+							{% endif %}
+							</td>
+
+							<!-- Link to Religion detail page -->
+							<td>
+							{% if pop["linked_objects"]["religion"] %}
+								<a href="{{ pop["linked_objects"]["religion"]["link"] }}">{{ pop["linked_objects"]["religion"]["name"] }}</a>
+							{% else %}
+								None
+							{% endif %}
+							</td>
+						</tr>
+					{% endfor %}
+				</tbody>
 			</table>
 		</div>
 		<div class="info-column">
@@ -171,39 +262,6 @@
 				<tr>
 					<th>{{ schema.properties.justice_stance.label }}:</th>
 					<td>{{ nation.justice_stance }}</td>
-				</tr>
-			</table>
-		</div>
-		<div class="info-column">
-			<h2>Administration & Holdings</h2>
-			<table class="info-table">
-				<tr>
-					<th>{{ schema.properties.administration.label }}:</th>
-					<td>{{ nation.administration }}</td>
-				</tr>
-				<tr>
-					<th>{{ schema.properties.current_territory.label }}:</th>
-					<td>{{ nation.current_territory }}</td>
-				</tr>
-				<tr>
-					<th>{{ schema.properties.effective_territory.label }}:</th>
-					<td>{{ nation.effective_territory }}</td>
-				</tr>
-				<tr>
-					<th>{{ schema.properties.road_usage.label }}:</th>
-					<td>{{ nation.road_usage }}</td>
-				</tr>
-				<tr>
-					<th>{{ schema.properties.road_capacity.label }}:</th>
-					<td>{{ nation.road_capacity }}</td>
-				</tr>
-				<tr>
-					<th>{{ schema.properties.cities.label }}:</th>
-					<td>{{ nation.cities }}</td>
-				</tr>
-				<tr>
-					<th>{{ schema.properties.city_slots.label }}:</th>
-					<td>{{ nation.city_slots }}</td>
 				</tr>
 			</table>
 		</div>
