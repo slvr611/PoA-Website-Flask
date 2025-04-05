@@ -6,7 +6,12 @@
 <div class="container">
 	<a href="{{ request.path.replace('/new', '') }}">Back to View</a></br>
 	<h1>{{ title }}:</h1>
-	<form method="POST" action="{{ request.path }}/save">
+	{% if g.user.is_admin %}
+		{% set default_action = request.path ~ '/save' %}
+	{% else %}
+		{% set default_action = request.path ~ '/request' %}
+	{% endif %}
+	<form method="POST" action="{{ default_action }}">
 		<table class="info-table">
 			{% for field, attributes in schema.properties.items() %}
 				{% if not attributes.calculated %}
@@ -53,10 +58,10 @@
 		
 		</table>
 		
-        <button type="submit" formaction="{{ request.path }}/request">Request</button>
 		{% if g.user.is_admin %}
 			<button type="submit" formaction="{{ request.path }}/save">Save</button>
 		{% endif %}
+        <button type="submit" formaction="{{ request.path }}/request">Request</button>
     </form>
 </div>
 {% endblock %}

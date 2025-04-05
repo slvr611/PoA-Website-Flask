@@ -16,13 +16,18 @@
 					<th><a href="{{ request.path }}/{{ item._id|string }}">{{ item._id }}</a></th>
 	            {% endif %}
 	            <td>
-	            	<form method="POST" action="{{ request.path.replace('edit', 'delete') }}/{{ item.name }}/request">
+					{% if g.user.is_admin %}
+						{% set default_action = request.path.replace('edit', 'delete') ~ '/' ~ item.name ~ '/save' %}
+					{% else %}
+						{% set default_action = request.path.replace('edit', 'delete') ~ '/' ~ item.name ~ '/request' %}
+					{% endif %}
+	            	<form method="POST" action="{{ default_action }}">
 	            		<label for="reason">Reason</label>
 						<input type="text" id="reason" name="reason" value="" required >
-			            <button type="submit" formaction="{{ request.path.replace('edit', 'delete') }}/{{ item.name }}/request">Request Delete</button>
 						{% if g.user.is_admin %}
 							<button type="submit" formaction="{{ request.path.replace('edit', 'delete') }}/{{ item.name }}/save">Immediate Delete</button>
 						{% endif %}
+			            <button type="submit" formaction="{{ request.path.replace('edit', 'delete') }}/{{ item.name }}/request">Request Delete</button>
 					</form>
 				</td>
             </tr>

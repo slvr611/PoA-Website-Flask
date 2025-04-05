@@ -19,7 +19,7 @@
 					<td><a href="{{ request.path }}/item/{{ item._id|string }}">{{ item._id }}</a></td>
 				{% endif %}
 				{% for preview_category in schema.preview %}
-					<td>{{ item.get(preview_category, "None") }}</td>
+					<td><a href="{{ preview_references[preview_category][item[preview_category]]["link"] }}">{{ preview_references[preview_category][item[preview_category]].get("name", item.preview_category) }}</a></td>
 				{% endfor %}
 			</tr>
 		{% endfor %}

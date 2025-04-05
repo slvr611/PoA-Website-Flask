@@ -133,13 +133,28 @@ def get_data_on_item(data_type, item_ref):
 def data_list(data_type):
     schema, db = get_data_on_category(data_type)
     
-    items = list(db.find().sort("name", ASCENDING))
-
+    query_dict = {"_id": 1, "name": 1}
+    preview_overall_lookup_dict = {}
+    
+    for preview_item in schema.get("preview", {}):
+        query_dict[preview_item] = 1
+        collection_name = schema.get("properties", {}).get(preview_item, {}).get("collection", None)
+        if not collection_name is None:
+            preview_db = category_data[collection_name]["database"]
+            preview_individual_lookup_dict = {}
+            preview_data = list(preview_db.find({}, {"_id": 1, "name": 1}))
+            for data in preview_data:
+                preview_individual_lookup_dict[str(data["_id"])] = {"name": data.get("name", "None"), "link": collection_name + "/item/" + data.get("name", data.get("_id", "#"))}
+            preview_overall_lookup_dict[preview_item] = preview_individual_lookup_dict
+    
+    items = list(db.find({}, query_dict).sort("name", ASCENDING))
+    
     return render_template(
         "dataList.html",
         title=category_data[data_type]["pluralName"],
         items=items,
-        schema=schema
+        schema=schema,
+        preview_references=preview_overall_lookup_dict
     )
 
 #######################################################
@@ -148,12 +163,28 @@ def data_list(data_type):
 def data_list_edit(data_type):
     schema, db = get_data_on_category(data_type)
     
-    items = list(db.find().sort("name", ASCENDING))
+    query_dict = {"_id": 1, "name": 1}
+    preview_overall_lookup_dict = {}
+    
+    for preview_item in schema.get("preview", {}):
+        query_dict[preview_item] = 1
+        collection_name = schema.get("properties", {}).get(preview_item, {}).get("collection", None)
+        if not collection_name is None:
+            preview_db = category_data[collection_name]["database"]
+            preview_individual_lookup_dict = {}
+            preview_data = list(preview_db.find({}, {"_id": 1, "name": 1}))
+            for data in preview_data:
+                preview_individual_lookup_dict[data["_id"]] = {data.get("name", "None"), collection_name + "/item/" + data.get("name", data.get("_id", "#"))}
+            preview_overall_lookup_dict[preview_item] = preview_individual_lookup_dict
+    
+    items = list(db.find({}, query_dict).sort("name", ASCENDING))
 
     return render_template(
         "dataListEdit.html",
         title=category_data[data_type]["pluralName"],
-        items=items
+        items=items,
+        schema=schema,
+        preview_references=preview_overall_lookup_dict
     )
 
 #######################################################
@@ -277,7 +308,7 @@ def change_item(item_ref):
     )
 
 @app.route("/changes/item/<item_ref>/approve")
-def approve_change(item_ref):
+def approve_change_route(item_ref):
     schema, db, item = get_data_on_item("changes", item_ref)
     
     try:
@@ -329,7 +360,7 @@ def data_item(data_type, item_ref):
         linked_objects=linked_objects
     )
 
-def get_linked_objects(schema, item, preview=None):
+def get_linked_objects(schema, item):
     properties = schema.get("properties", {})
     linked_objects = {}
         
@@ -361,7 +392,7 @@ def get_linked_objects(schema, item, preview=None):
                             object_to_add = {"name": obj["_id"], "link": f"/{related_collection}/item/{obj['_id']}"}
                         if attributes.get("preview", None) is not None:
                             preview_schema = category_data[attributes.get("collection")]["schema"]
-                            object_to_add["linked_objects"] = get_linked_objects(preview_schema, obj, field_preview)
+                            object_to_add["linked_objects"] = get_linked_objects(preview_schema, obj)
                         linked_objects[field].append(object_to_add)
             
             else:
@@ -556,8 +587,16 @@ def request_change(data_type, item_id, change_type, before_data, after_data, rea
 
 #Returns true if worked ok, if rejected returns false
 def approve_change(change_id):
-    approver = mongo.db.players.find_one({"id": g.user["id"]})["_id"]
+    approver = mongo.db.players.find_one({"id": g.user["id"]}, {"_id": 1, "username": 1, "is_admin": 1})
+    
+    print(approver)
+    
     if approver is None:
+        print("Change approval failed, no logged in user!")
+        return None
+    
+    if not approver.get("is_admin", False):
+        print("Change approval failed, logged in user is not admin!")
         return None
     
     changes_collection = mongo.db.changes
@@ -577,7 +616,7 @@ def approve_change(change_id):
             "target": inserted_item_id,
             "status": "Approved",
             "time_implemented": now,
-            "approver": approver,
+            "approver": approver.get("_id", None),
             "before_implemented_data": before_data,
             "after_implemented_data": after_data,
             }}
@@ -621,6 +660,7 @@ def approve_change(change_id):
             
             return True
     
+    print("Failed to approve")
     return False
 
 def keep_only_differences(before_data, after_data, change_type):
@@ -651,12 +691,14 @@ def calculate_int_changes(before_data, after_data):
 
 #Returns true if no other changes have been made that will interfere with approving a change
 def check_no_other_changes(before_data, after_data, current_data):
+    print(before_data)
+    print(current_data)
+    print(after_data)
+    
     for key in before_data:
-        if key not in after_data or key not in current_data:
-            return False
-        before_val = before_data.get(key)
-        after_val = after_data.get(key)
-        current_val = current_data.get(key)
+        before_val = before_data.get(key, None)
+        after_val = after_data.get(key, None)
+        current_val = current_data.get(key, None)
         if before_val != current_val and after_val != current_val and not isinstance(before_val, int) and not isinstance(after_val, int) and not isinstance(current_val, int):
             return False
     return True
@@ -780,7 +822,7 @@ def logout():
 def profile():
     if(g.user is None):
         return redirect(url_for("home"))
-    return redirect("/players/" + g.user["name"])
+    return redirect("/players/item/" + g.user["name"])
 
 #Helper function to save user to MongoDB
 def save_user_to_db(user):
