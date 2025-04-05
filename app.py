@@ -95,10 +95,23 @@ def inject_navbar_pages():
 def load_user():
     g.user = session.get('user', None)
 
+@app.before_request
+def cache_previous_url():
+    if request.endpoint != 'static':
+        session['second_previous_url'] = session.get('previous_url', None)
+        session['previous_url'] = session.get('current_url', None)
+        session['current_url'] = request.url
+
 #Routes
 @app.route("/")
 def home():
     return render_template("index.html")
+
+@app.route("/go_back")
+def go_back():
+    previous_url = session.get('second_previous_url', url_for("home"))
+    return redirect(previous_url)
+
 
 #######################################################
 
@@ -148,8 +161,6 @@ def data_list(data_type):
             preview_overall_lookup_dict[preview_item] = preview_individual_lookup_dict
     
     items = list(db.find({}, query_dict).sort("name", ASCENDING))
-    
-    print(preview_overall_lookup_dict)
     
     return render_template(
         "dataList.html",
@@ -421,7 +432,7 @@ def get_linked_objects(schema, item):
 
 @app.route("/nations/edit/<item_ref>", methods=["GET"])
 def edit_nation(item_ref):
-    schema, db, item = get_data_on_item("nations", item_ref)
+    schema, db, nation = get_data_on_item("nations", item_ref)
     
     dropdown_options = {}
     for field, attributes in schema["properties"].items():
@@ -429,21 +440,21 @@ def edit_nation(item_ref):
             related_collection = attributes.get("collection")
             dropdown_options[field] = list(mongo.db[related_collection].find({}, {"name": 1, "_id": 1}))
     
-    linked_objects = {}
-    for field, attributes in schema["properties"].items():
-        if attributes.get("collection") != None and attributes.get("queryTargetAttribute") != None:
-            related_collection = attributes.get("collection")
-            query_target = attributes.get("queryTargetAttribute")
-            item_id = str(item["_id"])
-            linked_objects[field] = list(mongo.db[related_collection].find({query_target: item_id}, {"name": 1, "_id": 1}))
+    linked_objects = get_linked_objects(schema, nation)
+    
+    calculated_fields = calculate_all_fields(nation, schema)
+    nation.update(calculated_fields)
     
     template = render_template(
-        "dataItemEdit.html",
+        "nationEdit.html",
         title="Edit " + item_ref,
         schema=schema,
-        item=item,
+        nation=nation,
         dropdown_options=dropdown_options,
-        linked_objects=linked_objects
+        linked_objects=linked_objects,
+        general_resources=general_resources,
+        unique_resources=unique_resources,
+        districts_config=json_data["districts"]
     )
     return template
 
@@ -488,11 +499,11 @@ def data_item_edit_request(data_type, item_ref):
         validate(instance=form_data, schema=schema)
     except ValidationError as e:
         flash(f"Validation Error: {e.message}")
-        return redirect("/" + data_type + "/" + item_ref + "/edit")
+        return redirect("/" + data_type + "/edit/" + item_ref)
     
     if "name" in form_data and form_data["name"] != item_ref and db.find_one({"name": form_data["name"]}):
         flash("Name must be unique!")
-        return redirect(f"/{data_type}/{item_ref}/edit")
+        return redirect(f"/{data_type}/edit/{item_ref}")
     
     item_id = item["_id"]
     reason = form_data.get("reason", "No Reason Given")
@@ -524,11 +535,11 @@ def data_item_edit_approve(data_type, item_ref):
         validate(instance=form_data, schema=schema)
     except ValidationError as e:
         flash(f"Validation Error: {e.message}")
-        return redirect("/" + data_type + "/" + item_ref + "/edit")
+        return redirect("/" + data_type + "/edit/" + item_ref)
     
     if "name" in form_data and form_data["name"] != item_ref and db.find_one({"name": form_data["name"]}):
         flash("Name must be unique!")
-        return redirect(f"/{data_type}/{item_ref}/edit")
+        return redirect(f"/{data_type}/edit/{item_ref}")
     
     item_id = item["_id"]
     reason = form_data.get("reason", "No Reason Given")
@@ -591,8 +602,6 @@ def request_change(data_type, item_id, change_type, before_data, after_data, rea
 def approve_change(change_id):
     approver = mongo.db.players.find_one({"id": g.user["id"]}, {"_id": 1, "username": 1, "is_admin": 1})
     
-    print(approver)
-    
     if approver is None:
         print("Change approval failed, no logged in user!")
         return None
@@ -654,7 +663,7 @@ def approve_change(change_id):
                 {"$set": {
                 "status": "Approved",
                 "time_implemented": now,
-                "approver": approver,
+                "approver": approver.get("_id", None),
                 "before_implemented_data": before_data,
                 "after_implemented_data": after_data,
                 }}
@@ -693,10 +702,6 @@ def calculate_int_changes(before_data, after_data):
 
 #Returns true if no other changes have been made that will interfere with approving a change
 def check_no_other_changes(before_data, after_data, current_data):
-    print(before_data)
-    print(current_data)
-    print(after_data)
-    
     for key in before_data:
         before_val = before_data.get(key, None)
         after_val = after_data.get(key, None)
@@ -706,6 +711,60 @@ def check_no_other_changes(before_data, after_data, current_data):
     return True
 
 #######################################################
+
+@app.route("/<data_type>/clone/<item_ref>/request", methods=["POST"])
+def data_item_clone_request(data_type, item_ref):
+    schema, db, item = get_data_on_item(data_type, item_ref)
+    
+    form_data = request.form.to_dict()
+    
+    if "name" in item:
+        item["name"] = "Copy of " + item["name"]
+    
+    item_id = item["_id"]
+    reason = form_data.get("reason", "No Reason Given")
+    after_data = item
+    
+    change_id = request_change(
+        data_type=data_type,
+        item_id=None,
+        change_type="Add",
+        before_data={},
+        after_data=after_data,
+        reason=reason
+    )
+    
+    flash(f"Change request #{change_id} created and awaits admin approval.")
+    
+    return redirect("/go_back")
+
+@app.route("/<data_type>/clone/<item_ref>/save", methods=["POST"])
+def data_item_clone_approve(data_type, item_ref):
+    schema, db, item = get_data_on_item(data_type, item_ref)
+    
+    form_data = request.form.to_dict()
+    
+    if "name" in item:
+        item["name"] = "Copy of " + item["name"]
+    
+    item_id = item["_id"]
+    reason = form_data.get("reason", "No Reason Given")
+    after_data = item
+    
+    change_id = request_change(
+        data_type=data_type,
+        item_id=None,
+        change_type="Add",
+        before_data={},
+        after_data=after_data,
+        reason=reason
+    )
+    
+    approve_change(change_id)
+    
+    flash(f"Change request #{change_id} created and approved.")
+    
+    return redirect("/go_back")
 
 @app.route("/<data_type>/delete/<item_ref>/request", methods=["POST"])
 def data_item_delete_request(data_type, item_ref):

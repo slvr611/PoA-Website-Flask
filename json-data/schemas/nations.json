@@ -824,10 +824,11 @@
         "description": "The number of cities the nation's government can support without penalties",
 		"calculated": true
       },
-	  "cities": {
+	  "city_count": {
         "bsonType": "number",
-		"label": "Cities",
-        "description": "The number of cities the nation currently controls"
+		"label": "City Count",
+        "description": "The number of cities the nation currently controls",
+		"calculated": true
       },
 	  "defensive_pact_slots": {
         "bsonType": "number",

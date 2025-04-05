@@ -17,17 +17,33 @@
 	            {% endif %}
 	            <td>
 					{% if g.user.is_admin %}
-						{% set default_action = request.path.replace('edit', 'delete') ~ '/' ~ item.name ~ '/save' %}
+						{% if item.name %}
+							{% set default_action = request.path.replace('edit', 'delete') ~ '/' ~ item.name ~ '/save' %}
+						{% else %}
+							{% set default_action = request.path.replace('edit', 'delete') ~ '/' ~ item._id ~ '/save' %}
+						{% endif %}
 					{% else %}
-						{% set default_action = request.path.replace('edit', 'delete') ~ '/' ~ item.name ~ '/request' %}
+						{% if item.name %}
+							{% set default_action = request.path.replace('edit', 'delete') ~ '/' ~ item.name ~ '/request' %}
+						{% else %}
+							{% set default_action = request.path.replace('edit', 'delete') ~ '/' ~ item._id ~ '/request' %}
+						{% endif %}
 					{% endif %}
 	            	<form method="POST" action="{{ default_action }}">
 	            		<label for="reason">Reason</label>
 						<input type="text" id="reason" name="reason" value="" required >
 						{% if g.user.is_admin %}
-							<button type="submit" formaction="{{ request.path.replace('edit', 'delete') }}/{{ item.name }}/save">Immediate Delete</button>
+							{% if item.name %}
+								<button type="submit" formaction="{{ request.path.replace('edit', 'delete') }}/{{ item.name }}/save">Immediate Delete</button>
+							{% else %}
+								<button type="submit" formaction="{{ request.path.replace('edit', 'delete') }}/{{ item._id }}/save">Immediate Delete</button>
+							{% endif %}
 						{% endif %}
-			            <button type="submit" formaction="{{ request.path.replace('edit', 'delete') }}/{{ item.name }}/request">Request Delete</button>
+						{% if item.name %}
+							<button type="submit" formaction="{{ request.path.replace('edit', 'delete') }}/{{ item.name }}/request">Request Delete</button>
+						{% else %}
+							<button type="submit" formaction="{{ request.path.replace('edit', 'delete') }}/{{ item._id }}/request">Request Delete</button>
+						{% endif %}
 					</form>
 				</td>
             </tr>
