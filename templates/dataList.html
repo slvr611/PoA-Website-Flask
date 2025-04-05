@@ -9,20 +9,45 @@
 	{% endif %}
 	<h1>{{ title }}:</h1>
 	<table class="info-table">
-		{% for item in items %}
+		<thead>
 			<tr>
-				{% if item.name %}
-					{# If there's a name, use it in the URL #}
-					<td><a href="{{ request.path }}/item/{{ item.name }}">{{ item.name }}</a></td>
-				{% else %}
-					{# Otherwise, use the _id #}
-					<td><a href="{{ request.path }}/item/{{ item._id|string }}">{{ item._id }}</a></td>
-				{% endif %}
+				<th>
+					{% if name in schema.preview %}
+						Name
+					{% else %}
+						ID
+					{% endif %}
+				</th>
 				{% for preview_category in schema.preview %}
-					<td><a href="{{ preview_references[preview_category][item[preview_category]]["link"] }}">{{ preview_references[preview_category][item[preview_category]].get("name", item.preview_category) }}</a></td>
+					<th>{{ schema.properties[preview_category]["label"] }}</th>
 				{% endfor %}
 			</tr>
-		{% endfor %}
+		</thead>
+		<tbody>
+			{% for item in items %}
+				<tr>
+					{% if item.name %}
+						{# If there's a name, use it in the URL #}
+						<td><a href="{{ request.path }}/item/{{ item.name }}">{{ item.name }}</a></td>
+					{% else %}
+						{# Otherwise, use the _id #}
+						<td><a href="{{ request.path }}/item/{{ item._id|string }}">{{ item._id }}</a></td>
+					{% endif %}
+					{% for preview_category in schema.preview %}
+						{% if preview_category in preview_references %}
+							{% set item_value = item[preview_category]|string %}
+							{% if item_value != "" %}
+								<td><a href="{{ preview_references[preview_category][item_value]["link"] }}">{{ preview_references[preview_category][item_value]["name"] }}</td>
+							{% else %}
+								<td></td>
+							{% endif %}
+						{% else %}
+							<td>{{ item[preview_category] }}</td>
+						{% endif %}
+					{% endfor %}
+				</tr>
+			{% endfor %}
+		</tbody>
 	</table>
 </div>
 {% endblock %}

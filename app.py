@@ -149,6 +149,8 @@ def data_list(data_type):
     
     items = list(db.find({}, query_dict).sort("name", ASCENDING))
     
+    print(preview_overall_lookup_dict)
+    
     return render_template(
         "dataList.html",
         title=category_data[data_type]["pluralName"],
@@ -174,7 +176,7 @@ def data_list_edit(data_type):
             preview_individual_lookup_dict = {}
             preview_data = list(preview_db.find({}, {"_id": 1, "name": 1}))
             for data in preview_data:
-                preview_individual_lookup_dict[data["_id"]] = {data.get("name", "None"), collection_name + "/item/" + data.get("name", data.get("_id", "#"))}
+                preview_individual_lookup_dict[str(data["_id"])] = {data.get("name", "None"), collection_name + "/item/" + data.get("name", data.get("_id", "#"))}
             preview_overall_lookup_dict[preview_item] = preview_individual_lookup_dict
     
     items = list(db.find({}, query_dict).sort("name", ASCENDING))
