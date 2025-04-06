@@ -268,6 +268,63 @@
 						</tr>
 					</table>
 				</div>
+				
+				<div class="info-column">
+					<h2>Vassalship</h2>
+					<table class="info-table">
+						<tr>
+							<th>{{ schema.properties.overlord.label }}:</th>
+							<td>
+								<select name="overlord">
+									<option value="" {% if not nation.get("overlord") %}selected{% endif %}>
+										{{ schema.properties.get("overlord", {}).get("noneResult", "None") }}
+									</option>
+									{% for option in dropdown_options["overlord"] %}
+										<option value="{{ option['_id'] }}" {% if nation.get("overlord")|string == option['_id']|string %}selected{% endif %}>
+											{{ option['name'] }}
+										</option>
+									{% endfor %}
+								</select>
+							</td>
+						</tr>
+						<tr>
+							<th>{{ schema.properties.vassal_type.label }}:</th>
+							<td>
+								<select name="vassal_type">
+									{% for option in schema.properties.vassal_type.enum %}
+										<option value="{{ option }}" {% if nation.get("vassal_type", None) == option %}selected{% endif %}>{{ option }}</option>
+									{% endfor %}
+								</select>
+							</td>
+						</tr>
+						<tr>
+							<th>{{ schema.properties.compliance.label }}:</th>
+							<td>
+								<select name="compliance">
+									{% for option in schema.properties.compliance.enum %}
+										<option value="{{ option }}" {% if nation.get("compliance", None) == option %}selected{% endif %}>{{ option }}</option>
+									{% endfor %}
+								</select>
+							</td>
+						</tr>
+						<tr>
+							<th>{{ schema.properties.disobey_chance.label }}:</th>
+							<td>{{ nation.disobey_chance }}</td>
+						</tr>
+						<tr>
+							<th>{{ schema.properties.rebellion_chance.label }}:</th>
+							<td>{{ nation.rebellion_chance }}</td>
+						</tr>
+						<tr>
+							<th>{{ schema.properties.concessions_chance.label }}:</th>
+							<td>{{ nation.concessions_chance }}</td>
+						</tr>
+						<tr>
+							<th>{{ schema.properties.concessions_qty.label }}:</th>
+							<td>{{ nation.concessions_qty }}</td>
+						</tr>
+					</table>
+				</div>
 
 				<!-- Miscellaneous: fields not in view -->
 				<div class="info-column">
