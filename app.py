@@ -153,7 +153,7 @@ def generate_id_to_name_dict(target):
 
 def compute_demographics(nation_id, race_id_to_name, culture_id_to_name, religion_id_to_name):
     demographics = {"race": {}, "culture": {}, "religion": {}}
-    pops = list(mongo.db.pops.find({"nation": str(nation_id)}))
+    pops = list(mongo.db.pops.find({"nation": str(nation_id)}).sort("name", ASCENDING))
     for pop in pops:
         race = race_id_to_name.get(pop.get("race", "Unknown"), "Unknown")
         culture = culture_id_to_name.get(pop.get("culture", "Unknown"), "Unknown")
@@ -255,7 +255,7 @@ def data_item_new(data_type):
     for field, attributes in schema["properties"].items():
         if attributes.get("collection") != None:
             related_collection = attributes.get("collection")
-            dropdown_options[field] = list(mongo.db[related_collection].find({}, {"name": 1, "_id": 1}))
+            dropdown_options[field] = list(mongo.db[related_collection].find({}, {"name": 1, "_id": 1}).sort("name", ASCENDING))
     
     template = render_template(
         "dataItemNew.html",
@@ -438,7 +438,7 @@ def get_linked_objects(schema, item):
                     for preview_item in field_preview:
                         query_dict[preview_item] = 1
                 
-                related_items = list(mongo.db[related_collection].find({query_target: item_id}, query_dict))
+                related_items = list(mongo.db[related_collection].find({query_target: item_id}, query_dict).sort("name", ASCENDING))
                 
                 if related_items:
                     linked_objects[field] = []
@@ -483,7 +483,7 @@ def edit_nation(item_ref):
     for field, attributes in schema["properties"].items():
         if attributes.get("collection") != None:
             related_collection = attributes.get("collection")
-            dropdown_options[field] = list(mongo.db[related_collection].find({}, {"name": 1, "_id": 1}))
+            dropdown_options[field] = list(mongo.db[related_collection].find({}, {"name": 1, "_id": 1}).sort("name", ASCENDING))
     
     linked_objects = get_linked_objects(schema, nation)
     
@@ -512,7 +512,7 @@ def data_item_edit(data_type, item_ref):
     for field, attributes in schema["properties"].items():
         if attributes.get("collection") != None:
             related_collection = attributes.get("collection")
-            dropdown_options[field] = list(mongo.db[related_collection].find({}, {"name": 1, "_id": 1}))
+            dropdown_options[field] = list(mongo.db[related_collection].find({}, {"name": 1, "_id": 1}).sort("name", ASCENDING))
     
     linked_objects = {}
     for field, attributes in schema["properties"].items():
@@ -520,7 +520,7 @@ def data_item_edit(data_type, item_ref):
             related_collection = attributes.get("collection")
             query_target = attributes.get("queryTargetAttribute")
             item_id = str(item["_id"])
-            linked_objects[field] = list(mongo.db[related_collection].find({query_target: item_id}, {"name": 1, "_id": 1}))
+            linked_objects[field] = list(mongo.db[related_collection].find({query_target: item_id}, {"name": 1, "_id": 1}).sort("name", ASCENDING))
     
     template = render_template(
         "dataItemEdit.html",
