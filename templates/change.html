@@ -73,7 +73,7 @@
 				<th><strong>{{ changes_label }}:</strong></th>
 				<td>
 					{% for key, data in before_data.items() %}
-						{{ target_schema.properties[key]["label"] }}: {{ before_data[key] }} -> {{ after_data[key] }}</br>
+						{{ target_schema.properties.get(key, {}).get("label", key) }}: {{ before_data[key] }} -> {{ after_data[key] }}</br>
 					{% endfor %}
 				</td>
 			</tr>
