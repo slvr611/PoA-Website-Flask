@@ -17,20 +17,20 @@
 		<tbody>
 			{% for nation in demographics_list %}
 				<tr>
-					<td><a href="/nations/{{ nation.name }}">{{ nation.name }}</a></td>
+					<td><a href="/nations/item/{{ nation.name }}">{{ nation.name }}</a></td>
 					<td>
 						{% for race, count in nation.demographics.race.items() %}
-							<div><a href="/races/{{ race }}">{{ race }}</a>: {{ count }}</div>
+							<div><a href="/races/item/{{ race }}">{{ race }}</a>: {{ count }}</div>
 						{% endfor %}
 					</td>
 					<td>
 						{% for culture, count in nation.demographics.culture.items() %}
-							<div><a href="/cultures/{{ culture }}">{{ culture }}</a>: {{ count }}</div>
+							<div><a href="/cultures/item/{{ culture }}">{{ culture }}</a>: {{ count }}</div>
 						{% endfor %}
 					</td>
 					<td>
 						{% for religion, count in nation.demographics.religion.items() %}
-							<div><a href="/religions/{{ religion }}">{{ religion }}</a>: {{ count }}</div>
+							<div><a href="/religions/item/{{ religion }}">{{ religion }}</a>: {{ count }}</div>
 						{% endfor %}
 					</td>
 				</tr>
