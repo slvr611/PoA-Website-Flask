@@ -5,6 +5,7 @@
 	"laws": ["stability", "government_type", "succession_type", "nomad_camp_type", "conscription_type", "military_funding",
 		"magic_stance", "citizenship_stance", "foreign_acceptance", "subject_stance", "land_doctrine", "naval_doctrine",
 		"diplomatic_stance", "scientific_stance", "economy_type", "expansion_stance", "mercenary_law", "consumption_stance", "tax_stance", "justice_stance"],
+	"preview": ["region"],
     "properties": {
       "name": {
         "bsonType": "string",
@@ -61,7 +62,8 @@
 	  "current_territory": {
         "bsonType": "number",
 		"label": "Current Territory",
-        "description": "The amount of territory the nation currently holds"
+        "description": "The amount of territory the nation currently holds",
+		"default": 0
       },
 	  "road_capacity": {
         "bsonType": "number",
@@ -73,13 +75,15 @@
 	  "road_usage": {
         "bsonType": "number",
 		"label": "Road Usage",
-        "description": "The amount of road capacity the nation is currently using"
+        "description": "The amount of road capacity the nation is currently using",
+		"default": 0
       },
 	  "stability": {
         "bsonType": "enum",
 		"label": "Stability",
         "description": "The nation's level of stability",
 		"enum": ["Fragile", "Unsettled", "Balanced", "Stable", "United"],
+		"default": "Balanced",
 		"laws": {
 			"Fragile": {
 				"civil_war_chance": 0.2,
@@ -121,7 +125,8 @@
 	  "infamy": {
         "bsonType": "number",
 		"label": "Infamy",
-        "description": "The nation's current level of infamy"
+        "description": "The nation's current level of infamy",
+		"default": 0
       },
 	  "wars": {
         "bsonType": "array",
@@ -158,7 +163,8 @@
 	  "money": {
         "bsonType": "number",
 		"label": "Money",
-        "description": "The amount of money the nation currently has"
+        "description": "The amount of money the nation currently has",
+		"default": 0
       },
 	  "money_capacity": {
         "bsonType": "number",
@@ -183,12 +189,14 @@
 	  "rolling_karma": {
         "bsonType": "number",
 		"label": "Rolling Karma",
-        "description": "The amount of rolling karma the nation has.  Rolling karma is increased after getting a bad event, reduced after getting a good event, and reset at the start of each era"
+        "description": "The amount of rolling karma the nation has.  Rolling karma is increased after getting a bad event, reduced after getting a good event, and reset at the start of each era",
+		"default": 0
       },
 	  "temporary_karma": {
         "bsonType": "number",
 		"label": "Temporary Karma",
-        "description": "The amount of temporary karma the nation has.  Temporary karma is removed after each tick"
+        "description": "The amount of temporary karma the nation has.  Temporary karma is removed after each tick",
+		"default": 0
       },
 	  "migration_distance": {
         "bsonType": "number",
@@ -436,7 +444,8 @@
         "bsonType": "enum",
 		"label": "Conscription Type",
         "description": "How much of the nation's population can be mobilized during a war",
-		"enum": ["Moderate", "Low", "High", "Very High", "Total", "Rebellion"],
+		"enum": ["Low", "Moderate", "High", "Very High", "Total", "Rebellion"],
+		"default": "Moderate",
 		"laws": {
 			"Moderate": {
 				"recruit_percentage": 0.3
@@ -470,6 +479,7 @@
 		"label": "Military Funding",
         "description": "How well funded the nation's military is",
 		"enum": ["Substandard", "Standard", "Substantial"],
+		"default": "Standard",
 		"laws": {
 			"Minimal": {
 				"unit_food_consumption": -1,
@@ -536,6 +546,7 @@
 		"label": "Foreign Acceptance",
         "description": "How minority cultures and religions living in the nation are handled",
 		"enum": ["Oppression", "Integration", "Acceptance", "Harmony"],
+		"default": "Integration",
 		"laws": {
 			"Oppression": {
 				"stability_loss_chance_per_unique_minority": 0.05,
@@ -561,6 +572,7 @@
 		"label": "Subject Stance",
         "description": "The way the nation tends to interact with its vassals",
 		"enum": ["Suppression", "Balanced", "Benevolence"],
+		"default": "Balanced",
 		"laws": {
 			"Suppression": {
 				"vassals_concessions_chance": -1
@@ -620,7 +632,7 @@
         "bsonType": "enum",
 		"label": "Diplomatic Stance",
         "description": "The nation's default stance towards interacting with its neighbors",
-		"enum": ["Cooperative", "Expansionist", "Belligerent", "Isolated"],
+		"enum": ["Expansionist", "Cooperative", "Belligerent", "Isolated"],
 		"laws": {
 			"Cooperative": {
 				"defensive_pact_slots": 1
@@ -639,6 +651,7 @@
 		"label": "Scientific Stance",
         "description": "The degree to which the nation is geared towards technological development",
 		"enum": ["Puritanical", "Conservative", "Pragmatic", "Progressive", "Radical", "Revolutionary"],
+		"default": "Pragmatic",
 		"laws": {
 			"Puritanical": {
 				"karma": 4,
@@ -703,6 +716,7 @@
 		"label": "Expansion Control Stance",
         "description": "The nation's default stance towards unregulated expansion",
 		"enum": ["Limitless", "Free", "Restricted", "Controlled"],
+		"default": "Free",
 		"laws": {
 			"Limitless": {
 				"passive_expansion_chance": 0.6
@@ -725,6 +739,7 @@
 		"label": "Mercenary Law",
         "description": "The degree to which the nation's military is geared to employ mercenaries",
 		"enum": ["No Mercenaries", "Some Mercenaries", "Mercenary Reliance", "Mercenary Military"],
+		"default": "Some Mercenaries",
 		"laws": {
 			"No Mercenaries": {
 				"mercenary_limit_mult": 0

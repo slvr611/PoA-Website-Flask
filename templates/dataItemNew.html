@@ -22,7 +22,7 @@
 								<input type="text" id="{{ field }}" name="{{ field }}"
 								   {% if field in schema.required %} required {% endif %}>
 							{% elif attributes.bsonType == "number" %}
-								<input type="number" id="{{ field }}" name="{{ field }}"
+								<input type="number" id="{{ field }}" name="{{ field }}" value="{{ attributes.get("default", "") }}"
 								   {% if field in schema.required %} required {% endif %}>
 							{% elif attributes.bsonType == "boolean" %}
 								<input type="checkbox" id="{{ field }}" name="{{ field }}"
@@ -41,7 +41,7 @@
 							{% elif attributes.bsonType == "enum" %}
 									<select id="{{ field }}" name="{{ field }}">
 										{% for option in attributes.enum %}
-											<option value="{{ option }}">
+											<option value="{{ option }}" {% if option == attributes.get("default", "") %}selected{% endif %} >
 												{{ option }}
 											</option>
 										{% endfor %}

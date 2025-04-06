@@ -277,7 +277,13 @@
 				<table class="info-table">
 					<tr>
 						<th>{{ schema.properties.overlord.label }}:</th>
-						<td>{{ nation.overlord }}</td>
+						<td>
+							{% if linked_objects["overlord"] %}
+								<a href="{{ linked_objects["overlord"]["link"] }}">{{ linked_objects["overlord"]["name"] }}</a>
+							{% else %}
+								None
+							{% endif %}
+						</td>
 					</tr>
 					<tr>
 						<th>{{ schema.properties.vassal_type.label }}:</th>
