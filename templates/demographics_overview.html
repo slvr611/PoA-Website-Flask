@@ -1,0 +1,41 @@
+{% extends "layout.html" %}
+
+{% block title %}World Demographic Overview{% endblock %}
+
+{% block content %}
+<div class="nation-page-container">
+	<h1>Demographics Overview</h1>
+	<table class="demographics-table">
+		<thead>
+			<tr>
+				<th>Nation</th>
+				<th>Race Demographics</th>
+				<th>Culture Demographics</th>
+				<th>Religion Demographics</th>
+			</tr>
+		</thead>
+		<tbody>
+			{% for nation in demographics_list %}
+				<tr>
+					<td><a href="/nations/{{ nation.name }}">{{ nation.name }}</a></td>
+					<td>
+						{% for race, count in nation.demographics.race.items() %}
+							<div><a href="/races/{{ race }}">{{ race }}</a>: {{ count }}</div>
+						{% endfor %}
+					</td>
+					<td>
+						{% for culture, count in nation.demographics.culture.items() %}
+							<div><a href="/cultures/{{ culture }}">{{ culture }}</a>: {{ count }}</div>
+						{% endfor %}
+					</td>
+					<td>
+						{% for religion, count in nation.demographics.religion.items() %}
+							<div><a href="/religions/{{ religion }}">{{ religion }}</a>: {{ count }}</div>
+						{% endfor %}
+					</td>
+				</tr>
+			{% endfor %}
+		</tbody>
+	</table>
+</div>
+{% endblock %}

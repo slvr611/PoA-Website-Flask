@@ -140,7 +140,52 @@ def get_data_on_item(data_type, item_ref):
     
     return schema, db, item
 
+def generate_id_to_name_dict(target):
+    id_to_name_dict = {}
+    all_items = list(category_data[target]["database"].find({}, {"_id": 1, "name": 1}))
+    
+    for item in all_items:
+        id_to_name_dict[str(item.get("_id", "None"))] = item.get("name", "None")
+    
+    print(id_to_name_dict)
+    
+    return id_to_name_dict
+
+def compute_demographics(nation_id, race_id_to_name, culture_id_to_name, religion_id_to_name):
+    demographics = {"race": {}, "culture": {}, "religion": {}}
+    pops = list(mongo.db.pops.find({"nation": str(nation_id)}))
+    for pop in pops:
+        race = race_id_to_name.get(pop.get("race", "Unknown"), "Unknown")
+        culture = culture_id_to_name.get(pop.get("culture", "Unknown"), "Unknown")
+        religion = religion_id_to_name.get(pop.get("religion", "Unknown"), "Unknown")
+        
+        demographics["race"][race] = demographics["race"].get(race, 0) + 1
+        demographics["culture"][culture] = demographics["culture"].get(culture, 0) + 1
+        demographics["religion"][religion] = demographics["religion"].get(religion, 0) + 1
+    return demographics
+
 #######################################################
+
+@app.route("/demographics_overview")
+def demographics_overview():
+    nations = list(mongo.db.nations.find().sort("name", ASCENDING))
+    
+    race_id_to_name = generate_id_to_name_dict("races")
+    culture_id_to_name = generate_id_to_name_dict("cultures")
+    religion_id_to_name = generate_id_to_name_dict("religions")
+    
+    demographics_list = []
+    for nation in nations:
+        demo = compute_demographics(nation.get("_id", None), race_id_to_name, culture_id_to_name, religion_id_to_name)
+        demographics_list.append({
+            "name": nation["name"],
+            "demographics": demo
+        })
+    
+    print(demographics_list)
+    
+    return render_template("demographics_overview.html", demographics_list=demographics_list)
+
 
 @app.route("/<data_type>")
 def data_list(data_type):

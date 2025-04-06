@@ -416,3 +416,33 @@ h1, h2 {
 .pops-table tr:nth-child(even) {
   background-color: #1e1e1e;
 }
+
+.demographics-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1rem;
+}
+
+.demographics-table th,
+.demographics-table td {
+  border: 1px solid #444;
+  padding: 8px;
+  text-align: left;
+  background-color: #222;
+  color: #e0e0e0;
+}
+
+.demographics-table th {
+  background-color: #333;
+  color: #fff;
+}
+
+.demographics-table a {
+  color: #8ab4f8;
+  text-decoration: none;
+}
+
+.demographics-table a:hover {
+  text-decoration: underline;
+  color: #c3dbff;
+}
