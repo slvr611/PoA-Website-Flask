@@ -27,6 +27,12 @@
 						{% if properties.bsonType == "string" or properties.bsonType == "enum" or properties.bsonType == "date"%}
 							{% if properties.image %}
 								<td><img src="{{ item[field] }}" alt="{{ properties.label }}" style="border-radius: 50%; width: 100px; height: 100px;"></td>
+							{% elif properties.long_text %}
+								<td>
+									<div class="multiline-text">
+										{{ item[field] }}
+									</div>
+								</td>
 							{% else %}
 								<td>{{ item[field] }}</td>
 							{% endif %}
