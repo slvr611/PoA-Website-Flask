@@ -298,6 +298,30 @@ h1, h2 {
   width: 70%;
 }
 
+.compact-table {
+  border-collapse: collapse;
+  margin: 0; /* remove extra margins if desired */
+}
+
+.compact-table th,
+.compact-table td {
+  border: 1px solid #444;
+  padding: .5em;
+  vertical-align: middle;
+}
+
+.compact-table th {
+  background-color: #333;
+  color: #fff;
+  text-align: right;
+}
+
+.compact-table td {
+  background-color: #222;
+  color: #e0e0e0;
+  text-align: left;
+}
+
 /* Districts Grid Container */
 .districts-grid {
   display: grid;

@@ -1,0 +1,77 @@
+{% extends "layout.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container">
+	{% if g.user.is_admin %}
+		<a href="{{ request.path }}/edit">Edit</a>
+	{% endif %}
+	<h1>Current Wonder Cost:</h1>
+	<table class="compact-table">
+		<thead>
+			<tr>
+				<th>Money</th>
+				<th>Wood</th>
+				<th>Stone</th>
+				<th>Food</th>
+				<th>Bronze</th>
+				<th>Iron</th>
+			</tr>
+		</thead>
+		<tbody>
+			<tr>
+				{% set wonder_count = items|length %}
+				<td>{{ 1000 + (100 * wonder_count) }}</td>
+				<td>{{ 10 + (1 * wonder_count) }}</td>
+				<td>{{ 5 + (1 * wonder_count) }}</td>
+				<td>{{ 5 + (1 * wonder_count) }}</td>
+				<td>{{ 5 + (1 * wonder_count) }}</td>
+				<td>{{ 1 + (1 * wonder_count) }}</td>
+			</tr>
+		</tbody>
+	</table>
+	<h1>Wonder List:</h1>
+	<table class="info-table">
+		<thead>
+			<tr>
+				<th>
+					{% if "name" in schema.preview %}
+						Name
+					{% else %}
+						ID
+					{% endif %}
+				</th>
+				{% for preview_category in schema.preview %}
+					<th>{{ schema.properties[preview_category]["label"] }}</th>
+				{% endfor %}
+			</tr>
+		</thead>
+		<tbody>
+			{% for item in items %}
+				<tr>
+					{% if item.name %}
+						{# If there's a name, use it in the URL #}
+						<td><a href="{{ request.path }}/item/{{ item.name }}">{{ item.name }}</a></td>
+					{% else %}
+						{# Otherwise, use the _id #}
+						<td><a href="{{ request.path }}/item/{{ item._id|string }}">{{ item._id }}</a></td>
+					{% endif %}
+					{% for preview_category in schema.preview %}
+						{% if preview_category in preview_references %}
+							{% set item_value = item[preview_category]|string %}
+							{% if item_value != "" %}
+								<td><a href="{{ preview_references[preview_category][item_value]["link"] }}">{{ preview_references[preview_category][item_value]["name"] }}</td>
+							{% else %}
+								<td></td>
+							{% endif %}
+						{% else %}
+							<td>{{ item[preview_category] }}</td>
+						{% endif %}
+					{% endfor %}
+				</tr>
+			{% endfor %}
+		</tbody>
+	</table>
+</div>
+{% endblock %}
