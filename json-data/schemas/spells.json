@@ -40,7 +40,8 @@
       "effect": {
         "bsonType": "string",
         "label": "Effect",
-        "description": "The spell's effects"
+        "description": "The spell's effects",
+		"long_text": true
       },
       "creator": {
         "bsonType": "linked_object",

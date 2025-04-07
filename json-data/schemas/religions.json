@@ -68,6 +68,18 @@
         "description": "The religion's stance on funerals",
 		"enum": ["None", "Celebration", "Mourning"]
       },
+	  "effect_description": {
+        "bsonType": "string",
+        "label": "Effect Description",
+        "description": "The description of the wonder's mechanical effects",
+		"long_text": true
+      },
+      "mechanical_effects": {
+        "bsonType": "array",
+        "label": "Mechanical Effects",
+        "description": "The wonder's mechanical effects",
+        "hidden": true
+      },
 	  "pops": {
         "bsonType": "array",
 		"label": "Pops",
