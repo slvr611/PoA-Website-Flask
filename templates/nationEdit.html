@@ -445,39 +445,25 @@
 					</tbody>
 				</table>
 			</section>
-
+			
 			<!-- Districts Section -->
 			<section class="districts-section">
 				<h2>Districts</h2>
 				<p>{{ schema.properties.district_slots.label }}: {{ nation.district_slots }}</p>
 				<div class="districts-grid">
-					{% for i in range(0, 3 + (nation.pop_count // 5)) %}
+					{% for district_field in form.districts %}
 						<div class="district-slot">
-							{% if nation.districts | length > i and nation.districts[i] %}
-								{% set district = districts_config[nation.districts[i]] %}
-								<h3>{{ district.display_name }}</h3>
-								<p>Type: {{ district.type }}</p>
-								<p>
-									Cost:
-									{% for resource, cost in district.cost.items() %}
-									{{ resource }}: {{ cost }}<br>
-									{% endfor %}
-								</p>
-								<p>
-									Modifiers:
-									{% for mod, value in district.modifiers.items() %}
-									{{ mod }}: {{ value }}<br>
-									{% endfor %}
-								</p>
-							{% else %}
-								<div class="empty-slot">
-								<p>Empty Slot</p>
-								</div>
-							{% endif %}
+							<label for="{{ district_field.id }}">Slot {{ loop.index }}</label>
+							{{ district_field(class="form-control") }}
 						</div>
 					{% endfor %}
 				</div>
 			</section>
+			
+			<tr>
+				<th><label for="reason">Reason</label></th>
+				<td><input type="text" id="reason" name="reason" value=""></td>
+			</tr>
 
 			{% if g.user.is_admin %}
 				<button type="submit" formaction="{{ request.path }}/save">Save</button>

@@ -271,7 +271,7 @@
 				</tr>
 			</table>
 		</div>
-		{% if "overlord" in nation and nation["overlord"] is not none %}
+		{% if "overlord" in nation and nation["overlord"] is not none and nation["overlord"] != "" %}
 			<div class="info-column">
 				<h2>Vassalship</h2>
 				<table class="info-table">
@@ -316,10 +316,36 @@
 			<div class="info-column">
 				<h2>Vassals</h2>
 				<table class="info-table">
-					<tr>
-						<th>{{ schema.properties.vassals.label }}:</th>
-						<td>TBA</td>
-					</tr>
+					<thead>
+						<tr class="resources-header-row">
+							<th colspan="6" class="resources-header">General Resources</th>
+						</tr>
+						<tr>
+							<th>Nation</th>
+							<th>Compliance</th>
+							<th>Chance to Disobey</th>
+							<th>Rebellion Chance</th>
+							<th>Concessions Chance</th>
+							<th>Concessions</th>
+						</tr>
+					</thead>
+					<tbody>
+						{% for vassal in linked_objects["vassals"] %}
+							<tr>
+								<td><a href="{{ vassal["link"] }}">{{ vassal["name"] }}</a></td>
+								
+								<td>{{ vassal["compliance"] }}</td>
+								
+								<td>{{ vassal["disobey_chance"] }}</td>
+								
+								<td>{{ vassal["rebellion_chance"] }}</td>
+
+								<td>{{ vassal["concession_chance"] }}</td>
+
+								<td>TBA</td>
+							</tr>
+						{% endfor %}
+					</tbody>
 				</table>
 			</div>
 		{% endif %}

@@ -286,7 +286,8 @@
 		"label": "Vassals",
         "description": "The list of vassals currently under the control of the nation",
 		"collection": "nations",
-		"queryTargetAttribute": "overlord"
+		"queryTargetAttribute": "overlord",
+		"preview": ["name", "compliance", "disobey_chance", "rebellion_chance", "concessions_chance"]
       },
 	  "diplomatic_relations_1": {
         "bsonType": "array",

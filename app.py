@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from jsonschema import validate, ValidationError
 from bson import ObjectId
 from datetime import datetime
+from forms import NationEditForm
 import math
 import os
 import json
@@ -474,58 +475,71 @@ def data_item(data_type, item_ref):
         linked_objects=linked_objects
     )
 
-def get_linked_objects(schema, item):
+def get_linked_objects(schema, item, preview_items=None):
     properties = schema.get("properties", {})
     linked_objects = {}
         
     for field, attributes in properties.items():
-        if attributes.get("collection") != None:
-            related_collection = attributes.get("collection")
-            
-            if attributes.get("queryTargetAttribute") != None:
-                query_target = attributes.get("queryTargetAttribute")
-                item_id = str(item["_id"])
+        if preview_items is None or field in preview_items:
+            if attributes.get("collection") != None:
+                related_collection = attributes.get("collection")
                 
-                query_dict = {"name": 1, "_id": 1}
-                
-                field_preview = attributes.get("preview", None)
-                
-                if field_preview is not None:
-                    for preview_item in field_preview:
-                        query_dict[preview_item] = 1
-                
-                related_items = list(mongo.db[related_collection].find({query_target: item_id}, query_dict).sort("name", ASCENDING))
-                
-                if related_items:
-                    linked_objects[field] = []
-                    for obj in related_items:
-                        object_to_add = {}
-                        if "name" in obj:
-                            object_to_add = {"name": obj["name"], "link": f"/{related_collection}/item/{obj['name']}"}
-                        else:
-                            object_to_add = {"name": obj["_id"], "link": f"/{related_collection}/item/{obj['_id']}"}
-                        if attributes.get("preview", None) is not None:
-                            preview_schema = category_data[attributes.get("collection")]["schema"]
-                            object_to_add["linked_objects"] = get_linked_objects(preview_schema, obj)
-                        linked_objects[field].append(object_to_add)
-            
-            else:
-                if field in item:
-                    object_id_to_find = item[field]
+                if attributes.get("queryTargetAttribute") != None:
+                    query_target = attributes.get("queryTargetAttribute")
+                    item_id = str(item["_id"])
                     
-                    if isinstance(object_id_to_find, str):
-                        try:
-                            object_id_to_find = ObjectId(object_id_to_find)
-                        except Exception as e:
-                            print(f"Error converting {object_id_to_find} to ObjectId: {e}")
-                            continue
+                    query_dict = {"name": 1, "_id": 1}
                     
-                    linked_object = mongo.db[related_collection].find_one({"_id": object_id_to_find})
+                    field_preview = attributes.get("preview", None)
                     
-                    if linked_object is not None:
-                        linked_object["link"] = "/" + related_collection + "/item/" + linked_object["name"] #TODO:  Update this to support ids
+                    if field_preview is not None:
+                        for preview_item in field_preview:
+                            query_dict[preview_item] = 1
                     
-                    linked_objects[field] = linked_object
+                    related_items = list(mongo.db[related_collection].find({query_target: item_id}, query_dict).sort("name", ASCENDING))
+                    
+                    if related_items:
+                        linked_objects[field] = []
+                        for obj in related_items:
+                            object_to_add = {}
+                            if "name" in obj:
+                                object_to_add["name"] = obj["name"]
+                            else:
+                                object_to_add["name"] = obj["_id"]
+                            
+                            object_to_add["link"] = f"/{related_collection}/item/{obj['_id']}"
+                            
+                            if field_preview is not None:
+                                preview_schema = category_data[attributes.get("collection")]["schema"]
+                                
+                                for preview_item in field_preview:
+                                    if preview_schema["properties"].get(preview_item, {}).get("calculated", False):
+                                        continue #TODO: deal with calculated linked fields
+                                    elif preview_schema["properties"].get(preview_item, {}).get("collection", None) != None:
+                                        continue #No need to deal with fields that are linked objects
+                                    else:
+                                        object_to_add[preview_item] = obj[preview_item] #Everything else just get the actual value from the object
+                                
+                                object_to_add["linked_objects"] = get_linked_objects(preview_schema, obj, preview_items=field_preview)
+                            linked_objects[field].append(object_to_add)
+                
+                else:
+                    if field in item:
+                        object_id_to_find = item[field]
+                        
+                        if isinstance(object_id_to_find, str):
+                            try:
+                                object_id_to_find = ObjectId(object_id_to_find)
+                            except Exception as e:
+                                print(f"Error converting {object_id_to_find} to ObjectId: {e}")
+                                continue
+                        
+                        linked_object = mongo.db[related_collection].find_one({"_id": object_id_to_find})
+                        
+                        if linked_object is not None:
+                            linked_object["link"] = "/" + related_collection + "/item/" + linked_object["name"] #TODO:  Update this to support ids
+                        
+                        linked_objects[field] = linked_object
     
     return linked_objects
 
@@ -546,16 +560,55 @@ def edit_nation(item_ref):
     calculated_fields = calculate_all_fields(nation, schema)
     nation.update(calculated_fields)
     
+    
+    
+    initial_jobs = []
+    for job_key, job_val in nation.get("jobs", {}).items():
+        initial_jobs.append({"key": job_key, "value": job_val})
+    # Decide on the minimum number of job entries you want.
+    # You can also add extra empty entries if desired.
+    min_job_entries = len(initial_jobs)  # or some fixed number
+    if len(initial_jobs) < min_job_entries:
+        for _ in range(min_job_entries - len(initial_jobs)):
+            initial_jobs.append({"key": "", "value": 0})
+    
+    # For districts, simply use what is stored, and pad with empty strings if needed.
+    district_slots = nation.get("district_slots", 3)
+    initial_districts = nation.get("districts", [])
+    if len(initial_districts) < district_slots:
+        initial_districts.extend([""] * (district_slots - len(initial_districts)))
+    
+    # Create the form, passing the initial data.
+    form = NationEditForm(data=nation)
+    # Populate nested FieldLists manually:
+    form.jobs.entries = []  # Clear existing entries
+    for job_data in initial_jobs:
+        entry = form.jobs.append_entry(job_data)
+        # Optionally, if you want to set choices for each job field,
+        # you can set entry.key.choices (if it were a SelectField) but here key is Hidden.
+    
+    district_choices = [("", "Empty Slot")]
+    # Assume json_data["districts"] holds the districts config.
+    for key, district in json_data["districts"].items():
+        district_choices.append((key, district["display_name"]))
+    
+    form.districts.entries = []
+    for i in range(district_slots):
+        entry = form.districts.append_entry(initial_districts[i])
+        # Set the choices for the current entry.
+        entry.choices = district_choices
+    
+    
     template = render_template(
         "nationEdit.html",
+        form=form,
         title="Edit " + item_ref,
         schema=schema,
         nation=nation,
         dropdown_options=dropdown_options,
         linked_objects=linked_objects,
         general_resources=general_resources,
-        unique_resources=unique_resources,
-        districts_config=json_data["districts"]
+        unique_resources=unique_resources
     )
     return template
 
@@ -631,6 +684,13 @@ def data_item_edit_approve(data_type, item_ref):
     schema, db, item = get_data_on_item(data_type, item_ref)
     
     form_data = request.form.to_dict()
+    
+    form = NationEditForm(request.form)
+    
+    districts = form.data.get("districts", None)
+    
+    if districts is not None:
+        form_data["districts"] = districts
     
     try:
         validate(instance=form_data, schema=schema)
