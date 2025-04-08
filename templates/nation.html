@@ -463,7 +463,7 @@
 		<h2>Districts</h2>
 		<p>{{ schema.properties.district_slots.label }}: {{ nation.district_slots }}</p>
 		<div class="districts-grid">
-			{% for i in range(0, 3 + (nation.pop_count // 5)) %}
+			{% for i in range(0, nation.district_slots) %}
 				<div class="district-slot">
 					{% if nation.districts | length > i and nation.districts[i] %}
 						{% set district = districts_config[nation.districts[i]] %}
