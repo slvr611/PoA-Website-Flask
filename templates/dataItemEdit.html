@@ -1,23 +1,10 @@
 {% extends "layout.html" %}
 
-{% block title %}Edit {{ item["name"] }}{% endblock %}
+{% block title %}Edit {{ title }}{% endblock %}
 
 {% block content %}
 <div class="container">
-	<a href="{{ request.path.replace('edit', 'item') }}">Back to View</a></br>
-	{% if g.user.is_admin %}
-		{% set default_action = request.path.replace('edit', 'clone') ~ '/save' %}
-	{% else %}
-		{% set default_action = request.path.replace('edit', 'clone') ~ '/request' %}
-	{% endif %}
-	<form method="POST" action="{{ default_action }}">
-		<label for="reason">Reason</label>
-		<input type="text" id="reason" name="reason" value="" required >
-		{% if g.user.is_admin %}
-			<button type="submit" formaction="{{ request.path.replace('edit', 'clone') }}/save">Immediate Clone</button>
-		{% endif %}
-		<button type="submit" formaction="{{ request.path.replace('edit', 'clone') }}/request">Request Clone</button>
-	</form>
+	<a href="{{ request.path.replace('/edit', '/item') }}">Back to View</a></br>
 	<h1>{{ title }}:</h1>
 	{% if g.user.is_admin %}
 		{% set default_action = request.path ~ '/save' %}
@@ -25,86 +12,48 @@
 		{% set default_action = request.path ~ '/request' %}
 	{% endif %}
 	<form method="POST" action="{{ default_action }}">
+		{{ form.csrf_token }}
 		<table class="info-table">
-			{% for field, attributes in schema.properties.items() %}
-					<tr>
-						<th><label for="{{ field }}">{{ attributes.label }}</label></th>
-						<td>
-							{% if attributes.static or attributes.calculated %}
-								{% if attributes.type == "string" or attributes.bsonType == "string" %}
-									{% if attributes.image %}
-										<img src="{{ item[field] }}" alt="{{ attributes.label }}" style="border-radius: 50%; width: 100px; height: 100px;">
-									{% else %}
-										{{ item[field] }}
-									{% endif %}
-								{% elif attributes.type == "number" or attributes.bsonType == "number" %}
-									{{ item[field] }}
-								{% elif attributes.type == "boolean" or attributes.bsonType == "boolean" %}
-									{{ item[field] }}
-								{% endif %}
-							{% else %}
-								{% if attributes.bsonType == "string" %}
-									{% if attributes.long_text %}
-										<textarea id="{{ field }}" name="{{ field }}" rows="8" style="width: 100%;"
-											{% if field in schema.required %} required {% endif %}>{{ item[field] }}</textarea>
-									{% else %}
-										<input type="text" id="{{ field }}" name="{{ field }}" value="{{ item[field] }}"
-										   {% if field in schema.required %} required {% endif %}>
-									{% endif %}
-								{% elif attributes.bsonType == "number" %}
-									<input type="number" id="{{ field }}" name="{{ field }}" value="{{ item[field] }}"
-									   {% if field in schema.required %} required {% endif %}>
-								{% elif attributes.bsonType == "boolean" %}
-									<input type="checkbox" id="{{ field }}" name="{{ field }}" value="{{ item[field] }}"
-									   {% if field in schema.required %} required {% endif %}>
-								{% elif attributes.bsonType == "linked_object" %}
-									<select id="{{ field }}" name="{{ field }}">
-										<option value="" {% if not item.get(field) %}selected{% endif %}>
-											{{ attributes.get("noneResult", "None") }}
-										</option>
-										{% for option in dropdown_options[field] %}
-											<option value="{{ option['_id'] }}" {% if item.get(field)|string == option['_id']|string %}selected{% endif %}>
-												{{ option['name'] }}
-											</option>
-										{% endfor %}
-									</select>
-								{% elif attributes.bsonType == "enum" %}
-									<select id="{{ field }}" name="{{ field }}">
-										{% for option in attributes.enum %}
-											<option value="{{ option }}" {% if item.get(field) == option %}selected{% endif %}>
-												{{ option }}
-											</option>
-										{% endfor %}
-									</select>
-								{% elif attributes.bsonType == "array" %}
-									<div>
-										{% for option in dropdown_options[field] %}
-											<input type="checkbox"
-												   id="{{ field }}_{{ option['_id'] }}"
-												   name="{{ field }}"
-												   value="{{ option['_id'] }}"
-												   {% if option['_id']|string in linked_objects[field]|string %}checked{% endif %}>
-											<label for="{{ field }}_{{ option['_id'] }}">{{ option['name'] }}</label>
-										{% endfor %}
-									</div>
-								{% endif %}
-							{% endif %}
-						</td>
-					</tr>
+			{% for field in form if field.name != 'csrf_token' and field.name != 'submit' and field.name != 'reason' %}
+				<tr>
+					<th><label for="{{ field.id }}">{{ field.label.text }}</label></th>
+					<td>
+						{{ field(class="form-control") }}
+						{% if field.errors %}
+							<ul class="errors">
+								{% for error in field.errors %}
+									<li>{{ error }}</li>
+								{% endfor %}
+							</ul>
+						{% endif %}
+						{% if field.description %}
+							<small class="form-text text-muted">{{ field.description }}</small>
+						{% endif %}
+					</td>
+				</tr>
 			{% endfor %}
-			
 			<tr>
-				<th><label for="reason">Reason</label></th>
-				<td><input type="text" id="reason" name="reason" value=""></td>
+				<th><label for="{{ form.reason.id }}">{{ form.reason.label.text }}</label></th>
+				<td>{{ form.reason(class="form-control") }}</td>
 			</tr>
-		
 		</table>
+		
+		{% if linked_objects %}
+			<h2>Related Items</h2>
+			{% for field_name, items in linked_objects.items() %}
+				<h3>{{ schema.properties[field_name].label }}</h3>
+				<ul>
+					{% for item in items %}
+						<li><a href="{{ item.link }}">{{ item.name }}</a></li>
+					{% endfor %}
+				</ul>
+			{% endfor %}
+		{% endif %}
 		
 		{% if g.user.is_admin %}
 			<button type="submit" formaction="{{ request.path }}/save">Save</button>
 		{% endif %}
         <button type="submit" formaction="{{ request.path }}/request">Request</button>
-		
     </form>
 </div>
 {% endblock %}

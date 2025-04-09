@@ -3,472 +3,384 @@
 {% block title %}Edit Nation: {{ nation.name }}{% endblock %}
 
 {% block content %}
-	<div class="nation-page-container">
-		<a href="{{ request.path.replace('edit', 'item') }}">Back to View</a>
-		<h1>Edit Nation: {{ nation.name }}</h1>
-		
-		{% if g.user.is_admin %}
-			{% set default_action = request.path ~ '/save' %}
-		{% else %}
-			{% set default_action = request.path ~ '/request' %}
-		{% endif %}
-		<form method="POST" action="{{ default_action }}">
-			<!-- Main information organized in columns -->
-			<div class="main-columns">
-				<!-- General / Numeric Stats -->
-				<div class="info-column">
-					<h2>General</h2>
-					<table class="info-table">
-						<tr>
-							<th>{{ schema.properties.name.label }}:</th>
-							<td><input type="text" name="name" value="{{ nation.name }}"></td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.region.label }}:</th>
-							<td>
-								<select name="region">
-									<option value="" {% if not nation.get("region") %}selected{% endif %}>
-										{{ schema.properties.get("region", {}).get("noneResult", "None") }}
-									</option>
-									{% for option in dropdown_options["region"] %}
-										<option value="{{ option['_id'] }}" {% if nation.get("region")|string == option['_id']|string %}selected{% endif %}>
-											{{ option['name'] }}
-										</option>
-									{% endfor %}
-								</select>
-							</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.stability.label }}:</th>
-							<td>
-								<select name="stability">
-									{% for option in schema.properties.stability.enum %}
-										<option value="{{ option }}" {% if nation.stability == option %}selected{% endif %}>{{ option }}</option>
-									{% endfor %}
-								</select>
-							</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.stability_gain_chance.label }}:</th>
-							<td>{{ nation.stability_gain_chance }}</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.stability_loss_chance.label }}:</th>
-							<td>{{ nation.stability_loss_chance }}</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.infamy.label }}:</th>
-							<td><input type="number" name="infamy" value="{{ nation.infamy }}"></td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.karma.label }}:</th>
-							<td>{{ nation.karma }}</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.temporary_karma.label }}:</th>
-							<td><input type="number" name="temporary_karma" value="{{ nation.temporary_karma }}"></td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.rolling_karma.label }}:</th>
-							<td><input type="number" name="rolling_karma" value="{{ nation.rolling_karma }}"></td>
-						</tr>
-					</table>
-				</div>
+<div class="nation-page-container">
+    <a href="{{ request.path.replace('edit', 'item') }}">Back to View</a>
+    <h1>Edit Nation: {{ nation.name }}</h1>
+    
+    {% if g.user.is_admin %}
+        {% set default_action = request.path ~ '/save' %}
+    {% else %}
+        {% set default_action = request.path ~ '/request' %}
+    {% endif %}
+    
+    <form method="POST" action="{{ default_action }}">
+        {{ form.csrf_token }}
+        
+        <!-- Main information organized in columns -->
+        <div class="main-columns">
+            <!-- General / Numeric Stats -->
+            <div class="info-column">
+                <h2>General</h2>
+                <table class="info-table">
+                    <tr>
+                        <th>{{ form.name.label.text }}:</th>
+                        <td>{{ form.name(class="form-control") }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ form.region.label.text }}:</th>
+                        <td>{{ form.region(class="form-control") }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ form.stability.label.text }}:</th>
+                        <td>{{ form.stability(class="form-control") }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ schema.properties.stability_gain_chance.label }}:</th>
+                        <td>{{ nation.stability_gain_chance }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ schema.properties.stability_loss_chance.label }}:</th>
+                        <td>{{ nation.stability_loss_chance }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ form.infamy.label.text }}:</th>
+                        <td>{{ form.infamy(class="form-control") }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ schema.properties.karma.label }}:</th>
+                        <td>{{ nation.karma }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ form.temporary_karma.label.text }}:</th>
+                        <td>{{ form.temporary_karma(class="form-control") }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ form.rolling_karma.label.text }}:</th>
+                        <td>{{ form.rolling_karma(class="form-control") }}</td>
+                    </tr>
+                </table>
+            </div>
 
-				<!-- Income -->
-				<div class="info-column">
-					<h2>Income</h2>
-					<table class="info-table">
-						<tr>
-							<th>{{ schema.properties.money.label }}:</th>
-							<td><input type="number" name="money" value="{{ nation.money }}"></td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.money_capacity.label }}:</th>
-							<td>{{ nation.money_capacity }}</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.money_income.label }}:</th>
-							<td>{{ nation.money_income }}</td>
-						</tr>
-					</table>
-				</div>
+            <!-- Income -->
+            <div class="info-column">
+                <h2>Income</h2>
+                <table class="info-table">
+                    <tr>
+                        <th>{{ form.money.label.text }}:</th>
+                        <td>{{ form.money(class="form-control") }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ schema.properties.money_capacity.label }}:</th>
+                        <td>{{ nation.money_capacity }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ schema.properties.money_income.label }}:</th>
+                        <td>{{ nation.money_income }}</td>
+                    </tr>
+                </table>
+            </div>
 
-				<!-- Demographics -->
-				<div class="info-column">
-					<h2>Demographics</h2>
-					<table class="info-table">
-						<tr>
-							<th>{{ schema.properties.primary_race.label }}:</th>
-							<td>
-								<select name="primary_race">
-									<option value="" {% if not nation.get("primary_race") %}selected{% endif %}>
-										{{ schema.properties.get("primary_race", {}).get("noneResult", "None") }}
-									</option>
-									{% for option in dropdown_options["primary_race"] %}
-										<option value="{{ option['_id'] }}" {% if nation.get("primary_race")|string == option['_id']|string %}selected{% endif %}>
-											{{ option['name'] }}
-										</option>
-									{% endfor %}
-								</select>
-							</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.primary_culture.label }}:</th>
-							<td>
-								<select name="primary_culture">
-									<option value="" {% if not nation.get("primary_culture") %}selected{% endif %}>
-										{{ schema.properties.get("primary_culture", {}).get("noneResult", "None") }}
-									</option>
-									{% for option in dropdown_options["primary_culture"] %}
-										<option value="{{ option['_id'] }}" {% if nation.get("primary_culture")|string == option['_id']|string %}selected{% endif %}>
-											{{ option['name'] }}
-										</option>
-									{% endfor %}
-								</select>
-							</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.primary_religion.label }}:</th>
-							<td>
-								<select name="primary_religion">
-									<option value="" {% if not nation.get("primary_religion") %}selected{% endif %}>
-										{{ schema.properties.get("primary_religion", {}).get("noneResult", "None") }}
-									</option>
-									{% for option in dropdown_options["primary_religion"] %}
-										<option value="{{ option['_id'] }}" {% if nation.get("primary_religion")|string == option['_id']|string %}selected{% endif %}>
-											{{ option['name'] }}
-										</option>
-									{% endfor %}
-								</select>
-							</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.unique_minority_count.label }}:</th>
-							<td>{{ nation.unique_minority_count }}</td>
-						</tr>
-					</table>
-					<h3>Population Details</h3>
-					<table class="pops-table">
-						<thead>
-							<tr>
-								<th>#</th>
-								<th>Race</th>
-								<th>Culture</th>
-								<th>Religion</th>
-								<th>Reason</th>
-								{% if g.user.is_admin %}
-									<th>Clone Now</th>
-								{% endif %}
-								<th>Request Clone</th>
-							</tr>
-						</thead>
-						<tbody>
-							{% for pop in linked_objects["pops"] %}
-								<tr>
-									<!-- If there's no separate name/ID, just show the loop index -->
-									<td><a href="{{ pop["link"] }}">{{ loop.index }}</a></td>
+            <!-- Demographics -->
+            <div class="info-column">
+                <h2>Demographics</h2>
+                <table class="info-table">
+                    <tr>
+                        <th>{{ form.primary_race.label.text }}:</th>
+                        <td>{{ form.primary_race(class="form-control") }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ form.primary_culture.label.text }}:</th>
+                        <td>{{ form.primary_culture(class="form-control") }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ form.primary_religion.label.text }}:</th>
+                        <td>{{ form.primary_religion(class="form-control") }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ schema.properties.unique_minority_count.label }}:</th>
+                        <td>{{ nation.unique_minority_count }}</td>
+                    </tr>
+                </table>
+                <h3>Population Details</h3>
+                <table class="pops-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Race</th>
+                            <th>Culture</th>
+                            <th>Religion</th>
+                            <th>Reason</th>
+                            {% if g.user.is_admin %}
+                                <th>Clone Now</th>
+                            {% endif %}
+                            <th>Request Clone</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for pop in linked_objects["pops"] %}
+                            <tr>
+                                <td><a href="{{ pop["link"] }}">{{ loop.index }}</a></td>
+                                <td>
+                                {% if pop["linked_objects"]["race"] %}
+                                    <a href="{{ pop["linked_objects"]["race"]["link"] }}">{{ pop["linked_objects"]["race"]["name"] }}</a>
+                                {% else %}
+                                    None
+                                {% endif %}
+                                </td>
+                                <td>
+                                {% if pop["linked_objects"]["culture"] %}
+                                    <a href="{{ pop["linked_objects"]["culture"]["link"] }}">{{ pop["linked_objects"]["culture"]["name"] }}</a>
+                                {% else %}
+                                    None
+                                {% endif %}
+                                </td>
+                                <td>
+                                {% if pop["linked_objects"]["religion"] %}
+                                    <a href="{{ pop["linked_objects"]["religion"]["link"] }}">{{ pop["linked_objects"]["religion"]["name"] }}</a>
+                                {% else %}
+                                    None
+                                {% endif %}
+                                </td>
+                                
+                                <td>
+                                    <input type="text" id="pop_reason" name="pop_reason" value="">
+                                </td>
+                                
+                                {% if g.user.is_admin %}
+                                    <td><button type="button" onclick="window.location.href='{{ pop["link"].replace("item", "clone") }}/save'">Clone Now</button></td>
+                                {% endif %}
+                                <td><button type="button" onclick="window.location.href='{{ pop["link"].replace("item", "clone") }}/request'">Request Clone</button></td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
 
-									<!-- Link to Race detail page -->
-									<td>
-									{% if pop["linked_objects"]["race"] %}
-										<a href="{{ pop["linked_objects"]["race"]["link"] }}">{{ pop["linked_objects"]["race"]["name"] }}</a>
-									{% else %}
-										None
-									{% endif %}
-									</td>
+            <!-- Government & Laws -->
+            <div class="info-column">
+                <h2>Government & Laws</h2>
+                <table class="info-table">
+					{{ form._fields.keys() }}
+                    {% for law in schema.laws %}
+                        {% if law != "stability" and law in form._fields.keys() %}
+                            <tr>
+                                <th>{{ form[law].label.text }}:</th>
+                                <td>{{ form[law](class="form-control") }}</td>
+                            </tr>
+                        {% endif %}
+                    {% endfor %}
+                </table>
+            </div>
 
-									<!-- Link to Culture detail page -->
-									<td>
-									{% if pop["linked_objects"]["culture"] %}
-										<a href="{{ pop["linked_objects"]["culture"]["link"] }}">{{ pop["linked_objects"]["culture"]["name"] }}</a>
-									{% else %}
-										None
-									{% endif %}
-									</td>
+            <!-- Administration & Holdings -->
+            <div class="info-column">
+                <h2>Administration & Holdings</h2>
+                <table class="info-table">
+                    <tr>
+                        <th>{{ schema.properties.administration.label }}:</th>
+                        <td>{{ nation.administration }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ form.current_territory.label.text }}:</th>
+                        <td>{{ form.current_territory(class="form-control") }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ schema.properties.effective_territory.label }}:</th>
+                        <td>{{ nation.effective_territory }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ form.road_usage.label.text }}:</th>
+                        <td>{{ form.road_usage(class="form-control") }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ schema.properties.road_capacity.label }}:</th>
+                        <td>{{ nation.road_capacity }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ schema.properties.city_count.label }}:</th>
+                        <td>{{ nation.cities }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ schema.properties.city_slots.label }}:</th>
+                        <td>{{ nation.city_slots }}</td>
+                    </tr>
+                </table>
+            </div>
+            
+            <div class="info-column">
+                <h2>Vassalship</h2>
+                <table class="info-table">
+                    <tr>
+                        <th>{{ form.overlord.label.text }}:</th>
+                        <td>{{ form.overlord(class="form-control") }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ form.vassal_type.label.text }}:</th>
+                        <td>{{ form.vassal_type(class="form-control") }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ form.compliance.label.text }}:</th>
+                        <td>{{ form.compliance(class="form-control") }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ schema.properties.disobey_chance.label }}:</th>
+                        <td>{{ nation.disobey_chance }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ schema.properties.rebellion_chance.label }}:</th>
+                        <td>{{ nation.rebellion_chance }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ schema.properties.concessions_chance.label }}:</th>
+                        <td>{{ nation.concessions_chance }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ schema.properties.concessions_qty.label }}:</th>
+                        <td>{{ nation.concessions_qty }}</td>
+                    </tr>
+                </table>
+            </div>
 
-									<!-- Link to Religion detail page -->
-									<td>
-									{% if pop["linked_objects"]["religion"] %}
-										<a href="{{ pop["linked_objects"]["religion"]["link"] }}">{{ pop["linked_objects"]["religion"]["name"] }}</a>
-									{% else %}
-										None
-									{% endif %}
-									</td>
-									
-									<form method="POST" action="{{ request.path }}/save">
-										<td>
-											<input type="text" id="reason" name="reason" value="">
-										</td>
-										
-										{% if g.user.is_admin %}
-											<td><button type="submit" formaction="{{ pop["link"].replace("item", "clone") }}/save">Clone Now</button></td>
-										{% endif %}
-										<td><button type="submit" formaction="{{ pop["link"].replace("item", "clone") }}/request">Request Clone</button></td>
-									</form>
-									
-								</tr>
-							{% endfor %}
-						</tbody>
-					</table>
-				</div>
+            <!-- Miscellaneous: fields not in view -->
+            <div class="info-column">
+                <h2>Miscellaneous</h2>
+                <table class="info-table">
+                    <tr>
+                        <th>{{ form.origin.label.text }}:</th>
+                        <td>{{ form.origin(class="form-control") }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ form.modifiers.label.text }}:</th>
+                        <td>{{ form.modifiers(class="form-control", rows=3, style="width: 100%;") }}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
 
-				<!-- Government & Laws -->
-				<div class="info-column">
-					<h2>Government & Laws</h2>
-					<table class="info-table">
-						{% for law in schema.laws %}
-							{% if law != "stability" %}
-								<tr>
-									<th>{{ schema.properties.get(law, {}).get("label", "No Label") }}:</th>
-									<td>
-										<select name="{{ law }}">
-											{% for option in schema.properties.get(law, {}).get("enum", []) %}
-												<option value="{{ option }}" {% if nation.get(law, None) == option %}selected{% endif %}>{{ option }}</option>
-											{% endfor %}
-										</select>
-									</td>
-								</tr>
-							{% endif %}
-						{% endfor %}
-					</table>
-				</div>
+        <!-- Resources Section -->
+        <section class="resources-section">
+            <h2>Resources</h2>
+            <table class="resources-table">
+                <thead>
+                    <tr class="resources-header-row">
+                        <th colspan="6" class="resources-header">General Resources</th>
+                    </tr>
+                    <tr>
+                        <th>Resource</th>
+                        <th>Production</th>
+                        <th>Consumption</th>
+                        <th>Excess</th>
+                        <th>Storage</th>
+                        <th>Capacity</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for resource in general_resources %}
+                        {% set resource_index = loop.index0 %}
+                        <tr>
+                            <td>{{ resource.name }}</td>
+                            <td>{{ nation.resource_production[resource.key] if resource.key in nation.resource_production else 0 }}</td>
+                            <td>{{ nation.resource_consumption[resource.key] if resource.key in nation.resource_consumption else 0 }}</td>
+                            <td>{{ nation.resource_excess[resource.key] if resource.key in nation.resource_excess else 0 }}</td>
+                            <td>{{ form.resource_storage[resource_index].key }}{{ form.resource_storage[resource_index].name }}{{ form.resource_storage[resource_index].value(class="form-control") }}</td>
+                            <td>{{ nation.resource_capacity[resource.key] if resource.key in nation.resource_capacity else 0 }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+                <thead>
+                    <tr class="resources-header-row">
+                        <th colspan="6" class="resources-header">Unique Resources</th>
+                    </tr>
+                    <tr>
+                        <th>Resource</th>
+                        <th>Production</th>
+                        <th>Consumption</th>
+                        <th>Excess</th>
+                        <th>Storage</th>
+                        <th>Capacity</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for resource in unique_resources %}
+                        {% set resource_index = general_resources|length + loop.index0 %}
+                        <tr>
+                            <td>{{ resource.name }}</td>
+                            <td>{{ nation.resource_production[resource.key] if resource.key in nation.resource_production else 0 }}</td>
+                            <td>{{ nation.resource_consumption[resource.key] if resource.key in nation.resource_consumption else 0 }}</td>
+                            <td>{{ nation.resource_excess[resource.key] if resource.key in nation.resource_excess else 0 }}</td>
+                            <td>{{ form.resource_storage[resource_index].key }}{{ form.resource_storage[resource_index].name }}{{ form.resource_storage[resource_index].value(class="form-control") }}</td>
+                            <td>{{ nation.resource_capacity[resource.key] if resource.key in nation.resource_capacity else 0 }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </section>
 
-				<!-- Administration & Holdings -->
-				<div class="info-column">
-					<h2>Administration & Holdings</h2>
-					<table class="info-table">
-						<tr>
-							<th>{{ schema.properties.administration.label }}:</th>
-							<td>{{ nation.administration }}</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.current_territory.label }}:</th>
-							<td><input type="number" name="current_territory" value="{{ nation.current_territory }}"></td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.effective_territory.label }}:</th>
-							<td>{{ nation.effective_territory }}</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.road_usage.label }}:</th>
-							<td><input type="number" name="road_usage" value="{{ nation.road_usage }}"></td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.road_capacity.label }}:</th>
-							<td>{{ nation.road_capacity }}</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.city_count.label }}:</th>
-							<td>{{ nation.cities }}</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.city_slots.label }}:</th>
-							<td>{{ nation.city_slots }}</td>
-						</tr>
-					</table>
-				</div>
-				
-				<div class="info-column">
-					<h2>Vassalship</h2>
-					<table class="info-table">
-						<tr>
-							<th>{{ schema.properties.overlord.label }}:</th>
-							<td>
-								<select name="overlord">
-									<option value="" {% if not nation.get("overlord") %}selected{% endif %}>
-										{{ schema.properties.get("overlord", {}).get("noneResult", "None") }}
-									</option>
-									{% for option in dropdown_options["overlord"] %}
-										<option value="{{ option['_id'] }}" {% if nation.get("overlord")|string == option['_id']|string %}selected{% endif %}>
-											{{ option['name'] }}
-										</option>
-									{% endfor %}
-								</select>
-							</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.vassal_type.label }}:</th>
-							<td>
-								<select name="vassal_type">
-									{% for option in schema.properties.vassal_type.enum %}
-										<option value="{{ option }}" {% if nation.get("vassal_type", None) == option %}selected{% endif %}>{{ option }}</option>
-									{% endfor %}
-								</select>
-							</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.compliance.label }}:</th>
-							<td>
-								<select name="compliance">
-									{% for option in schema.properties.compliance.enum %}
-										<option value="{{ option }}" {% if nation.get("compliance", None) == option %}selected{% endif %}>{{ option }}</option>
-									{% endfor %}
-								</select>
-							</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.disobey_chance.label }}:</th>
-							<td>{{ nation.disobey_chance }}</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.rebellion_chance.label }}:</th>
-							<td>{{ nation.rebellion_chance }}</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.concessions_chance.label }}:</th>
-							<td>{{ nation.concessions_chance }}</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.concessions_qty.label }}:</th>
-							<td>{{ nation.concessions_qty }}</td>
-						</tr>
-					</table>
-				</div>
-
-				<!-- Miscellaneous: fields not in view -->
-				<div class="info-column">
-					<h2>Miscellaneous</h2>
-					<table class="info-table">
-						<tr>
-							<th>{{ schema.properties.origin.label }}:</th>
-							<td>
-								<select name="origin">
-									{% for option in schema.properties.origin.enum %}
-										<option value="{{ option }}" {% if nation.origin == option %}selected{% endif %}>{{ option }}</option>
-									{% endfor %}
-								</select>
-							</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.modifiers.label }}:</th>
-							<td>
-								{% if modifiers in nation %}
-									<textarea name="modifiers" rows="3" style="width: 100%;">{{ nation.modifiers | tojson }}</textarea>
-								{% endif %}
-							</td>
-						</tr>
-					</table>
-				</div>
-			</div>
-
-			<!-- Resources Section -->
-			<section class="resources-section">
-				<h2>Resources</h2>
-				<table class="resources-table">
-					<thead>
-						<tr class="resources-header-row">
-							<th colspan="6" class="resources-header">General Resources</th>
-						</tr>
-						<tr>
-							<th>Resource</th>
-							<th>Production</th>
-							<th>Consumption</th>
-							<th>Excess</th>
-							<th>Storage</th>
-							<th>Capacity</th>
-						</tr>
-					</thead>
-					<tbody>
-						{% for resource in general_resources %}
-							<tr>
-								<td>{{ resource.name }}</td>
-								<td>{{ nation.resource_production[resource.key] if resource.key in nation.resource_production else 0 }}</td>
-								<td>{{ nation.resource_consumption[resource.key] if resource.key in nation.resource_consumption else 0 }}</td>
-								<td>{{ nation.resource_excess[resource.key] if resource.key in nation.resource_excess else 0 }}</td>
-								<td><input type="number" name="resource_storage[{{ resource.key }}]" value="{{ nation.resource_storage[resource.key] if resource.key in nation.resource_storage else 0 }}"></td>
-								<td>{{ nation.resource_capacity[resource.key] if resource.key in nation.resource_capacity else 0 }}</td>
-							</tr>
-						{% endfor %}
-					</tbody>
-					<thead>
-						<tr class="resources-header-row">
-							<th colspan="6" class="resources-header">Unique Resources</th>
-						</tr>
-						<tr>
-							<th>Resource</th>
-							<th>Production</th>
-							<th>Consumption</th>
-							<th>Excess</th>
-							<th>Storage</th>
-							<th>Capacity</th>
-						</tr>
-					</thead>
-					<tbody>
-						{% for resource in unique_resources %}
-							<tr>
-								<td>{{ resource.name }}</td>
-								<td>{{ nation.resource_production[resource.key] if resource.key in nation.resource_production else 0 }}</td>
-								<td>{{ nation.resource_consumption[resource.key] if resource.key in nation.resource_consumption else 0 }}</td>
-								<td>{{ nation.resource_excess[resource.key] if resource.key in nation.resource_excess else 0 }}</td>
-								<td><input type="number" name="resource_storage[{{ resource.key }}]" value="{{ nation.resource_storage[resource.key] if resource.key in nation.resource_storage else 0 }}"></td>
-								<td>{{ nation.resource_capacity[resource.key] if resource.key in nation.resource_capacity else 0 }}</td>
-							</tr>
-						{% endfor %}
-					</tbody>
-				</table>
-			</section>
-
-			<!-- Jobs Section -->
-			<section class="jobs-section">
-				<h2>Jobs</h2>
-				<table class="jobs-table">
-					<thead>
-						<tr>
-							<th>Job</th>
-							<th>Assigned Pops</th>
-							<th>Upkeep</th>
-							<th>Production</th>
-						</tr>
-					</thead>
-					<tbody>
-						{% for job_key, job in nation.job_details.items() %}
-							<tr>
-								<td>{{ job.display_name }}</td>
-								<td><input type="number" name="jobs[{{ job_key }}]" value="{{ nation.jobs[job_key] if job_key in nation.jobs else 0 }}"></td>
-								<td>
-								{% if job.upkeep is defined %}
-									{% for resource, cost in job.upkeep.items() %}
-										{{ resource }}: {{ cost }}<br>
-									{% endfor %}
-								{% endif %}
-								</td>
-								<td>
-								{% if job.production is defined %}
-									{% for resource, prod in job.production.items() %}
-										{{ resource }}: {{ prod }}<br>
-									{% endfor %}
-								{% endif %}
-								</td>
-							</tr>
-						{% endfor %}
-					</tbody>
-				</table>
-			</section>
-			
-			<!-- Districts Section -->
-			<section class="districts-section">
-				<h2>Districts</h2>
-				<p>{{ schema.properties.district_slots.label }}: {{ nation.district_slots }}</p>
-				<div class="districts-grid">
-					{% for district_field in form.districts %}
-						<div class="district-slot">
-							<label for="{{ district_field.id }}">Slot {{ loop.index }}</label>
-							{{ district_field(class="form-control") }}
-						</div>
-					{% endfor %}
-				</div>
-			</section>
-			
-			<tr>
-				<th><label for="reason">Reason</label></th>
-				<td><input type="text" id="reason" name="reason" value=""></td>
-			</tr>
-
-			{% if g.user.is_admin %}
-				<button type="submit" formaction="{{ request.path }}/save">Save</button>
-			{% endif %}
-			<button type="submit" formaction="{{ request.path }}/request">Request</button>
-		</form>
-	</div>
+        <!-- Jobs Section -->
+        <section class="jobs-section">
+            <h2>Jobs</h2>
+            <table class="jobs-table">
+                <thead>
+                    <tr>
+                        <th>Job</th>
+                        <th>Assigned Pops</th>
+                        <th>Upkeep</th>
+                        <th>Production</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for job_index in range(form.jobs|length) %}
+                        {% set job_key = form.jobs[job_index].key.data %}
+                        {% set job = nation.job_details[job_key] if job_key in nation.job_details else {} %}
+                        <tr>
+                            <td>{{ form.jobs[job_index].display_name.data }}</td>
+                            <td>{{ form.jobs[job_index].key() }}{{ form.jobs[job_index].display_name() }}{{ form.jobs[job_index].value(class="form-control") }}</td>
+                            <td>
+                            {% if job.upkeep is defined %}
+                                {% for resource, cost in job.upkeep.items() %}
+                                    {{ resource }}: {{ cost }}<br>
+                                {% endfor %}
+                            {% endif %}
+                            </td>
+                            <td>
+                            {% if job.production is defined %}
+                                {% for resource, prod in job.production.items() %}
+                                    {{ resource }}: {{ prod }}<br>
+                                {% endfor %}
+                            {% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </section>
+        
+        <!-- Districts Section -->
+        <section class="districts-section">
+            <h2>Districts</h2>
+            <p>{{ schema.properties.district_slots.label }}: {{ nation.district_slots }}</p>
+            <div class="districts-grid">
+                {% for district_field in form.districts %}
+                    <div class="district-slot">
+                        <label for="{{ district_field.id }}">Slot {{ loop.index }}</label>
+                        {{ district_field(class="form-control") }}
+                    </div>
+                {% endfor %}
+            </div>
+        </section>
+        
+        <!-- Reason and Submit -->
+        <div class="form-actions">
+            <div class="reason-field">
+                <label for="{{ form.reason.id }}">{{ form.reason.label.text }}:</label>
+                {{ form.reason(class="form-control") }}
+            </div>
+            
+            {% if g.user.is_admin %}
+                <button type="submit" formaction="{{ request.path }}/save" class="btn btn-primary">Save</button>
+            {% endif %}
+            <button type="submit" formaction="{{ request.path }}/request" class="btn btn-secondary">Request</button>
+        </div>
+    </form>
+</div>
 {% endblock %}

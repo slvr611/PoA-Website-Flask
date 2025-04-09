@@ -12,51 +12,30 @@
 		{% set default_action = request.path ~ '/request' %}
 	{% endif %}
 	<form method="POST" action="{{ default_action }}">
+		{{ form.csrf_token }}
 		<table class="info-table">
-			{% for field, attributes in schema.properties.items() %}
-				{% if not attributes.calculated %}
-					<tr>
-						<th><label for="{{ field }}">{{ attributes.label }}</label></th>
-						<td>
-							{% if attributes.bsonType == "string" %}
-								{% if attributes.long_text %}
-									<textarea id="{{ field }}" name="{{ field }}" rows="8" style="width: 100%;" {% if field in schema.required %} required {% endif %}></textarea>
-								{% else %}
-									<input type="text" id="{{ field }}" name="{{ field }}" {% if field in schema.required %} required {% endif %}>
-								{% endif %}
-							{% elif attributes.bsonType == "number" %}
-								<input type="number" id="{{ field }}" name="{{ field }}" value="{{ attributes.get("default", "") }}" {% if field in schema.required %} required {% endif %}>
-							{% elif attributes.bsonType == "boolean" %}
-								<input type="checkbox" id="{{ field }}" name="{{ field }}" {% if field in schema.required %} required {% endif %}>
-							{% elif attributes.bsonType == "linked_object" %}
-								<select id="{{ field }}" name="{{ field }}">
-									<option value="" selected>
-										{{ attributes.get("noneResult", "None") }}
-									</option>
-									{% for option in dropdown_options[field] %}
-										<option value="{{ option['_id'] }}">
-											{{ option['name'] }}
-										</option>
-									{% endfor %}
-								</select>
-							{% elif attributes.bsonType == "enum" %}
-									<select id="{{ field }}" name="{{ field }}">
-										{% for option in attributes.enum %}
-											<option value="{{ option }}" {% if option == attributes.get("default", "") %}selected{% endif %} >
-												{{ option }}
-											</option>
-										{% endfor %}
-									</select>
-							{% endif %}
-						</td>
-					</tr>
-				{% endif %}
+			{% for field in form if field.name != 'csrf_token' and field.name != 'submit' and field.name != 'reason' %}
+				<tr>
+					<th><label for="{{ field.id }}">{{ field.label.text }}</label></th>
+					<td>
+						{{ field(class="form-control") }}
+						{% if field.errors %}
+							<ul class="errors">
+								{% for error in field.errors %}
+									<li>{{ error }}</li>
+								{% endfor %}
+							</ul>
+						{% endif %}
+						{% if field.description %}
+							<small class="form-text text-muted">{{ field.description }}</small>
+						{% endif %}
+					</td>
+				</tr>
 			{% endfor %}
 			<tr>
-				<th><label for="reason">Reason</label></th>
-				<td><input type="text" id="reason" name="reason" value="" ></td>
+				<th><label for="{{ form.reason.id }}">{{ form.reason.label.text }}</label></th>
+				<td>{{ form.reason(class="form-control") }}</td>
 			</tr>
-		
 		</table>
 		
 		{% if g.user.is_admin %}

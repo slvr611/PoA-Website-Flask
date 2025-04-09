@@ -52,12 +52,12 @@
 			</div>
 			<div class="nav-right">
 				{% if g.user %}
-					<a href="{{ url_for('logout') }}">Logout</a>
-					<a href="{{ url_for('profile') }}">
+					<a href="/logout">Logout</a>
+					<a href="/players/item/{{ g.user.username }}">
 						<img src="{{ g.user.avatar_url }}" alt="User Avatar">
 					</a>
 				{% else %}
-					<a href="{{ url_for('login') }}">Login</a>
+					<a href="/login">Login</a>
 				{% endif %}
 			</div>
 		</nav>
