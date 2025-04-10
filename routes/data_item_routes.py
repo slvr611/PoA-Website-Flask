@@ -34,7 +34,7 @@ def data_list(data_type):
     
     sort_by = schema.get("sort", "name")
 
-    items = list(db.find({}, query_dict))
+    items = list(db.find({}, query_dict).sort("name", ASCENDING))
 
     if sort_by == "rarity":
         items.sort(key=lambda x: rarity_rankings.get(x.get("rarity", ""), 999))
@@ -83,9 +83,10 @@ def data_list_edit(data_type):
     
     sort_by = schema.get("sort", "name")
 
-    items = list(db.find({}, query_dict))
+    items = list(db.find({}, query_dict).sort("name", ASCENDING))
 
     if sort_by == "rarity":
+        items.sort("name")
         items.sort(key=lambda x: rarity_rankings.get(x.get("rarity", ""), 999))
     else:
         items = list(db.find({}, query_dict).sort(sort_by, ASCENDING))
