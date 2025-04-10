@@ -138,6 +138,6 @@ def nation_edit_approve(item_ref):
         reason=form_data.pop("reason", "No Reason Given")
     )
     
-    #approve_change(change_id)
+    approve_change(change_id)
     flash(f"Change request #{change_id} created and approved.")
     return redirect("/nations")

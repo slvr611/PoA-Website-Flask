@@ -62,7 +62,7 @@ def collect_districts(target, schema):
     return [json_data["districts"].get(name, {}).get("modifiers", {}) for name in district_names]
 
 def collect_jobs_assigned(target, schema):
-    return {}  # TODO
+    return target.get("jobs", {})
 
 def calculate_job_details(target, modifier_totals, district_totals, law_totals):
     job_details = json_data["jobs"]
@@ -116,6 +116,8 @@ def sum_district_totals(districts):
 def sum_job_totals(jobs_assigned, job_details):
     totals = {}
     for job, count in jobs_assigned.items():
-        for field, val in job_details.get(job, {}).items():
-            totals[field] = totals.get(field, 0) + (val * count)
+        for field, val in job_details.get(job, {}).get("production", {}).items():
+            totals[field + "_production"] = totals.get(field, 0) + (val * count)
+        for field, val in job_details.get(job, {}).get("upkeep", {}).items():
+            totals[field + "_consumption"] = totals.get(field, 0) + (val * count)
     return totals
