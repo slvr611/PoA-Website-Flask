@@ -3,6 +3,7 @@
     "bsonType": "object",
     "required": ["name", "effect_description"],
     "preview": ["rarity", "owner"],
+    "sort": "rarity",
     "properties": {
       "name": {
         "bsonType": "string",

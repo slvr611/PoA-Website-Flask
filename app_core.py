@@ -48,6 +48,8 @@ category_data = {
     "changes": {"pluralName": "Changes", "singularName": "Change", "database": mongo.db.changes}
 }
 
+rarity_rankings = {"Mythical": 0, "Legendary": 1, "Great": 2, "Good": 3, "Mundane": 4}
+
 json_files = ["jobs", "districts"]
 json_data = {"general_resources": [
             {"key": "food", "name": "Food", "base_storage": 20},

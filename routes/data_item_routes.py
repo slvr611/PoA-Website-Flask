@@ -6,7 +6,7 @@ from helpers.render_helpers import get_linked_objects
 from helpers.form_helpers import validate_form_with_jsonschema
 from routes.nation_routes import edit_nation, nation_edit_request, nation_edit_approve
 from calculations.field_calculations import calculate_all_fields
-from app_core import category_data, mongo
+from app_core import category_data, mongo, rarity_rankings
 from pymongo import ASCENDING
 
 
@@ -31,8 +31,16 @@ def data_list(data_type):
                     "link": f"{collection_name}/item/{data.get('name', data.get('_id', '#'))}"
                 }
             preview_overall_lookup_dict[preview_item] = preview_individual_lookup_dict
+    
+    sort_by = schema.get("sort", "name")
 
-    items = list(db.find({}, query_dict).sort("name", ASCENDING))
+    items = list(db.find({}, query_dict))
+
+    if sort_by == "rarity":
+        items.sort(key=lambda x: rarity_rankings.get(x.get("rarity", ""), 999))
+    else:
+        items = list(db.find({}, query_dict).sort(sort_by, ASCENDING))
+
     return render_template(
         "dataList.html",
         title=category_data[data_type]["pluralName"],
@@ -73,7 +81,14 @@ def data_list_edit(data_type):
                 preview_individual_lookup_dict[str(data["_id"])] = {data.get("name", "None"), collection_name + "/item/" + data.get("name", data.get("_id", "#"))}
             preview_overall_lookup_dict[preview_item] = preview_individual_lookup_dict
     
-    items = list(db.find({}, query_dict).sort("name", ASCENDING))
+    sort_by = schema.get("sort", "name")
+
+    items = list(db.find({}, query_dict))
+
+    if sort_by == "rarity":
+        items.sort(key=lambda x: rarity_rankings.get(x.get("rarity", ""), 999))
+    else:
+        items = list(db.find({}, query_dict).sort(sort_by, ASCENDING))
 
     return render_template(
         "dataListEdit.html",
