@@ -1,492 +1,427 @@
 from flask_wtf import FlaskForm
-from wtforms import StringField, TextAreaField, IntegerField, FloatField, BooleanField, SelectField
-from wtforms import FieldList, FormField, HiddenField, SubmitField, MultipleFileField
+from wtforms import Field, StringField, TextAreaField, IntegerField, FloatField, BooleanField, SelectField
+from wtforms import FieldList, FormField, HiddenField, SubmitField, MultipleFileField, Form
 from wtforms.validators import DataRequired, NumberRange, Optional, ValidationError
+from bson import ObjectId
+from app_core import json_data, category_data
 import json
 import copy
 
-def populate_select_field(form, field_name, schema, dropdown_options):
-    """
-    Populates a select field on the form.
-    - form: the form instance (e.g., an instance of EnhancedNationEditForm)
-    - field_name: the name of the field to populate (e.g., "region")
-    - schema: the JSON schema dictionary for your item.
-    - dropdown_options: a dictionary mapping field names to lists of options (from the database).
-    
-    This sets the field's choices to include a default option from the schema ("noneResult")
-    and then any additional options from dropdown_options. It also sets the default
-    value from the nation data (already in form.data).
-    """
-    field_schema = schema.get("properties", {}).get(field_name, {})
-    none_result = field_schema.get("noneResult", "None")
-    choices = [("", none_result)]
-    if field_name in dropdown_options:
-        choices += [(str(option["_id"]), option["name"]) for option in dropdown_options[field_name]]
-    
-    # Set choices on the field
-    field = getattr(form, field_name)
-    field.choices = choices
+class FormGenerator:
+    """Singleton class to manage form generation and caching"""
+    def __init__(self):
+        self.form_cache = {}
+        
+    def get_form(self, data_type, schema, item=None, formdata=None):
+        """Gets or creates a form instance"""
+        if data_type == "nations":
+            job_details = {}
+            if item:
+                job_details = item.get("job_details", {})
+            return NationForm.create_form(schema, item, formdata, job_details)
 
-    # Set the current value properly (assume nation values are stored as string IDs)
-    data_val = field.data
-    if data_val:
-        field.data = str(data_val)
-    else:
-        field.data = ""
+        return DynamicSchemaForm.create_form(schema, item, formdata)
 
-def to_int(value):
-    if value is None:
-        return 0
-    if isinstance(value, int):
-        return value
-    try:
-        value = value.strip()
-        return int(value) if value else 0
-    except (ValueError, AttributeError):
-        return 0
-
-
-class KeyValueForm(FlaskForm):
-    """Form for key-value pairs"""
-    key = HiddenField("Key")
-    value = IntegerField("Value", validators=[DataRequired()])
+class ResourceStorageDict(Form):
+    """Form for handling resource storage as a dictionary"""
     
     class Meta:
-        # Disable CSRF for nested forms
         csrf = False
+    
+    @classmethod
+    def create_form_class(cls):
+        general_resources = json_data.get("general_resources", [])
+        for resource in general_resources:
+            field = IntegerField(resource["name"], validators=[NumberRange(min=0)], default=0)
+            setattr(cls, resource["key"], field)
+        
+        # Unique resources
+        unique_resources = json_data.get("unique_resources", [])
+        for resource in unique_resources:
+            field = IntegerField(resource["name"], validators=[NumberRange(min=0)], default=0)
+            setattr(cls, resource["key"], field)
+        
+        return cls
 
-class StringFieldForm(FlaskForm):
-    """Form for string fields"""
-    value = StringField("Value")
+    def load_form_from_item(self, item):
+        """Loads form data from a database item"""
+        for field_name, field in self._fields.items():
+                if isinstance(field, SelectField) and field.data:
+                    field.data = str(field.data)
+                    
+                # Handle nested data structures
+                if field_name in item:
+                    field_value = item[field_name]
+                    
+                    if isinstance(field_value, ObjectId):
+                        field.data = str(field_value)
+                    elif isinstance(field, FieldList):
+                        # Clear existing entries
+                        while len(field.entries) > 0:
+                            field.pop_entry()
+                            
+                        # Add new entries from the data
+                        for value in field_value:
+                            if isinstance(value, dict):
+                                # For object arrays
+                                field.append_entry(value)
+                            elif isinstance(value, ObjectId):
+                                # For linked object arrays
+                                field.append_entry(str(value))
+                            else:
+                                # For simple value arrays
+                                field.append_entry(value)
+                    elif isinstance(field, FormField):
+                        field.load_form_from_item(field_value)
+                    else:
+                        field.data = field_value
+
+    
+
+class JobAssignmentDict(Form):
+    """Form for handling job assignments as a dictionary"""
     
     class Meta:
-        # Disable CSRF for nested forms
         csrf = False
+    
+    @classmethod
+    def create_form_class(cls, job_details):
+        for job in job_details.keys():
+            field = IntegerField(job, validators=[NumberRange(min=0)], default=0)
+            setattr(cls, job, field)
+        
+        return cls
+    
+    def load_form_from_item(self, item):
+        """Loads form data from a database item"""
+        for field_name, field in self._fields.items():
+                if isinstance(field, SelectField) and field.data:
+                    field.data = str(field.data)
+                    
+                # Handle nested data structures
+                if field_name in item:
+                    field_value = item[field_name]
+                    
+                    if isinstance(field_value, ObjectId):
+                        field.data = str(field_value)
+                    elif isinstance(field, FieldList):
+                        # Clear existing entries
+                        while len(field.entries) > 0:
+                            field.pop_entry()
+                            
+                        # Add new entries from the data
+                        for value in field_value:
+                            if isinstance(value, dict):
+                                # For object arrays
+                                field.append_entry(value)
+                            elif isinstance(value, ObjectId):
+                                # For linked object arrays
+                                field.append_entry(str(value))
+                            else:
+                                # For simple value arrays
+                                field.append_entry(value)
+                    elif isinstance(field, FormField):
+                        field.load_form_from_item(field_value)
+                    else:
+                        field.data = field_value
 
-class SchemaForm(FlaskForm):
-    """Base class for all schema-based forms"""
+class BaseSchemaForm(FlaskForm):
+    """Base form class with common functionality"""
     reason = StringField("Reason")
     submit = SubmitField("Save")
 
-class ResourceStorageForm(FlaskForm):
-    """Form for resource storage entries"""
-    key = HiddenField("Key")
-    name = HiddenField("Name")
-    value = IntegerField("Storage", validators=[NumberRange(min=0)], filters=[to_int])
+    def populate_select_field(self, field_name, schema, dropdown_options):
+        """Populates a select field with options"""
+        if not hasattr(self, field_name):
+            return
+
+        field = getattr(self, field_name)
+        if not isinstance(field, SelectField):
+            return
+
+        field_schema = schema.get("properties", {}).get(field_name, {})
+        none_result = field_schema.get("noneResult", "None")
+        
+        choices = [("", none_result)]
+        if field_name in dropdown_options:
+            choices += [(str(option["_id"]), option["name"]) 
+                       for option in dropdown_options[field_name]]
+        
+        field.choices = choices
+
+    def populate_linked_fields(self, schema, dropdown_options):
+        """Populates all linked fields with their options"""
+        for field_name, field_schema in schema.get("properties", {}).items():
+            if field_schema.get("collection"):
+                self.populate_select_field(field_name, schema, dropdown_options)
     
-    class Meta:
-        # Disable CSRF for nested forms
-        csrf = False
+    def load_form_from_item(self, item):
+        """Loads form data from a database item"""
+        for field_name, field in self._fields.items():
+                if isinstance(field, SelectField) and field.data:
+                    field.data = str(field.data)
+                    
+                # Handle nested data structures
+                if field_name in item:
+                    field_value = item[field_name]
+                    
+                    if isinstance(field_value, ObjectId):
+                        field.data = str(field_value)
+                    elif isinstance(field, FieldList):
+                        # Clear existing entries
+                        while len(field.entries) > 0:
+                            field.pop_entry()
+                            
+                        # Add new entries from the data
+                        for value in field_value:
+                            if isinstance(value, dict):
+                                # For object arrays
+                                field.append_entry(value)
+                            elif isinstance(value, ObjectId):
+                                # For linked object arrays
+                                field.append_entry(str(value))
+                            else:
+                                # For simple value arrays
+                                field.append_entry(value)
+                    elif isinstance(field, FormField):
+                        field.load_form_from_item(field_value)
+                    else:
+                        field.data = field_value
 
-class JobAssignmentForm(FlaskForm):
-    """Form for job assignments"""
-    key = HiddenField("Key")
-    display_name = HiddenField("Display Name")
-    value = IntegerField("Assigned Pops", validators=[NumberRange(min=0)], filters=[to_int])
-    
-    class Meta:
-        # Disable CSRF for nested forms
-        csrf = False
-
-class DynamicSchemaField:
-    """Helper class to store schema field information"""
-    def __init__(self, name, attrs, schema):
-        self.name = name
-        self.attrs = attrs
-        self.schema = schema
-        self.field_type = attrs.get('bsonType')
-        self.required = name in schema.get('required', [])
-        self.label = attrs.get('label', name)
-        self.description = attrs.get('description', '')
-        self.default = attrs.get('default')
-        self.collection = attrs.get('collection')
-        self.enum_values = attrs.get('enum', [])
-        self.long_text = attrs.get('long_text', False)
-        self.calculated = attrs.get('calculated', False)
-        self.none_result = attrs.get('noneResult', 'None')
-
-class DynamicForm(SchemaForm):
-    """Form that can be constructed at runtime based on JSON schema"""
+class DynamicSchemaForm(BaseSchemaForm):
+    """Dynamic form generated from JSON schema"""
     
     @classmethod
-    def create_from_schema(cls, schema, **kwargs):
-        """Create a form class from a JSON schema"""
-        form_class = type('DynamicSchemaForm', (cls,), {})
+    def create_form_class(cls, schema):
+        """Creates a new form class with fields from schema"""
+        form_class = type('GeneratedSchemaForm', (cls,), {})
         
-        # Add fields based on schema
-        for field_name, field_attrs in schema.get('properties', {}).items():
-            if field_attrs.get('calculated', False):
-                continue  # Skip calculated fields
-                
-            schema_field = DynamicSchemaField(field_name, field_attrs, schema)
-            form_field = create_field_from_schema_field(schema_field)
-            
-            if form_field:
-                setattr(form_class, field_name, form_field)
+        for field_name, field_schema in schema.get("properties", {}).items():
+            if not field_schema.get("calculated", False):
+                field = cls.create_field_from_schema(field_name, field_schema, schema)
+                if field:
+                    setattr(form_class, field_name, field)
         
-        return form_class(**kwargs)
-    
+        return form_class
+
     @classmethod
-    def update_from_schema_changes(cls, old_schema, new_schema):
-        """Update a form class based on schema changes"""
-        # Create a copy of the old form class
-        updated_form_class = type('UpdatedDynamicSchemaForm', (cls,), {})
+    def create_form(cls, schema, item=None, formdata=None):
+        """Creates and populates a form instance"""
+        form_class = cls.create_form_class(schema)
         
-        # Copy existing fields from old schema
-        for field_name, field_attrs in old_schema.get('properties', {}).items():
-            if field_attrs.get('calculated', False):
-                continue  # Skip calculated fields
-            
-            # Check if field still exists in new schema
-            if field_name in new_schema.get('properties', {}):
-                old_field = DynamicSchemaField(field_name, field_attrs, old_schema)
-                old_form_field = create_field_from_schema_field(old_field)
-                
-                if old_form_field:
-                    setattr(updated_form_class, field_name, old_form_field)
-        
-        # Add new fields from new schema
-        for field_name, field_attrs in new_schema.get('properties', {}).items():
-            if field_attrs.get('calculated', False):
-                continue  # Skip calculated fields
-            
-            # If field is new or has changed
-            if field_name not in old_schema.get('properties', {}) or old_schema['properties'][field_name] != field_attrs:
-                new_field = DynamicSchemaField(field_name, field_attrs, new_schema)
-                new_form_field = create_field_from_schema_field(new_field)
-                
-                if new_form_field:
-                    setattr(updated_form_class, field_name, new_form_field)
-        
-        return updated_form_class
-
-def create_field_from_schema_field(schema_field):
-    """Create a WTForms field from a DynamicSchemaField"""
-    validators = []
-    if schema_field.required:
-        validators.append(DataRequired())
-    else:
-        validators.append(Optional())
-    
-    # Handle different field types
-    if schema_field.field_type == 'string':
-        if schema_field.long_text:
-            return TextAreaField(schema_field.label, validators=validators, 
-                                description=schema_field.description,
-                                default=schema_field.default)
-        return StringField(schema_field.label, validators=validators, 
-                          description=schema_field.description,
-                          default=schema_field.default)
-    
-    elif schema_field.field_type == 'number':
-        return IntegerField(schema_field.label, validators=validators, 
-                           description=schema_field.description,
-                           default=schema_field.default)
-    
-    elif schema_field.field_type == 'boolean':
-        return BooleanField(schema_field.label, description=schema_field.description,
-                           default=schema_field.default)
-    
-    elif schema_field.field_type == 'enum':
-        choices = [(option, option) for option in schema_field.enum_values]
-        return SelectField(
-            schema_field.label, 
-            choices=choices, 
-            validators=validators,
-            description=schema_field.description,
-            default=schema_field.default
-        )
-    
-    elif schema_field.field_type == 'linked_object':
-        # This will be populated with choices from the database later
-        field = SelectField(
-            schema_field.label, 
-            validators=validators,
-            description=schema_field.description
-        )
-        # Store the none_result as an attribute on the field
-        field.none_result = schema_field.none_result
-        field.collection = schema_field.collection
-        return field
-    
-    # For complex types like arrays, we'll handle them separately
-    return None
-
-class SchemaFormGenerator:
-    """Generator for creating forms from schemas with caching"""
-    
-    def __init__(self):
-        self.form_cache = {}  # Cache for generated form classes
-        self.schema_cache = {}  # Cache for schemas
-    
-    def get_form(self, data_type, schema, item=None, **kwargs):
-        """Get a form for a specific data type, using cache if available"""
-        # Check if we have a custom form class for this data type
-        custom_form = self._get_custom_form_class(data_type)
-        if custom_form:
-            if item:
-                return custom_form(obj=item, **kwargs)
-            return custom_form(**kwargs)
-        
-        # Check if schema has changed since last cache
-        schema_hash = self._hash_schema(schema)
-        cached_schema_hash = self.schema_cache.get(data_type)
-        
-        if data_type in self.form_cache and cached_schema_hash == schema_hash:
-            # Use cached form class
-            form_class = self.form_cache[data_type]
+        if formdata:
+            form = form_class(formdata=formdata)
+        elif item:
+            form = form_class()
+            form.load_form_from_item(item)
         else:
-            # Create new form class and update cache
-            form_class = DynamicForm.create_from_schema(schema).__class__
-            self.form_cache[data_type] = form_class
-            self.schema_cache[data_type] = schema_hash
-        
-        # Create instance of the form
-        if item:
-            return form_class(obj=item, **kwargs)
-        return form_class(**kwargs)
-    
-    def update_form_for_schema_changes(self, data_type, old_schema, new_schema):
-        """Update a form class based on schema changes"""
-        # Only update if we have a cached form
-        if data_type not in self.form_cache:
-            return self.get_form(data_type, new_schema)
-        
-        # Update form class
-        updated_form_class = DynamicForm.update_from_schema_changes(old_schema, new_schema)
-        
-        # Update cache
-        self.form_cache[data_type] = updated_form_class
-        self.schema_cache[data_type] = self._hash_schema(new_schema)
-        
-        return updated_form_class()
-    
-    def populate_linked_fields(self, form, dropdown_options):
-        """Populate linked_object fields with options from the database"""
-        for field_name, options in dropdown_options.items():
-            if hasattr(form, field_name):
-                field = getattr(form, field_name)
-                if isinstance(field, SelectField):
-                    # Get the none_result from the field
-                    none_result = getattr(field, 'none_result', 'None')
-                    field.choices = [('', none_result)] + [
-                        (str(option['_id']), option['name']) for option in options
-                    ]
-    
-    def _get_custom_form_class(self, data_type):
-        """Get a custom form class for a specific data type if it exists"""
-        custom_forms = {
-            'nations': NationEditForm,
-            # Add other custom forms here
-        }
-        return custom_forms.get(data_type)
-    
-    def _hash_schema(self, schema):
-        """Create a hash of the schema for caching purposes"""
-        # Use a simple string representation for now
-        # In production, you might want a more efficient hashing method
-        return json.dumps(schema, sort_keys=True)
-
-class NationEditForm(SchemaForm):
-    """Custom form for editing nations"""
-    name = StringField("Name", validators=[DataRequired()])
-    jobs = FieldList(FormField(KeyValueForm), min_entries=0)
-    districts = FieldList(SelectField("District", choices=[]), min_entries=0)
-    
-    @classmethod
-    def create_from_nation(cls, nation, schema, json_data):
-        """Create a form pre-populated with nation data"""
-        form = cls(obj=nation)
-        
-        # Handle jobs
-        form.jobs.entries = []
-        initial_jobs = []
-        for job_key, job_val in nation.get("jobs", {}).items():
-            initial_jobs.append({"key": job_key, "value": job_val})
-        
-        for job_data in initial_jobs:
-            form.jobs.append_entry(job_data)
-        
-        # Handle districts
-        district_slots = nation.get("district_slots", 3)
-        initial_districts = nation.get("districts", [])
-        if len(initial_districts) < district_slots:
-            initial_districts.extend([""] * (district_slots - len(initial_districts)))
-        
-        form.districts.entries = []
-        district_choices = [("", "Empty Slot")]
-        for key, district in json_data["districts"].items():
-            district_choices.append((key, district["display_name"]))
-        
-        for i in range(district_slots):
-            entry = form.districts.append_entry(initial_districts[i])
-            entry.choices = district_choices
-        
+            form = form_class()
+            
         return form
 
-def validate_form_with_jsonschema(form, schema):
-    """Validate form data against JSON schema"""
-    from jsonschema import validate, ValidationError
+    @classmethod
+    def create_field_from_schema(cls, field_name, field_schema, schema):
+        """Creates a WTForms field based on schema definition"""
+        field_type = field_schema.get("bsonType")
+        required = field_name in schema.get("required", [])
+        validators = [DataRequired()] if required else [Optional()]
     
-    # Remove Flask-WTF specific fields
-    form_data = form.data.copy()
-    form_data.pop('csrf_token', None)
-    form_data.pop('submit', None)
-    form_data.pop('reason', None)
-    
-    try:
-        validate(instance=form_data, schema=schema)
-        return True, None
-    except ValidationError as e:
-        return False, e.message
+        field_args = {
+            "label": field_schema.get("label", field_name),
+            "description": field_schema.get("description", ""),
+            "validators": validators,
+            "default": field_schema.get("default")
+        }
 
-class EnhancedNationEditForm(FlaskForm):
-    """Enhanced form for editing nations with all fields"""
-    # CSRF token and submit button
-    csrf_token = HiddenField()
-    submit = SubmitField("Save")
-    reason = StringField("Reason")
-    
-    # General fields
+        if field_type == "string":
+            if field_schema.get("long_text"):
+                return TextAreaField(**field_args)
+            return StringField(**field_args)
+        
+        elif field_type == "number":
+            return IntegerField(**field_args)
+        
+        elif field_type == "boolean":
+            return BooleanField(**field_args)
+        
+        elif field_type == "enum":
+            field_args["choices"] = [(v, v) for v in field_schema.get("enum", [])]
+            return SelectField(**field_args)
+        
+        elif field_type == "linked_object":
+            field = SelectField(**field_args)
+            field.none_result = field_schema.get("noneResult", "None")
+            field.collection = field_schema.get("collection")
+            return field
+        
+        elif field_type == "array":
+            # Handle different types of arrays
+            items_schema = field_schema.get("items", {})
+            items_type = items_schema.get("bsonType")
+            
+            if items_type == "string":
+                # For simple string arrays
+                return FieldList(StringField("Value"), min_entries=0)
+                
+            elif items_type == "linked_object":
+                # For arrays of linked objects
+                subfield = SelectField("Value")
+                subfield.none_result = items_schema.get("noneResult", "None")
+                subfield.collection = items_schema.get("collection")
+                return FieldList(subfield, min_entries=0)
+                
+            elif items_type == "object":
+                # For arrays of objects, create a nested form
+                class DynamicSubForm(FlaskForm):
+                    class Meta:
+                        csrf = False
+                        
+                # Add fields from the items schema
+                for prop_name, prop_schema in items_schema.get("properties", {}).items():
+                    field = cls.create_field_from_schema(prop_name, prop_schema, items_schema)
+                    if field:
+                        setattr(DynamicSubForm, prop_name, field)
+                        
+                return FieldList(FormField(DynamicSubForm), min_entries=0)
+        
+        return None
+
+class NationForm(BaseSchemaForm):
+    """Specialized form for nations"""
+    # Basic fields
     name = StringField("Name", validators=[DataRequired()])
     region = SelectField("Region", choices=[])
     stability = SelectField("Stability", choices=[])
-    infamy = IntegerField("Infamy", validators=[NumberRange(min=0)], filters=[to_int])
-    temporary_karma = IntegerField("Temporary Karma", validators=[NumberRange(min=0)], filters=[to_int])
-    rolling_karma = IntegerField("Rolling Karma", validators=[NumberRange(min=0)], filters=[to_int])
-    
-    # Income fields
-    money = IntegerField("Money", validators=[NumberRange(min=0)], filters=[to_int])
+    infamy = IntegerField("Infamy", validators=[NumberRange(min=0)])
+    temporary_karma = IntegerField("Temporary Karma", validators=[NumberRange(min=0)])
+    rolling_karma = IntegerField("Rolling Karma", validators=[NumberRange(min=0)])
+    money = IntegerField("Money", validators=[NumberRange(min=0)])
     
     # Demographics fields
     primary_race = SelectField("Primary Race", choices=[])
     primary_culture = SelectField("Primary Culture", choices=[])
     primary_religion = SelectField("Primary Religion", choices=[])
     
-    # Administration & Holdings fields
-    current_territory = IntegerField("Current Territory", validators=[NumberRange(min=0)], filters=[to_int])
-    road_usage = IntegerField("Road Usage", validators=[NumberRange(min=0)], filters=[to_int])
+    # Territory fields
+    current_territory = IntegerField("Current Territory", validators=[NumberRange(min=0)])
+    road_usage = IntegerField("Road Usage", validators=[NumberRange(min=0)])
     
     # Vassalship fields
     overlord = SelectField("Overlord", choices=[])
     vassal_type = SelectField("Vassal Type", choices=[])
     compliance = SelectField("Compliance", choices=[])
     
-    # Miscellaneous fields
+    # Lists
+    districts = FieldList(SelectField("District"), min_entries=0)
+    
+    # Misc fields
     origin = SelectField("Origin", choices=[])
     modifiers = TextAreaField("Modifiers")
-    
-    # Complex fields
-    resource_storage = FieldList(FormField(ResourceStorageForm), min_entries=0)
-    jobs = FieldList(FormField(JobAssignmentForm), min_entries=0)
-    districts = FieldList(SelectField("District", choices=[]), min_entries=0)
-    
-    # Dynamic government laws fields will be added programmatically
+    temperament = SelectField("Temperament", choices=[])
+
+    # Add dynamic law fields from schema
+    @classmethod
+    def create_form_class(cls, schema, job_details):
+        """Creates a form class with additional fields from schema"""
+        for field_name, field_schema in schema.get("properties", {}).items():
+            if field_schema.get("bsonType") == "enum" and not hasattr(cls, field_name):
+                choices = [(v, v) for v in field_schema.get("enum", [])]
+                field = SelectField(
+                    field_schema.get("label", field_name),
+                    choices=choices,
+                    default=field_schema.get("default")
+                )
+                setattr(cls, field_name, field)
+
+        ResourceStorageDict.create_form_class()
+        cls.resource_storage = FormField(ResourceStorageDict)
+
+        JobAssignmentDict.create_form_class(job_details)
+        cls.jobs = FormField(JobAssignmentDict)
+
+        return cls
     
     @classmethod
-    def create_from_nation(cls, nation, schema, json_data, dropdown_options):
-        """Create a form pre-populated with nation data"""
-        form = cls()
+    def create_form(cls, schema, nation=None, formdata=None, job_details={}):
+        """Creates and populates a nation form"""
+        # First create the form class with all fields
+        form_cls = cls.create_form_class(schema, job_details)
         
-        # Set basic fields from nation data
-        form.name.data = nation.get("name", "")
-        form.infamy.data = nation.get("infamy", 0)
-        form.temporary_karma.data = nation.get("temporary_karma", 0)
-        form.rolling_karma.data = nation.get("rolling_karma", 0)
-        form.money.data = nation.get("money", 0)
-        form.current_territory.data = nation.get("current_territory", 0)
-        form.road_usage.data = nation.get("road_usage", 0)
-        form.modifiers.data = json.dumps(nation.get("modifiers", {})) if "modifiers" in nation else ""
+        # Create form instance
+        if formdata:
+            form = form_cls(formdata=formdata)
+        elif nation:
+            form = form_cls()
+            form.load_form_from_item(nation)
+        else:
+            form = form_cls()
         
-        # Set up select fields
-        # Region
-        populate_select_field(form, "region", schema, dropdown_options)
-        populate_select_field(form, "primary_race", schema, dropdown_options)
-        populate_select_field(form, "primary_culture", schema, dropdown_options)
-        populate_select_field(form, "primary_religion", schema, dropdown_options)
-        populate_select_field(form, "overlord", schema, dropdown_options)
-        
+        # Set up default choices for select fields
         form.stability.choices = [(option, option) for option in schema["properties"].get("stability", {}).get("enum", [])] or \
-                                 [("Balanced", "Balanced"), ("Unstable", "Unstable"), ("Stable", "Stable")]
-        form.stability.data = nation.get("stability", "Balanced")
-        
+                                [("Balanced", "Balanced"), ("Unstable", "Unstable"), ("Stable", "Stable")]
         form.vassal_type.choices = [(option, option) for option in schema["properties"].get("vassal_type", {}).get("enum", [])] or \
-                                    [("None", "None"), ("Tributary", "Tributary"), ("Mercantile", "Mercantile")]
-        form.vassal_type.data = nation.get("vassal_type", "None")
-        
+                                  [("None", "None"), ("Tributary", "Tributary"), ("Mercantile", "Mercantile")]
         form.compliance.choices = [(option, option) for option in schema["properties"].get("compliance", {}).get("enum", [])] or \
-                                  [("None", "None"), ("Neutral", "Neutral"), ("Loyal", "Loyal"), ("Disloyal", "Disloyal")]
-        form.compliance.data = nation.get("compliance", "None")
-        
+                                [("None", "None"), ("Neutral", "Neutral"), ("Loyal", "Loyal"), ("Disloyal", "Disloyal")]
+        form.temperament.choices = [(option, option) for option in schema["properties"].get("temperament", {}).get("enum", [])] or \
+                             [("Player", "Player"), ("Neutral", "Neutral")]
         form.origin.choices = [(option, option) for option in schema["properties"].get("origin", {}).get("enum", [])] or \
-                              [("Unknown", "Unknown"), ("Settled", "Settled"), ("Conquered", "Conquered")]
-        form.origin.data = nation.get("origin", "")
-        
-        # Add government law fields dynamically
-        for law in schema.get("laws", []):
-            if law != "stability" and law in schema["properties"]:
-                law_field = SelectField(schema["properties"][law].get("label", law))
-                law_choices = [(option, option) for option in schema["properties"][law].get("enum", [])]
-                if not law_choices:  # Ensure we have default choices if schema doesn't provide them
-                    law_choices = [("None", "None")]
-                law_field.choices = law_choices
-                setattr(form, law, law_field)
-                getattr(form, law).data = nation.get(law, "")
-        
-        print(form.origin)
-        print(form.government_type)
+                             [("Unknown", "Unknown"), ("Settled", "Settled"), ("Conquered", "Conquered")]
         
         # Handle resource storage
-        form.resource_storage.entries = []
-        # General resources
-        general_resources = json_data.get("general_resources", [])
-        for resource in general_resources:
-            resource_data = {
-                "key": resource["key"],
-                "name": resource["name"],
-                "value": nation.get("resource_storage", {}).get(resource["key"], 0)
-            }
-            form.resource_storage.append_entry(resource_data)
-        
-        # Unique resources
-        unique_resources = json_data.get("unique_resources", [])
-        for resource in unique_resources:
-            resource_data = {
-                "key": resource["key"],
-                "name": resource["name"],
-                "value": nation.get("resource_storage", {}).get(resource["key"], 0)
-            }
-            form.resource_storage.append_entry(resource_data)
+        if nation: #These if nation checks prevent overwriting existing data when using an existing form.  Try to find a better way at some point
+            general_resources = json_data.get("general_resources", [])
+            for resource in general_resources:
+                resource_field = getattr(form.resource_storage, resource["key"], None)
+                resource_field.data = nation.get("resource_storage", {}).get(resource["key"], 0)
+            
+            # Unique resources
+            unique_resources = json_data.get("unique_resources", [])
+            for resource in unique_resources:
+                resource_field = getattr(form.resource_storage, resource["key"], None)
+                resource_field.data = nation.get("resource_storage", {}).get(resource["key"], 0)
         
         # Handle jobs
-        form.jobs.entries = []
-        for job_key, job in nation.get("job_details", {}).items():
-            job_data = {
-                "key": job_key,
-                "display_name": job.get("display_name", job_key),
-                "value": nation.get("jobs", {}).get(job_key, 0)
-            }
-            form.jobs.append_entry(job_data)
-        
+        if nation:
+            for job_key, job_val in nation.get("jobs", {}).items():
+                job_field = getattr(form.jobs, job_key, None)
+                job_field.data = job_val
+                
         # Handle districts
-        district_slots = nation.get("district_slots", 3)
-        initial_districts = nation.get("districts", [])
-        if len(initial_districts) < district_slots:
-            initial_districts.extend([""] * (district_slots - len(initial_districts)))
+        if nation:
+            district_slots = nation.get("district_slots", 3)
+            districts = nation.get("districts", [])
+            if len(districts) < district_slots:
+                districts.extend([""] * (district_slots - len(districts)))
+                
+            form.districts.entries = []
+            for district in districts:
+                form.districts.append_entry(district)
         
-        form.districts.entries = []
-        district_choices = [("", "Empty Slot")]
-        for key, district in json_data.get("districts", {}).items():
-            district_choices.append((key, district["display_name"]))
-        
-        for i in range(district_slots):
-            entry = form.districts.append_entry(initial_districts[i] if i < len(initial_districts) else "")
-            entry.choices = district_choices
+        for entry in form.districts.entries:
+            print(entry.data)
         
         return form
     
+    def populate_linked_fields(self, schema, dropdown_options):
+        """Populates all linked fields with their options"""
+        for field_name, field_schema in schema.get("properties", {}).items():
+            if field_schema.get("collection"):
+                self.populate_select_field(field_name, schema, dropdown_options)
+        
+        #Handle Districts separately
+        none_result = "Empty Slot"
+        
+        choices = [("", none_result)]
+        districts = json_data.get("districts", {})
+        for district_key, district_data in districts.items():
+            choices.append((district_key, district_data["display_name"]))
+        
+        for district_field in self.districts:
+            district_field.choices = choices
+
+    """
     def to_dict(self):
-        """Convert form data to a dictionary for database storage"""
         data = {}
         
         # Basic fields
@@ -540,6 +475,13 @@ class EnhancedNationEditForm(FlaskForm):
         data["districts"] = [district for district in self.districts.data if district]
         
         return data
+    """
 
-# Create a global instance of the form generator
-form_generator = SchemaFormGenerator()
+# Global form generator instance
+form_generator = FormGenerator()
+
+
+
+
+
+

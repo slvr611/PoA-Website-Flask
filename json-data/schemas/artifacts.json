@@ -2,17 +2,18 @@
   "$jsonSchema": {
     "bsonType": "object",
     "required": ["name", "effect_description"],
+    "preview": ["rarity", "owner"],
     "properties": {
       "name": {
         "bsonType": "string",
         "label": "Name",
         "description": "The name of the artifact"
       },
-	  "rarity": {
+	    "rarity": {
         "bsonType": "enum",
         "label": "Rarity",
         "description": "The Rarity of the artifact",
-		"enum": ["Mundane", "Good", "Great", "Legendary", "Mythical"]
+		    "enum": ["Mundane", "Good", "Great", "Legendary", "Mythical"]
       },
       "effect_description": {
         "bsonType": "string",
@@ -30,15 +31,15 @@
         "label": "Owner",
         "description": "The artifact's owner",
         "noneResult": "Lost",
-		"collection": "characters"
+		    "collection": "characters"
       },
       "creator": {
         "bsonType": "linked_object",
         "label": "Creator",
         "description": "The artifact's creator",
         "noneResult": "Unknown",
-		"collection": "characters",
-		"static": true
+        "collection": "characters",
+        "static": true
       }
     }
   }

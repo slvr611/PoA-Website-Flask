@@ -160,7 +160,6 @@
             <div class="info-column">
                 <h2>Government & Laws</h2>
                 <table class="info-table">
-					{{ form._fields.keys() }}
                     {% for law in schema.laws %}
                         {% if law != "stability" and law in form._fields.keys() %}
                             <tr>
@@ -250,6 +249,10 @@
                         <td>{{ form.origin(class="form-control") }}</td>
                     </tr>
                     <tr>
+                        <th>{{ form.temperament.label.text }}:</th>
+                        <td>{{ form.temperament(class="form-control") }}</td>
+                    </tr>
+                    <tr>
                         <th>{{ form.modifiers.label.text }}:</th>
                         <td>{{ form.modifiers(class="form-control", rows=3, style="width: 100%;") }}</td>
                     </tr>
@@ -282,7 +285,7 @@
                             <td>{{ nation.resource_production[resource.key] if resource.key in nation.resource_production else 0 }}</td>
                             <td>{{ nation.resource_consumption[resource.key] if resource.key in nation.resource_consumption else 0 }}</td>
                             <td>{{ nation.resource_excess[resource.key] if resource.key in nation.resource_excess else 0 }}</td>
-                            <td>{{ form.resource_storage[resource_index].key }}{{ form.resource_storage[resource_index].name }}{{ form.resource_storage[resource_index].value(class="form-control") }}</td>
+                            <td>{{ form.resource_storage[resource.key](class="form-control") }}</td>
                             <td>{{ nation.resource_capacity[resource.key] if resource.key in nation.resource_capacity else 0 }}</td>
                         </tr>
                     {% endfor %}
@@ -308,7 +311,7 @@
                             <td>{{ nation.resource_production[resource.key] if resource.key in nation.resource_production else 0 }}</td>
                             <td>{{ nation.resource_consumption[resource.key] if resource.key in nation.resource_consumption else 0 }}</td>
                             <td>{{ nation.resource_excess[resource.key] if resource.key in nation.resource_excess else 0 }}</td>
-                            <td>{{ form.resource_storage[resource_index].key }}{{ form.resource_storage[resource_index].name }}{{ form.resource_storage[resource_index].value(class="form-control") }}</td>
+                            <td>{{ form.resource_storage[resource.key](class="form-control") }}</td>
                             <td>{{ nation.resource_capacity[resource.key] if resource.key in nation.resource_capacity else 0 }}</td>
                         </tr>
                     {% endfor %}
@@ -329,22 +332,20 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {% for job_index in range(form.jobs|length) %}
-                        {% set job_key = form.jobs[job_index].key.data %}
-                        {% set job = nation.job_details[job_key] if job_key in nation.job_details else {} %}
+                    {% for job, details in nation.job_details.items() %}
                         <tr>
-                            <td>{{ form.jobs[job_index].display_name.data }}</td>
-                            <td>{{ form.jobs[job_index].key() }}{{ form.jobs[job_index].display_name() }}{{ form.jobs[job_index].value(class="form-control") }}</td>
+                            <td>{{ details.display_name }}</td>
+                            <td>{{ form.jobs[job] }}</td>
                             <td>
-                            {% if job.upkeep is defined %}
-                                {% for resource, cost in job.upkeep.items() %}
+                            {% if details.upkeep is defined %}
+                                {% for resource, cost in details.upkeep.items() %}
                                     {{ resource }}: {{ cost }}<br>
                                 {% endfor %}
                             {% endif %}
                             </td>
                             <td>
-                            {% if job.production is defined %}
-                                {% for resource, prod in job.production.items() %}
+                            {% if details.production is defined %}
+                                {% for resource, prod in details.production.items() %}
                                     {{ resource }}: {{ prod }}<br>
                                 {% endfor %}
                             {% endif %}

@@ -8,7 +8,7 @@ def request_change(data_type, item_id, change_type, before_data, after_data, rea
         return None
 
     changes_collection = mongo.db.changes
-    now = datetime.utcnow()
+    now = datetime.now()
 
     after_data.pop("reason", None)
     before_data.pop("_id", None)
@@ -38,7 +38,7 @@ def approve_change(change_id):
         return None
 
     changes_collection = mongo.db.changes
-    now = datetime.utcnow()
+    now = datetime.now()
     change = changes_collection.find_one({"_id": change_id})
     target_collection = category_data[change["target_collection"]]["database"]
 

@@ -39,3 +39,16 @@ def compute_demographics(nation_id, race_id_to_name, culture_id_to_name, religio
         demographics["culture"][culture] = demographics["culture"].get(culture, 0) + 1
         demographics["religion"][religion] = demographics["religion"].get(religion, 0) + 1
     return demographics
+
+def get_dropdown_options(schema):
+    """Helper function to get dropdown options for linked fields"""
+    dropdown_options = {}
+    for field, attributes in schema["properties"].items():
+        if attributes.get("collection"):
+            related_collection = attributes.get("collection")
+            dropdown_options[field] = list(
+                mongo.db[related_collection].find(
+                    {}, {"name": 1, "_id": 1}
+                ).sort("name", ASCENDING)
+            )
+    return dropdown_options

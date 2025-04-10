@@ -1,4 +1,6 @@
-
 .env
-
 .venv/
+PoA-Website-Flask.code-workspace
+/__pycache__
+/__pycache__
+*.pyc

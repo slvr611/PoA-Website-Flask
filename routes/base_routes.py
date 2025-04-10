@@ -1,4 +1,9 @@
 from flask import Blueprint, render_template, session, redirect, url_for, g
+from helpers.data_helpers import generate_id_to_name_dict, compute_demographics
+from helpers.data_helpers import generate_id_to_name_dict, compute_demographics
+from pymongo import ASCENDING
+from app_core import mongo
+
 
 base_routes = Blueprint('base_routes', __name__)
 
@@ -30,10 +35,6 @@ def inject_navbar_pages():
 
 @base_routes.route("/demographics_overview")
 def demographics_overview():
-    from app import mongo, category_data
-    from helpers.data_helpers import generate_id_to_name_dict, compute_demographics
-    from pymongo import ASCENDING
-
     nations = list(mongo.db.nations.find().sort("name", ASCENDING))
 
     race_id_to_name = generate_id_to_name_dict("races")

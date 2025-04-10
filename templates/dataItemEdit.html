@@ -4,7 +4,20 @@
 
 {% block content %}
 <div class="container">
-	<a href="{{ request.path.replace('/edit', '/item') }}">Back to View</a></br>
+	<a href="{{ request.path.replace('edit', 'item') }}">Back to View</a></br>
+	{% if g.user.is_admin %}
+		{% set default_action = request.path.replace('edit', 'clone') ~ '/save' %}
+	{% else %}
+		{% set default_action = request.path.replace('edit', 'clone') ~ '/request' %}
+	{% endif %}
+	<form method="POST" action="{{ default_action }}">
+		<label for="reason">Reason</label>
+		<input type="text" id="reason" name="reason" value="" required >
+		{% if g.user.is_admin %}
+			<button type="submit" formaction="{{ request.path.replace('edit', 'clone') }}/save">Immediate Clone</button>
+		{% endif %}
+		<button type="submit" formaction="{{ request.path.replace('edit', 'clone') }}/request">Request Clone</button>
+	</form>
 	<h1>{{ title }}:</h1>
 	{% if g.user.is_admin %}
 		{% set default_action = request.path ~ '/save' %}
@@ -37,18 +50,6 @@
 				<td>{{ form.reason(class="form-control") }}</td>
 			</tr>
 		</table>
-		
-		{% if linked_objects %}
-			<h2>Related Items</h2>
-			{% for field_name, items in linked_objects.items() %}
-				<h3>{{ schema.properties[field_name].label }}</h3>
-				<ul>
-					{% for item in items %}
-						<li><a href="{{ item.link }}">{{ item.name }}</a></li>
-					{% endfor %}
-				</ul>
-			{% endfor %}
-		{% endif %}
 		
 		{% if g.user.is_admin %}
 			<button type="submit" formaction="{{ request.path }}/save">Save</button>

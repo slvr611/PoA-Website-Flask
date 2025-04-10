@@ -928,40 +928,138 @@
 	  "resource_nodes": {
         "bsonType": "array",
 		"label": "Resource Nodes",
-        "description": "The resource nodes of the nation"
-      },
-	  "resource_node_values": {
-        "bsonType": "array",
-		"label": "Resource Node Values",
-        "description": "The value of the resource nodes of the nation",
-		"calculated": true
+        "description": "The resource nodes of the nation",
+		"items":{
+			"bsonType": "object",
+			"properties": {
+				"type": {
+					"bsonType": "string",
+					"label": "Resource Type",
+					"description": "The type of the resource"
+				},
+				"value": {
+					"bsonType": "number",
+					"label": "Node Value",
+					"description": "The value of the node"
+				}
+			}
+		}
       },
 	  "luxury_resources": {
         "bsonType": "array",
 		"label": "Luxury Resources",
-        "description": "The luxury resources the nation has in their lands"
+        "description": "The luxury resources the nation has in their lands",
+		"items":{
+			"bsonType": "string"
+		}
       },
 	  "technologies": {
         "bsonType": "array",
 		"label": "Technologies",
-        "description": "The technologies the nation has access to"
+        "description": "The technologies the nation has access to",
+		"items":{
+			"bsonType": "object",
+			"properties": {
+				"name": {
+					"bsonType": "string",
+					"label": "Technology Name",
+					"description": "The name of the technology"
+				},
+				"base_cost": {
+					"bsonType": "number",
+					"label": "Technology Base Cost",
+					"description": "The base cost of the technology"
+				},
+				"current_cost": {
+					"bsonType": "number",
+					"label": "Technology Current Cost",
+					"description": "The current cost of the technology"
+				},
+				"invested": {
+					"bsonType": "number",
+					"label": "Research Points Invested",
+					"description": "The amount of research points already invested in the technology"
+				},
+				"prerequisites": {
+					"bsonType": "array",
+					"label": "Technology Prerequisites",
+					"description": "The technologies that must be researched before this one can be researched",
+					"items":{
+						"bsonType": "string"
+					}
+				}
+			}
+		}
       },
 	  "districts": {
         "bsonType": "array",
 		"label": "Districts",
-        "description": "The districts the nation owns"
+        "description": "The districts the nation owns",
+		"items":{
+			"bsonType": "object",
+			"properties": {
+				"type": {
+					"bsonType": "string",
+					"label": "City Type",
+					"description": "The type of the city"
+				},
+				"nodes": {
+					"bsonType": "array",
+					"label": "City Nodes",
+					"description": "The nodes under the city",
+					"items":{
+						"bsonType": "string",
+						"label": "Node Type",
+						"description": "The type of the node"
+					}
+				}
+			}
+		}
       },
 	  "cities": {
         "bsonType": "array",
 		"label": "Cities",
-        "description": "The cities the nation owns"
+        "description": "The cities the nation owns",
+		"items":{
+			"bsonType": "object",
+			"properties": {
+				"name": {
+					"bsonType": "string",
+					"label": "City Name",
+					"description": "The name of the city"
+				},
+				"type": {
+					"bsonType": "string",
+					"label": "City Type",
+					"description": "The type of the city"
+				},
+				"nodes": {
+					"bsonType": "array",
+					"label": "City Nodes",
+					"description": "The nodes under the city",
+					"items":{
+						"bsonType": "string",
+						"label": "Node Type",
+						"description": "The type of the node"
+					}
+				},
+				"walls": {
+					"bsonType": "string",
+					"label": "City Walls",
+					"description": "The type of walls the city has"
+				}
+			}
+		}
       },
 	  "wonders": {
         "bsonType": "array",
 		"label": "Wonders",
         "description": "The list of wonders the nation currently owns",
 		"collection": "wonders",
-		"queryTargetAttribute": "owner_nation"
+		"queryTargetAttribute": "owner_nation",
+		"items":{
+			"bsonType": "linked_object"
+		}
       },
 	  "total_export_slots": {
         "bsonType": "number",
@@ -994,19 +1092,45 @@
 		"label": "Outgoing Trades",
         "description": "The ongoing trades where the nation is currently exporting resources",
 		"collection": "trades",
-		"queryTargetAttribute": "exporting_nation"
+		"queryTargetAttribute": "exporting_nation",
+		"items":{
+			"bsonType": "linked_object"
+		}
       },
 	  "incoming_trades": {
         "bsonType": "array",
 		"label": "Incoming Trades",
         "description": "The ongoing trades where the nation is currently importing resources",
 		"collection": "trades",
-		"queryTargetAttribute": "importing_nation"
+		"queryTargetAttribute": "importing_nation",
+		"items":{
+			"bsonType": "linked_object"
+		}
       },
 	  "modifiers": {
         "bsonType": "array",
 		"label": "Ongoing Modifiers",
-        "description": "The ongoing modifiers currently affecting this nation"
+        "description": "The ongoing modifiers currently affecting this nation",
+		"items":{
+			"bsonType": "object",
+			"properties": {
+				"key": {
+					"bsonType": "string",
+					"label": "Modifier Key",
+					"description": "The key of the modifier"
+				},
+				"value": {
+					"bsonType": "number",
+					"label": "Modifier Value",
+					"description": "The value of the modifier"
+				},
+				"duration": {
+					"bsonType": "number",
+					"label": "Modifier Duration",
+					"description": "The duration of the modifier"
+				}
+			}
+		}
       }
     }
   }
