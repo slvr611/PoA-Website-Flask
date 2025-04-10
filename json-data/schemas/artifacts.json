@@ -19,7 +19,8 @@
       "effect_description": {
         "bsonType": "string",
         "label": "Effect Description",
-        "description": "The description of the artifact's mechanical effects"
+        "description": "The description of the artifact's mechanical effects",
+        "long_text": true
       },
       "mechanical_effects": {
         "bsonType": "array",
