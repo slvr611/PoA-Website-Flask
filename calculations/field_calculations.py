@@ -69,16 +69,17 @@ def collect_districts(target):
     collected_modifiers = []
     district_json_data = json_data["districts"]
     for district in nation_districts:
-        district_type = district.get("type", "")
-        district_node = district.get("node", "")
-        district_modifiers = district_json_data.get(district_type, {}).get("modifiers", {})
-        collected_modifiers.append(district_modifiers)
-        if district_node == district_json_data.get(district_type, {}).get("synergy_requirement", ""):
-            collected_modifiers.append(district_json_data.get(district_type, {}).get("synergy_modifiers", {}))
-            if district_json_data.get(district_type, {}).get("synergy_node_active", True):
+        if isinstance(district, dict):
+            district_type = district.get("type", "")
+            district_node = district.get("node", "")
+            district_modifiers = district_json_data.get(district_type, {}).get("modifiers", {})
+            collected_modifiers.append(district_modifiers)
+            if district_node == district_json_data.get(district_type, {}).get("synergy_requirement", ""):
+                collected_modifiers.append(district_json_data.get(district_type, {}).get("synergy_modifiers", {}))
+                if district_json_data.get(district_type, {}).get("synergy_node_active", True):
+                    collected_modifiers.append({district_node + "_production": 1})
+            elif district_node != "":
                 collected_modifiers.append({district_node + "_production": 1})
-        elif district_node != "":
-            collected_modifiers.append({district_node + "_production": 1})
 
     return collected_modifiers
 
@@ -114,7 +115,8 @@ def calculate_job_details(target, modifier_totals, district_totals, city_totals,
     modifier_sources = [modifier_totals, district_totals, city_totals, law_totals, node_totals]
     district_types = []
     for district in target.get("districts", []):
-        district_types.append(district["type"])
+        if isinstance(district, dict):
+            district_types.append(district["type"])
 
     new_job_details = {}
     for job, details in job_details.items():

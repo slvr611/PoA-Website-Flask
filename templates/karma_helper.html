@@ -1,0 +1,36 @@
+{% extends "layout.html" %}
+
+{% block title %}Admin Tools{% endblock %}
+
+{% block content %}
+<div class="container">
+	<h1>Karma Helper</h1>
+	<a href="/roll_karma">Roll Karma</a>
+	<table class="info-table">
+		<thead>
+			<tr>
+				<th>Nation</th>
+				<th>Event Type</th>
+				<th>Event Roll</th>
+				<th>Raw Roll</th>
+				<th>Karma</th>
+				<th>Rolling Karma</th>
+				<th>Temp Karma</th>
+			</tr>
+		</thead>
+		<tbody>
+			{% for nation in nations %}
+				<tr>
+					<td><a href="/nations/item/{{ nation.get('name', '') }}">{{ nation.get("name", "") }}</a></td>
+					<td>{{ nation.get("event_type", "Unknown") }}</td>
+					<td>{{ nation.get("event_roll", 0) }}</td>
+					<td>{{ nation.get("raw_roll", 0) }}</td>
+					<td>{{ nation.get("karma", 0) }}</td>
+					<td>{{ nation.get("rolling_karma", 0) }}</td>
+					<td>{{ nation.get("temporary_karma", 0) }}</td>
+				</tr>
+			{% endfor %}
+		</tbody>
+	</table>
+</div>
+{% endblock %}

@@ -52,6 +52,9 @@
 			</div>
 			<div class="nav-right">
 				{% if g.user %}
+					{% if g.user.is_admin %}
+						<a href="/admin_tools">Admin Tools</a>
+					{% endif %}
 					<a href="/logout">Logout</a>
 					<a href="/players/item/{{ g.user.username }}">
 						<img src="{{ g.user.avatar_url }}" alt="User Avatar">
