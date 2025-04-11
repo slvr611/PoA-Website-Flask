@@ -141,15 +141,16 @@
                                     None
                                 {% endif %}
                                 </td>
-                                
-                                <td>
-                                    <input type="text" id="pop_reason" name="pop_reason" value="">
-                                </td>
-                                
-                                {% if g.user.is_admin %}
-                                    <td><button type="button" onclick="window.location.href='{{ pop["link"].replace("item", "clone") }}/save'">Clone Now</button></td>
-                                {% endif %}
-                                <td><button type="button" onclick="window.location.href='{{ pop["link"].replace("item", "clone") }}/request'">Request Clone</button></td>
+                                <form method="POST" action="{{ pop['link'].replace('item', 'clone') }}/save" style="display: inline;"></form>
+                                    <td>
+                                        <input type="text" id="pop_reason" name="pop_reason" value="">
+                                    </td>
+                                    
+                                    {% if g.user.is_admin %}
+                                        <td><button type="submit" formaction="{{ pop["link"].replace("item", "clone") }}/save" class="btn btn-primary">Clone Now</button></td>
+                                    {% endif %}
+                                    <td><button type="submit" formaction="{{ pop["link"].replace("item", "clone") }}/request" class="btn btn-primary">Clone Now</button></td>
+                                </form></form>
                             </tr>
                         {% endfor %}
                     </tbody>

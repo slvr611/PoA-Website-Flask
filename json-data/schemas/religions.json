@@ -71,7 +71,7 @@
 	  "effect_description": {
         "bsonType": "string",
         "label": "Effect Description",
-        "description": "The description of the wonder's mechanical effects",
+        "description": "The description of the rerligion's mechanical effects on those following it",
 		"long_text": true
       },
       "mechanical_effects": {
