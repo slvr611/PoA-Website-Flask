@@ -114,24 +114,24 @@
 			<table class="info-table">
 				<tr>
 					<th>{{ schema.properties.primary_race.label }}:</th>
-					{% if linked_objects["primary_race"] %}
-						<td><a href="{{ linked_objects["primary_race"]["link"] }}">{{ linked_objects["primary_race"]["name"] }}</a></td>
+					{% if linked_objects['primary_race'] %}
+						<td><a href="{{ linked_objects['primary_race']['link'] }}">{{ linked_objects['primary_race']['name'] }}</a></td>
 					{% else %}
 						None
 					{% endif %}
 				</tr>
 				<tr>
 					<th>{{ schema.properties.primary_culture.label }}:</th>
-					{% if linked_objects["primary_culture"] %}
-						<td><a href="{{ linked_objects["primary_culture"]["link"] }}">{{ linked_objects["primary_culture"]["name"] }}</a></td>
+					{% if linked_objects['primary_culture'] %}
+						<td><a href="{{ linked_objects['primary_race']['link'] }}">{{ linked_objects['primary_culture']['name'] }}</a></td>
 					{% else %}
 						None
 					{% endif %}
 				</tr>
 				<tr>
 					<th>{{ schema.properties.primary_religion.label }}:</th>
-					{% if linked_objects["primary_religion"] %}
-						<td><a href="{{ linked_objects["primary_religion"]["link"] }}">{{ linked_objects["primary_religion"]["name"] }}</a></td>
+					{% if linked_objects['primary_religion'] %}
+						<td><a href="{{ linked_objects['primary_race']['link'] }}">{{ linked_objects['primary_religion']['name'] }}</a></td>
 					{% else %}
 						None
 					{% endif %}
@@ -155,12 +155,12 @@
 					{% for pop in linked_objects["pops"] %}
 						<tr>
 							<!-- If there's no separate name/ID, just show the loop index -->
-							<td><a href="{{ pop["link"] }}">{{ loop.index }}</a></td>
+							<td><a href="{{ pop['link'] }}">{{ loop.index }}</a></td>
 
 							<!-- Link to Race detail page -->
 							<td>
 							{% if pop["linked_objects"]["race"] %}
-								<a href="{{ pop["linked_objects"]["race"]["link"] }}">{{ pop["linked_objects"]["race"]["name"] }}</a>
+								<a href="{{ pop['linked_objects']['race']['link'] }}">{{ pop['linked_objects']['race']['name'] }}</a>
 							{% else %}
 								None
 							{% endif %}
@@ -168,8 +168,8 @@
 
 							<!-- Link to Culture detail page -->
 							<td>
-							{% if pop["linked_objects"]["culture"] %}
-								<a href="{{ pop["linked_objects"]["culture"]["link"] }}">{{ pop["linked_objects"]["culture"]["name"] }}</a>
+							{% if pop['linked_objects']['culture'] %}
+								<a href="{{ pop['linked_objects']['culture']['link'] }}">{{ pop['linked_objects']['culture']['name'] }}</a>
 							{% else %}
 								None
 							{% endif %}
@@ -178,7 +178,7 @@
 							<!-- Link to Religion detail page -->
 							<td>
 							{% if pop["linked_objects"]["religion"] %}
-								<a href="{{ pop["linked_objects"]["religion"]["link"] }}">{{ pop["linked_objects"]["religion"]["name"] }}</a>
+								<a href="{{ pop['linked_objects']['religion']['link'] }}">{{ pop["linked_objects"]["religion"]["name"] }}</a>
 							{% else %}
 								None
 							{% endif %}
@@ -279,7 +279,7 @@
 						<th>{{ schema.properties.overlord.label }}:</th>
 						<td>
 							{% if linked_objects["overlord"] %}
-								<a href="{{ linked_objects["overlord"]["link"] }}">{{ linked_objects["overlord"]["name"] }}</a>
+								<a href="{{ linked_objects['overlord']['link'] }}">{{ linked_objects["overlord"]["name"] }}</a>
 							{% else %}
 								None
 							{% endif %}
@@ -332,7 +332,7 @@
 					<tbody>
 						{% for vassal in linked_objects["vassals"] %}
 							<tr>
-								<td><a href="{{ vassal["link"] }}">{{ vassal["name"] }}</a></td>
+								<td><a href="{{ vassal['link'] }}">{{ vassal["name"] }}</a></td>
 								
 								<td>{{ vassal["compliance"] }}</td>
 								
@@ -522,18 +522,18 @@
 			{% for i in range(0, nation.district_slots) %}
 				<div class="district-slot">
 					{% if nation.districts | length > i and nation.districts[i] and nation.districts[i]["type"] != "" %}
-						{% set district = districts_config[nation.districts[i]["type"]] %}
-						<h3>{{ district.display_name }}</h3>
-						<p>Type: {{ district.type }}</p>
+						{% set district = districts_config.get(nation.districts[i]["type"], {}) %}
+						<h3>{{ district.get("display_name", "") }}</h3>
+						<p>Type: {{ district.get("type", "") }}</p>
 						<p>
 							Cost:
-							{% for resource, cost in district.cost.items() %}
+							{% for resource, cost in district.get("cost", {}).items() %}
 								{{ resource }}: {{ cost }}<br>
 							{% endfor %}
 						</p>
 						<p>
 							Modifiers:
-							{% for mod, value in district.modifiers.items() %}
+							{% for mod, value in district.get("modifiers", {}).items() %}
 								{{ mod }}: {{ value }}<br>
 							{% endfor %}
 						</p>
@@ -564,17 +564,17 @@
 					<div class="district-slot">
 						{% if nation.cities | length > i and nation.cities[i] and nation.cities[i]["type"] != "" %}
 							{% set city = cities_config[nation.cities[i]["type"]] %}
-							<h3>{{ city.display_name }}</h3>
+							<h3>{{ city.get("display_name", "") }}</h3>
 							<p>Name: {{ nation.cities[i].get("name", "") }}</p>
 							<p>
 								Cost:
-								{% for resource, cost in city.cost.items() %}
+								{% for resource, cost in city.get("cost", {}).items() %}
 									{{ resource }}: {{ cost }}<br>
 								{% endfor %}
 							</p>
 							<p>
 								Modifiers:
-								{% for mod, value in city.modifiers.items() %}
+								{% for mod, value in city.get("modifiers", {}).items() %}
 									{{ mod }}: {{ value }}<br>
 								{% endfor %}
 							</p>

@@ -18,14 +18,16 @@ def admin_tools():
 def karma_helper():
     schema, db = get_data_on_category("nations")
 
-    nations = list(db.find().sort("name", ASCENDING))
+    player_nations = list(db.find({"temperament": "Player"}).sort("name", ASCENDING))
+    ai_nations = list(db.find({"temperament": {"$ne": "Player"}}).sort("name", ASCENDING))
 
-    for nation in nations:
+    for nation in player_nations + ai_nations:
         calculated_fields = calculate_all_fields(nation, schema)
         nation.update(calculated_fields)
 
     return render_template("karma_helper.html",
-                           nations=nations)
+                           player_nations=player_nations,
+                           ai_nations=ai_nations)
 
 @admin_tool_routes.route("/roll_karma")
 @admin_required
