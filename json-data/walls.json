@@ -1,0 +1,24 @@
+{
+	"ancient_walls": {
+		"display_name": "Ancient Walls",
+		"cost": {
+			"wood": 6,
+			"stone": 3,
+			"food": 2
+		},
+		"modifiers": {
+			"food_consumption": 1
+		}
+	},
+	"classical_walls": {
+		"display_name": "Classical Walls",
+		"cost": {
+			"wood": 4,
+			"stone": 4,
+			"bronze": 4
+		},
+		"modifiers": {
+			"bronze_consumption": 1
+		}
+	}
+}

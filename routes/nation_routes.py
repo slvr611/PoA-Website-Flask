@@ -29,7 +29,8 @@ def nation_item(item_ref):
         linked_objects=linked_objects,
         general_resources=json_data["general_resources"],
         unique_resources=json_data["unique_resources"],
-        districts_config=json_data["districts"]
+        districts_config=json_data["districts"],
+        cities_config=json_data["cities"]
     )
 
 @nation_routes.route("/nations/edit/<item_ref>", methods=["GET"])

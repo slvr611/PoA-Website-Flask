@@ -50,7 +50,7 @@ category_data = {
 
 rarity_rankings = {"Mythical": 0, "Legendary": 1, "Great": 2, "Good": 3, "Mundane": 4}
 
-json_files = ["jobs", "districts"]
+json_files = ["jobs", "districts", "cities", "walls"]
 json_data = {"general_resources": [
             {"key": "food", "name": "Food", "base_storage": 20},
             {"key": "wood", "name": "Wood", "base_storage": 15},

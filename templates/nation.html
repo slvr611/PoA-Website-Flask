@@ -82,14 +82,6 @@
 					<th>{{ schema.properties.road_capacity.label }}:</th>
 					<td>{{ nation.road_capacity }}</td>
 				</tr>
-				<tr>
-					<th>{{ schema.properties.cities.label }}:</th>
-					<td>{{ nation.cities }}</td>
-				</tr>
-				<tr>
-					<th>{{ schema.properties.city_slots.label }}:</th>
-					<td>{{ nation.city_slots }}</td>
-				</tr>
 			</table>
 		</div>
 		<div class="info-column">
@@ -106,6 +98,14 @@
 				<tr>
 					<th>{{ schema.properties.money_income.label }}:</th>
 					<td>{{ nation.money_income }}</td>
+				</tr>
+				<tr>
+					<th>{{ schema.properties.remaining_import_slots.label }}:</th>
+					<td>{{ nation.remaining_import_slots }}</td>
+				</tr>
+				<tr>
+					<th>{{ schema.properties.remaining_export_slots.label }}:</th>
+					<td>{{ nation.remaining_export_slots }}</td>
 				</tr>
 			</table>
 		</div>
@@ -349,6 +349,62 @@
 				</table>
 			</div>
 		{% endif %}
+
+		<div class="info-column">
+			<h2>War Stats</h2>
+			<table class="info-table">
+				<tr>
+					<th>{{ schema.properties.land_attack.label }}:</th>
+					<td>{{ nation.land_attack }}</td>
+				</tr>
+				<tr>
+					<th>{{ schema.properties.land_defense.label }}:</th>
+					<td>{{ nation.land_defense }}</td>
+				</tr>
+				<tr>
+					<th>{{ schema.properties.naval_attack.label }}:</th>
+					<td>{{ nation.naval_attack }}</td>
+				</tr>
+				<tr>
+					<th>{{ schema.properties.naval_defense.label }}:</th>
+					<td>{{ nation.naval_defense }}</td>
+				</tr>
+				<tr>
+					<th>{{ schema.properties.mercenary_land_attack.label }}:</th>
+					<td>{{ nation.mercenary_land_attack }}</td>
+				</tr>
+				<tr>
+					<th>{{ schema.properties.mercenary_land_defense.label }}:</th>
+					<td>{{ nation.mercenary_land_defense }}</td>
+				</tr>
+				<tr>
+					<th>{{ schema.properties.mercenary_naval_attack.label }}:</th>
+					<td>{{ nation.mercenary_naval_attack }}</td>
+				</tr>
+				<tr>
+					<th>{{ schema.properties.mercenary_naval_defense.label }}:</th>
+					<td>{{ nation.mercenary_naval_defense }}</td>
+				</tr>
+			</table>
+		</div>
+	
+		<div class="info-column">
+			<h2>Nodes</h2>
+			<table class="info-table">
+				{% for resource in general_resources %}
+					<tr>
+						<th>{{ resource.name }}</th>
+						<td>{{ nation.get("resource_nodes", {}).get(resource["key"], 0) }}</td>
+					</tr>
+				{% endfor %}
+				{% for resource in unique_resources %}
+					<tr>
+						<th>{{ resource.name }}</th>
+						<td>{{ nation.get("resource_nodes", {}).get(resource["key"], 0) }}</td>
+					</tr>
+				{% endfor %}
+			</table>
+		</div>
 	</div>
 	
 	<section class="resources-section">
@@ -465,8 +521,8 @@
 		<div class="districts-grid">
 			{% for i in range(0, nation.district_slots) %}
 				<div class="district-slot">
-					{% if nation.districts | length > i and nation.districts[i] %}
-						{% set district = districts_config[nation.districts[i]] %}
+					{% if nation.districts | length > i and nation.districts[i] and nation.districts[i]["type"] != "" %}
+						{% set district = districts_config[nation.districts[i]["type"]] %}
 						<h3>{{ district.display_name }}</h3>
 						<p>Type: {{ district.type }}</p>
 						<p>
@@ -481,6 +537,14 @@
 								{{ mod }}: {{ value }}<br>
 							{% endfor %}
 						</p>
+						<p>
+							Node:
+							{% if nation.districts[i]["node"] != "" %}
+								{{ nation.districts[i]["node"] }}
+							{% else %}
+								None
+							{% endif %}
+						</p>
 					{% else %}
 						<div class="empty-slot">
 							<p>Empty Slot</p>
@@ -490,5 +554,47 @@
 			{% endfor %}
 		</div>
 	</section>
+
+	{% if nation.city_slots > 0 %}
+		<section class="districts-section">
+			<h2>Cities</h2>
+			<p>{{ schema.properties.city_slots.label }}: {{ nation.city_slots }}</p>
+			<div class="districts-grid">
+				{% for i in range(0, nation.city_slots) %}
+					<div class="district-slot">
+						{% if nation.cities | length > i and nation.cities[i] and nation.cities[i]["type"] != "" %}
+							{% set city = cities_config[nation.cities[i]["type"]] %}
+							<h3>{{ city.display_name }}</h3>
+							<p>Name: {{ nation.cities[i].get("name", "") }}</p>
+							<p>
+								Cost:
+								{% for resource, cost in city.cost.items() %}
+									{{ resource }}: {{ cost }}<br>
+								{% endfor %}
+							</p>
+							<p>
+								Modifiers:
+								{% for mod, value in city.modifiers.items() %}
+									{{ mod }}: {{ value }}<br>
+								{% endfor %}
+							</p>
+							<p>
+								Node:
+								{% if nation.cities[i]["node"] != "" %}
+									{{ nation.cities[i]["node"] }}
+								{% else %}
+									None
+								{% endif %}
+							</p>
+						{% else %}
+							<div class="empty-slot">
+								<p>Empty Slot</p>
+							</div>
+						{% endif %}
+					</div>
+				{% endfor %}
+			</div>
+		</section>
+	{% endif %}
 </div>
 {% endblock %}

@@ -426,7 +426,7 @@
 			},
 			"Encampment": {
 				"strength": 1,
-				"morale": 1,
+				"unit_morale": 1,
 				"unit_mount_consumption": -1,
 				"chance_to_lose_stability": 0.2,
 				"chance_to_lose_stability_while_at_war": -0.1
@@ -596,8 +596,8 @@
 				"land_unit_speed": 1
 			},
 			"Shock": {
-				"land_attack_during_first_session": 2,
-				"land_defense_after_first_session": -4
+				"first_session_land_attack": 2,
+				"after_first_session_land_defense": -4
 			},
 			"Volley": {
 				"land_unit_speed_mult": 0.5,
@@ -605,8 +605,8 @@
 			},
 			"Safeguard": {
 				"land_defense_against_ranged": 2,
-				"land_defense_when_in_defensive_war": 1,
-				"land_attack_when_in_offensive_war": -4
+				"defensive_war_land_defense": 1,
+				"offensive_war_land_attack": -4
 			},
 			"Militia": {},
 			"Ambush": {
@@ -750,12 +750,12 @@
 			},
 			"Mercenary Reliance": {
 				"mercenary_limit_mult": 0.75,
-				"national_unit_strength": -1
+				"strength": -1
 			},
 			"Mercenary Military": {
 				"mercenary_limit_mult": 1.25,
-				"national_unit_strength": -2,
-				"mercenary_unit_strength": 1
+				"strength": -2,
+				"mercenary_strength": 1
 			}
 		}
       },
@@ -768,19 +768,21 @@
 			"None": {},
 			"Indulgence": {
 				"food_consumption_per_pop": 0.5,
-				"stability_gain_chance": 0.4
+				"stability_gain_chance": 0.4,
+				"unit_morale": 1
 			},
 			"Comfort": {
 				"food_consumption_per_pop": 0.3334,
-				"stability_gain_chance": 0.25
+				"stability_gain_chance": 0.25,
+				"unit_morale": 1
 			},
 			"Standard": {
 				"stability_gain_chance": 0.05
 			},
 			"Rationing": {
-				"mercenary_limit_mult": 1.25,
-				"national_unit_strength": -2,
-				"mercenary_unit_strength": 1
+				"food_consumption_per_pop": -0.25,
+				"stability_loss_chance": 0.15,
+				"unit_morale": -1
 			}
 		}
       },
@@ -896,6 +898,54 @@
 		"label": "Naval Units",
         "description": "The naval units the nation has recruited"
       },
+	  "land_attack": {
+        "bsonType": "number",
+		"label": "Land Attack Modifier",
+        "description": "The land attack modifier of the nation",
+		"calculated": true
+      },
+	  "land_defense": {
+        "bsonType": "number",
+		"label": "Land Defense Modifier",
+        "description": "The land defense modifier of the nation",
+		"calculated": true
+      },
+	  "naval_attack": {
+        "bsonType": "number",
+		"label": "Naval Attack Modifier",
+        "description": "The naval attack modifier of the nation",
+		"calculated": true
+      },
+	  "naval_defense": {
+        "bsonType": "number",
+		"label": "Naval Defense Modifier",
+        "description": "The naval defense modifier of the nation",
+		"calculated": true
+      },
+	  "mercenary_land_attack": {
+        "bsonType": "number",
+		"label": "Mercenary Land Attack Modifier",
+        "description": "The mercenary land attack modifier of the nation",
+		"calculated": true
+      },
+	  "mercenary_land_defense": {
+        "bsonType": "number",
+		"label": "Mercenary Land Defense Modifier",
+        "description": "The mercenary land defense modifier of the nation",
+		"calculated": true
+      },
+	  "mercenary_naval_attack": {
+        "bsonType": "number",
+		"label": "Mercenary Naval Attack Modifier",
+        "description": "The mercenary naval attack modifier of the nation",
+		"calculated": true
+      },
+	  "mercenary_naval_defense": {
+        "bsonType": "number",
+		"label": "Mercenary Naval Defense Modifier",
+        "description": "The mercenary naval defense modifier of the nation",
+		"calculated": true
+      },
 	  "resource_production": {
         "bsonType": "object",
 		"label": "Resource Production",
@@ -926,24 +976,9 @@
 		"calculated": true
       },
 	  "resource_nodes": {
-        "bsonType": "array",
+        "bsonType": "object",
 		"label": "Resource Nodes",
-        "description": "The resource nodes of the nation",
-		"items":{
-			"bsonType": "object",
-			"properties": {
-				"type": {
-					"bsonType": "string",
-					"label": "Resource Type",
-					"description": "The type of the resource"
-				},
-				"value": {
-					"bsonType": "number",
-					"label": "Node Value",
-					"description": "The value of the node"
-				}
-			}
-		}
+        "description": "The resource nodes of the nation"
       },
 	  "luxury_resources": {
         "bsonType": "array",
@@ -1061,16 +1096,16 @@
 			"bsonType": "linked_object"
 		}
       },
-	  "total_export_slots": {
+	  "export_slots": {
         "bsonType": "number",
-		"label": "Total Export Slots",
+		"label": "Export Slots",
         "description": "The total number of export slots the nation has available each session, before accounting for ongoing trades",
 		"calculated": true,
 		"base_value": 3
       },
-	  "total_import_slots": {
+	  "import_slots": {
         "bsonType": "number",
-		"label": "Total Import Slots",
+		"label": "Import Slots",
         "description": "The total number of import slots the nation has available each session, before accounting for ongoing trades",
 		"calculated": true,
 		"base_value": 3

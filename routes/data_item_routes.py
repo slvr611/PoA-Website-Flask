@@ -456,3 +456,40 @@ def data_item_delete_save(data_type, item_ref):
     flash(f"Delete request #{change_id} created and approved.")
 
     return redirect("/" + data_type)
+
+@data_item_routes.route("/wonders")
+def wonder_list():
+    schema, db = get_data_on_category("wonders")
+    query_dict = {"_id": 1, "name": 1}
+    preview_overall_lookup_dict = {}
+
+    for preview_item in schema.get("preview", {}):
+        query_dict[preview_item] = 1
+        collection_name = schema.get("properties", {}).get(preview_item, {}).get("collection", None)
+        if collection_name:
+            preview_db = category_data[collection_name]["database"]
+            preview_individual_lookup_dict = {}
+            preview_data = list(preview_db.find({}, {"_id": 1, "name": 1}))
+            for data in preview_data:
+                preview_individual_lookup_dict[str(data["_id"])] = {
+                    "name": data.get("name", "None"),
+                    "link": f"{collection_name}/item/{data.get('name', data.get('_id', '#'))}"
+                }
+            preview_overall_lookup_dict[preview_item] = preview_individual_lookup_dict
+    
+    sort_by = schema.get("sort", "name")
+
+    items = list(db.find({}, query_dict).sort("name", ASCENDING))
+
+    if sort_by == "rarity":
+        items.sort(key=lambda x: rarity_rankings.get(x.get("rarity", ""), 999))
+    else:
+        items = list(db.find({}, query_dict).sort(sort_by, ASCENDING))
+
+    return render_template(
+        "wonder_list.html",
+        title=category_data["wonders"]["pluralName"],
+        items=items,
+        schema=schema,
+        preview_references=preview_overall_lookup_dict
+    )

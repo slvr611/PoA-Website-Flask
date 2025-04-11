@@ -35,7 +35,6 @@ class ResourceStorageDict(Form):
             field = IntegerField(resource["name"], validators=[NumberRange(min=0)], default=0)
             setattr(cls, resource["key"], field)
         
-        # Unique resources
         unique_resources = json_data.get("unique_resources", [])
         for resource in unique_resources:
             field = IntegerField(resource["name"], validators=[NumberRange(min=0)], default=0)
@@ -76,14 +75,65 @@ class ResourceStorageDict(Form):
                     else:
                         field.data = field_value
 
-    
-
-class JobAssignmentDict(Form):
-    """Form for handling job assignments as a dictionary"""
+class NodeDict(Form):
+    """Form for handling resources nodes as a dictionary"""
     
     class Meta:
         csrf = False
     
+    @classmethod
+    def create_form_class(cls):
+        general_resources = json_data.get("general_resources", [])
+        for resource in general_resources:
+            field = IntegerField(resource["name"], validators=[NumberRange(min=0)], default=0)
+            setattr(cls, resource["key"], field)
+        
+        unique_resources = json_data.get("unique_resources", [])
+        for resource in unique_resources:
+            field = IntegerField(resource["name"], validators=[NumberRange(min=0)], default=0)
+            setattr(cls, resource["key"], field)
+        
+        return cls
+
+    def load_form_from_item(self, item):
+        """Loads form data from a database item"""
+        for field_name, field in self._fields.items():
+                if isinstance(field, SelectField) and field.data:
+                    field.data = str(field.data)
+                    
+                # Handle nested data structures
+                if field_name in item:
+                    field_value = item[field_name]
+                    
+                    if isinstance(field_value, ObjectId):
+                        field.data = str(field_value)
+                    elif isinstance(field, FieldList):
+                        # Clear existing entries
+                        while len(field.entries) > 0:
+                            field.pop_entry()
+                            
+                        # Add new entries from the data
+                        for value in field_value:
+                            if isinstance(value, dict):
+                                # For object arrays
+                                field.append_entry(value)
+                            elif isinstance(value, ObjectId):
+                                # For linked object arrays
+                                field.append_entry(str(value))
+                            else:
+                                # For simple value arrays
+                                field.append_entry(value)
+                    elif isinstance(field, FormField):
+                        field.load_form_from_item(field_value)
+                    else:
+                        field.data = field_value
+
+class JobAssignmentDict(Form):
+    """Form for handling nation modifiers as a dictionary"""
+    
+    class Meta:
+        csrf = False
+
     @classmethod
     def create_form_class(cls, job_details):
         for job in job_details.keys():
@@ -92,6 +142,157 @@ class JobAssignmentDict(Form):
         
         return cls
     
+    def load_form_from_item(self, item):
+        """Loads form data from a database item"""
+        for field_name, field in self._fields.items():
+                if isinstance(field, SelectField) and field.data:
+                    field.data = str(field.data)
+                    
+                # Handle nested data structures
+                if field_name in item:
+                    field_value = item[field_name]
+                    
+                    if isinstance(field_value, ObjectId):
+                        field.data = str(field_value)
+                    elif isinstance(field, FieldList):
+                        # Clear existing entries
+                        while len(field.entries) > 0:
+                            field.pop_entry()
+                            
+                        # Add new entries from the data
+                        for value in field_value:
+                            if isinstance(value, dict):
+                                # For object arrays
+                                field.append_entry(value)
+                            elif isinstance(value, ObjectId):
+                                # For linked object arrays
+                                field.append_entry(str(value))
+                            else:
+                                # For simple value arrays
+                                field.append_entry(value)
+                    elif isinstance(field, FormField):
+                        field.load_form_from_item(field_value)
+                    else:
+                        field.data = field_value
+
+class ModifierDict(Form):
+    """Form for handling job assignments as a dictionary"""
+    
+    field = StringField("Field", validators=[DataRequired()])
+    value = IntegerField("Value", validators=[NumberRange()], default=1)
+    duration = IntegerField("Duration", validators=[NumberRange()], default=-1)
+    source = StringField("Source", validators=[DataRequired()])
+
+    class Meta:
+        csrf = False
+    
+    def load_form_from_item(self, item):
+        """Loads form data from a database item"""
+        for field_name, field in self._fields.items():
+                if isinstance(field, SelectField) and field.data:
+                    field.data = str(field.data)
+                    
+                # Handle nested data structures
+                if field_name in item:
+                    field_value = item[field_name]
+                    
+                    if isinstance(field_value, ObjectId):
+                        field.data = str(field_value)
+                    elif isinstance(field, FieldList):
+                        # Clear existing entries
+                        while len(field.entries) > 0:
+                            field.pop_entry()
+                            
+                        # Add new entries from the data
+                        for value in field_value:
+                            if isinstance(value, dict):
+                                # For object arrays
+                                field.append_entry(value)
+                            elif isinstance(value, ObjectId):
+                                # For linked object arrays
+                                field.append_entry(str(value))
+                            else:
+                                # For simple value arrays
+                                field.append_entry(value)
+                    elif isinstance(field, FormField):
+                        field.load_form_from_item(field_value)
+                    else:
+                        field.data = field_value
+
+class DistrictDict(Form):
+    """Form for handling each district as a dictionary"""
+    
+    type = SelectField("District Type")
+    node = SelectField("Node Type")
+
+    class Meta:
+        csrf = False
+    
+    def populate_linked_fields(self, type_options=[], node_options=[]):
+        """Populates all linked fields with their options"""
+        self.type.choices = []
+        self.node.choices = []
+        for type in type_options:
+            self.type.choices.append(type)
+        for node in node_options:
+            self.node.choices.append(node)
+    
+    def load_form_from_item(self, item):
+        """Loads form data from a database item"""
+        for field_name, field in self._fields.items():
+                if isinstance(field, SelectField) and field.data:
+                    field.data = str(field.data)
+                    
+                # Handle nested data structures
+                if field_name in item:
+                    field_value = item[field_name]
+                    
+                    if isinstance(field_value, ObjectId):
+                        field.data = str(field_value)
+                    elif isinstance(field, FieldList):
+                        # Clear existing entries
+                        while len(field.entries) > 0:
+                            field.pop_entry()
+                            
+                        # Add new entries from the data
+                        for value in field_value:
+                            if isinstance(value, dict):
+                                # For object arrays
+                                field.append_entry(value)
+                            elif isinstance(value, ObjectId):
+                                # For linked object arrays
+                                field.append_entry(str(value))
+                            else:
+                                # For simple value arrays
+                                field.append_entry(value)
+                    elif isinstance(field, FormField):
+                        field.load_form_from_item(field_value)
+                    else:
+                        field.data = field_value
+
+class CityDict(Form):
+    """Form for handling each City as a dictionary"""
+    
+    name = StringField("City Name")
+    type = SelectField("City Type")
+    node = SelectField("Node Type")
+    wall = SelectField("Wall Type")
+
+    class Meta:
+        csrf = False
+    
+    def populate_linked_fields(self, type_options=[], node_options=[], wall_options=[]):
+        """Populates all linked fields with their options"""
+        self.type.choices = []
+        self.node.choices = []
+        self.wall.choices = []
+        for type in type_options:
+            self.type.choices.append(type)
+        for node in node_options:
+            self.node.choices.append(node)
+        for wall in wall_options:
+            self.wall.choices.append(wall)
+
     def load_form_from_item(self, item):
         """Loads form data from a database item"""
         for field_name, field in self._fields.items():
@@ -312,11 +513,12 @@ class NationForm(BaseSchemaForm):
     compliance = SelectField("Compliance", choices=[])
     
     # Lists
-    districts = FieldList(SelectField("District"), min_entries=0)
+    districts = FieldList(FormField(DistrictDict), min_entries=0)
+    cities = FieldList(FormField(CityDict), min_entries=0)
     
     # Misc fields
     origin = SelectField("Origin", choices=[])
-    modifiers = TextAreaField("Modifiers")
+    modifiers = FieldList(FormField(ModifierDict), min_entries=0)
     temperament = SelectField("Temperament", choices=[])
 
     # Add dynamic law fields from schema
@@ -336,6 +538,9 @@ class NationForm(BaseSchemaForm):
         ResourceStorageDict.create_form_class()
         cls.resource_storage = FormField(ResourceStorageDict)
 
+        NodeDict.create_form_class()
+        cls.resource_nodes = FormField(NodeDict)
+
         JobAssignmentDict.create_form_class(job_details)
         cls.jobs = FormField(JobAssignmentDict)
 
@@ -345,16 +550,16 @@ class NationForm(BaseSchemaForm):
     def create_form(cls, schema, nation=None, formdata=None, job_details={}):
         """Creates and populates a nation form"""
         # First create the form class with all fields
-        form_cls = cls.create_form_class(schema, job_details)
+        form_class = cls.create_form_class(schema, job_details)
         
         # Create form instance
         if formdata:
-            form = form_cls(formdata=formdata)
+            form = form_class(formdata=formdata)
         elif nation:
-            form = form_cls()
+            form = form_class()
             form.load_form_from_item(nation)
         else:
-            form = form_cls()
+            form = form_class()
         
         # Set up default choices for select fields
         form.stability.choices = [(option, option) for option in schema["properties"].get("stability", {}).get("enum", [])] or \
@@ -385,21 +590,44 @@ class NationForm(BaseSchemaForm):
         if nation:
             for job_key, job_val in nation.get("jobs", {}).items():
                 job_field = getattr(form.jobs, job_key, None)
-                job_field.data = job_val
+                if job_field:
+                    job_field.data = job_val
                 
         # Handle districts
         if nation:
             district_slots = nation.get("district_slots", 3)
             districts = nation.get("districts", [])
+            if not isinstance(districts, list):
+                districts = []
             if len(districts) < district_slots:
-                districts.extend([""] * (district_slots - len(districts)))
-                
+                districts.extend([{"type": "", "node": ""}] * (district_slots - len(districts)))
+            
             form.districts.entries = []
             for district in districts:
                 form.districts.append_entry(district)
         
-        for entry in form.districts.entries:
-            print(entry.data)
+        # Handle cities
+        if nation:
+            city_slots = nation.get("city_slots", 1)
+            cities = nation.get("cities", [])
+            if not isinstance(cities, list):
+                cities = []
+            if len(cities) < city_slots:
+                cities.extend([{"type": "", "node": "", "wall": ""}] * (city_slots - len(cities)))
+            
+            print(cities)
+
+            form.cities.entries = []
+            for city in cities:
+                form.cities.append_entry(city)
+        
+        # Handle modifiers
+        if nation:
+            modifiers = nation.get("modifiers", [])
+            
+            form.modifiers.entries = []
+            for modifier in modifiers:
+                form.modifiers.append_entry(modifier)
         
         return form
     
@@ -409,76 +637,41 @@ class NationForm(BaseSchemaForm):
             if field_schema.get("collection"):
                 self.populate_select_field(field_name, schema, dropdown_options)
         
-        #Handle Districts separately
-        none_result = "Empty Slot"
+        node_choices = [("", "None")]
+        general_resources = json_data.get("general_resources", [])
+        for resource in general_resources:
+            node_choices.append((resource.get("key", resource), resource.get("name", resource)))
         
-        choices = [("", none_result)]
+        unique_resources = json_data.get("unique_resources", [])
+        for resource in unique_resources:
+            node_choices.append((resource.get("key", resource), resource.get("name", resource)))
+
+        #Handle Districts separately        
+        district_choices = [("", "Empty Slot")]
         districts = json_data.get("districts", {})
         for district_key, district_data in districts.items():
-            choices.append((district_key, district_data["display_name"]))
-        
+            district_choices.append((district_key, district_data["display_name"]))
+                
         for district_field in self.districts:
-            district_field.choices = choices
-
-    """
-    def to_dict(self):
-        data = {}
+            district_field.form.populate_linked_fields(type_options=district_choices, node_options=node_choices)
         
-        # Basic fields
-        data["name"] = self.name.data
-        data["infamy"] = self.infamy.data
-        data["temporary_karma"] = self.temporary_karma.data
-        data["rolling_karma"] = self.rolling_karma.data
-        data["money"] = self.money.data
-        data["current_territory"] = self.current_territory.data
-        data["road_usage"] = self.road_usage.data
+        #Handle Cities separately        
+        city_choices = [("", "Empty Slot")]
+        cities = json_data.get("cities", {})
+        for city_key, city_data in cities.items():
+            city_choices.append((city_key, city_data["display_name"]))
         
-        # Select fields
-        data["region"] = self.region.data if self.region.data else None
-        data["primary_race"] = self.primary_race.data if self.primary_race.data else None
-        data["primary_culture"] = self.primary_culture.data if self.primary_culture.data else None
-        data["primary_religion"] = self.primary_religion.data if self.primary_religion.data else None
-        data["overlord"] = self.overlord.data if self.overlord.data else None
-        data["stability"] = self.stability.data
-        data["vassal_type"] = self.vassal_type.data
-        data["compliance"] = self.compliance.data
-        data["origin"] = self.origin.data
-        
-        # Handle modifiers
-        if self.modifiers.data:
-            try:
-                data["modifiers"] = json.loads(self.modifiers.data)
-            except:
-                data["modifiers"] = {}
-        
-        # Handle government laws
-        for field_name, field in self._fields.items():
-            if isinstance(field, SelectField) and field_name not in [
-                "region", "primary_race", "primary_culture", "primary_religion", 
-                "overlord", "stability", "vassal_type", "compliance", "origin"
-            ]:
-                data[field_name] = field.data
-        
-        # Handle resource storage
-        resource_storage = {}
-        for entry in self.resource_storage.data:
-            resource_storage[entry["key"]] = entry["value"]
-        data["resource_storage"] = resource_storage
-        
-        # Handle jobs
-        jobs = {}
-        for entry in self.jobs.data:
-            jobs[entry["key"]] = entry["value"]
-        data["jobs"] = jobs
-        
-        # Handle districts
-        data["districts"] = [district for district in self.districts.data if district]
-        
-        return data
-    """
+        wall_choices = [("", "No Walls")]
+        walls = json_data.get("walls", {})
+        for wall_key, wall_data in walls.items():
+            wall_choices.append((wall_key, wall_data["display_name"]))
+                
+        for city_field in self.cities:
+            city_field.form.populate_linked_fields(type_options=city_choices, node_options=node_choices, wall_options=wall_choices)
 
 # Global form generator instance
 form_generator = FormGenerator()
+
 
 
 
