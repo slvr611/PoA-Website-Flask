@@ -22,7 +22,7 @@ def karma_helper():
     ai_nations = list(db.find({"temperament": {"$ne": "Player"}}).sort("name", ASCENDING))
 
     for nation in player_nations + ai_nations:
-        calculated_fields = calculate_all_fields(nation, schema)
+        calculated_fields = calculate_all_fields(nation, schema,  "nation")
         nation.update(calculated_fields)
 
     return render_template("karma_helper.html",
@@ -37,7 +37,7 @@ def roll_karma():
     nations = list(db.find().sort("name", ASCENDING))
 
     for nation in nations:
-        calculated_fields = calculate_all_fields(nation, schema)
+        calculated_fields = calculate_all_fields(nation, schema, "nation")
         nation.update(calculated_fields)
         raw_roll = random.randint(1, 20)
         event_roll = raw_roll + nation.get("karma", 0)
