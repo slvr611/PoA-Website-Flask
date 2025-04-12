@@ -102,7 +102,7 @@ def nation_edit_request(item_ref):
     )
     
     flash(f"Change request #{change_id} created and awaits admin approval.")
-    return redirect("/nations")
+    return redirect("/nations/item/" + item_ref)
 
 @nation_routes.route("/nations/edit/<item_ref>/save", methods=["POST"])
 def nation_edit_approve(item_ref):
@@ -141,4 +141,4 @@ def nation_edit_approve(item_ref):
     
     approve_change(change_id)
     flash(f"Change request #{change_id} created and approved.")
-    return redirect("/nations")
+    return redirect("/nations/item/" + item_ref)

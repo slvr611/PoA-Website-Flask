@@ -63,6 +63,7 @@
 		"label": "Effective Territory",
         "description": "The nation's maximum territory they can hold before they start suffering penalties",
 		"calculated": true,
+		"effective_territory_per_admin": 5,
 		"base_value": 10
       },
 	  "current_territory": {
@@ -76,6 +77,7 @@
 		"label": "Road Capacity",
         "description": "The nation's maximum road capacity that can be used before they start suffering penalties",
 		"calculated": true,
+		"road_capacity_per_admin": 4,
 		"base_value": 6
       },
 	  "road_usage": {
