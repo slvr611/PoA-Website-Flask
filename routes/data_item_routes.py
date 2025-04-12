@@ -53,7 +53,7 @@ def data_list(data_type):
 def data_item(data_type, item_ref):
     schema, db, item = get_data_on_item(data_type, item_ref)
     linked_objects = get_linked_objects(schema, item)
-    calculated_fields = calculate_all_fields(item, schema)
+    calculated_fields = calculate_all_fields(item, schema, category_data[data_type]["singularName"].lower())
     item.update(calculated_fields)
     return render_template(
         "dataItem.html",
@@ -265,6 +265,7 @@ def data_item_edit_request(data_type, item_ref):
     
     if not form.validate():
         flash("Form validation failed!")
+        flash(form.errors)
         return redirect(f"/{data_type}/edit/{item_ref}")
     
     form_data = form.data.copy()
@@ -306,7 +307,11 @@ def data_item_edit_approve(data_type, item_ref):
         print("Had to redirect from data_item_routes to nation_routes")
         return nation_edit_request(item_ref)
     
+    print(request.form)
+
     form = form_generator.get_form(data_type, schema, formdata=request.form)
+
+    print(form.data)
     
     dropdown_options = {}
     for field, attributes in schema["properties"].items():
@@ -318,6 +323,7 @@ def data_item_edit_approve(data_type, item_ref):
     
     if not form.validate():
         flash("Form validation failed!")
+        flash(form.errors)
         return redirect("/" + data_type + "/edit/" + item_ref)
     
     form_data = form.data.copy()

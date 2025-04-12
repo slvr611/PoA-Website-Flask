@@ -17,7 +17,7 @@
 					None
 				{% endif %}
 			</span>
-			<span>{{ schema.properties.pop_count.label }}: {{ nation.pop_count }}</span>
+			<span>{{ schema.properties.pop_count.label }}: {{ nation.pop_count }} / {{ nation.effective_pop_capacity }}</span>
 			{% if nation.empire %}
 				<span>Empire</span>
 				<span>{{ schema.properties.prestige.label }}: {{ nation.prestige }}</span>
@@ -54,7 +54,7 @@
 					<td>{{ nation.infamy }}</td>
 				</tr>
 				<tr>
-					<th>{{ schema.properties.karma.label }}:</th>
+					<th>Karma:</th>
 					<td>{{ nation.karma }}</td>
 				</tr>
 			</table>
@@ -67,20 +67,12 @@
 					<td>{{ nation.administration }}</td>
 				</tr>
 				<tr>
-					<th>{{ schema.properties.current_territory.label }}:</th>
-					<td>{{ nation.current_territory }}</td>
+					<th>Territory:</th>
+					<td>{{ nation.current_territory }} / {{ nation.effective_territory }}</td>
 				</tr>
 				<tr>
-					<th>{{ schema.properties.effective_territory.label }}:</th>
-					<td>{{ nation.effective_territory }}</td>
-				</tr>
-				<tr>
-					<th>{{ schema.properties.road_usage.label }}:</th>
-					<td>{{ nation.road_usage }}</td>
-				</tr>
-				<tr>
-					<th>{{ schema.properties.road_capacity.label }}:</th>
-					<td>{{ nation.road_capacity }}</td>
+					<th>Roads:</th>
+					<td>{{ nation.road_usage }} / {{ nation.road_capacity }}</td>
 				</tr>
 			</table>
 		</div>
@@ -89,11 +81,7 @@
 			<table class="info-table">
 				<tr>
 					<th>{{ schema.properties.money.label }}:</th>
-					<td>{{ nation.money }}</td>
-				</tr>
-				<tr>
-					<th>{{ schema.properties.money_capacity.label }}:</th>
-					<td>{{ nation.money_capacity }}</td>
+					<td>{{ nation.money }} / {{ nation.money_capacity }}</td>
 				</tr>
 				<tr>
 					<th>{{ schema.properties.money_income.label }}:</th>
@@ -421,7 +409,6 @@
 					<th>Consumption</th>
 					<th>Excess</th>
 					<th>Storage</th>
-					<th>Storage Capacity</th>
 				</tr>
 			</thead>
 			<tbody>
@@ -438,8 +425,7 @@
 						{% else %}
 							<td>{{ excess_value }}</td>
 						{% endif %}
-						<td>{{ nation.get("resource_storage", {}).get(resource["key"], 0) }}</td>
-						<td>{{ nation.get("resource_capacity", {}).get(resource["key"], 0) }}</td>
+						<td>{{ nation.get("resource_storage", {}).get(resource["key"], 0) }} / {{ nation.get("resource_capacity", {}).get(resource["key"], 0) }}</td>
 					</tr>
 				{% endfor %}
 			</tbody>
@@ -454,7 +440,6 @@
 					<th>Consumption</th>
 					<th>Excess</th>
 					<th>Storage</th>
-					<th>Storage Capacity</th>
 				</tr>
 			</thead>
 			<tbody>
@@ -471,8 +456,7 @@
 						{% else %}
 							<td>{{ excess_value }}</td>
 						{% endif %}
-						<td>{{ nation.get("resource_storage", {}).get(resource["key"], 0) }}</td>
-						<td>{{ nation.get("resource_capacity", {}).get(resource["key"], 0) }}</td>
+						<td>{{ nation.get("resource_storage", {}).get(resource["key"], 0) }} / {{ nation.get("resource_capacity", {}).get(resource["key"], 0) }}</td>
 					</tr>
 				{% endfor %}
 			</tbody>

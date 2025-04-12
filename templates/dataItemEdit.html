@@ -31,7 +31,32 @@
 				<tr>
 					<th><label for="{{ field.id }}">{{ field.label.text }}</label></th>
 					<td>
-						{{ field(class="form-control") }}
+						{% if field.type == 'FieldList' and field.name == 'modifiers' %}
+							<table class="modifiers-table">
+								<thead>
+									<tr>
+										<th>Type</th>
+										<th>Modifier</th>
+										<th>Value</th>
+										<th>Actions</th>
+									</tr>
+								</thead>
+								<tbody id="{{ field.name }}-tbody">
+									{% for modifier_field in field %}
+										<tr>
+											<td>{{ modifier_field.form.type(class="form-control") }}</td>
+											<td>{{ modifier_field.form.modifier(class="form-control") }}</td>
+											<td>{{ modifier_field.form.value(class="form-control") }}</td>
+											<td><button type="button" class="btn btn-danger" onclick="removeModifier(this, '{{ field.name }}')">Remove</button></td>
+										</tr>
+									{% endfor %}
+								</tbody>
+							</table>
+							<button type="button" class="btn btn-primary" onclick="addModifier('{{ field.name }}')">Add Modifier</button>
+						{% else %}
+							{{ field(class="form-control") }}
+						{% endif %}
+						
 						{% if field.errors %}
 							<ul class="errors">
 								{% for error in field.errors %}
@@ -57,4 +82,47 @@
         <button type="submit" formaction="{{ request.path }}/request">Request</button>
     </form>
 </div>
+
+<script>
+	function addModifier(fieldName) {
+		const tbody = document.getElementById(`${fieldName}-tbody`);
+		const currentCount = tbody.children.length;
+		
+		const newRow = document.createElement('tr');
+		const typeChoices = ["nation", "character"].map(choice => [choice, choice]);
+		
+		const typeOptions = typeChoices.map(([value, label]) => 
+			`<option value="${value}">${label}</option>`
+		).join('');
+		
+		newRow.innerHTML = `
+			<td>
+				<select class="form-control" name="${fieldName}-${currentCount}-type" id="${fieldName}-${currentCount}-type">
+					${typeOptions}
+				</select>
+			</td>
+			<td><input type="text" class="form-control" name="${fieldName}-${currentCount}-modifier" id="${fieldName}-${currentCount}-modifier" required></td>
+			<td><input type="number" class="form-control" name="${fieldName}-${currentCount}-value" id="${fieldName}-${currentCount}-value" required></td>
+			<td><button type="button" class="btn btn-danger" onclick="removeModifier(this, '${fieldName}')">Remove</button></td>
+		`;
+		
+		tbody.appendChild(newRow);
+	}
+
+	function removeModifier(button, fieldName) {
+		const row = button.closest('tr');
+		row.remove();
+		
+		// Reindex remaining modifiers
+		const tbody = document.getElementById(`${fieldName}-tbody`);
+		Array.from(tbody.children).forEach((row, index) => {
+			row.querySelectorAll('select, input').forEach(input => {
+				const fieldName = input.name.split('-').pop();
+				input.name = `${fieldName}-${index}-${fieldName}`;
+				input.id = `${fieldName}-${index}-${fieldName}`;
+			});
+		});
+	}
+</script>
+
 {% endblock %}

@@ -15,7 +15,7 @@ def nation_item(item_ref):
     """Display a nation's details"""
     schema, db, nation = get_data_on_item("nations", item_ref)
     linked_objects = get_linked_objects(schema, nation)
-    calculated_fields = calculate_all_fields(nation, schema)
+    calculated_fields = calculate_all_fields(nation, schema, "nation")
     nation.update(calculated_fields)
     
     if "jobs" not in nation:
@@ -49,7 +49,7 @@ def edit_nation(item_ref):
             )
     
     linked_objects = get_linked_objects(schema, nation)
-    calculated_fields = calculate_all_fields(nation, schema)
+    calculated_fields = calculate_all_fields(nation, schema, "nation")
     nation.update(calculated_fields)
     
     form = form_generator.get_form("nations", schema, item=nation)

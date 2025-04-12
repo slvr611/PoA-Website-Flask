@@ -6,6 +6,12 @@
 		"magic_stance", "citizenship_stance", "foreign_acceptance", "subject_stance", "land_doctrine", "naval_doctrine",
 		"diplomatic_stance", "scientific_stance", "economy_type", "expansion_stance", "mercenary_law", "consumption_stance", "tax_stance", "justice_stance"],
 	"preview": ["region"],
+	"external_calculation_requirements": {
+		"overlord": ["subject_stance"],
+		"primary_race": ["positive_trait", "negative_trait", "preferred_terrain"],
+		"primary_religion": ["modifiers"],
+		"wonders": ["modifiers"]
+	},
     "properties": {
       "name": {
         "bsonType": "string",
@@ -102,18 +108,6 @@
 				"karma": 2
 			}
 		}
-      },
-	  "stability_gain_chance": {
-        "bsonType": "number",
-		"label": "Stability Gain Chance",
-        "description": "The nation's percentage chance of gaining a level of stability each tick",
-		"calculated": true
-      },
-	  "stability_loss_chance": {
-        "bsonType": "number",
-		"label": "Stability Loss Chance",
-        "description": "The nation's percentage chance of losing a level of stability each tick",
-		"calculated": true
       },
 	  "stability_loss_chance_on_leader_death": {
         "bsonType": "number",
@@ -313,6 +307,13 @@
         "description": "The amount of pops the nation has",
 		"calculated": true
       },
+	  "effective_pop_capacity": {
+        "bsonType": "number",
+		"label": "Effective Pop Capacity",
+        "description": "The amount of pops the nation can effectively hold",
+		"calculated": true,
+		"base_value": 13
+      },
 	  "pops": {
         "bsonType": "array",
 		"label": "Pops",
@@ -327,6 +328,18 @@
         "description": "The amount of unique minorities the nation has",
 		"calculated": true
 	  },
+	  "stability_gain_chance": {
+        "bsonType": "number",
+		"label": "Stability Gain Chance",
+        "description": "The nation's percentage chance of gaining a level of stability each tick",
+		"calculated": true
+      },
+	  "stability_loss_chance": {
+        "bsonType": "number",
+		"label": "Stability Loss Chance",
+        "description": "The nation's percentage chance of losing a level of stability each tick",
+		"calculated": true
+      },
 	  "district_slots": {
         "bsonType": "number",
 		"label": "District Slots",
@@ -576,12 +589,13 @@
 		"default": "Balanced",
 		"laws": {
 			"Suppression": {
-				"vassals_concessions_chance": -1
+				"nation_concessions_chance": -1
 			},
 			"Balanced": {},
 			"Benevolence": {
-				"vassals_rebellion_chance_above_rebellious": -1,
-				"vassals_concessions_qty_mult": 2
+				"//These modifiers only apply to vassals, despite starting with nation": 0,
+				"nation_rebellion_chance_above_rebellious": -1,
+				"nation_concessions_qty_mult": 2
 			}
 		}
       },

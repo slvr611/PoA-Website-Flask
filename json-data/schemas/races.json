@@ -5,39 +5,177 @@
     "properties": {
       "name": {
         "bsonType": "string",
-		"label": "Name",
+		    "label": "Name",
         "description": "The race's name"
       },
       "founding_nation": {
         "bsonType": "linked_object",
-		"label": "Founding Nation",
+		    "label": "Founding Nation",
         "description": "The first nation of this race",
-		"collection": "nations"
+		    "collection": "nations"
       },
       "positive_trait": {
         "bsonType": "enum",
-		"label": "Positive Trait",
+		    "label": "Positive Trait",
         "description": "The positive trait associated with this race",
-		"enum": ["Airborne", "Abstemious", "Aggressive", "Aquatic", "Charismatic", "Courageous", "Curious", "Docile", "Fecund", "Industrious", "Lucky", "Magical", "Semi-Aquatic", "Sturdy", "Swift", "Venerable"]
+		    "enum": ["Airborne", "Abstemious", "Aggressive", "Aquatic", "Charismatic", "Courageous", "Curious", "Docile", "Fecund", "Industrious", "Lucky", "Magical", "Semi-Aquatic", "Sturdy", "Swift", "Venerable"],
+        "laws": {
+          "Airborne": {
+            "nation_mundane_unit_flight": 1
+          },
+          "Abstemious": {
+            "nation_food_consumption": -3,
+            "nation_food_consumption_minimum": 3
+          },
+          "Aggressive": {
+            "nation_attack": 1
+          },
+          "Charismatic": {
+            "nation_trade_slot_mult": 0.5
+          },
+          "Courageous": {
+            "nation_civilian_unit_hp": 1,
+            "nation_civilian_unit_damage": 1
+          },
+          "Curious": {
+            "nation_tech_cost": -1,
+            "nation_tech_cost_minimum": 2
+          },
+          "Docile": {
+            "nation_stability_loss_chance": -0.1,
+            "nation_civil_war_chance_maximum": 0.25
+          },
+          "Fecund": {},
+          "Industrious": {
+            "nation_district_cost": -0.3,
+            "nation_city_cost": -0.2,
+            "nation_wonder_cost": -0.1
+          },
+          "Lucky": {
+            "nation_karma": 4
+          },
+          "Magical": {
+            "nation_spell_cost": -1,
+            "nation_spell_cost_minimum": 2
+          },
+          "Semi-Aquatic": {
+            "nation_strength_on_water": 1,
+            "nation_naval_unit_speed": 1
+          },
+          "Sturdy": {
+            "nation_defense": 1,
+            "nation_armor_cannot_be_ignored": 1
+          },
+          "Swift": {
+            "nation_unit_speed": 1
+          },
+          "Venerable": {
+            "character_elderly_start": 1,
+            "character_stats_while_elderly": 1
+          }
+        }
       },
-	  "negative_trait": {
+	    "negative_trait": {
         "bsonType": "enum",
-		"label": "Negative Trait",
+		    "label": "Negative Trait",
         "description": "The negative trait associated with this race",
-		"enum": ["Acrophobia", "Clumsy", "Craven", "Dim", "Fleeting", "Frail", "Hydrophobic", "Infertile", "Insatiable", "Irksome", "Meek", "Mundane", "Rowdy", "Slow", "Unlucky"]
+		    "enum": ["Acrophobia", "Clumsy", "Craven", "Dim", "Fleeting", "Frail", "Hydrophobic", "Infertile", "Insatiable", "Irksome", "Meek", "Mundane", "Rowdy", "Slow", "Unlucky"],
+        "laws": {
+          "Acrophobia": {
+            "nation_mountain_attrition": 0.25,
+            "nation_hill_attrition": 0.25
+          },
+          "Clumsy": {
+            "nation_district_cost": 0.2,
+            "nation_city_cost": 0.1,
+            "nation_wonder_cost": 0.05
+          },
+          "Craven": {
+            "nation_unit_morale": -1,
+            "nation_unit_morale_minimum": 1
+          },
+          "Dim": {
+            "nation_research_production": -1
+          },
+          "Fleeting": {
+            "character_elderly_start": -1,
+            "character_elderly_death_start_early": 1
+          },
+          "Frail": {
+            "nation_unit_armor": -1,
+            "nation_unit_armor_minimum": 0
+          },
+          "Hydrophobic": {
+            "nation_land_strength_on_water": -3,
+            "nation_naval_strength": -2,
+            "nation_locks_fisherman": 1
+          },
+          "Infertile": {},
+          "Insatiable": {
+            "nation_food_consumption": 3
+          },
+          "Irksome": {
+            "nation_trade_slot_mult": -0.5
+          },
+          "Meek": {},
+          "Mundane": {
+            "nation_spell_cost": 2
+          },
+          "Rowdy": {
+            "nation_stability_loss_chance_at_united": 0.35,
+            "nation_stability_loss_chance_at_stable": 0.15
+          },
+          "Slow": {
+            "nation_unit_speed": -1,
+            "nation_unit_speed_minimum": 2
+          },
+          "Unlucky": {
+            "nation_karma": -4
+          }
+        }
       },
-	  "preferred_terrain": {
+	    "preferred_terrain": {
         "bsonType": "enum",
-		"label": "Preferred Terrain",
+		    "label": "Preferred Terrain",
         "description": "The preferred terrain of this race",
-		"enum": ["Plains", "Tundra", "Desert", "Forest", "River", "Dense Forest", "Marsh", "Hill", "Mountain", "Hazardous"]
+		    "enum": ["Plains", "Tundra", "Desert", "Forest", "River", "Dense Forest", "Marsh", "Hill", "Mountain", "Hazardous"],
+        "laws": {
+          "Plains": {
+            "nation_mounts_production": 1
+          },
+          "Tundra": {
+            "nation_mounts_production": 1
+          },
+          "Desert": {
+            "nation_mounts_production": 1
+          },
+          "Forest": {
+            "nation_food_production": 1
+          },
+          "River": {
+            "nation_food_production": 1
+          },
+          "Dense Forest": {
+            "nation_wood_production": 1
+          },
+          "Marsh": {
+            "nation_wood_production": 1
+          },
+          "Hill": {
+            "nation_stone_production": 1
+          },
+          "Mountain": {
+            "nation_stone_production": 1
+          },
+          "Hazardous": {}
+        }
       },
-	  "pops": {
+	    "pops": {
         "bsonType": "array",
-		"label": "Pops",
+		    "label": "Pops",
         "description": "Pops that have this race",
-		"collection": "pops",
-		"queryTargetAttribute": "race"
+		    "collection": "pops",
+		    "queryTargetAttribute": "race"
       }
     }
   }

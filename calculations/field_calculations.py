@@ -1,10 +1,14 @@
 import math
 import copy
-from app_core import mongo, json_data
+from app_core import mongo, json_data, category_data
 from calculations.compute_functions import CUSTOM_COMPUTE_FUNCTIONS
+from bson.objectid import ObjectId
 
-def calculate_all_fields(target, schema):
+def calculate_all_fields(target, schema, target_data_type):
     schema_properties = schema.get("properties", {})
+
+    external_modifiers = collect_external_requirements(target, schema, target_data_type)
+    external_modifiers_total = sum_external_modifier_totals(external_modifiers)
 
     modifiers = collect_modifiers(target)
     modifier_totals = sum_modifier_totals(modifiers)
@@ -26,7 +30,7 @@ def calculate_all_fields(target, schema):
     job_totals = sum_job_totals(jobs_assigned, job_details)
 
     overall_total_modifiers = {}
-    for d in [modifier_totals, district_totals, city_totals, node_totals, law_totals, job_totals]:
+    for d in [external_modifiers_total, modifier_totals, district_totals, city_totals, node_totals, law_totals, job_totals]:
         for key, value in d.items():
             overall_total_modifiers[key] = overall_total_modifiers.get(key, 0) + value
 
@@ -140,10 +144,59 @@ def calculate_job_details(target, modifier_totals, district_totals, city_totals,
 
     return new_job_details
 
+def collect_external_requirements(target, schema, target_data_type):
+    external_reqs = schema.get("external_calculation_requirements", {})
+    collected_modifiers = []
+    
+    for field, required_fields in external_reqs.items():
+        field_schema = schema["properties"].get(field, {})
+
+        collection = field_schema.get("collection")
+        if not collection:
+            continue
+
+        linked_object_schema = category_data.get(collection, {}).get("schema", {})
+
+        if field_schema.get("queryTargetAttribute"):
+            query_target = field_schema["queryTargetAttribute"]
+            linked_objects = list(mongo.db[collection].find({query_target: str(target["_id"])}))
+            for object in linked_objects:
+                collected_modifiers.extend(collect_external_modifiers_from_object(object, required_fields, linked_object_schema, target_data_type))
+        else:
+            object_id = target.get(field)
+            if not object_id:
+                continue
+            
+            object = mongo.db[collection].find_one({"_id": ObjectId(object_id)})
+            collected_modifiers.extend(collect_external_modifiers_from_object(object, required_fields, linked_object_schema, target_data_type))
+    
+    return collected_modifiers
+
+def collect_external_modifiers_from_object(object, required_fields, linked_object_schema, target_data_type):
+    collected_modifiers = []
+
+    for req_field in required_fields:
+        req_field_schema = linked_object_schema["properties"].get(req_field, {})
+        if req_field in object:
+            field_type = linked_object_schema["properties"].get(req_field, {}).get("bsonType")
+
+            if field_type == "array" and req_field == "modifiers":
+                for modifier in object[req_field]:
+                    if modifier.get("type") == target_data_type:
+                        collected_modifiers.append({modifier.get("modifier", ""): modifier.get("value", 0)})
+            
+            elif field_type == "enum" and req_field_schema.get("laws"):
+                law_modifiers = req_field_schema["laws"].get(object[req_field], {})
+                for key, value in law_modifiers.items():
+                    if key.startswith(target_data_type + "_"):
+                        collected_modifiers.append({key.replace(target_data_type + "_", ""): value})
+    
+    return collected_modifiers
+
 def sum_modifier_totals(modifiers):
     totals = {}
     for m in modifiers:
-        totals[m["field"]] = totals.get(m["field"], 0) + m["value"]
+        totals[m.get("field", "")] = totals.get(m.get("field", ""), 0) + m.get("value", 0)
     return totals
 
 def sum_law_totals(laws):
@@ -181,4 +234,11 @@ def sum_job_totals(jobs_assigned, job_details):
             totals[field + "_production"] = totals.get(field, 0) + (val * count)
         for field, val in job_details.get(job, {}).get("upkeep", {}).items():
             totals[field + "_consumption"] = totals.get(field, 0) + (val * count)
+    return totals
+
+def sum_external_modifier_totals(external_modifiers):
+    totals = {}
+    for modifier in external_modifiers:
+        for field, val in modifier.items():
+            totals[field] = totals.get(field, 0) + val
     return totals

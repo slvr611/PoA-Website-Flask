@@ -26,47 +26,68 @@ def compute_field_karma(field, target, base_value, field_schema, overall_total_m
 def compute_disobey_chance(field, target, base_value, field_schema, overall_total_modifiers):
     compliance = target.get("compliance", "None")
     
+    value = 0
+
     match compliance:
         case "Rebellious":
-            return 0.5
+            value = 0.5
         case "Defiant":
-            return 0.25
+            value = 0.25
         case "Neutral":
-            return 0.15
+            value = 0.15
         case "Compliant":
-            return 0.1
-    
-    return 0
+            value = 0.1
+
+    value += overall_total_modifiers.get(field, 0)
+    value = max(value, 0)
+
+    return value
 
 def compute_rebellion_chance(field, target, base_value, field_schema, overall_total_modifiers):
     compliance = target.get("compliance", "None")
     
+    value = 0
+
     match compliance:
         case "Rebellious":
-            return 0.25
+            value = 0.25
         case "Defiant":
-            return 0.15
+            value = 0.15 + overall_total_modifiers.get("rebellion_chance_above_rebellious", 0)
         case "Neutral":
-            return 0.05
+            value = 0.05 + overall_total_modifiers.get("rebellion_chance_above_rebellious", 0)
     
-    return 0
+    value += overall_total_modifiers.get(field, 0)
+    value = max(value, 0)
+
+    return value
 
 def compute_concessions_chance(field, target, base_value, field_schema, overall_total_modifiers):
     compliance = target.get("compliance", "None")
     
+    value = 0
+
     match compliance:
         case "Rebellious":
-            return 0.5
+            value = 0.5
         case "Defiant":
-            return 0.4
+            value = 0.4
         case "Neutral":
-            return 0.3
+            value = 0.3
         case "Compliant":
-            return 0.2
+            value = 0.2
         case "Loyal":
-            return 0.1
+            value = 0.1
+
+    value += overall_total_modifiers.get(field, 0)
+    value = max(value, 0)
+
+    return value
+
+def compute_concessions_qty(field, target, base_value, field_schema, overall_total_modifiers):
+    value = base_value + overall_total_modifiers.get(field, 0)
+    value *= overall_total_modifiers.get("concessions_qty_mult", 1)
     
-    return 0
+    return value
 
 def compute_pop_count(field, target, base_value, field_schema, overall_total_modifiers):
     pop_database = category_data["pops"]["database"]
@@ -318,6 +339,7 @@ CUSTOM_COMPUTE_FUNCTIONS = {
     "disobey_chance": compute_disobey_chance,
     "rebellion_chance": compute_rebellion_chance,
     "concessions_chance": compute_concessions_chance,
+    "concessions_qty": compute_concessions_qty,
     "pop_count": compute_pop_count,
     "unique_minority_count": compute_minority_count,
     "district_slots": compute_district_slots,

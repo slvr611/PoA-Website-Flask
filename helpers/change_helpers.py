@@ -95,7 +95,7 @@ def calculate_int_changes(before_data, after_data):
         b_val = before_data.get(key)
         a_val = after_data.get(key)
         if isinstance(b_val, int) and isinstance(a_val, int):
-            diff[key] = {a_val - b_val}
+            diff[key] = a_val - b_val
     return diff
 
 def check_no_other_changes(before_data, after_data, current_data):

@@ -1,92 +1,113 @@
 {
-  "$jsonSchema": {
-    "bsonType": "object",
-    "required": ["name", "conversion_strength", "faith", "integrity", "empathy", "death", "pleasure", "aspiration", "funeral"],
-    "properties": {
-      "name": {
-        "bsonType": "string",
-		"label": "Name",
-        "description": "The religion's name"
-      },
-	  "founding_nation": {
-        "bsonType": "linked_object",
-		"label": "Founding Nation",
-        "description": "The first nation of this culture",
-		"collection": "nations"
-      },
-	  "religion_type": {
-        "bsonType": "enum",
-		"label": "Religion Type",
-        "description": "The type of this religion",
-		"enum": ["Monotheistic", "Polytheistic", "Pantheistic", "Animistic", "Agnostic", "Philosophy", "Cult"]
-      },
-      "conversion_strength": {
-        "bsonType": "enum",
-		"label": "Conversion Strength",
-        "description": "The conversion strength of this culture",
-		"enum": ["None", "Weak", "Moderate", "Strong", "Intense", "Zealous"]
-      },
-	  "faith": {
-        "bsonType": "enum",
-		"label": "Faith",
-        "description": "The religion's stance on faith",
-		"enum": ["Devotion", "Indifference"]
-      },
-	  "integrity": {
-        "bsonType": "enum",
-		"label": "Integrity",
-        "description": "The religion's stance on integrity",
-		"enum": ["Humility", "Dignity"]
-      },
-	  "empathy": {
-        "bsonType": "enum",
-		"label": "Empathy",
-        "description": "The religion's stance on empathy",
-		"enum": ["Compassion", "Strength"]
-      },
-	  "death": {
-        "bsonType": "enum",
-		"label": "Death",
-        "description": "The religion's stance on death",
-		"enum": ["Defiance", "Reverence"]
-      },
-	  "pleasure": {
-        "bsonType": "enum",
-		"label": "Pleasure",
-        "description": "The religion's stance on pleasure",
-		"enum": ["Indulgence", "Temperance"]
-      },
-	  "aspiration": {
-        "bsonType": "enum",
-		"label": "Aspiration",
-        "description": "The religion's stance on aspiration",
-		"enum": ["Ambition", "Patience"]
-      },
-	  "funeral": {
-        "bsonType": "enum",
-		"label": "Funeral",
-        "description": "The religion's stance on funerals",
-		"enum": ["None", "Celebration", "Mourning"]
-      },
-	  "effect_description": {
-        "bsonType": "string",
-        "label": "Effect Description",
-        "description": "The description of the rerligion's mechanical effects on those following it",
-		"long_text": true
-      },
-      "mechanical_effects": {
-        "bsonType": "array",
-        "label": "Mechanical Effects",
-        "description": "The wonder's mechanical effects",
-        "hidden": true
-      },
-	  "pops": {
-        "bsonType": "array",
-		"label": "Pops",
-        "description": "Pops that have this race",
-		"collection": "pops",
-		"queryTargetAttribute": "religion"
-      }
+    "$jsonSchema": {
+        "bsonType": "object",
+        "required": ["name", "conversion_strength", "faith", "integrity", "empathy", "death", "pleasure", "aspiration", "funeral"],
+        "properties": {
+            "name": {
+                "bsonType": "string",
+                "label": "Name",
+                "description": "The religion's name"
+            },
+            "founding_nation": {
+                "bsonType": "linked_object",
+                "label": "Founding Nation",
+                "description": "The first nation of this culture",
+                "collection": "nations"
+            },
+            "religion_type": {
+                "bsonType": "enum",
+                "label": "Religion Type",
+                "description": "The type of this religion",
+                "enum": ["Monotheistic", "Polytheistic", "Pantheistic", "Animistic", "Agnostic", "Philosophy", "Cult"]
+            },
+            "conversion_strength": {
+                "bsonType": "enum",
+                "label": "Conversion Strength",
+                "description": "The conversion strength of this culture",
+                "enum": ["None", "Weak", "Moderate", "Strong", "Intense", "Zealous"]
+            },
+            "faith": {
+                "bsonType": "enum",
+                "label": "Faith",
+                "description": "The religion's stance on faith",
+                "enum": ["Devotion", "Indifference"]
+            },
+            "integrity": {
+                "bsonType": "enum",
+                "label": "Integrity",
+                "description": "The religion's stance on integrity",
+                "enum": ["Humility", "Dignity"]
+            },
+            "empathy": {
+                "bsonType": "enum",
+                "label": "Empathy",
+                "description": "The religion's stance on empathy",
+                "enum": ["Compassion", "Strength"]
+            },
+            "death": {
+                "bsonType": "enum",
+                "label": "Death",
+                "description": "The religion's stance on death",
+                "enum": ["Defiance", "Reverence"]
+            },
+            "pleasure": {
+                "bsonType": "enum",
+                "label": "Pleasure",
+                "description": "The religion's stance on pleasure",
+                "enum": ["Indulgence", "Temperance"]
+            },
+            "aspiration": {
+                "bsonType": "enum",
+                "label": "Aspiration",
+                "description": "The religion's stance on aspiration",
+                "enum": ["Ambition", "Patience"]
+            },
+            "funeral": {
+                "bsonType": "enum",
+                "label": "Funeral",
+                "description": "The religion's stance on funerals",
+                "enum": ["None", "Celebration", "Mourning"]
+            },
+            "effect_description": {
+                "bsonType": "string",
+                "label": "Effect Description",
+                "description": "The description of the rerligion's mechanical effects on those following it",
+                "long_text": true
+            },
+            "modifiers": {
+                "bsonType": "array",
+                "label": "Mechanical Modifiers",
+                "description": "The mechanical modifiers that affect the owner",
+                "hidden": true,
+                "items":{
+                    "bsonType": "object",
+                    "properties": {
+                        "type": {
+                            "bsonType": "enum",
+                            "label": "Type",
+                            "description": "The type of entity the modifier affects",
+                            "enum": ["nation", "character"]
+                        },
+                        "modifier": {
+                            "bsonType": "string",
+                            "label": "Modifier",
+                            "description": "The modifier"
+                        },
+                        "value": {
+                            "bsonType": "number",
+                            "label": "Modifier Value",
+                            "description": "The value of the modifier"
+                        }
+                    }
+                }
+            },
+            "pops": {
+            "bsonType": "array",
+            "label": "Pops",
+            "description": "Pops that have this race",
+            "collection": "pops",
+            "queryTargetAttribute": "religion"
+            }
+        }
     }
-  }
 }

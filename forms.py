@@ -326,6 +326,15 @@ class CityDict(Form):
                     else:
                         field.data = field_value
 
+class NonNationModifierForm(Form):
+    """Generic form for handling non-nation modifiers based on schema"""
+    class Meta:
+        csrf = False
+
+    type = SelectField("Type", choices=[("nation", "nation"), ("character", "character")])
+    modifier = StringField("Modifier", validators=[])
+    value = IntegerField("Value", validators=[])
+
 class BaseSchemaForm(FlaskForm):
     """Base form class with common functionality"""
     reason = StringField("Reason")
@@ -460,7 +469,10 @@ class DynamicSchemaForm(BaseSchemaForm):
             items_schema = field_schema.get("items", {})
             items_type = items_schema.get("bsonType")
             
-            if items_type == "string":
+            if field_name == "modifiers":
+                return FieldList(FormField(NonNationModifierForm), min_entries=0)
+
+            elif items_type == "string":
                 # For simple string arrays
                 return FieldList(StringField("Value"), min_entries=0)
                 
@@ -473,6 +485,7 @@ class DynamicSchemaForm(BaseSchemaForm):
                 
             elif items_type == "object":
                 # For arrays of objects, create a nested form
+                print("Creating subform")
                 class DynamicSubForm(FlaskForm):
                     class Meta:
                         csrf = False
