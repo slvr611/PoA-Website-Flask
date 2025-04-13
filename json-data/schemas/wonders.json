@@ -46,7 +46,7 @@
                 "noneResult": "Unknown",
                 "collection": "nations"
             },
-            "modifiers": {
+            "external_modifiers": {
                 "bsonType": "array",
                 "label": "Mechanical Modifiers",
                 "description": "The mechanical modifiers that affect the owner",

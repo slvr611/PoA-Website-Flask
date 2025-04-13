@@ -117,7 +117,6 @@ def nation_edit_approve(item_ref):
         return redirect("/nations/edit/" + item_ref)
     
     form_data = form.data.copy()
-    print(form_data)
     form_data.pop('csrf_token', None)
     form_data.pop('submit', None)
     
@@ -141,4 +140,4 @@ def nation_edit_approve(item_ref):
     
     approve_change(change_id)
     flash(f"Change request #{change_id} created and approved.")
-    return redirect("/nations/item/" + item_ref)
+    return redirect("/nations/item/" + form_data["name"])

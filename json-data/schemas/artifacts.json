@@ -42,6 +42,33 @@
         "noneResult": "Unknown",
         "collection": "characters",
         "static": true
+      },
+      "external_modifiers": {
+        "bsonType": "array",
+        "label": "Mechanical Modifiers",
+        "description": "The mechanical modifiers that affect the owner",
+        "hidden": true,
+        "items":{
+          "bsonType": "object",
+          "properties": {
+            "type": {
+              "bsonType": "enum",
+              "label": "Type",
+              "description": "The type of entity the modifier affects",
+              "enum": ["nation", "character"]
+            },
+            "modifier": {
+              "bsonType": "string",
+              "label": "Modifier",
+              "description": "The modifier"
+            },
+            "value": {
+              "bsonType": "number",
+              "label": "Modifier Value",
+              "description": "The value of the modifier"
+            }
+          }
+        }
       }
     }
   }

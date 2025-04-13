@@ -74,7 +74,7 @@
                 "description": "The description of the rerligion's mechanical effects on those following it",
                 "long_text": true
             },
-            "modifiers": {
+            "external_modifiers": {
                 "bsonType": "array",
                 "label": "Mechanical Modifiers",
                 "description": "The mechanical modifiers that affect the owner",

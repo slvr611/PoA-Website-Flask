@@ -1,0 +1,113 @@
+{% extends "layout.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container">
+	<a href="/characters">Back to Characters</a></br>
+	<h1>{{ title }}</h1>
+	{% if g.user.is_admin %}
+		{% set default_action = request.path ~ '/save' %}
+	{% else %}
+		{% set default_action = request.path ~ '/request' %}
+	{% endif %}
+	<form method="POST" action="{{ default_action }}">
+		{{ form.csrf_token }}
+		<table class="info-table">
+			{% for field in form if field.name != 'csrf_token' and field.name != 'submit' and field.name != 'reason' %}
+				<tr>
+					<th>
+						<label for="{{ field.id }}">{{ field.label.text }}</label>
+					</th>
+					<td>
+						{% if field.type == 'SelectMultipleField' and field.name in ['strengths', 'weaknesses'] %}
+							<div class="checkbox-group">
+								{{ field(class="form-check-input") }}
+							</div>
+						{% elif field.type == 'FieldList' and field.name == 'modifiers' %}
+							<table class="modifiers-table">
+								<thead>
+									<tr>
+										<th>Field</th>
+										<th>Value</th>
+										<th>Duration</th>
+										<th>Source</th>
+										<th>Actions</th>
+									</tr>
+								</thead>
+								<tbody id="{{ field.name }}-tbody">
+									{% for modifier_field in field %}
+										<tr>
+											<td>{{ modifier_field.field(class="form-control") }}</td>
+											<td>{{ modifier_field.value(class="form-control") }}</td>
+											<td>{{ modifier_field.duration(class="form-control") }}</td>
+											<td>{{ modifier_field.source(class="form-control") }}</td>
+											<td><button type="button" class="btn btn-danger" onclick="removeModifier(this, '{{ field.name }}')">Remove</button></td>
+										</tr>
+									{% endfor %}
+								</tbody>
+							</table>
+							<button type="button" class="btn btn-primary" onclick="addModifier('{{ field.name }}')">Add Modifier</button>
+						{% else %}
+							{{ field(class="form-control") }}
+						{% endif %}
+						{% if field.errors %}
+							<ul class="errors">
+								{% for error in field.errors %}
+									<li>{{ error }}</li>
+								{% endfor %}
+							</ul>
+						{% endif %}
+						{% if field.description %}
+							<small class="form-text text-muted">{{ field.description }}</small>
+						{% endif %}
+					</td>
+				</tr>
+			{% endfor %}
+			<tr>
+				<th><label for="{{ form.reason.id }}">{{ form.reason.label.text }}</label></th>
+				<td>{{ form.reason(class="form-control") }}</td>
+			</tr>
+		</table>
+		
+		{% if g.user.is_admin %}
+			<button type="submit" class="btn btn-primary" formaction="{{ request.path }}/save">Save</button>
+		{% endif %}
+		<button type="submit" class="btn btn-primary" formaction="{{ request.path }}/request">Request</button>
+	</form>
+</div>
+
+<script>
+function addModifier(fieldName) {
+    const tbody = document.getElementById(`${fieldName}-tbody`);
+    const currentCount = tbody.children.length;
+    
+    const newRow = document.createElement('tr');
+    newRow.innerHTML = `
+        <td><input type="text" class="form-control" name="${fieldName}-${currentCount}-field" id="${fieldName}-${currentCount}-field" required></td>
+        <td><input type="number" class="form-control" name="${fieldName}-${currentCount}-value" id="${fieldName}-${currentCount}-value" required></td>
+        <td><input type="number" class="form-control" name="${fieldName}-${currentCount}-duration" id="${fieldName}-${currentCount}-duration" value="0" required></td>
+		<td><input type="text" class="form-control" name="${fieldName}-${currentCount}-source" id="${fieldName}-${currentCount}-source" required></td>
+        <td><button type="button" class="btn btn-danger" onclick="removeModifier(this, '${fieldName}')">Remove</button></td>
+    `;
+    
+    tbody.appendChild(newRow);
+}
+
+function removeModifier(button, fieldName) {
+    const row = button.closest('tr');
+    row.remove();
+    
+    // Reindex remaining modifiers
+    const tbody = document.getElementById(`${fieldName}-tbody`);
+    Array.from(tbody.children).forEach((row, index) => {
+        row.querySelectorAll('input').forEach(input => {
+            const fieldName = input.name.split('-').pop();
+            input.name = `${fieldName}-${index}-${fieldName}`;
+            input.id = `${fieldName}-${index}-${fieldName}`;
+        });
+    });
+}
+</script>
+
+{% endblock %}

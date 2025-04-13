@@ -180,7 +180,7 @@ def collect_external_modifiers_from_object(object, required_fields, linked_objec
         if req_field in object:
             field_type = linked_object_schema["properties"].get(req_field, {}).get("bsonType")
 
-            if field_type == "array" and req_field == "modifiers":
+            if field_type == "array" and req_field == "external_modifiers":
                 for modifier in object[req_field]:
                     if modifier.get("type") == target_data_type:
                         collected_modifiers.append({modifier.get("modifier", ""): modifier.get("value", 0)})

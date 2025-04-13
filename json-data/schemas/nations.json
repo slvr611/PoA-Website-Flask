@@ -9,8 +9,8 @@
 	"external_calculation_requirements": {
 		"overlord": ["subject_stance"],
 		"primary_race": ["positive_trait", "negative_trait", "preferred_terrain"],
-		"primary_religion": ["modifiers"],
-		"wonders": ["modifiers"]
+		"primary_religion": ["external_modifiers"],
+		"wonders": ["external_modifiers"]
 	},
     "properties": {
       "name": {
@@ -1179,6 +1179,11 @@
 					"bsonType": "number",
 					"label": "Modifier Duration",
 					"description": "The duration of the modifier"
+				},
+				"source": {
+					"bsonType": "string",
+					"label": "Modifier Source",
+					"description": "The source of the modifier"
 				}
 			}
 		}

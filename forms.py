@@ -1,6 +1,7 @@
 from flask_wtf import FlaskForm
-from wtforms import Field, StringField, TextAreaField, IntegerField, FloatField, BooleanField, SelectField
+from wtforms import Field, StringField, TextAreaField, IntegerField, FloatField, BooleanField, SelectField, SelectMultipleField
 from wtforms import FieldList, FormField, HiddenField, SubmitField, MultipleFileField, Form
+from wtforms import widgets
 from wtforms.validators import DataRequired, NumberRange, Optional, ValidationError
 from bson import ObjectId
 from app_core import json_data, category_data
@@ -19,6 +20,9 @@ class FormGenerator:
             if item:
                 job_details = item.get("job_details", {})
             return NationForm.create_form(schema, item, formdata, job_details)
+
+        elif data_type == "new_character":
+            return NewCharacterForm.create_form(schema, item, formdata)
 
         return DynamicSchemaForm.create_form(schema, item, formdata)
 
@@ -175,8 +179,8 @@ class JobAssignmentDict(Form):
                     else:
                         field.data = field_value
 
-class ModifierDict(Form):
-    """Form for handling job assignments as a dictionary"""
+class ModifierForm(Form):
+    """Form for handling nation/character modifiers as a dictionary"""
     
     field = StringField("Field", validators=[DataRequired()])
     value = IntegerField("Value", validators=[NumberRange()], default=1)
@@ -326,7 +330,7 @@ class CityDict(Form):
                     else:
                         field.data = field_value
 
-class NonNationModifierForm(Form):
+class ExternalModifierForm(Form):
     """Generic form for handling non-nation modifiers based on schema"""
     class Meta:
         csrf = False
@@ -469,8 +473,11 @@ class DynamicSchemaForm(BaseSchemaForm):
             items_schema = field_schema.get("items", {})
             items_type = items_schema.get("bsonType")
             
-            if field_name == "modifiers":
-                return FieldList(FormField(NonNationModifierForm), min_entries=0)
+            if field_name == "external_modifiers":
+                return FieldList(FormField(ExternalModifierForm), min_entries=0)
+            
+            elif field_name == "modifiers":
+                return FieldList(FormField(ModifierForm), min_entries=0)
 
             elif items_type == "string":
                 # For simple string arrays
@@ -531,7 +538,7 @@ class NationForm(BaseSchemaForm):
     
     # Misc fields
     origin = SelectField("Origin", choices=[])
-    modifiers = FieldList(FormField(ModifierDict), min_entries=0)
+    modifiers = FieldList(FormField(ModifierForm), min_entries=0)
     temperament = SelectField("Temperament", choices=[])
 
     # Add dynamic law fields from schema
@@ -681,9 +688,94 @@ class NationForm(BaseSchemaForm):
                 
         for city_field in self.cities:
             city_field.form.populate_linked_fields(type_options=city_choices, node_options=node_choices, wall_options=wall_choices)
+    
+class NewCharacterForm(BaseSchemaForm):
+    """Form for creating a new character"""
+    name = StringField("Name", validators=[DataRequired()])
+    
+    player = SelectField("Player", choices=[])
+    creator = SelectField("Creator", choices=[])
+
+    character_type = SelectField("Character Type", choices=[])
+    character_subtype = SelectField("Character Subtype", choices=[])
+
+    race = SelectField("Race", choices=[])
+    culture = SelectField("Culture", choices=[])
+    religion = SelectField("Religion", choices=[])
+    
+    ruling_nation_org = SelectField("Ruling Nation/Organization", choices=[])
+    region = SelectField("Region", choices=[])
+
+    strengths = SelectMultipleField("Strengths", 
+        choices=[
+            ('rulership', 'Rulership'),
+            ('cunning', 'Cunning'),
+            ('charisma', 'Charisma'),
+            ('prowess', 'Prowess'),
+            ('magic', 'Magic'),
+            ('strategy', 'Strategy')
+        ],
+        option_widget=widgets.CheckboxInput(),
+        widget=widgets.ListWidget(prefix_label=False)
+    )
+
+    weaknesses = SelectMultipleField("Weaknesses", 
+        choices=[
+            ('rulership', 'Rulership'),
+            ('cunning', 'Cunning'),
+            ('charisma', 'Charisma'),
+            ('prowess', 'Prowess'),
+            ('magic', 'Magic'),
+            ('strategy', 'Strategy')
+        ],
+        option_widget=widgets.CheckboxInput(),
+        widget=widgets.ListWidget(prefix_label=False)
+    )
+
+    positive_quirk = SelectField("Positive Quirk", choices=[])
+    negative_quirk = SelectField("Negative Quirk", choices=[])
+
+    modifiers = FieldList(FormField(ModifierForm), min_entries=0)
+
+    submit = SubmitField("Create Character")
+
+    @classmethod
+    def create_form_class(cls, schema):
+        """Creates a form class with additional fields from schema"""
+        for field_name, field_schema in schema.get("properties", {}).items():
+            if field_schema.get("bsonType") == "enum" and not field_schema.get("calculated", False):
+                choices = [(v, v) for v in field_schema.get("enum", [])]
+                field = SelectField(
+                    field_schema.get("label", field_name),
+                    choices=choices,
+                    default=field_schema.get("default")
+                )
+                setattr(cls, field_name, field)
+
+        return cls
+
+
+    @classmethod
+    def create_form(cls, schema, item=None, formdata=None):
+        """Creates and populates a nation form"""
+        # First create the form class with all fields
+        form_class = cls.create_form_class(schema)
+        
+        # Create form instance
+        if formdata:
+            form = form_class(formdata=formdata)
+        elif item:
+            form = form_class()
+            form.load_form_from_item(item)
+        else:
+            form = form_class()
+
+        return form
 
 # Global form generator instance
 form_generator = FormGenerator()
+
+
 
 
 

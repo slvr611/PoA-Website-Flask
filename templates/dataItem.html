@@ -5,7 +5,7 @@
 {% block content %}
 <div class="container">
 	{% if g.user.is_admin %}
-		<a href="{{ request.path.replace("item", "edit") }}">Edit</a>
+		<a href="{{ request.path.replace('item', 'edit') }}">Edit</a>
 	{% endif %}
 	<div class="content">
 		<h1>
@@ -19,9 +19,8 @@
 		</h1>
 		<table class="info-table">
 			{% for field, properties in schema.properties.items() %}
-				{% if not properties.hidden
-				and not (properties.hideIfNone is defined and (item.get(properties.hideIfNone) is none or item.get(properties.hideIfNone) == "" or not item.get(properties.hideIfNone)))
-				and not (properties.bsonType == "array" and not (field in linked_objects and linked_objects[field] is not none)) %}
+				{% if properties and not properties.hidden
+				and not (properties.hideIfNone is defined and (item.get(properties.hideIfNone) is none or item.get(properties.hideIfNone) == "" or not item.get(properties.hideIfNone)))%}
 					<tr>
 						<th><strong>{{ properties.label }}:</strong></th>
 						{% if properties.bsonType == "string" or properties.bsonType == "enum" or properties.bsonType == "date"%}
@@ -43,7 +42,7 @@
 						{% elif properties.bsonType == "linked_object" %}
 							<td>
 								{% if field in linked_objects and linked_objects[field] is not none %}
-									<a href="{{ linked_objects[field]["link"] }}">{{ linked_objects[field]["name"] }}</a>
+									<a href="{{ linked_objects[field]['link'] }}">{{ linked_objects[field]["name"] }}</a>
 								{% else %}
 									{{ properties.get("noneResult", "None") }}
 								{% endif %}
@@ -51,13 +50,29 @@
 						{% elif properties.bsonType == "object" %}
 							<td>{{ item[field] }}</td>
 						{% elif properties.bsonType == "array" %}
-							<td>
-								<ul>
-									{% for item in linked_objects[field] %}
-										<li><a href="{{ item["link"] }}">{{ item["name"] }}</a></li>
+							{% if properties.get("items", {}).get("bsonType", "None") == "string" %}
+								<td>
+									{% for sub_item in item[field] %}
+										{{ sub_item }}<br>
 									{% endfor %}
-								</ul>
-							</td>
+								</td>
+							{% elif properties.get("items", {}).get("bsonType", "None") == "linked_object" %}
+								<td>
+									<ul>
+										{% for item in linked_objects[field] %}
+											<li><a href="{{ item['link'] }}">{{ item["name"] }}</a></li>
+										{% endfor %}
+									</ul>
+								</td>
+							{% elif properties.get("items", {}).get("bsonType", "None") == "object" %}
+								<td>
+									<ul>
+										{% for sub_item in item[field] %}
+											<li>{{ sub_item }}</li>
+										{% endfor %}
+									</ul>
+								</td>
+							{% endif %}
 						{% endif %}
 					</tr>
 				{% endif %}

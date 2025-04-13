@@ -54,8 +54,16 @@
 					<td>{{ nation.infamy }}</td>
 				</tr>
 				<tr>
-					<th>Karma:</th>
+					<th>{{ schema.properties.karma.label }}:</th>
 					<td>{{ nation.karma }}</td>
+				</tr>
+				<tr>
+					<th>{{ schema.properties.rolling_karma.label }}:</th>
+					<td>{{ nation.rolling_karma }}</td>
+				</tr>
+				<tr>
+					<th>{{ schema.properties.temporary_karma.label }}:</th>
+					<td>{{ nation.temporary_karma }}</td>
 				</tr>
 			</table>
 		</div>
@@ -580,5 +588,29 @@
 			</div>
 		</section>
 	{% endif %}
+
+	<div class="info-column">
+		<h2>Modifiers</h2>
+		<table class="info-table">
+			<thead>
+				<tr>
+					<th>Modifier</th>
+					<th>Value</th>
+					<th>Type</th>
+					<th>Source</th>
+				</tr>
+			</thead>
+			<tbody>
+				{% for modifier in nation.modifiers %}
+					<tr>
+						<td>{{ modifier.display_name }}</td>
+						<td>{{ modifier.value }}</td>
+						<td>{{ modifier.type }}</td>
+						<td>{{ modifier.source }}</td>
+					</tr>
+				{% endfor %}
+			</tbody>
+		</table>
+	</div>
 </div>
 {% endblock %}

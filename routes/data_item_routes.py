@@ -55,6 +55,7 @@ def data_item(data_type, item_ref):
     linked_objects = get_linked_objects(schema, item)
     calculated_fields = calculate_all_fields(item, schema, category_data[data_type]["singularName"].lower())
     item.update(calculated_fields)
+
     return render_template(
         "dataItem.html",
         title=item_ref,

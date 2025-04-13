@@ -329,6 +329,14 @@ def compute_mercenary_naval_defense(field, target, base_value, field_schema, ove
     
     return value
 
+##############################################################
+
+def compute_stat(field, target, base_value, field_schema, overall_total_modifiers):
+    value = base_value + overall_total_modifiers.get(field, 0) + overall_total_modifiers.get("stats", 0)
+
+    #TODO: Add elderly modifiers
+    
+    return value
 
 ##############################################################
 
@@ -361,4 +369,10 @@ CUSTOM_COMPUTE_FUNCTIONS = {
     "mercenary_land_defense": compute_mercenary_land_defense,
     "mercenary_naval_attack": compute_mercenary_naval_attack,
     "mercenary_naval_defense": compute_mercenary_naval_defense,
+    "rulership": compute_stat,
+    "cunning": compute_stat,
+    "charisma": compute_stat,
+    "prowess": compute_stat,
+    "magic": compute_stat,
+    "strategy": compute_stat,
 }
