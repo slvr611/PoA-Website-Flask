@@ -39,7 +39,7 @@ def compute_disobey_chance(field, target, base_value, field_schema, overall_tota
             value = 0.1
 
     value += overall_total_modifiers.get(field, 0)
-    value = max(value, 0)
+    value = round(max(value, 0), 2)
 
     return value
 
@@ -57,7 +57,7 @@ def compute_rebellion_chance(field, target, base_value, field_schema, overall_to
             value = 0.05 + overall_total_modifiers.get("rebellion_chance_above_rebellious", 0)
     
     value += overall_total_modifiers.get(field, 0)
-    value = max(value, 0)
+    value = round(max(value, 0), 2)
 
     return value
 
@@ -79,7 +79,7 @@ def compute_concessions_chance(field, target, base_value, field_schema, overall_
             value = 0.1
 
     value += overall_total_modifiers.get(field, 0)
-    value = max(value, 0)
+    value = round(max(value, 0), 2)
 
     return value
 
@@ -117,6 +117,28 @@ def compute_minority_count(field, target, base_value, field_schema, overall_tota
             minority_count += 1
     
     return minority_count
+
+def compute_stability_gain_chance(field, target, base_value, field_schema, overall_total_modifiers):
+    karma = target.get("karma", 0)
+    unique_minority_count = target.get("unique_minority_count", 0)
+
+    karma_stability_gain = max(min(karma * overall_total_modifiers.get("stability_gain_chance_per_karma", 0), overall_total_modifiers.get("max_stability_gain_chance_per_karma", 0)), 0)
+    minority_stability_gain = max(min(unique_minority_count * overall_total_modifiers.get("stability_gain_chance_per_unique_minority", 0), overall_total_modifiers.get("max_stability_gain_chance_per_unique_minority", 0)), 0)
+
+    value = round(max(base_value + overall_total_modifiers.get(field, 0) + karma_stability_gain + minority_stability_gain, 0), 2)
+
+    return value
+
+def compute_stability_loss_chance(field, target, base_value, field_schema, overall_total_modifiers):
+    karma = target.get("karma", 0)
+    unique_minority_count = target.get("unique_minority_count", 0)
+    
+    karma_stability_loss = max(min(karma * overall_total_modifiers.get("stability_loss_chance_per_karma", 0), overall_total_modifiers.get("max_stability_loss_chance_per_karma", 0)), 0)
+    minority_stability_loss = max(min(unique_minority_count * overall_total_modifiers.get("stability_loss_chance_per_unique_minority", 0), overall_total_modifiers.get("max_stability_loss_chance_per_unique_minority", 0)), 0)
+
+    value = round(max(base_value + overall_total_modifiers.get(field, 0) + karma_stability_loss + minority_stability_loss, 0), 2)
+
+    return value
 
 def compute_district_slots(field, target, base_value, field_schema, overall_total_modifiers):
     pop_count = target.get("pop_count", 0)
@@ -357,7 +379,7 @@ def compute_death_chance(field, target, base_value, field_schema, overall_total_
     age = target.get("age", 1)
     elderly_age = target.get("elderly_age", 3)
 
-    value = max((age - elderly_age) * 0.2, 0)
+    value = round(max((age - elderly_age) * 0.2, 0), 2)
     value += overall_total_modifiers.get(field, 0)
 
     return value
@@ -365,14 +387,14 @@ def compute_death_chance(field, target, base_value, field_schema, overall_total_
 def compute_heal_chance(field, target, base_value, field_schema, overall_total_modifiers):
     prowess = target.get("prowess", 0)
 
-    value = max(base_value + overall_total_modifiers.get(field, 0) + max(prowess * field_schema.get("heal_chance_per_prowess", 0), 0.1), 0)
+    value = round(max(base_value + overall_total_modifiers.get(field, 0) + max(prowess * field_schema.get("heal_chance_per_prowess", 0), 0.1), 0), 2)
 
     return value
 
 def compute_magic_point_income(field, target, base_value, field_schema, overall_total_modifiers):
     magic = target.get("magic", 0)
 
-    value = base_value + magic + overall_total_modifiers.get(field, 0)
+    value = max(base_value + magic + overall_total_modifiers.get(field, 0), 0)
 
     return value
 
@@ -395,6 +417,8 @@ CUSTOM_COMPUTE_FUNCTIONS = {
     "concessions_qty": compute_concessions_qty,
     "pop_count": compute_pop_count,
     "unique_minority_count": compute_minority_count,
+    "stability_gain_chance": compute_stability_gain_chance,
+    "stability_loss_chance": compute_stability_loss_chance,
     "district_slots": compute_district_slots,
     "land_unit_capacity": compute_unit_capacity,
     "naval_unit_capacity": compute_unit_capacity,

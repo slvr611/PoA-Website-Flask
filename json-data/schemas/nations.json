@@ -505,20 +505,24 @@
 		"laws": {
 			"Minimal": {
 				"unit_food_consumption": -1,
-				"strength": -8
+				"strength": -2
 			},
 			"Substandard": {
 				"unit_food_consumption": -0.5,
-				"strength": -4
+				"strength": -1
 			},
 			"Standard": {},
-			"Substantial": {
+			"Notable": {
 				"unit_food_consumption": 1,
+				"strength": 1
+			},
+			"Substantial": {
+				"unit_food_consumption": 2,
 				"strength": 2
 			},
 			"Extreme": {
-				"unit_food_consumption": 2,
-				"strength": 4
+				"unit_food_consumption": 3,
+				"strength": 3
 			}
 		}
       },
