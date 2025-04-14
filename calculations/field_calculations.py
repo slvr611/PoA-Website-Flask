@@ -116,12 +116,13 @@ def collect_jobs_assigned(target):
 
 def calculate_job_details(target, modifier_totals, district_totals, city_totals, node_totals, law_totals):
     job_details = json_data["jobs"]
+    district_details = json_data["districts"]
     modifier_sources = [modifier_totals, district_totals, city_totals, law_totals, node_totals]
     district_types = []
     for district in target.get("districts", []):
         if isinstance(district, dict):
-            district_types.append(district["type"])
-
+            district_types.append(district_details.get(district["type"], {}).get("type", ""))
+    
     new_job_details = {}
     for job, details in job_details.items():
         if "requirements" not in details or ("district" in details["requirements"] and details["requirements"]["district"] in district_types):
@@ -141,7 +142,7 @@ def calculate_job_details(target, modifier_totals, district_totals, city_totals,
                         elif modifier.endswith("upkeep"):
                             new_details.setdefault("upkeep", {})[resource] = new_details.get("upkeep", {}).get(resource, 0) + value
             new_job_details[job] = new_details
-
+    
     return new_job_details
 
 def collect_external_requirements(target, schema, target_data_type):
