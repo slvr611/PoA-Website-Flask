@@ -7,6 +7,7 @@ from helpers.form_helpers import validate_form_with_jsonschema
 from routes.nation_routes import edit_nation, nation_edit_request, nation_edit_approve
 from calculations.field_calculations import calculate_all_fields
 from app_core import category_data, mongo, rarity_rankings
+from helpers.auth_helpers import admin_required
 from pymongo import ASCENDING
 
 
@@ -171,6 +172,7 @@ def data_item_new_request(data_type):
     return redirect("/" + data_type)
 
 @data_item_routes.route("/<data_type>/new/save", methods=["POST"])
+@admin_required
 def data_item_new_approve(data_type):
     schema, db = get_data_on_category(data_type)
         
@@ -301,6 +303,7 @@ def data_item_edit_request(data_type, item_ref):
     return redirect("/" + data_type)
 
 @data_item_routes.route("/<data_type>/edit/<item_ref>/save", methods=["POST"])
+@admin_required
 def data_item_edit_approve(data_type, item_ref):
     schema, db, item = get_data_on_item(data_type, item_ref)
     
@@ -387,6 +390,7 @@ def data_item_clone_request(data_type, item_ref):
     return redirect("/go_back")
 
 @data_item_routes.route("/<data_type>/clone/<item_ref>/save", methods=["POST"])
+@admin_required
 def data_item_clone_approve(data_type, item_ref):
     schema, db, item = get_data_on_item(data_type, item_ref)
     
@@ -439,6 +443,7 @@ def data_item_delete_request(data_type, item_ref):
     return redirect("/" + data_type)
 
 @data_item_routes.route("/<data_type>/delete/<item_ref>/save", methods=["POST"])
+@admin_required
 def data_item_delete_save(data_type, item_ref):
     schema, db, item = get_data_on_item(data_type, item_ref)
 

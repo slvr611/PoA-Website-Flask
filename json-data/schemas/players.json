@@ -4,46 +4,49 @@
     "properties": {
       "id": {
         "bsonType": "string",
-		"label": "ID",
+        "label": "ID",
         "description": "Unique identifier for the user",
-		"hidden": true,
-		"static": true
+        "hidden": true,
+        "static": true
       },
       "name": {
         "bsonType": "string",
-		"label": "Username",
+        "label": "Username",
         "description": "The user's display name",
-		"static": true
+        "static": true
       },
       "avatar_url": {
         "bsonType": "string",
-		"label": "Avatar",
+		  "label": "Avatar",
         "description": "URL to the user's avatar image",
-		"static": true,
-		"image": true
+		    "static": true,
+		    "image": true
       },
       "is_admin": {
         "bsonType": "boolean",
-		"label": "Is Admin?",
+		    "label": "Is Admin?",
         "description": "Indicates if the user is an administrator",
-		"static": true
+		    "static": true
       },
-	  "is_rp_mod": {
+      "is_rp_mod": {
         "bsonType": "boolean",
-		"label": "Is RP Mod?",
+		    "label": "Is RP Mod?",
         "description": "Indicates if the user is an RP Mod"
       },
-	  "is_website_helper": {
+	    "is_website_helper": {
         "bsonType": "boolean",
-		"label": "Is Website Helper?",
+		    "label": "Is Website Helper?",
         "description": "Indicates if the user is a website helper"
       },
-	  "characters": {
+      "characters": {
         "bsonType": "array",
-		"label": "Characters",
+        "label": "Characters",
         "description": "The list of characters this player is currently playing",
-		"collection": "characters",
-		"queryTargetAttribute": "player"
+        "collection": "characters",
+        "queryTargetAttribute": "player",
+        "items":{
+			    "bsonType": "linked_object"
+        }
       }
     }
   }

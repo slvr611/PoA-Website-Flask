@@ -16,18 +16,17 @@
 					<li class="nav-item dropdown">
 						<a href="#" class="dropbtn">National Entities</a>
 						<ul class="dropdown-content">
-							<li><a href="/regions">Regions</a></li>
-							<li><a href="/nations">Nations</a></li>
-							<li><a href="/merchants">Merchants</a></li>
-							<li><a href="/mercenaries">Mercenaries</a></li>
 							<li><a href="/factions">Factions</a></li>
+							<li><a href="/regions">Regions</a></li>
+							<li><a href="/mercenaries">Mercenaries</a></li>
+							<li><a href="/merchants">Merchants</a></li>
+							<li><a href="/nations">Nations</a></li>
 						</ul>
 					</li>
 
 					<li class="nav-item dropdown">
 						<a href="#" class="dropbtn">Demographics</a>
 						<ul class="dropdown-content">
-							<li><a href="/demographics_overview">Demographics Overview</a></li>
 							<li><a href="/races">Races</a></li>
 							<li><a href="/cultures">Cultures</a></li>
 							<li><a href="/religions">Religions</a></li>
@@ -35,33 +34,41 @@
 						</ul>
 					</li>
 					
-					<!-- Additional dropdown sections -->
 					<li class="nav-item dropdown">
 						<a href="#" class="dropbtn">Misc</a>
 						<ul class="dropdown-content">
-							<li><a href="/characters">Characters</a></li>
 							<li><a href="/artifacts">Artifacts</a></li>
-							<li><a href="/spells">Spells</a></li>
-							<li><a href="/wonders">Wonders</a></li>
+							<li><a href="/characters">Characters</a></li>
 							<li><a href="/markets">Markets</a></li>
+							<li><a href="/spells">Spells</a></li>
 							<li><a href="/wars">Wars</a></li>
-							<li><a href="/changes">Changes</a></li>
+							<li><a href="/wonders">Wonders</a></li>
 						</ul>
 					</li>
 				</ul>
 			</div>
 			<div class="nav-right">
-				{% if g.user %}
-					{% if g.user.is_admin %}
-						<a href="/admin_tools">Admin Tools</a>
+				<ul class="nav-list">
+					{% if g.user %}
+						{% if g.user.is_admin %}
+							<li class="nav-item dropdown">
+								<a href="#" class="dropbtn">Admin Tools</a>
+								<ul class="dropdown-content">
+									<li><a href="/changes">Changes</a></li>
+									<li><a href="/demographics_overview">Demographics Overview</a></li>
+									<li><a href="/karma_helper">Karma Helper</a></li>
+									<li><a href="/players">Players</a></li>
+								</ul>
+							</li>
+						{% endif %}
+						<a href="/logout">Logout</a>
+						<a href="/players/item/{{ g.user.name }}">
+							<img src="{{ g.user.avatar_url }}" alt="User Avatar">
+						</a>
+					{% else %}
+						<a href="/login">Login</a>
 					{% endif %}
-					<a href="/logout">Logout</a>
-					<a href="/players/item/{{ g.user.username }}">
-						<img src="{{ g.user.avatar_url }}" alt="User Avatar">
-					</a>
-				{% else %}
-					<a href="/login">Login</a>
-				{% endif %}
+				</ul>
 			</div>
 		</nav>
 	</header>

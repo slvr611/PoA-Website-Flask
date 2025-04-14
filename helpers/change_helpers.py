@@ -75,6 +75,22 @@ def approve_change(change_id):
             return True
     return False
 
+def deny_change(change_id):
+    denier = mongo.db.players.find_one({"id": g.user["id"]})
+    if denier is None or not denier.get("is_admin", False):
+        return False
+
+    changes_collection = mongo.db.changes
+    now = datetime.now()
+
+    changes_collection.update_one({"_id": change_id}, {"$set": {
+        "status": "Rejected",
+        "time_rejected": now,
+        "denier": denier["_id"]
+    }})
+    return True
+
+
 def keep_only_differences(before_data, after_data, change_type):
     new_before = {}
     new_after = {}

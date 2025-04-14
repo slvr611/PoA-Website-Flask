@@ -6,13 +6,11 @@
 <div class="nation-page-container">
 	<div class="header-bar">
 		<h1>{{ nation.name }}</h1>
-		{% if g.user.is_admin %}
-			<a href="{{ request.path.replace("item", "edit") }}" class="edit-button">Edit</a>
-		{% endif %}
+		<a href="{{ request.path.replace('item', 'edit') }}" class="edit-button">Edit</a>
 		<div class="nation-summary">
 			<span>{{ schema.properties.region.label }}: 
 				{% if linked_objects["region"] %}
-					<td><a href="{{ linked_objects["region"]["link"] }}">{{ linked_objects["region"]["name"] }}</a></td>
+					<td><a href="{{ linked_objects['region']['link'] }}">{{ linked_objects["region"]["name"] }}</a></td>
 				{% else %}
 					None
 				{% endif %}
@@ -43,11 +41,15 @@
 				</tr>
 				<tr>
 					<th>{{ schema.properties.stability_gain_chance.label }}:</th>
-					<td>{{ nation.stability_gain_chance }}</td>
+					<td>{{ nation.stability_gain_chance * 100 }}%</td>
 				</tr>
 				<tr>
 					<th>{{ schema.properties.stability_loss_chance.label }}:</th>
-					<td>{{ nation.stability_loss_chance }}</td>
+					<td>{{ nation.stability_loss_chance * 100 }}%</td>
+				</tr>
+				<tr>
+					<th>{{ schema.properties.stability_loss_chance_on_leader_death.label }}:</th>
+					<td>{{ nation.stability_loss_chance_on_leader_death * 100 }}%</td>
 				</tr>
 				<tr>
 					<th>{{ schema.properties.infamy.label }}:</th>
@@ -291,15 +293,15 @@
 					</tr>
 					<tr>
 						<th>{{ schema.properties.disobey_chance.label }}:</th>
-						<td>{{ nation.disobey_chance }}</td>
+						<td>{{ nation.disobey_chance * 100 }}%</td>
 					</tr>
 					<tr>
 						<th>{{ schema.properties.rebellion_chance.label }}:</th>
-						<td>{{ nation.rebellion_chance }}</td>
+						<td>{{ nation.rebellion_chance * 100 }}%</td>
 					</tr>
 					<tr>
 						<th>{{ schema.properties.concessions_chance.label }}:</th>
-						<td>{{ nation.concessions_chance }}</td>
+						<td>{{ nation.concessions_chance * 100 }}%</td>
 					</tr>
 					<tr>
 						<th>{{ schema.properties.concessions_qty.label }}:</th>
@@ -332,11 +334,11 @@
 								
 								<td>{{ vassal["compliance"] }}</td>
 								
-								<td>{{ vassal["disobey_chance"] }}</td>
+								<td>{{ vassal.get("disobey_chance", 0) * 100 }}%</td>
 								
-								<td>{{ vassal["rebellion_chance"] }}</td>
+								<td>{{ vassal.get("rebellion_chance", 0) * 100 }}%</td>
 
-								<td>{{ vassal["concession_chance"] }}</td>
+								<td>{{ vassal.get("concessions_chance", 0) * 100 }}%</td>
 
 								<td>TBA</td>
 							</tr>

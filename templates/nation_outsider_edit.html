@@ -36,11 +36,15 @@
                     </tr>
                     <tr>
                         <th>{{ schema.properties.stability_gain_chance.label }}:</th>
-                        <td>{{ nation.stability_gain_chance }}</td>
+                        <td>{{ nation.stability_gain_chance * 100 }}%</td>
                     </tr>
                     <tr>
                         <th>{{ schema.properties.stability_loss_chance.label }}:</th>
-                        <td>{{ nation.stability_loss_chance }}</td>
+                        <td>{{ nation.stability_loss_chance * 100 }}%</td>
+                    </tr>
+                    <tr>
+                        <th>{{ schema.properties.stability_loss_chance_on_leader_death.label }}:</th>
+                        <td>{{ nation.stability_loss_chance_on_leader_death * 100 }}%</td>
                     </tr>
                     <tr>
                         <th>{{ form.infamy.label.text }}:</th>
@@ -204,15 +208,15 @@
                     </tr>
                     <tr>
                         <th>{{ schema.properties.disobey_chance.label }}:</th>
-                        <td>{{ nation.disobey_chance }}</td>
+                        <td>{{ nation.disobey_chance * 100 }}%</td>
                     </tr>
                     <tr>
                         <th>{{ schema.properties.rebellion_chance.label }}:</th>
-                        <td>{{ nation.rebellion_chance }}</td>
+                        <td>{{ nation.rebellion_chance * 100 }}%</td>
                     </tr>
                     <tr>
                         <th>{{ schema.properties.concessions_chance.label }}:</th>
-                        <td>{{ nation.concessions_chance }}</td>
+                        <td>{{ nation.concessions_chance * 100 }}%</td>
                     </tr>
                     <tr>
                         <th>{{ schema.properties.concessions_qty.label }}:</th>

@@ -331,11 +331,56 @@ def compute_mercenary_naval_defense(field, target, base_value, field_schema, ove
 
 ##############################################################
 
+def compute_age_status(field, target, base_value, field_schema, overall_total_modifiers):
+    age = target.get("age", 1)
+    
+    value = "Adult"
+    if age < 1:
+        value = "Child"
+    elif age >= target.get("elderly_age", 3):
+        value = "Elderly"
+
+    return value
+
 def compute_stat(field, target, base_value, field_schema, overall_total_modifiers):
     value = base_value + overall_total_modifiers.get(field, 0) + overall_total_modifiers.get("stats", 0)
 
-    #TODO: Add elderly modifiers
+    age_status = target.get("age_status", "Adult")
+    if age_status == "Child":
+        value -= 1
+    elif age_status == "Elderly":
+        value -= 1
     
+    return value
+
+def compute_death_chance(field, target, base_value, field_schema, overall_total_modifiers):
+    age = target.get("age", 1)
+    elderly_age = target.get("elderly_age", 3)
+
+    value = max((age - elderly_age) * 0.2, 0)
+    value += overall_total_modifiers.get(field, 0)
+
+    return value
+
+def compute_heal_chance(field, target, base_value, field_schema, overall_total_modifiers):
+    prowess = target.get("prowess", 0)
+
+    value = max(base_value + overall_total_modifiers.get(field, 0) + max(prowess * field_schema.get("heal_chance_per_prowess", 0), 0.1), 0)
+
+    return value
+
+def compute_magic_point_income(field, target, base_value, field_schema, overall_total_modifiers):
+    magic = target.get("magic", 0)
+
+    value = base_value + magic + overall_total_modifiers.get(field, 0)
+
+    return value
+
+def compute_magic_point_capacity(field, target, base_value, field_schema, overall_total_modifiers):
+    magic = target.get("magic", 0)
+
+    value = max(base_value + overall_total_modifiers.get(field, 0) + (magic * field_schema.get("magic_point_capacity_per_magic", 0)), 0)
+
     return value
 
 ##############################################################
@@ -369,10 +414,15 @@ CUSTOM_COMPUTE_FUNCTIONS = {
     "mercenary_land_defense": compute_mercenary_land_defense,
     "mercenary_naval_attack": compute_mercenary_naval_attack,
     "mercenary_naval_defense": compute_mercenary_naval_defense,
+    "age_status": compute_age_status,
     "rulership": compute_stat,
     "cunning": compute_stat,
     "charisma": compute_stat,
     "prowess": compute_stat,
     "magic": compute_stat,
     "strategy": compute_stat,
+    "death_chance": compute_death_chance,
+    "heal_chance": compute_heal_chance,
+    "magic_point_income": compute_magic_point_income,
+    "magic_point_capacity": compute_magic_point_capacity,
 }

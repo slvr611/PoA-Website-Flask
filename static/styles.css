@@ -280,7 +280,7 @@ h1, h2 {
 .info-table th,
 .info-table td {
   border: 1px solid #444;
-  padding: 6px;
+  padding: .5em;
   vertical-align: middle;
 }
 
@@ -288,14 +288,12 @@ h1, h2 {
   background-color: #333;
   color: #fff;
   text-align: center;
-  width: 30%;
 }
 
 .info-table td {
   background-color: #222;
   color: #e0e0e0;
   text-align: left;
-  width: 40%;
 }
 
 .compact-table {

@@ -116,7 +116,8 @@
 		"label": "Stability Loss Chance On Leader Death",
         "description": "The nation's percentage chance of losing a level of stability when their leader dies",
 		"calculated": true,
-		"hidden":true
+		"hidden":true,
+		"format": "percentage"
       },
 	  "infamy": {
         "bsonType": "number",
@@ -253,21 +254,24 @@
 		"label": "Chance to Disobey",
         "description": "Percentage chance for this nation to disobey a vassal action from their overlord",
 		"calculated": true,
-		"hideIfNone": "overlord"
+		"hideIfNone": "overlord",
+		"format": "percentage"
       },
 	  "rebellion_chance": {
         "bsonType": "number",
 		"label": "Chance to Rebel",
         "description": "Percentage chance for this nation to Rebel against their overlord",
 		"calculated": true,
-		"hideIfNone": "overlord"
+		"hideIfNone": "overlord",
+		"format": "percentage"
       },
 	  "concessions_chance": {
         "bsonType": "number",
 		"label": "Chance to Demand Concessions",
         "description": "Percentage chance for this nation to demand concessions from their overlord",
 		"calculated": true,
-		"hideIfNone": "overlord"
+		"hideIfNone": "overlord",
+		"format": "percentage"
       },
 	  "concessions_qty": {
         "bsonType": "number",
@@ -334,13 +338,15 @@
         "bsonType": "number",
 		"label": "Stability Gain Chance",
         "description": "The nation's percentage chance of gaining a level of stability each tick",
-		"calculated": true
+		"calculated": true,
+		"format": "percentage"
       },
 	  "stability_loss_chance": {
         "bsonType": "number",
 		"label": "Stability Loss Chance",
         "description": "The nation's percentage chance of losing a level of stability each tick",
-		"calculated": true
+		"calculated": true,
+		"format": "percentage"
       },
 	  "district_slots": {
         "bsonType": "number",

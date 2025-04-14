@@ -1,0 +1,501 @@
+{% extends "layout.html" %}
+
+{% block title %}Edit Nation: {{ nation.name }}{% endblock %}
+
+{% block content %}
+<div class="nation-page-container">
+    <a href="{{ request.path.replace('edit', 'item') }}">Back to View</a>
+    <h1>Edit Nation: {{ nation.name }}</h1>
+    
+    {% if g.user.is_admin %}
+        {% set default_action = request.path ~ '/save' %}
+    {% else %}
+        {% set default_action = request.path ~ '/request' %}
+    {% endif %}
+    
+    <form method="POST" action="{{ default_action }}">
+        {{ form.csrf_token }}
+        
+        <!-- Main information organized in columns -->
+        <div class="main-columns">
+            <!-- General / Numeric Stats -->
+            <div class="info-column">
+                <h2>General</h2>
+                <table class="info-table">
+                    <tr>
+                        <th>{{ form.name.label.text }}:</th>
+                        <td>{{ form.name(class="form-control") }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ form.region.label.text }}:</th>
+                        <td>{{ form.region(class="form-control") }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ form.stability.label.text }}:</th>
+                        <td>{{ form.stability(class="form-control") }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ schema.properties.stability_gain_chance.label }}:</th>
+                        <td>{{ nation.stability_gain_chance * 100 }}%</td>
+                    </tr>
+                    <tr>
+                        <th>{{ schema.properties.stability_loss_chance.label }}:</th>
+                        <td>{{ nation.stability_loss_chance * 100 }}%</td>
+                    </tr>
+                    <tr>
+                        <th>{{ schema.properties.stability_loss_chance_on_leader_death.label }}:</th>
+                        <td>{{ nation.stability_loss_chance_on_leader_death * 100 }}%</td>
+                    </tr>
+                    <tr>
+                        <th>{{ form.infamy.label.text }}:</th>
+                        <td>{{ form.infamy(class="form-control") }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ schema.properties.karma.label }}:</th>
+                        <td>{{ nation.karma }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ form.temporary_karma.label.text }}:</th>
+                        <td>{{ form.temporary_karma(class="form-control") }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ form.rolling_karma.label.text }}:</th>
+                        <td>{{ form.rolling_karma(class="form-control") }}</td>
+                    </tr>
+                </table>
+            </div>
+
+            <!-- Income -->
+            <div class="info-column">
+                <h2>Income</h2>
+                <table class="info-table">
+                    <tr>
+                        <th>{{ form.money.label.text }}:</th>
+                        <td>{{ form.money(class="form-control") }} / {{ nation.money_capacity }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ schema.properties.money_income.label }}:</th>
+                        <td>{{ nation.money_income }}</td>
+                    </tr>
+                </table>
+            </div>
+
+            <!-- Demographics -->
+            <div class="info-column">
+                <h2>Demographics</h2>
+                <table class="info-table">
+                    <tr>
+                        <th>{{ form.primary_race.label.text }}:</th>
+                        <td>{{ form.primary_race(class="form-control") }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ form.primary_culture.label.text }}:</th>
+                        <td>{{ form.primary_culture(class="form-control") }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ form.primary_religion.label.text }}:</th>
+                        <td>{{ form.primary_religion(class="form-control") }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ schema.properties.unique_minority_count.label }}:</th>
+                        <td>{{ nation.unique_minority_count }}</td>
+                    </tr>
+                </table>
+                <h3>Population Details</h3>
+                <table class="pops-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Race</th>
+                            <th>Culture</th>
+                            <th>Religion</th>
+                            <th>Reason</th>
+                            {% if g.user.is_admin %}
+                                <th>Clone Now</th>
+                            {% endif %}
+                            <th>Request Clone</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for pop in linked_objects["pops"] %}
+                            <tr>
+                                <td><a href="{{ pop["link"] }}">{{ loop.index }}</a></td>
+                                <td>
+                                {% if pop["linked_objects"]["race"] %}
+                                    <a href="{{ pop["linked_objects"]["race"]["link"] }}">{{ pop["linked_objects"]["race"]["name"] }}</a>
+                                {% else %}
+                                    None
+                                {% endif %}
+                                </td>
+                                <td>
+                                {% if pop["linked_objects"]["culture"] %}
+                                    <a href="{{ pop["linked_objects"]["culture"]["link"] }}">{{ pop["linked_objects"]["culture"]["name"] }}</a>
+                                {% else %}
+                                    None
+                                {% endif %}
+                                </td>
+                                <td>
+                                {% if pop["linked_objects"]["religion"] %}
+                                    <a href="{{ pop["linked_objects"]["religion"]["link"] }}">{{ pop["linked_objects"]["religion"]["name"] }}</a>
+                                {% else %}
+                                    None
+                                {% endif %}
+                                </td>
+                                <form method="POST" action="{{ pop['link'].replace('item', 'clone') }}/save" style="display: inline;"></form>
+                                    <td>
+                                        <input type="text" id="pop_reason" name="pop_reason" value="">
+                                    </td>
+                                    
+                                    {% if g.user.is_admin %}
+                                        <td><button type="submit" formaction="{{ pop["link"].replace("item", "clone") }}/save" class="btn btn-primary">Clone Now</button></td>
+                                    {% endif %}
+                                    <td><button type="submit" formaction="{{ pop["link"].replace("item", "clone") }}/request" class="btn btn-primary">Clone Now</button></td>
+                                </form></form>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Government & Laws -->
+            <div class="info-column">
+                <h2>Government & Laws</h2>
+                <table class="info-table">
+                    {% for law in schema.laws %}
+                        {% if law != "stability" and law in form._fields.keys() %}
+                            <tr>
+                                <th>{{ form[law].label.text }}:</th>
+                                <td>{{ form[law](class="form-control") }}</td>
+                            </tr>
+                        {% endif %}
+                    {% endfor %}
+                </table>
+            </div>
+
+            <!-- Administration & Holdings -->
+            <div class="info-column">
+                <h2>Administration & Holdings</h2>
+                <table class="info-table">
+                    <tr>
+                        <th>{{ schema.properties.administration.label }}:</th>
+                        <td>{{ nation.administration }}</td>
+                    </tr>
+                    <tr>
+                        <th>Territory:</th>
+                        <td>{{ form.current_territory(class="form-control") }} / {{ nation.effective_territory }}</td>
+                    </tr>
+                    <tr>
+                        <th>Roads:</th>
+                        <td>{{ form.road_usage(class="form-control") }} / {{ nation.road_capacity }}</td>
+                    </tr>
+                </table>
+            </div>
+            
+            <div class="info-column">
+                <h2>Vassalship</h2>
+                <table class="info-table">
+                    <tr>
+                        <th>{{ form.overlord.label.text }}:</th>
+                        <td>{{ form.overlord(class="form-control") }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ form.vassal_type.label.text }}:</th>
+                        <td>{{ form.vassal_type(class="form-control") }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ form.compliance.label.text }}:</th>
+                        <td>{{ form.compliance(class="form-control") }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ schema.properties.disobey_chance.label }}:</th>
+                        <td>{{ nation.disobey_chance * 100 }}%</td>
+                    </tr>
+                    <tr>
+                        <th>{{ schema.properties.rebellion_chance.label }}:</th>
+                        <td>{{ nation.rebellion_chance * 100 }}%</td>
+                    </tr>
+                    <tr>
+                        <th>{{ schema.properties.concessions_chance.label }}:</th>
+                        <td>{{ nation.concessions_chance * 100 }}%</td>
+                    </tr>
+                    <tr>
+                        <th>{{ schema.properties.concessions_qty.label }}:</th>
+                        <td>{{ nation.concessions_qty }}</td>
+                    </tr>
+                </table>
+            </div>
+
+            <!-- Miscellaneous: fields not in view -->
+            <div class="info-column">
+                <h2>Miscellaneous</h2>
+                <table class="info-table">
+                    <tr>
+                        <th>{{ form.origin.label.text }}:</th>
+                        <td>{{ form.origin(class="form-control") }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ form.temperament.label.text }}:</th>
+                        <td>{{ form.temperament(class="form-control") }}</td>
+                    </tr>
+                    <tr>
+                        
+                        <th>{{ form.modifiers.label.text }}:</th>
+                        <td>
+                            <table class="jobs-table">
+                                <thead>
+                                    <tr>
+                                        <th>Field</th>
+                                        <th>Value</th>
+                                        <th>Duration</th>
+                                        <th>Source</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="modifiers-tbody">
+                                    {% for modifier_field in form.modifiers %}
+                                        <tr>
+                                            <td>{{ modifier_field.field(class="form-control") }}</td>
+                                            <td>{{ modifier_field.value(class="form-control") }}</td>
+                                            <td>{{ modifier_field.duration(class="form-control") }}</td>
+                                            <td>{{ modifier_field.source(class="form-control") }}</td>
+                                            <td><button type="button" class="btn btn-danger" onclick="removeModifier(this)">Remove</button></td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                            <button type="button" class="btn btn-primary" onclick="addModifier()">Add Modifier</button>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+
+        <script>
+            function addModifier() {
+                const tbody = document.getElementById('modifiers-tbody');
+                const currentCount = tbody.children.length;
+                
+                const newRow = document.createElement('tr');
+                newRow.innerHTML = `
+                    <td><input type="text" class="form-control" name="modifiers-${currentCount}-field" id="modifiers-${currentCount}-field" required></td>
+                    <td><input type="number" class="form-control" name="modifiers-${currentCount}-value" id="modifiers-${currentCount}-value" required></td>
+                    <td><input type="number" class="form-control" name="modifiers-${currentCount}-duration" id="modifiers-${currentCount}-duration" value="0" required></td>
+                    <td><input type="text" class="form-control" name="modifiers-${currentCount}-source" id="modifiers-${currentCount}-source" required></td>
+                    <td><button type="button" class="btn btn-danger" onclick="removeModifier(this)">Remove</button></td>
+                `;
+                
+                tbody.appendChild(newRow);
+            }
+            
+            function removeModifier(button) {
+                const row = button.closest('tr');
+                row.remove();
+                
+                // Reindex remaining modifiers
+                const tbody = document.getElementById('modifiers-tbody');
+                Array.from(tbody.children).forEach((row, index) => {
+                    row.querySelectorAll('input').forEach(input => {
+                        const fieldName = input.name.split('-').pop();
+                        input.name = `modifiers-${index}-${fieldName}`;
+                        input.id = `modifiers-${index}-${fieldName}`;
+                    });
+                });
+            }
+        </script>
+
+        <div class="info-column">
+            <h2>War Stats</h2>
+            <table class="info-table">
+                <tr>
+                    <th>{{ schema.properties.land_attack.label }}:</th>
+                    <td>{{ nation.land_attack }}</td>
+                </tr>
+                <tr>
+                    <th>{{ schema.properties.land_defense.label }}:</th>
+                    <td>{{ nation.land_defense }}</td>
+                </tr>
+                <tr>
+                    <th>{{ schema.properties.naval_attack.label }}:</th>
+                    <td>{{ nation.naval_attack }}</td>
+                </tr>
+                <tr>
+                    <th>{{ schema.properties.naval_defense.label }}:</th>
+                    <td>{{ nation.naval_defense }}</td>
+                </tr>
+                <tr>
+                    <th>{{ schema.properties.mercenary_land_attack.label }}:</th>
+                    <td>{{ nation.mercenary_land_attack }}</td>
+                </tr>
+                <tr>
+                    <th>{{ schema.properties.mercenary_land_defense.label }}:</th>
+                    <td>{{ nation.mercenary_land_defense }}</td>
+                </tr>
+                <tr>
+                    <th>{{ schema.properties.mercenary_naval_attack.label }}:</th>
+                    <td>{{ nation.mercenary_naval_attack }}</td>
+                </tr>
+                <tr>
+                    <th>{{ schema.properties.mercenary_naval_defense.label }}:</th>
+                    <td>{{ nation.mercenary_naval_defense }}</td>
+                </tr>
+            </table>
+        </div>
+
+        <!-- Resources Section -->
+        <section class="resources-section">
+            <h2>Resources</h2>
+            <table class="resources-table">
+                <thead>
+                    <tr class="resources-header-row">
+                        <th colspan="6" class="resources-header">General Resources</th>
+                    </tr>
+                    <tr>
+                        <th>Resource</th>
+                        <th>Production</th>
+                        <th>Consumption</th>
+                        <th>Excess</th>
+                        <th>Storage</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for resource in general_resources %}
+                        {% set resource_index = loop.index0 %}
+                        <tr>
+                            <td>{{ resource.name }}</td>
+                            <td>{{ nation.resource_production[resource.key] if resource.key in nation.resource_production else 0 }}</td>
+                            <td>{{ nation.resource_consumption[resource.key] if resource.key in nation.resource_consumption else 0 }}</td>
+                            <td>{{ nation.resource_excess[resource.key] if resource.key in nation.resource_excess else 0 }}</td>
+                            <td>{{ form.resource_storage[resource.key](class="form-control") }} / {{ nation.resource_capacity[resource.key] if resource.key in nation.resource_capacity else 0 }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+                <thead>
+                    <tr class="resources-header-row">
+                        <th colspan="6" class="resources-header">Unique Resources</th>
+                    </tr>
+                    <tr>
+                        <th>Resource</th>
+                        <th>Production</th>
+                        <th>Consumption</th>
+                        <th>Excess</th>
+                        <th>Storage</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for resource in unique_resources %}
+                        {% set resource_index = general_resources|length + loop.index0 %}
+                        <tr>
+                            <td>{{ resource.name }}</td>
+                            <td>{{ nation.resource_production[resource.key] if resource.key in nation.resource_production else 0 }}</td>
+                            <td>{{ nation.resource_consumption[resource.key] if resource.key in nation.resource_consumption else 0 }}</td>
+                            <td>{{ nation.resource_excess[resource.key] if resource.key in nation.resource_excess else 0 }}</td>
+                            <td>{{ form.resource_storage[resource.key](class="form-control") }} / {{ nation.resource_capacity[resource.key] if resource.key in nation.resource_capacity else 0 }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </section>
+
+        <!-- Jobs Section -->
+        <section class="jobs-section">
+            <h2>Jobs</h2>
+            <table class="jobs-table">
+                <thead>
+                    <tr>
+                        <th>Job</th>
+                        <th>Assigned Pops</th>
+                        <th>Upkeep</th>
+                        <th>Production</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for job, details in nation.job_details.items() %}
+                        <tr>
+                            <td>{{ details.display_name }}</td>
+                            <td>{{ form.jobs[job] }}</td>
+                            <td>
+                            {% if details.upkeep is defined %}
+                                {% for resource, cost in details.upkeep.items() %}
+                                    {{ resource }}: {{ cost }}<br>
+                                {% endfor %}
+                            {% endif %}
+                            </td>
+                            <td>
+                            {% if details.production is defined %}
+                                {% for resource, prod in details.production.items() %}
+                                    {{ resource }}: {{ prod }}<br>
+                                {% endfor %}
+                            {% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </section>
+        
+        <div class="info-column">
+            <h2>Nodes</h2>
+            <table class="info-table">
+                {% for resource in general_resources %}
+                    <tr>
+                        <td>{{ resource.name }}</td>
+                        <td>{{ form.resource_nodes[resource.key](class="form-control") }}</td>
+                    </tr>
+                {% endfor %}
+                {% for resource in unique_resources %}
+                    <tr>
+                        <td>{{ resource.name }}</td>
+                        <td>{{ form.resource_nodes[resource.key](class="form-control") }}</td>
+                    </tr>
+                {% endfor %}
+            </table>
+        </div>
+        
+        <!-- Districts Section -->
+        <section class="districts-section">
+            <h2>Districts</h2>
+            <p>{{ schema.properties.district_slots.label }}: {{ nation.district_slots }}</p>
+            <div class="districts-grid">
+                {% for district_field in form.districts %}
+                    <div class="district-slot">
+                        <label for="{{ district_field.id }}">Slot {{ loop.index }}</label></br></br>
+                        {{ district_field.form.type.label }}: {{ district_field.form.type(class="form-control") }}
+                        {{ district_field.form.node.label }}: {{ district_field.form.node(class="form-control") }}
+                    </div>
+                {% endfor %}
+            </div>
+        </section>
+
+        <!-- City Section -->
+        <section class="districts-section">
+            <h2>Cities</h2>
+            <p>{{ schema.properties.city_slots.label }}: {{ nation.city_slots }}</p>
+            <div class="districts-grid">
+                {% for city_field in form.cities %}
+                    <div class="district-slot">
+                        <label for="{{ city_field.id }}">Slot {{ loop.index }}</label></br></br>
+                        {{ city_field.form.name.label }}: {{ city_field.form.name(class="form-control") }}</br>                   
+                        {{ city_field.form.type.label }}: {{ city_field.form.type(class="form-control") }}
+                        {{ city_field.form.node.label }}: {{ city_field.form.node(class="form-control") }}
+                        {{ city_field.form.wall.label }}: {{ city_field.form.wall(class="form-control") }}
+                    </div>
+                {% endfor %}
+            </div>
+        </section>
+        
+        
+        <!-- Reason and Submit -->
+        <div class="form-actions">
+            <div class="reason-field">
+                <label for="{{ form.reason.id }}">{{ form.reason.label.text }}:</label>
+                {{ form.reason(class="form-control") }}
+            </div>
+            
+            {% if g.user.is_admin %}
+                <button type="submit" formaction="{{ request.path }}/save" class="btn btn-primary">Save</button>
+            {% endif %}
+            <button type="submit" formaction="{{ request.path }}/request" class="btn btn-secondary">Request</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

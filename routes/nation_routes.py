@@ -5,6 +5,7 @@ from helpers.change_helpers import request_change, approve_change
 from helpers.form_helpers import validate_form_with_jsonschema
 from calculations.field_calculations import calculate_all_fields
 from app_core import category_data, mongo, json_data
+from helpers.auth_helpers import admin_required
 from pymongo import ASCENDING
 from forms import form_generator
 
@@ -22,7 +23,7 @@ def nation_item(item_ref):
         nation["jobs"] = {}
     
     return render_template(
-        "nation.html",
+        "nation_owner.html",
         title=item_ref,
         schema=schema,
         nation=nation,
@@ -56,7 +57,7 @@ def edit_nation(item_ref):
     form.populate_linked_fields(schema, dropdown_options)
 
     return render_template(
-        "nationEdit.html",
+        "nation_owner_edit.html",
         form=form,
         title="Edit " + item_ref,
         schema=schema,
@@ -105,6 +106,7 @@ def nation_edit_request(item_ref):
     return redirect("/nations/item/" + item_ref)
 
 @nation_routes.route("/nations/edit/<item_ref>/save", methods=["POST"])
+@admin_required
 def nation_edit_approve(item_ref):
     """Handle nation edit approval"""
     schema, db, nation = get_data_on_item("nations", item_ref)

@@ -32,21 +32,3 @@ def go_back():
 def inject_navbar_pages():
     from app_core import category_data  # Avoid circular import
     return {'category_data': category_data}
-
-@base_routes.route("/demographics_overview")
-def demographics_overview():
-    nations = list(mongo.db.nations.find().sort("name", ASCENDING))
-
-    race_id_to_name = generate_id_to_name_dict("races")
-    culture_id_to_name = generate_id_to_name_dict("cultures")
-    religion_id_to_name = generate_id_to_name_dict("religions")
-
-    demographics_list = []
-    for nation in nations:
-        demo = compute_demographics(nation.get("_id", None), race_id_to_name, culture_id_to_name, religion_id_to_name)
-        demographics_list.append({
-            "name": nation["name"],
-            "demographics": demo
-        })
-
-    return render_template("demographics_overview.html", demographics_list=demographics_list)

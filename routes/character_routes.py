@@ -5,6 +5,7 @@ from helpers.change_helpers import request_change, approve_change
 from helpers.form_helpers import validate_form_with_jsonschema
 from calculations.field_calculations import calculate_all_fields
 from app_core import category_data, mongo, json_data
+from helpers.auth_helpers import admin_required
 from pymongo import ASCENDING
 from forms import form_generator
 import random
@@ -75,6 +76,7 @@ def new_character_request():
     return redirect("/characters")
 
 @character_routes.route("/characters/new/save", methods=["POST"])
+@admin_required
 def new_character_approve():
     """Handle new character approval (admin only)"""
     schema, db = get_data_on_category("characters")

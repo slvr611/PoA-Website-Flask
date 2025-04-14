@@ -1,8 +1,8 @@
 {
   "$jsonSchema": {
     "bsonType": "object",
-    "required": ["target", "before_data", "after_data", "reason"],
-    "preview": ["target_collection", "change_type", "status", "target", "time_requested", "time_implemented", "time_reverted", "requester", "approver", "reverter"],
+    "required": ["target", "target_collection", "request_reason"],
+    "preview": ["target_collection", "change_type", "status", "target", "time_requested", "time_implemented", "time_denied", "time_reverted", "requester", "approver", "denier", "reverter", "before_requested_data", "after_requested_data", "before_implemented_data", "after_implemented_data", "before_revert_data", "after_revert_data", "request_reason"],
     "properties": {
       "target_collection": {
         "bsonType": "string",
@@ -27,6 +27,11 @@
         "label": "Time Implemented",
         "description": "The time the change was implemented"
       },
+      "time_denied": {
+        "bsonType": "date",
+        "label": "Time Denied",
+        "description": "The time the change was denied"
+      },
       "time_reverted": {
         "bsonType": "date",
         "label": "Time Reverted",
@@ -44,6 +49,13 @@
         "bsonType": "linked_object",
         "label": "Approver",
         "description": "The user that approved the change",
+        "noneResult": "None",
+        "collection": "players"
+      },
+      "denier": {
+        "bsonType": "linked_object",
+        "label": "Denier",
+        "description": "The user that rejected the change",
         "noneResult": "None",
         "collection": "players"
       },

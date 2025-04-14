@@ -1,0 +1,141 @@
+{% extends "layout.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1>Pending Changes</h1>
+    <table class="info-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Target Collection</th>
+                <th>Target</th>
+                <th>Change Type</th>
+                <th>Status</th>
+                <th>Changes</th>
+                <th>Time</th>
+                <th>User</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for change in pending_changes %}
+                <tr>
+                    <td><a href="/changes/item/{{ change._id }}">{{ change._id }}</a></td>
+                    <td>{{ change.target_collection }}</td>
+                    <td>
+                        {% if change.target_collection in preview_references and change.target|string in preview_references[change.target_collection] %}
+                            <a href="{{ preview_references[change.target_collection][change.target|string]['link'] }}">
+                                {{ preview_references[change.target_collection][change.target|string]['name'] }}
+                            </a>
+                        {% else %}
+                            {{ change.target }}
+                        {% endif %}
+                    </td>
+                    <td>{{ change.change_type }}</td>
+                    <td>{{ change.status }}</td>
+                    <td>
+                        {% for key, value in change.before_requested_data.items() %}
+                            {{ target_schemas[change.target_collection].properties.get(key, {}).get("label", key) }}: 
+                            {{ value }} → {{ change.after_requested_data[key] }}<br>
+                        {% endfor %}
+                    </td>
+                    <td>{{ change.time_requested.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                    <td>
+                        {% if "requester" in preview_references and change.requester|string in preview_references["requester"] %}
+                            <a href="{{ preview_references['requester'][change.requester|string]['link'] }}">
+                                {{ preview_references['requester'][change.requester|string]['name'] }}
+                            </a>
+                        {% endif %}
+                    </td>
+                    <td class="action-buttons">
+                        {% if g.user and g.user.is_admin %}
+                            <a href="/changes/item/{{ change._id }}/approve" class="btn btn-approve">Approve</a>
+                            <a href="/changes/item/{{ change._id }}/deny" class="btn btn-deny">Deny</a>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <h1>Archived Changes</h1>
+    <table class="info-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Target Collection</th>
+                <th>Target</th>
+                <th>Change Type</th>
+                <th>Status</th>
+                <th>Changes</th>
+                <th>Time</th>
+                <th>User</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for change in archived_changes %}
+                <tr>
+                    <td><a href="/changes/item/{{ change._id }}">{{ change._id }}</a></td>
+                    <td>{{ change.target_collection }}</td>
+                    <td>
+                        {% if change.target_collection in preview_references and change.target|string in preview_references[change.target_collection] %}
+                            <a href="{{ preview_references[change.target_collection][change.target|string]['link'] }}">
+                                {{ preview_references[change.target_collection][change.target|string]['name'] }}
+                            </a>
+                        {% else %}
+                            {{ change.target }}
+                        {% endif %}
+                    </td>
+                    <td>{{ change.change_type }}</td>
+                    <td>{{ change.status }}</td>
+                    <td>
+                        {% if change.status == "Approved" %}
+                            {% for key, value in change.before_implemented_data.items() %}
+                                {{ target_schemas[change.target_collection].properties.get(key, {}).get("label", key) }}: 
+                                {{ value }} → {{ change.after_implemented_data[key] }}<br>
+                            {% endfor %}
+                        {% else %}
+                            {% for key, value in change.before_requested_data.items() %}
+                                {{ target_schemas[change.target_collection].properties.get(key, {}).get("label", key) }}: 
+                                {{ value }} → {{ change.after_requested_data[key] }}<br>
+                            {% endfor %}
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if change.status == "Approved" %}
+                            {{ change.time_implemented.strftime('%Y-%m-%d %H:%M:%S') }}
+                        {% elif change.status == "Denied" %}
+                            {{ change.time_denied.strftime('%Y-%m-%d %H:%M:%S') }}
+                        {% elif change.status == "Reverted" %}
+                            {{ change.time_reverted.strftime('%Y-%m-%d %H:%M:%S') }}
+                        {% else %}
+                            {{ change.time_requested.strftime('%Y-%m-%d %H:%M:%S') }}
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if change.status == "Approved" and "approver" in preview_references and change.approver|string in preview_references["approver"] %}
+                            <a href="{{ preview_references['approver'][change.approver|string]['link'] }}">
+                                {{ preview_references['approver'][change.approver|string]['name'] }}
+                            </a>
+                        {% elif change.status == "Denied" and "denier" in preview_references and change.denier|string in preview_references["denier"] %}
+                            <a href="{{ preview_references['denier'][change.denier|string]['link'] }}">
+                                {{ preview_references['denier'][change.denier|string]['name'] }}
+                            </a>
+                        {% elif change.status == "Reverted" and "reverter" in preview_references and change.reverter|string in preview_references["reverter"] %}
+                            <a href="{{ preview_references['reverter'][change.reverter|string]['link'] }}">
+                                {{ preview_references['reverter'][change.reverter|string]['name'] }}
+                            </a>
+                        {% elif "requester" in preview_references and change.requester|string in preview_references["requester"] %}
+                            <a href="{{ preview_references['requester'][change.requester|string]['link'] }}">
+                                {{ preview_references['requester'][change.requester|string]['name'] }}
+                            </a>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

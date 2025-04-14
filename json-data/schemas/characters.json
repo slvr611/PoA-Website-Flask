@@ -3,7 +3,7 @@
     "bsonType": "object",
     "required": ["name"],
     "preview": ["ruling_nation_org", "region"],
-    "laws": ["character_type", "age_status", "health_status"],
+    "laws": ["character_type", "health_status"],
     "external_calculation_requirements": {
 		"race": ["positive_trait", "negative_trait"],
         "religion": ["external_modifiers"],
@@ -230,16 +230,7 @@
 		"label": "Age Status",
         "description": "The current age status of the Character",
 		"enum": ["Child", "Adult", "Elderly"],
-		"calculated": true,
-        "laws": {
-			"Child": {
-                "stats": -1
-            },
-			"Adult": {},
-			"Elderly": {
-                "stats": -1
-			}
-		}
+		"calculated": true
       },
       "health_status": {
         "bsonType": "enum",
@@ -269,24 +260,17 @@
         "bsonType": "number",
 		"label": "Death Chance",
         "description": "The percentage chance of the Character dying each tick",
-		"calculated": true
+		"calculated": true,
+        "format": "percentage"
       },
       "heal_chance": {
         "bsonType": "number",
 		"label": "Heal Chance",
         "description": "The percentage chance of the Character healing each tick",
-		"calculated": true
-      },
-	  "magic_points": {
-        "bsonType": "number",
-		"label": "Magic Points",
-        "description": "The amount of magic points the Character currently has in storage"
-      },
-	  "magic_point_income": {
-        "bsonType": "number",
-		"label": "Magic Point Production",
-        "description": "The amount of magic points the Character produces each tick",
-		"calculated": true
+		"calculated": true,
+        "base_value": 0.05,
+        "heal_chance_per_prowess": 0.05,
+        "format": "percentage"
       },
 	  "rulership": {
         "bsonType": "number",
@@ -322,6 +306,24 @@
         "bsonType": "number",
 		"label": "Strategy",
         "description": "The Strategy stat of the character",
+		"calculated": true
+      },
+	  "magic_points": {
+        "bsonType": "number",
+		"label": "Magic Points",
+        "description": "The amount of magic points the Character currently has in storage"
+      },
+	  "magic_point_income": {
+        "bsonType": "number",
+		"label": "Magic Point Production",
+        "description": "The amount of magic points the Character produces each tick",
+		"calculated": true
+      },
+      "magic_point_capacity": {
+        "bsonType": "number",
+		"label": "Magic Point Capacity",
+        "description": "The amount of magic points the Character can hold",
+        "magic_point_capacity_per_magic": 3,
 		"calculated": true
       },
 	  "modifiers": {

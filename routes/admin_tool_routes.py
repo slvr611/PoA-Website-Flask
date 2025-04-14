@@ -1,8 +1,8 @@
 from flask import Blueprint, render_template, redirect
 from helpers.auth_helpers import admin_required
-from helpers.data_helpers import get_data_on_category
+from helpers.data_helpers import get_data_on_category, generate_id_to_name_dict, compute_demographics
 from calculations.field_calculations import calculate_all_fields
-from app_core import category_data, rarity_rankings
+from app_core import category_data, rarity_rankings, mongo
 from pymongo import ASCENDING
 import random
 
@@ -12,6 +12,25 @@ admin_tool_routes = Blueprint('admin_tool_routes', __name__)
 @admin_required
 def admin_tools():
     return render_template("admin_tools.html")
+
+@admin_tool_routes.route("/demographics_overview")
+@admin_required
+def demographics_overview():
+    nations = list(mongo.db.nations.find().sort("name", ASCENDING))
+
+    race_id_to_name = generate_id_to_name_dict("races")
+    culture_id_to_name = generate_id_to_name_dict("cultures")
+    religion_id_to_name = generate_id_to_name_dict("religions")
+
+    demographics_list = []
+    for nation in nations:
+        demo = compute_demographics(nation.get("_id", None), race_id_to_name, culture_id_to_name, religion_id_to_name)
+        demographics_list.append({
+            "name": nation["name"],
+            "demographics": demo
+        })
+
+    return render_template("demographics_overview.html", demographics_list=demographics_list)
 
 @admin_tool_routes.route("/karma_helper")
 @admin_required
