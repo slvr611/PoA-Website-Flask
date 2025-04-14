@@ -1,23 +1,70 @@
 {
   "$jsonSchema": {
     "bsonType": "object",
-    "required": ["id", "name", "avatar_url", "isAdmin"],
+    "required": ["name", "control"],
+    "preview": ["nation"],
+    "laws": ["control"],
     "properties": {
-      "id": {
-        "bsonType": "string",
-        "description": "Unique identifier for the user"
-      },
       "name": {
         "bsonType": "string",
-        "description": "The user's display name"
+		    "label": "Name",
+        "description": "The name of the faction"
       },
-      "avatar_url": {
-        "bsonType": "string",
-        "description": "URL to the user's avatar image"
+	    "leaders": {
+        "bsonType": "array",
+		    "label": "Leaders",
+        "description": "The list of leaders of the merchant company",
+		    "collection": "characters",
+		    "queryTargetAttribute": "ruling_nation_org",
+        "items":{
+          "bsonType": "linked_object"
+        }
       },
-      "isAdmin": {
-        "bsonType": "boolean",
-        "description": "Indicates if the user is an administrator"
+	    "nation": {
+        "bsonType": "linked_object",
+		    "label": "Nation",
+        "description": "The nation the faction is based in",
+		    "collection": "nations"
+      },
+      "faction_type": {
+        "bsonType": "enum",
+		    "label": "Faction Type",
+        "description": "The type of faction",
+		    "enum": ["Adventurer", "Criminal", "Cult", "Cultrual", "Dissident", "Military", "Political"]
+      },
+      "control": {
+        "bsonType": "enum",
+		    "label": "Control",
+        "description": "The amount of control the faction has",
+		    "enum": ["Inisignificant", "Minor", "Moderate", "Strong", "Absolute"],
+        "laws":{
+          "Inisignificant": {
+            "influence_income": 1
+          },
+          "Minor": {
+            "influence_income": 2
+          },
+          "Moderate": {
+            "influence_income": 3
+          },
+          "Strong": {
+            "influence_income": 4
+          },
+          "Absolute": {
+            "influence_income": 5
+          }
+        }
+      },
+      "influence_income": {
+        "bsonType": "number",
+		    "label": "Influence Income",
+        "description": "The amount of influence the faction earns each session",
+		    "calculated": true
+      },
+	    "influence": {
+        "bsonType": "number",
+		    "label": "Influence",
+        "description": "The amount of influence the faction has"
       }
     }
   }

@@ -1,23 +1,178 @@
 {
   "$jsonSchema": {
     "bsonType": "object",
-    "required": ["id", "name", "avatar_url", "isAdmin"],
+    "required": ["name", "reknown"],
+	  "laws": ["reknown", "size"],
     "properties": {
-      "id": {
-        "bsonType": "string",
-        "description": "Unique identifier for the user"
-      },
       "name": {
         "bsonType": "string",
-        "description": "The user's display name"
+		    "label": "Name",
+        "description": "The name of the merchant company"
       },
-      "avatar_url": {
-        "bsonType": "string",
-        "description": "URL to the user's avatar image"
+	    "leaders": {
+        "bsonType": "array",
+		    "label": "Leaders",
+        "description": "The list of leaders of the merchant company",
+		    "collection": "characters",
+		    "queryTargetAttribute": "ruling_nation_org",
+        "items":{
+          "bsonType": "linked_object"
+        },
+        "preview": ["name", "character_type"]
       },
-      "isAdmin": {
-        "bsonType": "boolean",
-        "description": "Indicates if the user is an administrator"
+	    "Region": {
+        "bsonType": "linked_object",
+		    "label": "Region",
+        "description": "The region the mercenary company is currently stationed in",
+		    "collection": "nations"
+      },
+      "patron": {
+        "bsonType": "linked_object",
+		    "label": "Patron",
+        "description": "The nation that currently employs the mercenary company",
+		    "collection": "nations"
+      },
+      "land_doctrine": {
+        "bsonType": "enum",
+		    "label": "Land Doctrine",
+        "description": "The nation's general approach to land based warfare",
+        "enum": ["Standard", "Nomadic", "Shock", "Volley", "Safeguard", "Militia", "Ambush"],
+        "laws": {
+          "Standard": {},
+          "Nomadic": {
+            "land_unit_speed": 1
+          },
+          "Shock": {
+            "first_session_land_attack": 2,
+            "after_first_session_land_defense": -4
+          },
+          "Volley": {
+            "land_unit_speed_mult": 0.5,
+            "land_unit_range_when_stationary": 1
+          },
+          "Safeguard": {
+            "land_defense_against_ranged": 2,
+            "defensive_war_land_defense": 1,
+            "offensive_war_land_attack": -4
+          },
+          "Militia": {},
+          "Ambush": {
+            "land_attack_vs_damaged_units": 2,
+            "land_non_ruler_unit_speed": 1,
+            "land_cavalry_unit_speed": -1,
+            "land_unit_hp_mult": 0.75
+          }
+        }
+      },
+	    "naval_doctrine": {
+        "bsonType": "enum",
+		    "label": "Naval Doctrine",
+        "description": "The nation's general approach to aquatic warfare",
+        "enum": ["Standard", "Skirmish", "Fleet", "Transport"],
+        "laws": {
+          "Standard": {},
+          "Skirmish": {},
+          "Fleet": {},
+          "Transport": {}
+        }
+      },
+      "size": {
+        "bsonType": "enum",
+		    "label": "Size",
+        "description": "The size of the mercenary company",
+		    "enum": ["Small", "Medium", "Large", "Massive"],
+		    "laws":{
+          "Small": {
+            "budget": 450,
+            "max_units": 2
+          },
+          "Medium": {
+            "budget": 750,
+            "max_units": 3
+          },
+          "Large": {
+            "budget": 1050,
+            "max_units": 4
+          },
+          "Massive": {
+            "budget": 1500,
+            "max_units": 5
+          }
+        }
+      },
+      "reknown": {
+        "bsonType": "enum",
+		    "label": "Reknown",
+        "description": "The mercenary company's reputation",
+		    "enum": ["Scoundrels", "Unscrupulous", "Standard", "Honorable"],
+		    "laws":{
+          "Scoundrels": {
+            "attack": 2,
+            "hiring_cost_mult": -0.25
+          },
+          "Unscrupulous": {
+            "strength": 1,
+            "hiring_cost_mult": -0.15
+          },
+          "Standard": {
+            "strength": 1,
+            "hiring_cost_mult": -0.1
+          },
+          "Honorable": {
+            "defense": 2
+          }
+        }
+      },
+      "upkeep": {
+        "bsonType": "number",
+		    "label": "Upkeep",
+        "description": "The amount of money the mercenary company has to pay each session in upkeep",
+		    "calculated": true
+      },
+	    "treasury": {
+        "bsonType": "number",
+		    "label": "Treasury",
+        "description": "The amount of money the mercenary company has in its coffers"
+      },
+      "hiring_cost": {
+        "bsonType": "number",
+		    "label": "Hiring Cost",
+        "description": "The minimum amount of money the mercenary company charges to hire",
+		    "calculated": true
+      },
+      "budget": {
+        "bsonType": "number",
+		    "label": "Budget",
+        "description": "The amount of money the mercenary company has to recruit units with",
+		    "calculated": true
+      },
+      "budget_spent": {
+        "bsonType": "number",
+		    "label": "Budget Spent",
+        "description": "The amount of money the mercenary company has spent to recruit units",
+		    "calculated": true
+      },
+      "max_units": {
+        "bsonType": "number",
+		    "label": "Max Units",
+        "description": "The maximum number of units the mercenary company can field",
+		    "calculated": true
+      },
+      "districts": {
+        "bsonType": "array",
+		    "label": "Districts",
+        "description": "The districts the mercenary company owns",
+        "items":{
+          "bsonType": "string"
+        }
+      },
+      "units": {
+        "bsonType": "array",
+		    "label": "Units",
+        "description": "The units the mercenary company owns",
+        "items":{
+          "bsonType": "string"
+        }
       }
     }
   }
