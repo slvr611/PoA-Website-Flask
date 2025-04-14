@@ -232,9 +232,10 @@ def sum_job_totals(jobs_assigned, job_details):
     totals = {}
     for job, count in jobs_assigned.items():
         for field, val in job_details.get(job, {}).get("production", {}).items():
-            totals[field + "_production"] = totals.get(field, 0) + (val * count)
+            totals[field + "_production"] = totals.get(field + "_production", 0) + (val * count)
         for field, val in job_details.get(job, {}).get("upkeep", {}).items():
-            totals[field + "_consumption"] = totals.get(field, 0) + (val * count)
+            totals[field + "_consumption"] = totals.get(field + "_consumption", 0) + (val * count)
+    
     return totals
 
 def sum_external_modifier_totals(external_modifiers):

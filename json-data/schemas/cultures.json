@@ -5,50 +5,53 @@
     "properties": {
       "name": {
         "bsonType": "string",
-		"label": "Name",
+		    "label": "Name",
         "description": "The culture's name"
       },
-	  "naming_scheme": {
+	    "naming_scheme": {
         "bsonType": "string",
-		"label": "Naming Scheme",
+		    "label": "Naming Scheme",
         "description": "The naming scheme of this culture"
       },
       "founding_nation": {
         "bsonType": "linked_object",
-		"label": "Founding Nation",
+		    "label": "Founding Nation",
         "description": "The first nation of this culture",
-		"collection": "nations"
+		    "collection": "nations"
       },
       "conversion_strength": {
         "bsonType": "enum",
-		"label": "Conversion Strength",
+		    "label": "Conversion Strength",
         "description": "The conversion strength of this culture",
-		"enum": ["None", "Weak", "Moderate", "Strong", "Intense", "Zealous"]
+		    "enum": ["None", "Weak", "Moderate", "Strong", "Intense", "Zealous"]
       },
-	  "trait_one": {
+	    "trait_one": {
         "bsonType": "enum",
-		"label": "Trait One",
+		    "label": "Trait One",
         "description": "The first cultural trait of this culture",
-		"enum": ["None", "Absolutist", "Communalist", "Egalitarian", "Individualist", "Isolationist", "Mercantilist", "Militarist", "Pacifist", "Progressive", "Secular", "Spiritualist", "Traditionalist"]
+		    "enum": ["None", "Absolutist", "Communalist", "Egalitarian", "Individualist", "Isolationist", "Mercantilist", "Militarist", "Pacifist", "Progressive", "Secular", "Spiritualist", "Traditionalist"]
       },
-	  "trait_two": {
+	    "trait_two": {
         "bsonType": "enum",
-		"label": "Trait Two",
+		    "label": "Trait Two",
         "description": "The second cultural trait of this culture",
-		"enum": ["None", "Absolutist", "Communalist", "Egalitarian", "Individualist", "Isolationist", "Mercantilist", "Militarist", "Pacifist", "Progressive", "Secular", "Spiritualist", "Traditionalist"]
+		    "enum": ["None", "Absolutist", "Communalist", "Egalitarian", "Individualist", "Isolationist", "Mercantilist", "Militarist", "Pacifist", "Progressive", "Secular", "Spiritualist", "Traditionalist"]
       },
-	  "trait_three": {
+	    "trait_three": {
         "bsonType": "enum",
-		"label": "Trait Three",
+		    "label": "Trait Three",
         "description": "The third cultural trait of this culture",
-		"enum": ["None", "Absolutist", "Communalist", "Egalitarian", "Individualist", "Isolationist", "Mercantilist", "Militarist", "Pacifist", "Progressive", "Secular", "Spiritualist", "Traditionalist"]
+		    "enum": ["None", "Absolutist", "Communalist", "Egalitarian", "Individualist", "Isolationist", "Mercantilist", "Militarist", "Pacifist", "Progressive", "Secular", "Spiritualist", "Traditionalist"]
       },
-	  "pops": {
+	    "pops": {
         "bsonType": "array",
-		"label": "Pops",
+		    "label": "Pops",
         "description": "Pops that have this race",
-		"collection": "pops",
-		"queryTargetAttribute": "culture"
+        "collection": "pops",
+        "queryTargetAttribute": "culture",
+        "items": {
+          "bsonType": "linked_object"
+        }
       }
     }
   }

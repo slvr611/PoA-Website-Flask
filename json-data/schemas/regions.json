@@ -5,52 +5,71 @@
     "properties": {
       "name": {
         "bsonType": "string",
-		"label": "Name",
+		    "label": "Name",
         "description": "The name of the region"
       },
       "current_event": {
         "bsonType": "linked_object",
-		"label": "Current Event",
+		    "label": "Current Event",
         "description": "The current event of the region",
-		"collection": "events"
+		    "collection": "events"
       },
       "events": {
         "bsonType": "array",
-		"label": "Events",
+		    "label": "Events",
         "description": "All events that have ocurred in the region",
-		"collection": "events",
-		"queryTargetAttribute": "target"
+		    "collection": "events",
+		    "queryTargetAttribute": "target"
       },
-	  "nations": {
+	    "nations": {
         "bsonType": "array",
-		"label": "Nations",
+		    "label": "Nations",
         "description": "Nations currently located in this region",
-		"collection": "nations",
-		"queryTargetAttribute": "region"
+		    "collection": "nations",
+		    "queryTargetAttribute": "region",
+        "items": {
+          "bsonType": "linked_object"
+        }
       },
-	  "merchants": {
+	    "merchants": {
         "bsonType": "array",
-		"label": "Merchants",
-        "description": "Merchants currently located in this region"
+		    "label": "Merchants",
+        "description": "Merchants currently located in this region",
+        "collection": "merchants",
+		    "queryTargetAttribute": "region",
+        "items": {
+          "bsonType": "linked_object"
+        }
       },
-	  "mercenaries": {
+	    "mercenaries": {
         "bsonType": "array",
-		"label": "Mercenaries",
+		    "label": "Mercenaries",
         "description": "Mercenaries currently located in this region",
-		"collection": "mercenaries",
-		"queryTargetAttribute": "region"
+		    "collection": "mercenaries",
+		    "queryTargetAttribute": "region",
+        "items": {
+          "bsonType": "linked_object"
+        }
       },
-	  "characters": {
+	    "characters": {
         "bsonType": "array",
-		"label": "Characters",
+		    "label": "Characters",
         "description": "Characters currently located in this region",
-		"collection": "characters",
-		"queryTargetAttribute": "region"
+		    "collection": "characters",
+		    "queryTargetAttribute": "region",
+        "items": {
+          "bsonType": "linked_object"
+        }
       },
-	  "wars": {
+	    "wars": {
         "bsonType": "array",
-		"label": "Wars",
-        "description": "Wars currently being fought in this region"
+		    "label": "Wars",
+        "description": "Wars currently being fought in this region",
+        "collection": "wars",
+		    "queryTargetAttribute": "region",
+        "items": {
+          "bsonType": "linked_object"
+        }
       }
     }
   }

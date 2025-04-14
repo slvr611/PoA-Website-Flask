@@ -175,7 +175,10 @@
 		    "label": "Pops",
         "description": "Pops that have this race",
 		    "collection": "pops",
-		    "queryTargetAttribute": "race"
+		    "queryTargetAttribute": "race",
+        "items": {
+          "bsonType": "linked_object"
+        }
       }
     }
   }

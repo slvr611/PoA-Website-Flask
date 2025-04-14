@@ -102,11 +102,14 @@
                 }
             },
             "pops": {
-            "bsonType": "array",
-            "label": "Pops",
-            "description": "Pops that have this race",
-            "collection": "pops",
-            "queryTargetAttribute": "religion"
+                "bsonType": "array",
+                "label": "Pops",
+                "description": "Pops that have this race",
+                "collection": "pops",
+                "queryTargetAttribute": "religion",
+                "items": {
+                    "bsonType": "linked_object"
+                }
             }
         }
     }
