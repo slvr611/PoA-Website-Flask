@@ -85,12 +85,12 @@
 		"base_value": 9
       },
 	  "resource_storage": {
-        "bsonType": "array",
+        "bsonType": "object",
 		"label": "Resource Storage",
         "description": "The resource reserves of the merchant company"
       },
 	  "resource_production": {
-        "bsonType": "array",
+        "bsonType": "object",
 		"label": "Resource Production",
         "description": "The amount of each resource the merchant company makes at the start of each session",
 		"calculated": true

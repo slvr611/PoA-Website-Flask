@@ -24,7 +24,7 @@
 				<span>
 					{{ schema.properties.rulers.label }}:
 					{% for ruler in linked_objects["rulers"] %}
-						<a href="/characters/{{ ruler.name }}">{{ ruler.name }}</a>{% if not loop.last %}, {% endif %}
+						<a href="/characters/item/{{ ruler.name }}">{{ ruler.name }}</a>{% if not loop.last %}, {% endif %}
 					{% endfor %}
 				</span>
 			{% endif %}
