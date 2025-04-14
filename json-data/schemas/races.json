@@ -70,7 +70,7 @@
             "nation_unit_speed": 1
           },
           "Venerable": {
-            "character_elderly_start": 1,
+            "character_elderly_age": 1,
             "character_stats_while_elderly": 1
           }
         }
@@ -98,7 +98,7 @@
             "nation_research_production": -1
           },
           "Fleeting": {
-            "character_elderly_start": -1,
+            "character_elderly_age": -1,
             "character_elderly_death_start_early": 1
           },
           "Frail": {
