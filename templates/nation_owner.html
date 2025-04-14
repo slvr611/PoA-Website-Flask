@@ -6,7 +6,9 @@
 <div class="nation-page-container">
 	<div class="header-bar">
 		<h1>{{ nation.name }}</h1>
-		<a href="{{ request.path.replace('item', 'edit') }}" class="edit-button">Edit</a>
+		{% if g.user is not none %}
+			<a href="{{ request.path.replace('item', 'edit') }}" class="edit-button">Edit</a>
+		{% endif %}
 		<div class="nation-summary">
 			<span>{{ schema.properties.region.label }}: 
 				{% if linked_objects["region"] %}

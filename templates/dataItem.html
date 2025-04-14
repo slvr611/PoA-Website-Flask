@@ -4,7 +4,9 @@
 
 {% block content %}
 <div class="container">
-	<a href="{{ request.path.replace('item', 'edit') }}">Edit</a>
+	{% if g.user is not none %}
+		<a href="{{ request.path.replace('item', 'edit') }}">Edit</a>
+	{% endif %}
 	<div class="content">
 		<h1>
 			{% if item.name %}

@@ -4,7 +4,9 @@
 
 {% block content %}
 <div class="container">
-	<a href="{{ request.path }}/edit">Edit</a>
+	{% if g.user is not none %}
+		<a href="{{ request.path }}/edit">Edit</a>
+	{% endif %}
 	<h1>{{ title }}:</h1>
 	<table class="info-table">
 		<thead>
