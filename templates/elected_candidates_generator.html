@@ -1,0 +1,18 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="container">
+    <h1>Elected Candidates Generator</h1>
+    <h2># Your Options:</h2>
+
+    <h3>**Option A:**</h3>
+    <strong>**Strengths:**</strong> {{ candidate_1_strengths|join(", ") }}<br>
+    <strong>**Weaknesses:**</strong> {{ candidate_1_weaknesses|join(", ") }}<br>
+    <strong>**Title:**</strong> "{{ candidate_1_title }}"<br>
+    </br>
+    <h3>**Option B:**</h3>
+    <strong>**Strengths:**</strong> {{ candidate_2_strengths|join(", ") }}<br>
+    <strong>**Weaknesses:**</strong> {{ candidate_2_weaknesses|join(", ") }}<br>
+    <strong>**Title:**</strong> "{{ candidate_2_title }}"<br>
+</div>
+{% endblock %}

@@ -1,0 +1,1143 @@
+{
+	"the_trader": {
+		"display_name": "the Trader",
+		"tier": 1,
+		"type": "positive",
+		"modifiers": {
+			"nation_trade_slots": 1
+		}
+	},
+	"the_merchant": {
+		"display_name": "the Merchant",
+		"tier": 2,
+		"type": "positive",
+		"modifiers": {
+			"nation_trade_slots": 2
+		}
+	},
+	"the_guildmaster": {
+		"display_name": "the Guildmaster",
+		"tier": 3,
+		"type": "positive",
+		"modifiers": {
+			"nation_trade_slots": 3
+		}
+	},
+	"the_clever": {
+		"display_name": "the Clever",
+		"tier": 1,
+		"type": "positive",
+		"modifiers": {}
+	},
+	"the_wise": {
+		"display_name": "the Wise",
+		"tier": 2,
+		"type": "positive",
+		"modifiers": {}
+	},
+	"the_sage": {
+		"display_name": "the Sage",
+		"tier": 3,
+		"type": "positive",
+		"modifiers": {}
+	},
+	"the_bold": {
+		"display_name": "the Bold",
+		"tier": 1,
+		"type": "positive",
+		"modifiers": {
+			"nation_ruler_unit_morale": 1
+		}
+	},
+	"the_brave": {
+		"display_name": "the Brave",
+		"tier": 2,
+		"type": "positive",
+		"modifiers": {
+			"nation_ruler_unit_morale": 2
+		}
+	},
+	"the_fearless": {
+		"display_name": "the Fearless",
+		"tier": 3,
+		"type": "positive",
+		"modifiers": {
+			"nation_ruler_unit_morale": 3
+		}
+	},
+	"the_strong": {
+		"display_name": "the Strong",
+		"tier": 1,
+		"type": "positive",
+		"modifiers": {
+			"nation_ruler_unit_attack": 1
+		}
+	},
+	"the_mighty": {
+		"display_name": "the Mighty",
+		"tier": 2,
+		"type": "positive",
+		"modifiers": {
+			"nation_ruler_unit_attack": 2
+		}
+	},
+	"the_ferocious": {
+		"display_name": "the Ferocious",
+		"tier": 3,
+		"type": "positive",
+		"modifiers": {
+			"nation_ruler_unit_attack": 4
+		}
+	},
+	"the_solid": {
+		"display_name": "the Solid",
+		"tier": 1,
+		"type": "positive",
+		"modifiers": {
+			"nation_ruler_unit_defense": 1
+		}
+	},
+	"the_sturdy": {
+		"display_name": "the Sturdy",
+		"tier": 2,
+		"type": "positive",
+		"modifiers": {
+			"nation_ruler_unit_defense": 2
+		}
+	},
+	"the_stalwart": {
+		"display_name": "the Stalwart",
+		"tier": 3,
+		"type": "positive",
+		"modifiers": {
+			"nation_ruler_unit_defense": 4
+		}
+	},
+	"the_rich": {
+		"display_name": "the Rich",
+		"tier": 1,
+		"type": "positive",
+		"modifiers": {
+			"nation_money_income": 60
+		}
+	},
+	"the_wealthy": {
+		"display_name": "the Wealthy",
+		"tier": 2,
+		"type": "positive",
+		"modifiers": {
+			"nation_money_income": 120
+		}
+	},
+	"the_golden": {
+		"display_name": "the Golden",
+		"tier": 3,
+		"type": "positive",
+		"modifiers": {
+			"nation_money_income": 180
+		}
+	},
+	"the_fair": {
+		"display_name": "the Fair",
+		"tier": 1,
+		"type": "positive",
+		"modifiers": {
+			"nation_stability_gain_chance": 0.10
+		}
+	},
+	"the_just": {
+		"display_name": "the Just",
+		"tier": 2,
+		"type": "positive",
+		"modifiers": {
+			"nation_stability_gain_chance": 0.15
+		}
+	},
+	"the_virtuous": {
+		"display_name": "the Virtuous",
+		"tier": 3,
+		"type": "positive",
+		"modifiers": {
+			"nation_stability_gain_chance": 0.25
+		}
+	},
+	"the_humble": {
+		"display_name": "the Humble",
+		"tier": 1,
+		"type": "positive",
+		"modifiers": {}
+	},
+	"the_blessed": {
+		"display_name": "the Blessed",
+		"tier": 2,
+		"type": "positive",
+		"modifiers": {}
+	},
+	"the_divine": {
+		"display_name": "the Divine",
+		"tier": 3,
+		"type": "positive",
+		"modifiers": {}
+	},
+	"the_neat": {
+		"display_name": "the Neat",
+		"tier": 1,
+		"type": "positive",
+		"modifiers": {}
+	},
+	"the_elegant": {
+		"display_name": "the Elegant",
+		"tier": 2,
+		"type": "positive",
+		"modifiers": {}
+	},
+	"the_exquisite": {
+		"display_name": "the Exquisite",
+		"tier": 3,
+		"type": "positive",
+		"modifiers": {}
+	},
+	"the_fearsome": {
+		"display_name": "the Fearsome",
+		"tier": 1,
+		"type": "positive",
+		"modifiers": {
+			"nation_stability_loss_chance": -0.10
+		}
+	},
+	"the_grim": {
+		"display_name": "the Grim",
+		"tier": 2,
+		"type": "positive",
+		"modifiers": {
+			"nation_stability_loss_chance": -0.15
+		}
+	},
+	"the_dreaded": {
+		"display_name": "the Dreaded",
+		"tier": 3,
+		"type": "positive",
+		"modifiers": {
+			"nation_stability_loss_chance": -0.25
+		}
+	},
+	"the_friendly": {
+		"display_name": "the Friendly",
+		"tier": 1,
+		"type": "positive",
+		"modifiers": {}
+	},
+	"the_diplomat": {
+		"display_name": "the Diplomat",
+		"tier": 2,
+		"type": "positive",
+		"modifiers": {}
+	},
+	"the_emissary": {
+		"display_name": "the Emissary",
+		"tier": 3,
+		"type": "positive",
+		"modifiers": {}
+	},
+	"the_rustic": {
+		"display_name": "the Rustic",
+		"tier": 1,
+		"type": "positive",
+		"modifiers": {
+			"nation_food_production": 1
+		}
+	},
+	"the_countryman": {
+		"display_name": "the Countryman",
+		"tier": 2,
+		"type": "positive",
+		"modifiers": {
+			"nation_food_production": 2
+		}
+	},
+	"the_green": {
+		"display_name": "the Green",
+		"tier": 3,
+		"type": "positive",
+		"modifiers": {
+			"nation_food_production": 4
+		}
+	},
+	"the_tireless": {
+		"display_name": "the Tireless",
+		"tier": 1,
+		"type": "positive",
+		"modifiers": {}
+	},
+	"the_vigorous": {
+		"display_name": "the Vigorous",
+		"tier": 2,
+		"type": "positive",
+		"modifiers": {}
+	},
+	"the_unstoppable": {
+		"display_name": "the Unstoppable",
+		"tier": 3,
+		"type": "positive",
+		"modifiers": {}
+	},
+	"the_apprentice": {
+		"display_name": "the Apprentice",
+		"tier": 1,
+		"type": "positive",
+		"modifiers": {}
+	},
+	"the_mystic": {
+		"display_name": "the Mystic",
+		"tier": 2,
+		"type": "positive",
+		"modifiers": {
+			"character_spell_cost_reduction": 1
+		}
+	},
+	"the_exalted": {
+		"display_name": "the Exalted",
+		"tier": 3,
+		"type": "positive",
+		"modifiers": {
+			"nation_spell_cost_reduction": 1,
+			"character_spell_cost_reduction": 1
+		}
+	},
+	"the_specific": {
+		"display_name": "the Specific",
+		"tier": 1,
+		"type": "positive",
+		"modifiers": {}
+	},
+	"the_consistent": {
+		"display_name": "the Consistent",
+		"tier": 2,
+		"type": "positive",
+		"modifiers": {}
+	},
+	"the_decisive": {
+		"display_name": "the Decisive",
+		"tier": 3,
+		"type": "positive",
+		"modifiers": {}
+	},
+	"the_cheerful": {
+		"display_name": "the Cheerful",
+		"tier": 1,
+		"type": "positive",
+		"modifiers": {}
+	},
+	"the_optimistic": {
+		"display_name": "the Optimistic",
+		"tier": 2,
+		"type": "positive",
+		"modifiers": {}
+	},
+	"the_sanguine": {
+		"display_name": "the Sanguine",
+		"tier": 3,
+		"type": "positive",
+		"modifiers": {}
+	},
+	"the_aware": {
+		"display_name": "the Aware",
+		"tier": 1,
+		"type": "positive",
+		"modifiers": {}
+	},
+	"the_perceptive": {
+		"display_name": "the Perceptive",
+		"tier": 2,
+		"type": "positive",
+		"modifiers": {}
+	},
+	"the_shrewd": {
+		"display_name": "the Shrewd",
+		"tier": 3,
+		"type": "positive",
+		"modifiers": {}
+	},
+	"the_clean": {
+		"display_name": "the Clean",
+		"tier": 1,
+		"type": "positive",
+		"modifiers": {
+			"character_death_chance": -0.10
+		}
+	},
+	"the_pristine": {
+		"display_name": "the Pristine",
+		"tier": 2,
+		"type": "positive",
+		"modifiers": {
+			"character_death_chance": -0.15
+		}
+	},
+	"the_immaculate": {
+		"display_name": "the Immaculate",
+		"tier": 3,
+		"type": "positive",
+		"modifiers": {
+			"character_death_chance": -0.20
+		}
+	},
+	"the_careful": {
+		"display_name": "the Careful",
+		"tier": 1,
+		"type": "positive",
+		"modifiers": {}
+	},
+	"the_attentive": {
+		"display_name": "the Attentive",
+		"tier": 2,
+		"type": "positive",
+		"modifiers": {}
+	},
+	"the_meticulous": {
+		"display_name": "the Meticulous",
+		"tier": 3,
+		"type": "positive",
+		"modifiers": {}
+	},
+	"the_favored": {
+		"display_name": "the Favored",
+		"tier": 1,
+		"type": "positive",
+		"modifiers": {
+			"nation_karma": 2
+		}
+	},
+	"the_gifted": {
+		"display_name": "the Gifted",
+		"tier": 2,
+		"type": "positive",
+		"modifiers": {
+			"nation_karma": 4
+		}
+	},
+	"the_foretold": {
+		"display_name": "the Foretold",
+		"tier": 3,
+		"type": "positive",
+		"modifiers": {
+			"nation_karma": 4,
+			"nation_abysmal_event_requires_nat_1": 1
+		}
+	},
+	"the_connected": {
+		"display_name": "the Connected",
+		"tier": 1,
+		"type": "positive",
+		"modifiers": {
+			"non_aggression_pact_slots": 2
+		}
+	},
+	"the_ally": {
+		"display_name": "the Ally",
+		"tier": 2,
+		"type": "positive",
+		"modifiers": {
+			"non_aggression_pact_slots": 2,
+			"defensive_pact_slots": 1
+		}
+	},
+	"the_uniter": {
+		"display_name": "the Uniter",
+		"tier": 3,
+		"type": "positive",
+		"modifiers": {
+			"non_aggression_pact_slots": 3,
+			"military_pact_slots": 1
+		}
+	},
+	"the_confident": {
+		"display_name": "the Confident",
+		"tier": 1,
+		"type": "positive",
+		"modifiers": {}
+	},
+	"the_assertive": {
+		"display_name": "the Assertive",
+		"tier": 2,
+		"type": "positive",
+		"modifiers": {}
+	},
+	"the_commanding": {
+		"display_name": "the Commanding",
+		"tier": 3,
+		"type": "positive",
+		"modifiers": {}
+	},
+	"the_witty": {
+		"display_name": "the Witty",
+		"tier": 1,
+		"type": "positive",
+		"modifiers": {}
+	},
+	"the_astute": {
+		"display_name": "the Astute",
+		"tier": 2,
+		"type": "positive",
+		"modifiers": {}
+	},
+	"the_eidetic": {
+		"display_name": "the Eidetic",
+		"tier": 3,
+		"type": "positive",
+		"modifiers": {}
+	},
+	"the_lasting": {
+		"display_name": "the Lasting",
+		"tier": 1,
+		"type": "positive",
+		"modifiers": {}
+	},
+	"the_enduring": {
+		"display_name": "the Enduring",
+		"tier": 2,
+		"type": "positive",
+		"modifiers": {}
+	},
+	"the_everlasting": {
+		"display_name": "the Everlasting",
+		"tier": 3,
+		"type": "positive",
+		"modifiers": {}
+	},
+	"the_good": {
+		"display_name": "the Good",
+		"tier": 1,
+		"type": "positive",
+		"modifiers": {}
+	},
+	"the_gracious": {
+		"display_name": "the Gracious",
+		"tier": 2,
+		"type": "positive",
+		"modifiers": {}
+	},
+	"the_benevolent": {
+		"display_name": "the Benevolent",
+		"tier": 3,
+		"type": "positive",
+		"modifiers": {}
+	},
+	"the_lively": {
+		"display_name": "the Lively",
+		"tier": 1,
+		"type": "positive",
+		"modifiers": {
+			"ignore_elderly_strength": true
+		}
+	},
+	"the_energetic": {
+		"display_name": "the Energetic",
+		"tier": 2,
+		"type": "positive",
+		"modifiers": {
+			"ignore_elderly_penalties": true
+		}
+	},
+	"the_vigorous_elder": {
+		"display_name": "the Vigorous",
+		"tier": 3,
+		"type": "positive",
+		"modifiers": {
+			"ignore_elderly_penalties": true,
+			"elderly_mechrp_bonus": 1
+		}
+	},
+	"the_adept": {
+		"display_name": "the Adept",
+		"tier": 1,
+		"type": "positive",
+		"modifiers": {
+			"unit_recruitment_discount": 0.15
+		}
+	},
+	"the_journeyman": {
+		"display_name": "the Journeyman",
+		"tier": 2,
+		"type": "positive",
+		"modifiers": {
+			"unit_recruitment_discount": 0.25
+		}
+	},
+	"the_master": {
+		"display_name": "the Master",
+		"tier": 3,
+		"type": "positive",
+		"modifiers": {
+			"unit_recruitment_discount": 0.35
+		}
+	},
+	"the_cheat": {
+		"display_name": "the Cheat",
+		"tier": 1,
+		"type": "negative",
+		"modifiers": {
+			"nation_trade_slots": -1
+		}
+	},
+	"the_swindler": {
+		"display_name": "the Swindler",
+		"tier": 2,
+		"type": "negative",
+		"modifiers": {
+			"nation_trade_slots": -2
+		}
+	},
+	"the_fraud": {
+		"display_name": "the Fraud",
+		"tier": 3,
+		"type": "negative",
+		"modifiers": {
+			"nation_trade_slots": -3
+		}
+	},
+	"the_gullible": {
+		"display_name": "the Gullible",
+		"tier": 1,
+		"type": "negative",
+		"modifiers": {}
+	},
+	"the_misguided": {
+		"display_name": "the Misguided",
+		"tier": 2,
+		"type": "negative",
+		"modifiers": {}
+	},
+	"the_fool": {
+		"display_name": "the Fool",
+		"tier": 3,
+		"type": "negative",
+		"modifiers": {}
+	},
+	"the_fearful": {
+		"display_name": "the Fearful",
+		"tier": 1,
+		"type": "negative",
+		"modifiers": {
+			"nation_ruler_unit_morale": -1,
+			"nation_ruler_unit_minimum_morale": 2
+		}
+	},
+	"the_coward": {
+		"display_name": "the Coward",
+		"tier": 2,
+		"type": "negative",
+		"modifiers": {
+			"nation_ruler_unit_morale": -2,
+			"nation_ruler_unit_minimum_morale": 2
+		}
+	},
+	"the_spineless": {
+		"display_name": "the Spineless",
+		"tier": 3,
+		"type": "negative",
+		"modifiers": {
+			"nation_ruler_unit_morale": -3,
+			"nation_ruler_unit_minimum_morale": 2
+		}
+	},
+	"the_weak": {
+		"display_name": "the Weak",
+		"tier": 1,
+		"type": "negative",
+		"modifiers": {
+			"nation_ruler_unit_attack": -1
+		}
+	},
+	"the_feeble": {
+		"display_name": "the Feeble",
+		"tier": 2,
+		"type": "negative",
+		"modifiers": {
+			"nation_ruler_unit_attack": -2
+		}
+	},
+	"the_infirm": {
+		"display_name": "the Infirm",
+		"tier": 3,
+		"type": "negative",
+		"modifiers": {
+			"nation_ruler_unit_attack": -4
+		}
+	},
+	"the_frail": {
+		"display_name": "the Frail",
+		"tier": 1,
+		"type": "negative",
+		"modifiers": {
+			"nation_ruler_unit_defense": -1
+		}
+	},
+	"the_brittle": {
+		"display_name": "the Brittle",
+		"tier": 2,
+		"type": "negative",
+		"modifiers": {
+			"nation_ruler_unit_defense": -2
+		}
+	},
+	"the_fragile": {
+		"display_name": "the Fragile",
+		"tier": 3,
+		"type": "negative",
+		"modifiers": {
+			"nation_ruler_unit_defense": -4
+		}
+	},
+	"the_poor": {
+		"display_name": "the Poor",
+		"tier": 1,
+		"type": "negative",
+		"modifiers": {
+			"nation_money_income": -45
+		}
+	},
+	"the_pauper": {
+		"display_name": "the Pauper",
+		"tier": 2,
+		"type": "negative",
+		"modifiers": {
+			"nation_money_income": -75
+		}
+	},
+	"the_beggar": {
+		"display_name": "the Beggar",
+		"tier": 3,
+		"type": "negative",
+		"modifiers": {
+			"nation_money_income": -105
+		}
+	},
+	"the_hypocrite": {
+		"display_name": "the Hypocrite",
+		"tier": 1,
+		"type": "negative",
+		"modifiers": {
+			"nation_stability_loss_chance": 0.10
+		}
+	},
+	"the_unjust": {
+		"display_name": "the Unjust",
+		"tier": 2,
+		"type": "negative",
+		"modifiers": {
+			"nation_stability_loss_chance": 0.15
+		}
+	},
+	"the_corrupt": {
+		"display_name": "the Corrupt",
+		"tier": 3,
+		"type": "negative",
+		"modifiers": {
+			"nation_stability_loss_chance": 0.20
+		}
+	},
+	"the_skeptic": {
+		"display_name": "the Skeptic",
+		"tier": 1,
+		"type": "negative",
+		"modifiers": {}
+	},
+	"the_dissenter": {
+		"display_name": "the Dissenter",
+		"tier": 2,
+		"type": "negative",
+		"modifiers": {}
+	},
+	"the_apostate": {
+		"display_name": "the Apostate",
+		"tier": 3,
+		"type": "negative",
+		"modifiers": {}
+	},
+	"the_gaudy": {
+		"display_name": "the Gaudy",
+		"tier": 1,
+		"type": "negative",
+		"modifiers": {}
+	},
+	"the_garish": {
+		"display_name": "the Garish",
+		"tier": 2,
+		"type": "negative",
+		"modifiers": {}
+	},
+	"the_flagrant": {
+		"display_name": "the Flagrant",
+		"tier": 3,
+		"type": "negative",
+		"modifiers": {}
+	},
+	"the_disliked": {
+		"display_name": "the Disliked",
+		"tier": 1,
+		"type": "negative",
+		"modifiers": {}
+	},
+	"the_hated": {
+		"display_name": "the Hated",
+		"tier": 2,
+		"type": "negative",
+		"modifiers": {}
+	},
+	"the_despised": {
+		"display_name": "the Despised",
+		"tier": 3,
+		"type": "negative",
+		"modifiers": {}
+	},
+	"the_awkward": {
+		"display_name": "the Awkward",
+		"tier": 1,
+		"type": "negative",
+		"modifiers": {}
+	},
+	"the_bumbling": {
+		"display_name": "the Bumbling",
+		"tier": 2,
+		"type": "negative",
+		"modifiers": {}
+	},
+	"the_foul": {
+		"display_name": "the Foul",
+		"tier": 3,
+		"type": "negative",
+		"modifiers": {}
+	},
+	"the_urbanite": {
+		"display_name": "the Urbanite",
+		"tier": 1,
+		"type": "negative",
+		"modifiers": {
+			"nation_food_production": -1
+		}
+	},
+	"the_stranger": {
+		"display_name": "the Stranger",
+		"tier": 2,
+		"type": "negative",
+		"modifiers": {
+			"nation_food_production": -2
+		}
+	},
+	"the_black_thumb": {
+		"display_name": "the Black Thumb",
+		"tier": 3,
+		"type": "negative",
+		"modifiers": {
+			"nation_food_production": -4
+		}
+	},
+	"the_lazy": {
+		"display_name": "the Lazy",
+		"tier": 1,
+		"type": "negative",
+		"modifiers": {}
+	},
+	"the_sloth": {
+		"display_name": "the Sloth",
+		"tier": 2,
+		"type": "negative",
+		"modifiers": {}
+	},
+	"the_petulant": {
+		"display_name": "the Petulant",
+		"tier": 3,
+		"type": "negative",
+		"modifiers": {}
+	},
+	"the_novice": {
+		"display_name": "the Novice",
+		"tier": 1,
+		"type": "negative",
+		"modifiers": {
+			"nation_spell_cost": 1
+		}
+	},
+	"the_trite": {
+		"display_name": "the Trite",
+		"tier": 2,
+		"type": "negative",
+		"modifiers": {
+			"nation_spell_cost": 1,
+			"character_spell_cost": 1
+		}
+	},
+	"the_banal": {
+		"display_name": "the Banal",
+		"tier": 3,
+		"type": "negative",
+		"modifiers": {
+			"nation_spell_cost": 2,
+			"character_spell_cost": 2,
+			"nation_spell_complexity_increase": 1
+		}
+	},
+	"the_fickle": {
+		"display_name": "the Fickle",
+		"tier": 1,
+		"type": "negative",
+		"modifiers": {}
+	},
+	"the_indecisive": {
+		"display_name": "the Indecisive",
+		"tier": 2,
+		"type": "negative",
+		"modifiers": {}
+	},
+	"the_capricious": {
+		"display_name": "the Capricious",
+		"tier": 3,
+		"type": "negative",
+		"modifiers": {}
+	},
+	"the_sad": {
+		"display_name": "the Sad",
+		"tier": 1,
+		"type": "negative",
+		"modifiers": {}
+	},
+	"the_melancholic": {
+		"display_name": "the Melancholic",
+		"tier": 2,
+		"type": "negative",
+		"modifiers": {}
+	},
+	"the_miserable": {
+		"display_name": "the Miserable",
+		"tier": 3,
+		"type": "negative",
+		"modifiers": {}
+	},
+	"the_ignorant": {
+		"display_name": "the Ignorant",
+		"tier": 1,
+		"type": "negative",
+		"modifiers": {}
+	},
+	"the_blind": {
+		"display_name": "the Blind",
+		"tier": 2,
+		"type": "negative",
+		"modifiers": {}
+	},
+	"the_oblivious": {
+		"display_name": "the Oblivious",
+		"tier": 3,
+		"type": "negative",
+		"modifiers": {}
+	},
+	"the_unclean": {
+		"display_name": "the Unclean",
+		"tier": 1,
+		"type": "negative",
+		"modifiers": {
+			"character_death_chance": 0.10
+		}
+	},
+	"the_diseased": {
+		"display_name": "the Diseased",
+		"tier": 2,
+		"type": "negative",
+		"modifiers": {
+			"character_death_chance": 0.15
+		}
+	},
+	"the_rotten": {
+		"display_name": "the Rotten",
+		"tier": 3,
+		"type": "negative",
+		"modifiers": {
+			"character_death_chance": 0.20
+		}
+	},
+	"the_careless": {
+		"display_name": "the Careless",
+		"tier": 1,
+		"type": "negative",
+		"modifiers": {}
+	},
+	"the_squanderer": {
+		"display_name": "the Squanderer",
+		"tier": 2,
+		"type": "negative",
+		"modifiers": {}
+	},
+	"the_wasteful": {
+		"display_name": "the Wasteful",
+		"tier": 3,
+		"type": "negative",
+		"modifiers": {}
+	},
+	"the_unlucky": {
+		"display_name": "the Unlucky",
+		"tier": 1,
+		"type": "negative",
+		"modifiers": {
+			"nation_karma": -2
+		}
+	},
+	"the_jinxed": {
+		"display_name": "the Jinxed",
+		"tier": 2,
+		"type": "negative",
+		"modifiers": {
+			"nation_karma": -4
+		}
+	},
+	"the_cursed": {
+		"display_name": "the Cursed",
+		"tier": 3,
+		"type": "negative",
+		"modifiers": {
+			"nation_karma": -4,
+			"nation_fantastic_events_disabled": 1
+		}
+	},
+	"the_isolated": {
+		"display_name": "the Isolated",
+		"tier": 1,
+		"type": "negative",
+		"modifiers": {
+			"non_aggression_pact_slots": -2
+		}
+	},
+	"the_hermit": {
+		"display_name": "the Hermit",
+		"tier": 2,
+		"type": "negative",
+		"modifiers": {
+			"non_aggression_pact_slots": -3,
+			"defensive_pact_slots": -1
+		}
+	},
+	"the_recluse": {
+		"display_name": "the Recluse",
+		"tier": 3,
+		"type": "negative",
+		"modifiers": {
+			"non_aggression_pact_slots": -3,
+			"military_pact_slots": -1,
+			"defensive_pact_slots": -1
+		}
+	},
+	"the_shy": {
+		"display_name": "the Shy",
+		"tier": 1,
+		"type": "negative",
+		"modifiers": {}
+	},
+	"the_meek": {
+		"display_name": "the Meek",
+		"tier": 2,
+		"type": "negative",
+		"modifiers": {}
+	},
+	"the_submissive": {
+		"display_name": "the Submissive",
+		"tier": 3,
+		"type": "negative",
+		"modifiers": {}
+	},
+	"the_simple": {
+		"display_name": "the Simple",
+		"tier": 1,
+		"type": "negative",
+		"modifiers": {}
+	},
+	"the_forgetful": {
+		"display_name": "the Forgetful",
+		"tier": 2,
+		"type": "negative",
+		"modifiers": {}
+	},
+	"the_idiot": {
+		"display_name": "the Idiot",
+		"tier": 3,
+		"type": "negative",
+		"modifiers": {}
+	},
+	"the_hindered": {
+		"display_name": "the Hindered",
+		"tier": 1,
+		"type": "negative",
+		"modifiers": {}
+	},
+	"the_burdened": {
+		"display_name": "the Burdened",
+		"tier": 2,
+		"type": "negative",
+		"modifiers": {}
+	},
+	"the_hopeless": {
+		"display_name": "the Hopeless",
+		"tier": 3,
+		"type": "negative",
+		"modifiers": {}
+	},
+	"the_persecutor": {
+		"display_name": "the Persecutor",
+		"tier": 1,
+		"type": "negative",
+		"modifiers": {}
+	},
+	"the_oppressor": {
+		"display_name": "the Oppressor",
+		"tier": 2,
+		"type": "negative",
+		"modifiers": {}
+	},
+	"the_tyrant": {
+		"display_name": "the Tyrant",
+		"tier": 3,
+		"type": "negative",
+		"modifiers": {}
+	},
+	"the_tired": {
+		"display_name": "the Tired",
+		"tier": 1,
+		"type": "negative",
+		"modifiers": {}
+	},
+	"the_overworked": {
+		"display_name": "the Overworked",
+		"tier": 2,
+		"type": "negative",
+		"modifiers": {}
+	},
+	"the_drained": {
+		"display_name": "the Drained",
+		"tier": 3,
+		"type": "negative",
+		"modifiers": {}
+	},
+	"the_untrained": {
+		"display_name": "the Untrained",
+		"tier": 1,
+		"type": "negative",
+		"modifiers": {
+			"unit_recruitment_discount": -0.10
+		}
+	},
+	"the_amateur": {
+		"display_name": "the Amateur",
+		"tier": 2,
+		"type": "negative",
+		"modifiers": {
+			"unit_recruitment_discount": -0.15
+		}
+	},
+	"the_incapable": {
+		"display_name": "the Incapable",
+		"tier": 3,
+		"type": "negative",
+		"modifiers": {
+			"unit_recruitment_discount": -0.25
+		}
+	}
+}
