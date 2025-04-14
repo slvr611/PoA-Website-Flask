@@ -35,7 +35,7 @@
 		},
 		"modifiers": {
 			"food_consumption": 1,
-			"mount_consumption": 1,
+			"mounts_consumption": 1,
 			"effective_pop_capacity": 1,
 			"money_production": 75,
 			"trade_distance": 3,
