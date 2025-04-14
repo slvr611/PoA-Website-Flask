@@ -122,7 +122,7 @@ def compute_stability_gain_chance(field, target, base_value, field_schema, overa
     karma = target.get("karma", 0)
     unique_minority_count = target.get("unique_minority_count", 0)
 
-    karma_stability_gain = max(min(karma * overall_total_modifiers.get("stability_gain_chance_per_karma", 0), overall_total_modifiers.get("max_stability_gain_chance_per_karma", 0)), 0)
+    karma_stability_gain = max(min(karma * overall_total_modifiers.get("stability_gain_chance_per_positive_karma", 0), overall_total_modifiers.get("max_stability_gain_chance_per_positive_karma", 0)), 0)
     minority_stability_gain = max(min(unique_minority_count * overall_total_modifiers.get("stability_gain_chance_per_unique_minority", 0), overall_total_modifiers.get("max_stability_gain_chance_per_unique_minority", 0)), 0)
 
     value = round(max(base_value + overall_total_modifiers.get(field, 0) + karma_stability_gain + minority_stability_gain, 0), 2)
@@ -133,10 +133,12 @@ def compute_stability_loss_chance(field, target, base_value, field_schema, overa
     karma = target.get("karma", 0)
     unique_minority_count = target.get("unique_minority_count", 0)
     
-    karma_stability_loss = max(min(karma * overall_total_modifiers.get("stability_loss_chance_per_karma", 0), overall_total_modifiers.get("max_stability_loss_chance_per_karma", 0)), 0)
+    karma_stability_loss = max(min(-karma * overall_total_modifiers.get("stability_loss_chance_per_negative_karma", 0), overall_total_modifiers.get("max_stability_loss_chance_per_negative_karma", 0)), 0)
     minority_stability_loss = max(min(unique_minority_count * overall_total_modifiers.get("stability_loss_chance_per_unique_minority", 0), overall_total_modifiers.get("max_stability_loss_chance_per_unique_minority", 0)), 0)
 
     value = round(max(base_value + overall_total_modifiers.get(field, 0) + karma_stability_loss + minority_stability_loss, 0), 2)
+
+    print(value)
 
     return value
 

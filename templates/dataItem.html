@@ -37,7 +37,7 @@
 							{% endif %}
 						{% elif properties.bsonType == "number" %}
 							{% if properties.format == "percentage" %}
-								<td>{{ item[field] * 100 }}%</td>
+								<td>{{ (item[field] * 100)|int }}%</td>
 							{% else %}
 								<td>{{ item[field] }}</td>
 							{% endif %}

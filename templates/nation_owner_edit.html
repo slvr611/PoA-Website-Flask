@@ -36,15 +36,15 @@
                     </tr>
                     <tr>
                         <th>{{ schema.properties.stability_gain_chance.label }}:</th>
-                        <td>{{ nation.stability_gain_chance * 100 }}%</td>
+                        <td>{{ (nation.stability_gain_chance * 100)|int }}%</td>
                     </tr>
                     <tr>
                         <th>{{ schema.properties.stability_loss_chance.label }}:</th>
-                        <td>{{ nation.stability_loss_chance * 100 }}%</td>
+                        <td>{{ (nation.stability_loss_chance * 100)|int }}%</td>
                     </tr>
                     <tr>
                         <th>{{ schema.properties.stability_loss_chance_on_leader_death.label }}:</th>
-                        <td>{{ nation.stability_loss_chance_on_leader_death * 100 }}%</td>
+                        <td>{{ (nation.stability_loss_chance_on_leader_death * 100)|int }}%</td>
                     </tr>
                     <tr>
                         <th>{{ form.infamy.label.text }}:</th>
@@ -122,21 +122,21 @@
                                 <td><a href="{{ pop["link"] }}">{{ loop.index }}</a></td>
                                 <td>
                                 {% if pop["linked_objects"]["race"] %}
-                                    <a href="{{ pop["linked_objects"]["race"]["link"] }}">{{ pop["linked_objects"]["race"]["name"] }}</a>
+                                    <a href="{{ pop['linked_objects']['race']['link'] }}">{{ pop['linked_objects']['race']['name'] }}</a>
                                 {% else %}
                                     None
                                 {% endif %}
                                 </td>
                                 <td>
                                 {% if pop["linked_objects"]["culture"] %}
-                                    <a href="{{ pop["linked_objects"]["culture"]["link"] }}">{{ pop["linked_objects"]["culture"]["name"] }}</a>
+                                    <a href="{{ pop['linked_objects']['culture']['link'] }}">{{ pop['linked_objects']['culture']['name'] }}</a>
                                 {% else %}
                                     None
                                 {% endif %}
                                 </td>
                                 <td>
                                 {% if pop["linked_objects"]["religion"] %}
-                                    <a href="{{ pop["linked_objects"]["religion"]["link"] }}">{{ pop["linked_objects"]["religion"]["name"] }}</a>
+                                    <a href="{{ pop['linked_objects']['religion']['link'] }}">{{ pop['linked_objects']['religion']['name'] }}</a>
                                 {% else %}
                                     None
                                 {% endif %}
@@ -147,9 +147,9 @@
                                     </td>
                                     
                                     {% if g.user.is_admin %}
-                                        <td><button type="submit" formaction="{{ pop["link"].replace("item", "clone") }}/save" class="btn btn-primary">Clone Now</button></td>
+                                        <td><button type="submit" formaction="{{ pop['link'].replace('item', 'clone') }}/save" class="btn btn-primary">Clone Now</button></td>
                                     {% endif %}
-                                    <td><button type="submit" formaction="{{ pop["link"].replace("item", "clone") }}/request" class="btn btn-primary">Clone Now</button></td>
+                                    <td><button type="submit" formaction="{{ pop['link'].replace('item', 'clone') }}/request" class="btn btn-primary">Clone Now</button></td>
                                 </form></form>
                             </tr>
                         {% endfor %}
@@ -208,15 +208,15 @@
                     </tr>
                     <tr>
                         <th>{{ schema.properties.disobey_chance.label }}:</th>
-                        <td>{{ nation.disobey_chance * 100 }}%</td>
+                        <td>{{ (nation.disobey_chance * 100)|int }}%</td>
                     </tr>
                     <tr>
                         <th>{{ schema.properties.rebellion_chance.label }}:</th>
-                        <td>{{ nation.rebellion_chance * 100 }}%</td>
+                        <td>{{ (nation.rebellion_chance * 100)|int }}%</td>
                     </tr>
                     <tr>
                         <th>{{ schema.properties.concessions_chance.label }}:</th>
-                        <td>{{ nation.concessions_chance * 100 }}%</td>
+                        <td>{{ (nation.concessions_chance * 100)|int }}%</td>
                     </tr>
                     <tr>
                         <th>{{ schema.properties.concessions_qty.label }}:</th>
