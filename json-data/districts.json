@@ -276,8 +276,7 @@
 		"modifiers": {
 			"mounts_consumption": 1,
 			"trade_distance": 3,
-			"import_capacity": 1,
-			"export_capacity": 1,
+			"trade_slots": 1,
 			"money_income": 100
 		},
 		"synergy_requirement": "luxury",
