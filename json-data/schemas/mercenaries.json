@@ -24,7 +24,7 @@
         "bsonType": "linked_object",
 		    "label": "Region",
         "description": "The region the mercenary company is currently stationed in",
-		    "collection": "nations"
+		    "collection": "regions"
       },
       "patron": {
         "bsonType": "linked_object",
