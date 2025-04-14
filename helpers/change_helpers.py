@@ -3,7 +3,7 @@ from app_core import mongo, category_data
 from flask import g
 
 def request_change(data_type, item_id, change_type, before_data, after_data, reason):
-    requester = mongo.db.players.find_one({"id": g.user["id"]})["_id"]
+    requester = mongo.db.players.find_one({"id": g.user.get("id", None)})["_id"]
     if requester is None:
         return None
 
@@ -33,7 +33,7 @@ def request_change(data_type, item_id, change_type, before_data, after_data, rea
     return result.inserted_id
 
 def approve_change(change_id):
-    approver = mongo.db.players.find_one({"id": g.user["id"]})
+    approver = mongo.db.players.find_one({"id": g.user.get("id", None)})
     if approver is None or not approver.get("is_admin", False):
         return None
 
