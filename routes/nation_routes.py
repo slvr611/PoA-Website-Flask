@@ -1,8 +1,9 @@
-from flask import Blueprint, render_template, request, redirect, flash
+from flask import Blueprint, render_template, request, redirect, flash, g
 from helpers.data_helpers import get_data_on_category, get_data_on_item, get_dropdown_options
 from helpers.render_helpers import get_linked_objects
-from helpers.change_helpers import request_change, approve_change
+from helpers.change_helpers import request_change, approve_change, system_approve_change
 from helpers.form_helpers import validate_form_with_jsonschema
+from helpers.auth_helpers import owner_required
 from calculations.field_calculations import calculate_all_fields
 from app_core import category_data, mongo, json_data
 from helpers.auth_helpers import admin_required
@@ -11,6 +12,8 @@ from forms import form_generator
 
 nation_routes = Blueprint("nation_routes", __name__)
 
+
+
 @nation_routes.route("/nations/item/<item_ref>")
 def nation_item(item_ref):
     """Display a nation's details"""
@@ -18,6 +21,15 @@ def nation_item(item_ref):
     linked_objects = get_linked_objects(schema, nation)
     calculated_fields = calculate_all_fields(nation, schema, "nation")
     nation.update(calculated_fields)
+
+    user = mongo.db.players.find_one({"id": g.user.get("id")})
+    user_is_owner = False
+    if user:
+        user_characters = list(mongo.db.characters.find({"player": str(user["_id"])}))
+        for character in user_characters:
+            if str(character.get("ruling_nation_org", "")) == str(nation["_id"]):
+                user_is_owner = True
+                break
     
     if "jobs" not in nation:
         nation["jobs"] = {}
@@ -31,7 +43,8 @@ def nation_item(item_ref):
         general_resources=json_data["general_resources"],
         unique_resources=json_data["unique_resources"],
         districts_config=json_data["districts"],
-        cities_config=json_data["cities"]
+        cities_config=json_data["cities"],
+        user_is_owner=user_is_owner
     )
 
 @nation_routes.route("/nations/edit/<item_ref>", methods=["GET"])
@@ -143,3 +156,51 @@ def nation_edit_approve(item_ref):
     approve_change(change_id)
     flash(f"Change request #{change_id} created and approved.")
     return redirect("/nations/item/" + form_data["name"])
+
+@nation_routes.route("/nations/edit_jobs/<item_ref>", methods=["GET"])
+@owner_required("nations")
+def edit_nation_jobs(item_ref):
+    """Display nation job edit form"""
+    schema, db, nation = get_data_on_item("nations", item_ref)
+        
+    calculated_fields = calculate_all_fields(nation, schema, "nation_jobs")
+    nation.update(calculated_fields)
+    
+    form = form_generator.get_form("jobs", schema, item=nation)
+
+    return render_template(
+        "nation_jobs_edit.html",
+        form=form,
+        title="Edit Jobs for " + item_ref,
+        schema=schema,
+        nation=nation
+    )
+
+@nation_routes.route("/nations/edit_jobs/<item_ref>/save", methods=["POST"])
+@owner_required("nations")
+def nation_edit_jobs_approve(item_ref):
+    """Handle nation jobs edit approval"""
+    schema, db, nation = get_data_on_item("nations", item_ref)
+    
+    form = form_generator.get_form("jobs", schema, formdata=request.form)
+    
+    if not form.validate():
+        flash(f"Form validation failed: {form.errors}")
+        return redirect("/nations/edit_jobs/" + item_ref)
+    
+    form_data = form.data.copy()
+    form_data.pop('csrf_token', None)
+    form_data.pop('submit', None)
+    
+    change_id = request_change(
+        data_type="nations",
+        item_id=nation["_id"],
+        change_type="Update",
+        before_data=nation,
+        after_data=form_data,
+        reason="Job Assignment"
+    )
+    
+    print(system_approve_change(change_id))
+    flash(f"Change request #{change_id} created and approved.")
+    return redirect("/nations/item/" + item_ref)

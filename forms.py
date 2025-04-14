@@ -21,6 +21,12 @@ class FormGenerator:
                 job_details = item.get("job_details", {})
             return NationForm.create_form(schema, item, formdata, job_details)
 
+        elif data_type == "jobs":
+            job_details = {}
+            if item:
+                job_details = item.get("job_details", {})
+            return JobForm.create_form(schema, item, formdata, job_details)
+
         elif data_type == "new_character":
             return NewCharacterForm.create_form(schema, item, formdata)
 
@@ -688,7 +694,48 @@ class NationForm(BaseSchemaForm):
                 
         for city_field in self.cities:
             city_field.form.populate_linked_fields(type_options=city_choices, node_options=node_choices, wall_options=wall_choices)
+
+class JobForm(BaseSchemaForm):
+    """Form to change jobs without needing to request a full nation edit"""
+    # Add dynamic law fields from schema
+    @classmethod
+    def create_form_class(cls, schema, job_details):
+        """Creates a form class with additional fields from schema"""
+        JobAssignmentDict.create_form_class(job_details)
+        cls.jobs = FormField(JobAssignmentDict)
+
+        return cls
     
+    @classmethod
+    def create_form(cls, schema, nation=None, formdata=None, job_details={}):
+        """Creates and populates a nation form"""
+        # First create the form class with all fields
+        form_class = cls.create_form_class(schema, job_details)
+        
+        # Create form instance
+        if formdata:
+            form = form_class(formdata=formdata)
+        elif nation:
+            form = form_class()
+            form.load_form_from_item(nation)
+        else:
+            form = form_class()
+        
+        # Handle jobs
+        if nation:
+            for job_key, job_val in nation.get("jobs", {}).items():
+                job_field = getattr(form.jobs, job_key, None)
+                if job_field:
+                    job_field.data = job_val
+        
+        return form
+    
+    def populate_linked_fields(self, schema, dropdown_options):
+        """Populates all linked fields with their options"""
+        for field_name, field_schema in schema.get("properties", {}).items():
+            if field_schema.get("collection"):
+                self.populate_select_field(field_name, schema, dropdown_options)
+
 class NewCharacterForm(BaseSchemaForm):
     """Form for creating a new character"""
     name = StringField("Name", validators=[DataRequired()])

@@ -183,7 +183,7 @@
 		},
 		"modifiers": {
 			"wood_consumption": 1,
-			"effective_pop_capacity": 2
+			"effective_pop_capacity": 3
 		},
 		"synergy_requirement": "food",
 		"synergy_node_active": true,

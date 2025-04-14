@@ -509,6 +509,9 @@
 				{% endfor %}
 			</tbody>
 		</table>
+		{% if user_is_owner %}
+			<a href="{{ request.path.replace('item', 'edit_jobs') }}">Edit Jobs</a>
+		{% endif %}
 	</section>
 	
 	<section class="districts-section">

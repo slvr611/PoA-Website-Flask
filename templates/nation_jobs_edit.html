@@ -1,0 +1,54 @@
+{% extends "layout.html" %}
+
+{% block title %}Edit Jobs: {{ nation.name }}{% endblock %}
+
+{% block content %}
+<div class="nation-page-container">
+    <a href="{{ request.path.replace('edit_jobs', 'item') }}">Back to View</a>
+    <h1>Edit Jobs: {{ nation.name }}</h1>
+        
+    <form method="POST" action="{{ request.path ~ '/save' }}">
+        {{ form.csrf_token }}
+        
+        <section class="jobs-section">
+            <h2>Jobs</h2>
+            <table class="jobs-table">
+                <thead>
+                    <tr>
+                        <th>Job</th>
+                        <th>Assigned Pops</th>
+                        <th>Upkeep</th>
+                        <th>Production</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for job, details in nation.job_details.items() %}
+                        <tr>
+                            <td>{{ details.display_name }}</td>
+                            <td>{{ form.jobs[job] }}</td>
+                            <td>
+                            {% if details.upkeep is defined %}
+                                {% for resource, cost in details.upkeep.items() %}
+                                    {{ resource }}: {{ cost }}<br>
+                                {% endfor %}
+                            {% endif %}
+                            </td>
+                            <td>
+                            {% if details.production is defined %}
+                                {% for resource, prod in details.production.items() %}
+                                    {{ resource }}: {{ prod }}<br>
+                                {% endfor %}
+                            {% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </section>
+
+        <div class="form-actions">            
+            <button type="submit" formaction="{{ request.path }}/save" class="btn btn-primary">Save</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

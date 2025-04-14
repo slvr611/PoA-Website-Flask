@@ -75,6 +75,48 @@ def approve_change(change_id):
             return True
     return False
 
+def system_approve_change(change_id):
+    approver = mongo.db.players.find_one({"name": "System"})
+
+    changes_collection = mongo.db.changes
+    now = datetime.now()
+    change = changes_collection.find_one({"_id": change_id})
+    target_collection = category_data[change["target_collection"]]["database"]
+
+    if change["change_type"] == "Add":
+        after_data = change["after_requested_data"]
+        inserted_item_id = target_collection.insert_one(after_data).inserted_id
+        changes_collection.update_one({"_id": change_id}, {"$set": {
+            "target": inserted_item_id,
+            "status": "Approved",
+            "time_implemented": now,
+            "approver": approver["_id"],
+            "before_implemented_data": {},
+            "after_implemented_data": after_data
+        }})
+        return True
+    else:
+        target = target_collection.find_one({"_id": change["target"]})
+        before_data = change["before_requested_data"]
+        after_data = change["after_requested_data"]
+
+        if check_no_other_changes(before_data, after_data, target):
+            if change["change_type"] == "Update":
+                target_collection.update_one({"_id": change["target"]}, {"$set": after_data})
+            else:
+                target_collection.delete_one({"_id": change["target"]})
+
+            changes_collection.update_one({"_id": change_id}, {"$set": {
+                "status": "Approved",
+                "time_implemented": now,
+                "approver": approver["_id"],
+                "before_implemented_data": before_data,
+                "after_implemented_data": after_data
+            }})
+            return True
+    return False
+
+
 def deny_change(change_id):
     denier = mongo.db.players.find_one({"id": g.user["id"]})
     if denier is None or not denier.get("is_admin", False):
