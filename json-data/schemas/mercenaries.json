@@ -105,6 +105,7 @@
 		    "label": "Reknown",
         "description": "The mercenary company's reputation",
 		    "enum": ["Scoundrels", "Unscrupulous", "Standard", "Honorable"],
+        "default": "Standard",
 		    "laws":{
           "Scoundrels": {
             "attack": 2,

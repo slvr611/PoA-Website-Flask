@@ -513,10 +513,10 @@ class NationForm(BaseSchemaForm):
     name = StringField("Name", validators=[DataRequired()])
     region = SelectField("Region", choices=[])
     stability = SelectField("Stability", choices=[])
-    infamy = IntegerField("Infamy", validators=[NumberRange(min=0)])
-    temporary_karma = IntegerField("Temporary Karma", validators=[NumberRange(min=0)])
-    rolling_karma = IntegerField("Rolling Karma", validators=[NumberRange(min=0)])
-    money = IntegerField("Money", validators=[NumberRange(min=0)])
+    infamy = IntegerField("Infamy", validators=[NumberRange(min=0)], default=0)
+    temporary_karma = IntegerField("Temporary Karma", validators=[NumberRange(min=0)], default=0)
+    rolling_karma = IntegerField("Rolling Karma", validators=[NumberRange(min=0)], default=0)
+    money = IntegerField("Money", validators=[NumberRange(min=0)], default=0)
     
     # Demographics fields
     primary_race = SelectField("Primary Race", choices=[])
@@ -524,8 +524,8 @@ class NationForm(BaseSchemaForm):
     primary_religion = SelectField("Primary Religion", choices=[])
     
     # Territory fields
-    current_territory = IntegerField("Current Territory", validators=[NumberRange(min=0)])
-    road_usage = IntegerField("Road Usage", validators=[NumberRange(min=0)])
+    current_territory = IntegerField("Current Territory", validators=[NumberRange(min=0)], default=0)
+    road_usage = IntegerField("Road Usage", validators=[NumberRange(min=0)], default=0)
     
     # Vassalship fields
     overlord = SelectField("Overlord", choices=[])
