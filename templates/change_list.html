@@ -14,6 +14,7 @@
                 <th>Change Type</th>
                 <th>Status</th>
                 <th>Changes</th>
+                <th>Reason</th>
                 <th>Time</th>
                 <th>User</th>
                 <th>Actions</th>
@@ -41,6 +42,7 @@
                             {{ value }} → {{ change.after_requested_data[key] }}<br>
                         {% endfor %}
                     </td>
+                    <td>{{ change.request_reason }}</td>
                     <td>{{ change.time_requested.strftime('%Y-%m-%d %H:%M:%S') }}</td>
                     <td>
                         {% if "requester" in preview_references and change.requester|string in preview_references["requester"] %}
@@ -70,6 +72,7 @@
                 <th>Change Type</th>
                 <th>Status</th>
                 <th>Changes</th>
+                <th>Reason</th>
                 <th>Time</th>
                 <th>User</th>
             </tr>
@@ -103,6 +106,7 @@
                             {% endfor %}
                         {% endif %}
                     </td>
+                    <td>{{ change.request_reason }}</td>
                     <td>
                         {% if change.status == "Approved" %}
                             {{ change.time_implemented.strftime('%Y-%m-%d %H:%M:%S') }}
