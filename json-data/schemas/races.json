@@ -31,7 +31,7 @@
             "nation_attack": 1
           },
           "Charismatic": {
-            "nation_trade_slot_mult": 0.5
+            "nation_trade_slots_mult": 0.5
           },
           "Courageous": {
             "nation_civilian_unit_hp": 1,
@@ -115,7 +115,7 @@
             "nation_food_consumption": 3
           },
           "Irksome": {
-            "nation_trade_slot_mult": -0.5
+            "nation_trade_slots_mult": -0.5
           },
           "Meek": {},
           "Mundane": {

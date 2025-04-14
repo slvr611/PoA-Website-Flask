@@ -138,8 +138,6 @@ def compute_stability_loss_chance(field, target, base_value, field_schema, overa
 
     value = round(max(base_value + overall_total_modifiers.get(field, 0) + karma_stability_loss + minority_stability_loss, 0), 2)
 
-    print(value)
-
     return value
 
 def compute_district_slots(field, target, base_value, field_schema, overall_total_modifiers):
@@ -229,6 +227,10 @@ def compute_import_slots(field, target, base_value, field_schema, overall_total_
     value += overall_total_modifiers.get(field, 0)
     value += overall_total_modifiers.get("trade_slots", 0)
     value += overall_total_modifiers.get("trade_slots_per_admin", 0) * administration
+
+    value *= 1 + overall_total_modifiers.get("trade_slots_mult", 0)
+
+    value = int(math.ceil(value))
     
     return value
 
@@ -240,6 +242,9 @@ def compute_export_slots(field, target, base_value, field_schema, overall_total_
     value += overall_total_modifiers.get(field, 0)
     value += overall_total_modifiers.get("trade_slots", 0)
     value += overall_total_modifiers.get("trade_slots_per_admin", 0) * administration
+
+    value *= (1 + overall_total_modifiers.get("trade_slots_mult", 0))
+    value = int(math.ceil(value))
     
     return value
 

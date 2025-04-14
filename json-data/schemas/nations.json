@@ -4,7 +4,8 @@
     "required": ["name", "region", "primary_race", "primary_culture", "primary_religion", "government_type", "succession_type", "foreign_acceptance", "origin"],
 	"laws": ["stability", "government_type", "succession_type", "nomad_camp_type", "conscription_type", "military_funding",
 		"magic_stance", "citizenship_stance", "foreign_acceptance", "subject_stance", "land_doctrine", "naval_doctrine",
-		"diplomatic_stance", "scientific_stance", "economy_type", "expansion_stance", "mercenary_law", "consumption_stance", "tax_stance", "justice_stance"],
+		"diplomatic_stance", "scientific_stance", "economy_type", "expansion_stance", "mercenary_law", "consumption_stance", "tax_stance", "justice_stance",
+		"vassal_type"],
 	"preview": ["region"],
 	"external_calculation_requirements": {
 		"overlord": ["subject_stance"],
@@ -240,7 +241,34 @@
 		"label": "Vassal Type",
         "description": "The type of vassal of the nation",
 		"enum": ["None", "Tributary", "Protectorate", "Mercantile", "Martial", "Provincial"],
-		"hideIfNone": "overlord"
+		"hideIfNone": "overlord",
+		"laws": {
+			"None": {},
+			"Tributary": {},
+			"Protectorate": {
+				"defensive_pact_slots_maximum": 1,
+				"military_pact_slots_maximum": 0,
+				"vassal_slots_maximum": 0
+			},
+			"Mercantile": {
+				"defensive_pact_slots_maximum": 0,
+				"military_pact_slots_maximum": 0,
+				"vassal_slots_maximum": 0,
+				"money_income": -75,
+				"trade_slots": 3,
+				"trade_distance": 3
+			},
+			"Martial": {
+				"defensive_pact_slots_maximum": 0,
+				"military_pact_slots_maximum": 1,
+				"vassal_slots_maximum": 0
+			},
+			"Provincial": {
+				"defensive_pact_slots_maximum": 0,
+				"military_pact_slots_maximum": 0,
+				"vassal_slots_maximum": 0
+			}
+		}
       },
 	  "compliance": {
         "bsonType": "enum",

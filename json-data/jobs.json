@@ -83,9 +83,8 @@
 			"mount": 1
 		},
 		"production": {
-			"trade distance": 4,
-			"import_capacity": 2,
-			"export_capacity": 2
+			"trade_distance": 4,
+			"trade_slots": 2
 		}
 	},
 	"metallurgist": {
