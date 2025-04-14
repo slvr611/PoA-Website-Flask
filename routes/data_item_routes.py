@@ -264,7 +264,7 @@ def data_item_edit_request(data_type, item_ref):
             related_collection = attributes.get("collection")
             dropdown_options[field] = list(mongo.db[related_collection].find({}, {"name": 1, "_id": 1}).sort("name", ASCENDING))
     
-    form.populate_linked_fields(form, dropdown_options)
+    form.populate_linked_fields(schema, dropdown_options)
     
     if not form.validate():
         flash("Form validation failed!")
@@ -311,11 +311,7 @@ def data_item_edit_approve(data_type, item_ref):
         print("Had to redirect from data_item_routes to nation_routes")
         return nation_edit_request(item_ref)
     
-    print(request.form)
-
     form = form_generator.get_form(data_type, schema, formdata=request.form)
-
-    print(form.data)
     
     dropdown_options = {}
     for field, attributes in schema["properties"].items():
