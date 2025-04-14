@@ -166,6 +166,21 @@ def compute_resource_production(field, target, base_value, field_schema, overall
         modifiers_to_check = [resource["key"] + "_production", "resource_production"]
         for modifier in modifiers_to_check:
             specific_resource_production += overall_total_modifiers.get(modifier, 0)
+        
+        if resource["key"] == "research":
+            pop_database = category_data["pops"]["database"]
+            pops = pop_database.find({"nation": target["_id"]})
+            religiously_homogeneous = True
+            for pop in pops:
+                if pop.get("religion", "") != target.get("primary_religion", ""):
+                    religiously_homogeneous = False
+                    break
+            
+            if religiously_homogeneous:
+                specific_resource_production += overall_total_modifiers.get("research_production_if_religously_homogeneous", 0)
+
+        specific_resource_production = max(specific_resource_production, 0)
+
         production_dict[resource["key"]] = specific_resource_production
     
     return production_dict
