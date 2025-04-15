@@ -30,7 +30,7 @@
         "bsonType": "enum",
 		    "label": "Faction Type",
         "description": "The type of faction",
-		    "enum": ["Adventurer", "Criminal", "Cult", "Cultrual", "Dissident", "Military", "Political"]
+		    "enum": ["Adventurer", "Criminal", "Cult", "Cultural", "Dissident", "Military", "Political"]
       },
       "control": {
         "bsonType": "enum",

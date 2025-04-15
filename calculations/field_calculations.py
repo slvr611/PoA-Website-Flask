@@ -3,6 +3,7 @@ import copy
 from app_core import mongo, json_data, category_data
 from calculations.compute_functions import CUSTOM_COMPUTE_FUNCTIONS
 from bson.objectid import ObjectId
+from app_core import json_data
 
 def calculate_all_fields(target, schema, target_data_type):
     schema_properties = schema.get("properties", {})
@@ -230,11 +231,25 @@ def sum_node_totals(nodes):
 
 def sum_job_totals(jobs_assigned, job_details):
     totals = {}
+    general_resources = json_data["general_resources"]
+    unique_resources = json_data["unique_resources"]
+
     for job, count in jobs_assigned.items():
         for field, val in job_details.get(job, {}).get("production", {}).items():
-            totals[field + "_production"] = totals.get(field + "_production", 0) + (val * count)
+            if field == "money":
+                field = "money_income"
+            elif field in general_resources or field in unique_resources:
+                field = field + "_production"
+            totals[field] = totals.get(field, 0) + (val * count)
         for field, val in job_details.get(job, {}).get("upkeep", {}).items():
-            totals[field + "_consumption"] = totals.get(field + "_consumption", 0) + (val * count)
+            if field == "money":
+                field = "money_income"
+                val = -val
+            elif field in general_resources or field in unique_resources:
+                field = field + "_consumption"
+            else:
+                val = -val
+            totals[field] = totals.get(field, 0) + (val * count)
     
     return totals
 

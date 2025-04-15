@@ -22,14 +22,15 @@ def nation_item(item_ref):
     calculated_fields = calculate_all_fields(nation, schema, "nation")
     nation.update(calculated_fields)
 
-    user = mongo.db.players.find_one({"id": g.user.get("id")})
     user_is_owner = False
-    if user:
-        user_characters = list(mongo.db.characters.find({"player": str(user["_id"])}))
-        for character in user_characters:
-            if str(character.get("ruling_nation_org", "")) == str(nation["_id"]):
-                user_is_owner = True
-                break
+    if g.user:
+        user = mongo.db.players.find_one({"id": g.user.get("id")})
+        if user:
+            user_characters = list(mongo.db.characters.find({"player": str(user["_id"])}))
+            for character in user_characters:
+                if str(character.get("ruling_nation_org", "")) == str(nation["_id"]):
+                    user_is_owner = True
+                    break
     
     if "jobs" not in nation:
         nation["jobs"] = {}
