@@ -201,7 +201,7 @@
 		"label": "Migration Distance",
         "description": "The distance this nation can migrate each session",
 		"calculated": true,
-		"base_value": 3
+		"base_value": 6
       },
 	  "stationary_delay": {
         "bsonType": "number",
