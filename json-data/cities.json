@@ -37,7 +37,7 @@
 			"food_consumption": 1,
 			"mounts_consumption": 1,
 			"effective_pop_capacity": 1,
-			"money_production": 75,
+			"money_income": 75,
 			"trade_distance": 3,
 			"trade_slots": 3
 		}
