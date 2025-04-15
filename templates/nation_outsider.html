@@ -75,6 +75,10 @@
 					<th>{{ schema.properties.remaining_export_slots.label }}:</th>
 					<td>{{ nation.remaining_export_slots }}</td>
 				</tr>
+				<tr>
+					<th>{{ schema.properties.trade_distance.label }}:</th>
+					<td>{{ nation.trade_distance }}</td>
+				</tr>
 			</table>
 		</div>
 		{% if "overlord" in nation and nation["overlord"] is not none and nation["overlord"] != "" %}

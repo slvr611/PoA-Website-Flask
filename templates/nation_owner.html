@@ -69,6 +69,16 @@
 					<th>{{ schema.properties.temporary_karma.label }}:</th>
 					<td>{{ nation.temporary_karma }}</td>
 				</tr>
+				{% if nation.nomadic > 0 %}
+					<tr>
+						<th>{{ schema.properties.migration_distance.label }}:</th>
+						<td>{{ nation.migration_distance }}</td>
+					</tr>
+					<tr>
+						<th>{{ schema.properties.stationary_delay.label }}:</th>
+						<td>{{ nation.stationary_delay }}</td>
+					</tr>
+				{% endif %}
 			</table>
 		</div>
 		<div class="info-column">
@@ -106,6 +116,10 @@
 				<tr>
 					<th>{{ schema.properties.remaining_export_slots.label }}:</th>
 					<td>{{ nation.remaining_export_slots }}</td>
+				</tr>
+				<tr>
+					<th>{{ schema.properties.trade_distance.label }}:</th>
+					<td>{{ nation.trade_distance }}</td>
 				</tr>
 			</table>
 		</div>
@@ -199,10 +213,10 @@
 					<th>{{ schema.properties.succession_type.label }}:</th>
 					<td>{{ nation.succession_type }}</td>
 				</tr>
-				{% if false %} <!-- TODO: Add check for nomad type -->
+				{% if nation.nomadic > 0 %}
 					<tr>
-						<th>{{ schema.properties.succession_type.label }}:</th>
-						<td>{{ nation.succession_type }}</td>
+						<th>{{ schema.properties.nomad_camp_type.label }}:</th>
+						<td>{{ nation.nomad_camp_type }}</td>
 					</tr>
 				{% endif %}
 				<tr>

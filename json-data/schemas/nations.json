@@ -410,10 +410,12 @@
 				"city_slots": 4
 			},
 			"Untamed Lords": {
-				"effective_territory": 6
+				"effective_territory": 6,
+				"nomadic": 1
 			},
 			"Far Travelers": {
-				"effective_territory": 3
+				"effective_territory": 3,
+				"nomadic": 1
 			},
 			"Iron-Fisted Dictatorship": {
 				"resource_production": 1,
@@ -432,13 +434,21 @@
 			},
 			"Great Khanate:": {
 				"morale": 2,
-				"effective_territory_per_tributary": 6
+				"effective_territory_per_tributary": 6,
+				"nomadic": 1
 			},
 			"World Warden": {
 				"migration_distance": 6,
-				"effective_territory": 3
+				"effective_territory": 3,
+				"nomadic": 1
 			}
 		}
+      },
+	  "nomadic": {
+        "bsonType": "int",
+		"label": "Nomadic",
+        "description": "Whether the nation is nomadic",
+		"calculated": true
       },
 	  "succession_type": {
         "bsonType": "enum",
@@ -1175,6 +1185,13 @@
 		"label": "Remaining Import Slots",
         "description": "The number of import slots the nation has available this session, after accounting for ongoing trades",
 		"calculated": true
+      },
+	  "trade_distance": {
+        "bsonType": "number",
+		"label": "Trade Distance",
+        "description": "The distance at which the nation can trade with other nations or merchant companies",
+		"calculated": true,
+		"base_value": 7
       },
 	  "outgoing_trades": {
         "bsonType": "array",
