@@ -14,7 +14,7 @@
         "bsonType": "array",
 		    "label": "Leaders",
         "description": "The list of leaders of the merchant company",
-		    "collection": "characters",
+		    "collections": ["characters"],
 		    "queryTargetAttribute": "ruling_nation_org",
         "items":{
           "bsonType": "linked_object"
@@ -24,7 +24,7 @@
         "bsonType": "linked_object",
 		    "label": "Nation",
         "description": "The nation the faction is based in",
-		    "collection": "nations"
+		    "collections": ["nations"]
       },
       "faction_type": {
         "bsonType": "enum",

@@ -42,7 +42,7 @@
         "label": "Requester",
         "description": "The user that requested the change",
     		"noneResult": "None",
-    		"collection": "players",
+    		"collections": ["players"],
     		"static": true
       },
       "approver": {
@@ -50,21 +50,21 @@
         "label": "Approver",
         "description": "The user that approved the change",
         "noneResult": "None",
-        "collection": "players"
+        "collections": ["players"]
       },
       "denier": {
         "bsonType": "linked_object",
         "label": "Denier",
         "description": "The user that rejected the change",
         "noneResult": "None",
-        "collection": "players"
+        "collections": ["players"]
       },
       "reverter": {
         "bsonType": "linked_object",
         "label": "Reverter",
         "description": "The user that reverted the change",
     		"noneResult": "None",
-    		"collection": "players"
+    		"collections": ["players"]
       },
       "change_type": {
         "bsonType": "enum",

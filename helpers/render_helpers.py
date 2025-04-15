@@ -8,8 +8,8 @@ def get_linked_objects(schema, item, preview_items=None):
 
     for field, attributes in properties.items():
         if preview_items is None or field in preview_items:
-            if attributes.get("collection"):
-                related_collection = attributes["collection"]
+            if attributes.get("collections"):
+                related_collections = attributes["collections"]
 
                 if attributes.get("queryTargetAttribute"):
                     query_target = attributes["queryTargetAttribute"]
@@ -21,7 +21,9 @@ def get_linked_objects(schema, item, preview_items=None):
                         for p in field_preview:
                             query_dict[p] = 1
 
-                    related_items = list(mongo.db[related_collection].find({query_target: item_id}, query_dict).sort("name", ASCENDING))
+                    related_items = []
+                    for related_collection in related_collections:
+                        related_items += list(mongo.db[related_collection].find({query_target: item_id}, query_dict).sort("name", ASCENDING))
 
                     if related_items:
                         linked_objects[field] = []
@@ -41,9 +43,11 @@ def get_linked_objects(schema, item, preview_items=None):
                         except:
                             continue
 
-                        linked_object = mongo.db[related_collection].find_one({"_id": object_id_to_find})
-                        if linked_object:
-                            linked_object["link"] = f"/{related_collection}/item/{linked_object.get('name', linked_object['_id'])}"
-                            linked_objects[field] = linked_object
-
+                        for related_collection in related_collections:
+                            linked_object = mongo.db[related_collection].find_one({"_id": object_id_to_find})
+                            if linked_object:
+                                linked_object["link"] = f"/{related_collection}/item/{linked_object.get('name', linked_object['_id'])}"
+                                linked_objects[field] = linked_object
+                                break
+    
     return linked_objects

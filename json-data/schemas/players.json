@@ -42,7 +42,7 @@
         "bsonType": "array",
         "label": "Characters",
         "description": "The list of characters this player is currently playing",
-        "collection": "characters",
+        "collections": ["characters"],
         "queryTargetAttribute": "player",
         "items":{
 			    "bsonType": "linked_object"

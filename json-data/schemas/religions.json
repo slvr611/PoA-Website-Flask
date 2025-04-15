@@ -12,7 +12,7 @@
                 "bsonType": "linked_object",
                 "label": "Founding Nation",
                 "description": "The first nation of this culture",
-                "collection": "nations"
+                "collections": ["nations"]
             },
             "religion_type": {
                 "bsonType": "enum",
@@ -105,7 +105,7 @@
                 "bsonType": "array",
                 "label": "Pops",
                 "description": "Pops that have this race",
-                "collection": "pops",
+                "collections": ["pops"],
                 "queryTargetAttribute": "religion",
                 "items": {
                     "bsonType": "linked_object"

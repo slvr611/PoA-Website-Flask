@@ -372,7 +372,7 @@ class BaseSchemaForm(FlaskForm):
     def populate_linked_fields(self, schema, dropdown_options):
         """Populates all linked fields with their options"""
         for field_name, field_schema in schema.get("properties", {}).items():
-            if field_schema.get("collection"):
+            if field_schema.get("collections"):
                 self.populate_select_field(field_name, schema, dropdown_options)
     
     def load_form_from_item(self, item):
@@ -471,7 +471,6 @@ class DynamicSchemaForm(BaseSchemaForm):
         elif field_type == "linked_object":
             field = SelectField(**field_args)
             field.none_result = field_schema.get("noneResult", "None")
-            field.collection = field_schema.get("collection")
             return field
         
         elif field_type == "array":
@@ -493,7 +492,6 @@ class DynamicSchemaForm(BaseSchemaForm):
                 # For arrays of linked objects
                 subfield = SelectField("Value")
                 subfield.none_result = items_schema.get("noneResult", "None")
-                subfield.collection = items_schema.get("collection")
                 return FieldList(subfield, min_entries=0)
                 
             elif items_type == "object":
@@ -660,7 +658,7 @@ class NationForm(BaseSchemaForm):
     def populate_linked_fields(self, schema, dropdown_options):
         """Populates all linked fields with their options"""
         for field_name, field_schema in schema.get("properties", {}).items():
-            if field_schema.get("collection"):
+            if field_schema.get("collections"):
                 self.populate_select_field(field_name, schema, dropdown_options)
         
         node_choices = [("", "None")]
@@ -733,7 +731,7 @@ class JobForm(BaseSchemaForm):
     def populate_linked_fields(self, schema, dropdown_options):
         """Populates all linked fields with their options"""
         for field_name, field_schema in schema.get("properties", {}).items():
-            if field_schema.get("collection"):
+            if field_schema.get("collections"):
                 self.populate_select_field(field_name, schema, dropdown_options)
 
 class NewCharacterForm(BaseSchemaForm):

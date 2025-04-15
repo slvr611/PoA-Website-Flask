@@ -13,8 +13,11 @@
         "bsonType": "array",
 		"label": "Leaders",
         "description": "The list of leaders of the merchant company",
-		"collection": "characters",
-		"queryTargetAttribute": "ruling_nation_org"
+		"collections": ["characters"],
+		"queryTargetAttribute": "ruling_nation_org",
+        "items": {
+          "bsonType": "linked_object"
+        }
       },
       "reputation": {
         "bsonType": "enum",
@@ -50,7 +53,7 @@
         "bsonType": "linked_object",
 		"label": "Current Location",
         "description": "The nation the merchant company is currently stationed in",
-		"collection": "nations"
+		"collections": ["nations"]
       },
 	  "income": {
         "bsonType": "number",
@@ -96,34 +99,29 @@
 		"calculated": true
       },
 	  "production_district_1": {
-        "bsonType": "linked_object",
+        "bsonType": "enum",
 		"label": "Production District 1",
-        "description": "The first production district of the merchant company",
-		"collection": "merchant_production_districts"
+        "description": "The first production district of the merchant company"
       },
 	  "production_district_2": {
-        "bsonType": "linked_object",
+        "bsonType": "enum",
 		"label": "Production District 2",
-        "description": "The second production district of the merchant company",
-		"collection": "merchant_production_districts"
+        "description": "The second production district of the merchant company"
       },
 	  "production_district_3": {
-        "bsonType": "linked_object",
+        "bsonType": "enum",
 		"label": "Production District 3",
-        "description": "The second production district of the merchant company",
-		"collection": "merchant_production_districts"
+        "description": "The second production district of the merchant company"
       },
 	  "specialty_district": {
-        "bsonType": "linked_object",
+        "bsonType": "enum",
 		"label": "Specialty District",
-        "description": "The specialty district of the merchant company",
-		"collection": "merchant_specialty_districts"
+        "description": "The specialty district of the merchant company"
       },
 	  "luxury_district": {
-        "bsonType": "linked_object",
+        "bsonType": "enum",
 		"label": "Luxury District",
-        "description": "The luxury district of the merchant company",
-		"collection": "merchant_luxury_districts"
+        "description": "The luxury district of the merchant company"
       }
     }
   }

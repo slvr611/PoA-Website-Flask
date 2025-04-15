@@ -33,14 +33,14 @@
         "label": "Owner",
         "description": "The artifact's owner",
         "noneResult": "Lost",
-		    "collection": "characters"
+		    "collections": ["characters"]
       },
       "creator": {
         "bsonType": "linked_object",
         "label": "Creator",
         "description": "The artifact's creator",
         "noneResult": "Unknown",
-        "collection": "characters",
+        "collections": ["characters"],
         "static": true
       },
       "external_modifiers": {

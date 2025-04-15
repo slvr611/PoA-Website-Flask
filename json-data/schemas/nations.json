@@ -50,7 +50,7 @@
         "bsonType": "linked_object",
 		"label": "Region",
         "description": "The region the nation is in",
-		"collection": "regions"
+		"collections": ["regions"]
       },
 	  "administration": {
         "bsonType": "number",
@@ -132,7 +132,7 @@
         "description": "The list of wars the nation is currently fighting, if any",
 		"linkCollection": "war_links",
 		"linkQueryTarget": "participant",
-		"collection": "wars",
+		"collections": ["wars"],
 		"queryTarget": "war"
       },
 	  "markets": {
@@ -141,21 +141,21 @@
         "description": "The list of markets the nation is currently a part of, if any",
 		"linkCollection": "market_links",
 		"linkQueryTarget": "member",
-		"collection": "markets",
+		"collections": ["markets"],
 		"queryTarget": "market"
       },
 	  "factions": {
         "bsonType": "array",
 		"label": "Factions",
         "description": "The list of factions currently based in the nation, if any",
-		"collection": "factions",
+		"collections": ["factions"],
 		"queryTargetAttribute": "base"
       },
 	  "hired_mercenaries": {
         "bsonType": "array",
 		"label": "Hired Mercenaries",
         "description": "The list of mercenaries the nation has currently employed",
-		"collection": "mercenaries",
+		"collections": ["mercenaries"],
 		"queryTargetAttribute": "patron"
       },
 	  "money": {
@@ -214,26 +214,26 @@
         "bsonType": "linked_object",
 		"label": "Primary Race",
         "description": "The primary race of the nation",
-		"collection": "races"
+		"collections": ["races"]
       },
 	  "primary_culture": {
         "bsonType": "linked_object",
 		"label": "Primary Culture",
         "description": "The primary culture of the nation",
-		"collection": "cultures"
+		"collections": ["cultures"]
       },
 	  "primary_religion": {
         "bsonType": "linked_object",
 		"label": "Primary Religion",
         "description": "The primary religion of the nation",
-		"collection": "religions"
+		"collections": ["religions"]
       },
 	  "overlord": {
         "bsonType": "linked_object",
 		"label": "Overlord",
         "description": "The overlord of the nation",
 		"noneResult":"Independent",
-		"collection": "nations",
+		"collections": ["nations"],
 		"hideIfNone": "overlord"
       },
 	  "vassal_type": {
@@ -313,7 +313,7 @@
         "bsonType": "array",
 		"label": "Vassals",
         "description": "The list of vassals currently under the control of the nation",
-		"collection": "nations",
+		"collections": ["nations"],
 		"queryTargetAttribute": "overlord",
 		"preview": ["name", "compliance", "disobey_chance", "rebellion_chance", "concessions_chance"]
       },
@@ -323,7 +323,7 @@
         "description": "The list of relations this nation has with other nations",
 		"linkCollection": "diplo_relation",
 		"linkQueryTarget": "nation_1",
-		"collection": "nations",
+		"collections": ["nations"],
 		"queryTarget": "nation_2"
       },
 	  "diplomatic_relations_2": {
@@ -332,7 +332,7 @@
         "description": "The list of relations this nation has with other nations",
 		"linkCollection": "diplo_relation",
 		"linkQueryTarget": "nation_2",
-		"collection": "nations",
+		"collections": ["nations"],
 		"queryTarget": "nation_1"
       },
 	  "pop_count": {
@@ -352,7 +352,7 @@
         "bsonType": "array",
 		"label": "Pops",
         "description": "The list of pops in the nation",
-		"collection": "pops",
+		"collections": ["pops"],
 		"queryTargetAttribute": "nation",
 		"preview": ["race", "culture", "religion"]
       },
@@ -1154,7 +1154,7 @@
         "bsonType": "array",
 		"label": "Wonders",
         "description": "The list of wonders the nation currently owns",
-		"collection": "wonders",
+		"collections": ["wonders"],
 		"queryTargetAttribute": "owner_nation",
 		"items":{
 			"bsonType": "linked_object"
@@ -1197,7 +1197,7 @@
         "bsonType": "array",
 		"label": "Outgoing Trades",
         "description": "The ongoing trades where the nation is currently exporting resources",
-		"collection": "trades",
+		"collections": ["trades"],
 		"queryTargetAttribute": "exporting_nation",
 		"items":{
 			"bsonType": "linked_object"
@@ -1207,7 +1207,7 @@
         "bsonType": "array",
 		"label": "Incoming Trades",
         "description": "The ongoing trades where the nation is currently importing resources",
-		"collection": "trades",
+		"collections": ["trades"],
 		"queryTargetAttribute": "importing_nation",
 		"items":{
 			"bsonType": "linked_object"

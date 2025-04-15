@@ -10,12 +10,12 @@
       },
       "participants": {
         "bsonType": "array",
-		"label": "Participants",
+		    "label": "Participants",
         "description": "The Nations and Mercenary companies involved in the war",
-		"linkCollection": "war_links",
-		"linkQueryTarget": "war",
-		"collection": "nations",
-		"queryTarget": "participant"
+		    "linkCollection": "war_links",
+		    "linkQueryTarget": "war",
+		    "collections": ["nations", "mercenaries"],
+		    "queryTarget": "participant"
       }
     }
   }

@@ -44,13 +44,15 @@ def get_dropdown_options(schema):
     """Helper function to get dropdown options for linked fields"""
     dropdown_options = {}
     for field, attributes in schema["properties"].items():
-        if attributes.get("collection"):
-            related_collection = attributes.get("collection")
-            dropdown_options[field] = list(
-                mongo.db[related_collection].find(
-                    {}, {"name": 1, "_id": 1}
-                ).sort("name", ASCENDING)
-            )
+        if attributes.get("collections"):
+            related_collections = attributes.get("collections")
+            dropdown_options[field] = []
+            for related_collection in related_collections:
+                dropdown_options[field] += list(
+                    mongo.db[related_collection].find(
+                        {}, {"name": 1, "_id": 1}
+                    ).sort("name", ASCENDING)
+                )
     return dropdown_options
 
 def get_user_entities():

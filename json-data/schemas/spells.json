@@ -41,14 +41,14 @@
         "bsonType": "string",
         "label": "Effect",
         "description": "The spell's effects",
-		"long_text": true
+		    "long_text": true
       },
       "creator": {
         "bsonType": "linked_object",
         "label": "Creator",
         "description": "The spell's creator",
         "noneResult": "Unknown",
-		"collection": "characters"
+		    "collections": ["characters"]
       }
     }
   }

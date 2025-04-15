@@ -2,31 +2,31 @@
   "$jsonSchema": {
     "bsonType": "object",
     "required": ["nation", "race", "culture", "religion"],
-	"preview": ["nation", "race", "culture", "religion"],
+	  "preview": ["nation", "race", "culture", "religion"],
     "properties": {
       "nation": {
         "bsonType": "linked_object",
-		"label": "Nation",
+		    "label": "Nation",
         "description": "The nation the pop is a part of",
-		"collection": "nations"
+		    "collections": ["nations"]
       },
-	  "race": {
+	    "race": {
         "bsonType": "linked_object",
-		"label": "Race",
+		    "label": "Race",
         "description": "The race of the pop",
-		"collection": "races"
+		    "collections": ["races"]
       },
-	  "culture": {
+	    "culture": {
         "bsonType": "linked_object",
-		"label": "Culture",
+		    "label": "Culture",
         "description": "The culture of the pop",
-		"collection": "cultures"
+		    "collections": ["cultures"]
       },
-	  "religion": {
+	    "religion": {
         "bsonType": "linked_object",
-		"label": "Religion",
+		    "label": "Religion",
         "description": "The religion of the pop",
-		"collection": "religions"
+		    "collections": ["religions"]
       }
     }
   }

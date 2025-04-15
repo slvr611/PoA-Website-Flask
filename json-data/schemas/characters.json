@@ -2,7 +2,7 @@
   "$jsonSchema": {
     "bsonType": "object",
     "required": ["name"],
-    "preview": ["ruling_nation_org", "region"],
+    "preview": ["ruling_nation_org", "player", "region"],
     "laws": ["character_type", "health_status"],
     "external_calculation_requirements": {
 		"race": ["positive_trait", "negative_trait"],
@@ -20,14 +20,14 @@
 		"label": "Player",
         "description": "Who is playing the Character",
 		"noneResult": "AI",
-		"collection": "players"
+		"collections": ["players"]
       },
 	  "creator": {
         "bsonType": "linked_object",
 		"label": "Creator",
         "description": "Who made the Character",
 		"noneResult": "Admin",
-		"collection": "players",
+		"collections": ["players"],
 		"static": true
       },
 	  "ruling_nation_org": {
@@ -35,35 +35,35 @@
 		"label": "Ruling Nation/Organization",
         "description": "The nation or organization the character is currently ruling",
 		"noneResult": "None",
-		"collection": "nations"
+		"collections": ["nations", "merchants", "mercenaries", "factions"]
       },
 	  "region": {
         "bsonType": "linked_object",
 		"label": "Region",
         "description": "The region the character is currently in",
 		"noneResult": "Unknown",
-		"collection": "regions"
+		"collections": ["regions"]
       },
 	  "race": {
         "bsonType": "linked_object",
 		"label": "Race",
         "description": "The race of the character",
 		"noneResult": "Unknown",
-		"collection": "races"
+		"collections": ["races"]
       },
 	  "culture": {
         "bsonType": "linked_object",
 		"label": "Culture",
         "description": "The culture of the character",
 		"noneResult": "Unknown",
-		"collection": "cultures"
+		"collections": ["cultures"]
       },
 	  "religion": {
         "bsonType": "linked_object",
 		"label": "Religion",
         "description": "The religion of the character",
 		"noneResult": "Unknown",
-		"collection": "religions"
+		"collections": ["religions"]
       },
       "positive_quirk": {
         "bsonType": "enum",
@@ -197,7 +197,7 @@
         "bsonType": "array",
 		"label": "Artifacts",
         "description": "The list of artifacts that currently belong to this character",
-		"collection": "artifacts",
+		"collections": ["artifacts"],
 		"queryTargetAttribute": "owner",
         "items":{
 			"bsonType": "linked_object"

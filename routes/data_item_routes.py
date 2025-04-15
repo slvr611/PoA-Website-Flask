@@ -21,14 +21,15 @@ def data_list(data_type):
 
     for preview_item in schema.get("preview", {}):
         query_dict[preview_item] = 1
-        collection_name = schema.get("properties", {}).get(preview_item, {}).get("collection", None)
-        if collection_name:
-            preview_db = category_data[collection_name]["database"]
+        collection_names = schema.get("properties", {}).get(preview_item, {}).get("collections", None)
+        if collection_names:
             preview_individual_lookup_dict = {}
-            preview_data = list(preview_db.find({}, {"_id": 1, "name": 1}))
-            for data in preview_data:
-                preview_individual_lookup_dict[str(data["_id"])] = {
-                    "name": data.get("name", "None"),
+            for collection_name in collection_names:
+                preview_db = category_data[collection_name]["database"]
+                preview_data = list(preview_db.find({}, {"_id": 1, "name": 1}))
+                for data in preview_data:
+                    preview_individual_lookup_dict[str(data["_id"])] = {
+                        "name": data.get("name", "None"),
                     "link": f"{collection_name}/item/{data.get('name', data.get('_id', '#'))}"
                 }
             preview_overall_lookup_dict[preview_item] = preview_individual_lookup_dict
@@ -74,13 +75,14 @@ def data_list_edit(data_type):
     
     for preview_item in schema.get("preview", {}):
         query_dict[preview_item] = 1
-        collection_name = schema.get("properties", {}).get(preview_item, {}).get("collection", None)
-        if not collection_name is None:
-            preview_db = category_data[collection_name]["database"]
+        collection_names = schema.get("properties", {}).get(preview_item, {}).get("collections", None)
+        if collection_names:
             preview_individual_lookup_dict = {}
-            preview_data = list(preview_db.find({}, {"_id": 1, "name": 1}))
-            for data in preview_data:
-                preview_individual_lookup_dict[str(data["_id"])] = {data.get("name", "None"), collection_name + "/item/" + data.get("name", data.get("_id", "#"))}
+            for collection_name in collection_names:
+                preview_db = category_data[collection_name]["database"]
+                preview_data = list(preview_db.find({}, {"_id": 1, "name": 1}))
+                for data in preview_data:
+                    preview_individual_lookup_dict[str(data["_id"])] = {data.get("name", "None"), collection_name + "/item/" + data.get("name", data.get("_id", "#"))}
             preview_overall_lookup_dict[preview_item] = preview_individual_lookup_dict
     
     sort_by = schema.get("sort", "name")
@@ -106,9 +108,11 @@ def data_item_new(data_type):
     
     dropdown_options = {}
     for field, attributes in schema["properties"].items():
-        if attributes.get("collection") != None:
-            related_collection = attributes.get("collection")
-            dropdown_options[field] = list(mongo.db[related_collection].find({}, {"name": 1, "_id": 1}).sort("name", ASCENDING))
+        dropdown_options[field] = []
+        if attributes.get("collections") != None:
+            related_collections = attributes.get("collections")
+            for related_collection in related_collections:
+                dropdown_options[field] += list(mongo.db[related_collection].find({}, {"name": 1, "_id": 1}).sort("name", ASCENDING))
     
     form = form_generator.get_form(data_type, schema)
     form.populate_linked_fields(schema, dropdown_options)
@@ -129,9 +133,11 @@ def data_item_new_request(data_type):
         
     dropdown_options = {}
     for field, attributes in schema["properties"].items():
-        if attributes.get("collection") != None:
-            related_collection = attributes.get("collection")
-            dropdown_options[field] = list(mongo.db[related_collection].find({}, {"name": 1, "_id": 1}).sort("name", ASCENDING))
+        if attributes.get("collections") != None:
+            related_collections = attributes.get("collections")
+            dropdown_options[field] = []
+            for related_collection in related_collections:
+                dropdown_options[field] += list(mongo.db[related_collection].find({}, {"name": 1, "_id": 1}).sort("name", ASCENDING))
     
     form = form_generator.get_form(data_type, schema, formdata=request.form)
     form.populate_linked_fields(schema, dropdown_options)
@@ -178,9 +184,11 @@ def data_item_new_approve(data_type):
         
     dropdown_options = {}
     for field, attributes in schema["properties"].items():
-        if attributes.get("collection") != None:
-            related_collection = attributes.get("collection")
-            dropdown_options[field] = list(mongo.db[related_collection].find({}, {"name": 1, "_id": 1}).sort("name", ASCENDING))
+        if attributes.get("collections") != None:
+            related_collections = attributes.get("collections")
+            dropdown_options[field] = []
+            for related_collection in related_collections:
+                dropdown_options[field] += list(mongo.db[related_collection].find({}, {"name": 1, "_id": 1}).sort("name", ASCENDING))
     
     form = form_generator.get_form(data_type, schema, formdata=request.form)
     form.populate_linked_fields(schema, dropdown_options)
@@ -228,14 +236,16 @@ def data_item_edit(data_type, item_ref):
     
     dropdown_options = {}
     for field, attrs in schema["properties"].items():
-        if attrs.get("collection"):
-            related_collection = attrs.get("collection")
-            dropdown_options[field] = list(
-                mongo.db[related_collection].find(
-                    {}, {"name": 1, "_id": 1}
-                ).sort("name", ASCENDING)
-            )
-    
+        if attrs.get("collections"):
+            related_collections = attrs.get("collections")
+            dropdown_options[field] = []
+            for related_collection in related_collections:
+                dropdown_options[field] += list(
+                    mongo.db[related_collection].find(
+                        {}, {"name": 1, "_id": 1}
+                    ).sort("name", ASCENDING)
+                )
+
     form = form_generator.get_form(data_type, schema, item=item)
     form.populate_linked_fields(schema, dropdown_options)
     
@@ -260,9 +270,11 @@ def data_item_edit_request(data_type, item_ref):
     
     dropdown_options = {}
     for field, attributes in schema["properties"].items():
-        if attributes.get("collection") != None:
-            related_collection = attributes.get("collection")
-            dropdown_options[field] = list(mongo.db[related_collection].find({}, {"name": 1, "_id": 1}).sort("name", ASCENDING))
+        if attributes.get("collections") != None:
+            related_collections = attributes.get("collections")
+            dropdown_options[field] = []
+            for related_collection in related_collections:
+                dropdown_options[field] += list(mongo.db[related_collection].find({}, {"name": 1, "_id": 1}).sort("name", ASCENDING))
     
     form.populate_linked_fields(schema, dropdown_options)
     
@@ -315,9 +327,11 @@ def data_item_edit_approve(data_type, item_ref):
     
     dropdown_options = {}
     for field, attributes in schema["properties"].items():
-        if attributes.get("collection") != None:
-            related_collection = attributes.get("collection")
-            dropdown_options[field] = list(mongo.db[related_collection].find({}, {"name": 1, "_id": 1}).sort("name", ASCENDING))
+        if attributes.get("collections") != None:
+            related_collections = attributes.get("collections")
+            dropdown_options[field] = []
+            for related_collection in related_collections:
+                dropdown_options[field] += list(mongo.db[related_collection].find({}, {"name": 1, "_id": 1}).sort("name", ASCENDING))
     
     form.populate_linked_fields(schema, dropdown_options)
     
@@ -473,14 +487,15 @@ def wonder_list():
 
     for preview_item in schema.get("preview", {}):
         query_dict[preview_item] = 1
-        collection_name = schema.get("properties", {}).get(preview_item, {}).get("collection", None)
-        if collection_name:
-            preview_db = category_data[collection_name]["database"]
-            preview_individual_lookup_dict = {}
-            preview_data = list(preview_db.find({}, {"_id": 1, "name": 1}))
-            for data in preview_data:
-                preview_individual_lookup_dict[str(data["_id"])] = {
-                    "name": data.get("name", "None"),
+        collection_names = schema.get("properties", {}).get(preview_item, {}).get("collections", None)
+        if collection_names:
+            for collection_name in collection_names:
+                preview_db = category_data[collection_name]["database"]
+                preview_individual_lookup_dict = {}
+                preview_data = list(preview_db.find({}, {"_id": 1, "name": 1}))
+                for data in preview_data:
+                    preview_individual_lookup_dict[str(data["_id"])] = {
+                        "name": data.get("name", "None"),
                     "link": f"{collection_name}/item/{data.get('name', data.get('_id', '#'))}"
                 }
             preview_overall_lookup_dict[preview_item] = preview_individual_lookup_dict

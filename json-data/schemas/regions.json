@@ -12,20 +12,22 @@
         "bsonType": "linked_object",
 		    "label": "Current Event",
         "description": "The current event of the region",
-		    "collection": "events"
+		    "collections": ["events"],
+        "hidden": true
       },
       "events": {
         "bsonType": "array",
 		    "label": "Events",
         "description": "All events that have ocurred in the region",
-		    "collection": "events",
-		    "queryTargetAttribute": "target"
+		    "collections": ["events"],
+		    "queryTargetAttribute": "target",
+        "hidden": true
       },
 	    "nations": {
         "bsonType": "array",
 		    "label": "Nations",
         "description": "Nations currently located in this region",
-		    "collection": "nations",
+		    "collections": ["nations"],
 		    "queryTargetAttribute": "region",
         "items": {
           "bsonType": "linked_object"
@@ -35,7 +37,7 @@
         "bsonType": "array",
 		    "label": "Merchants",
         "description": "Merchants currently located in this region",
-        "collection": "merchants",
+		    "collections": ["merchants"],
 		    "queryTargetAttribute": "region",
         "items": {
           "bsonType": "linked_object"
@@ -45,7 +47,7 @@
         "bsonType": "array",
 		    "label": "Mercenaries",
         "description": "Mercenaries currently located in this region",
-		    "collection": "mercenaries",
+		    "collections": ["mercenaries"],
 		    "queryTargetAttribute": "region",
         "items": {
           "bsonType": "linked_object"
@@ -55,7 +57,7 @@
         "bsonType": "array",
 		    "label": "Characters",
         "description": "Characters currently located in this region",
-		    "collection": "characters",
+		    "collections": ["characters"],
 		    "queryTargetAttribute": "region",
         "items": {
           "bsonType": "linked_object"
@@ -65,7 +67,7 @@
         "bsonType": "array",
 		    "label": "Wars",
         "description": "Wars currently being fought in this region",
-        "collection": "wars",
+		    "collections": ["wars"],
 		    "queryTargetAttribute": "region",
         "items": {
           "bsonType": "linked_object"

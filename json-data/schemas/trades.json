@@ -5,17 +5,17 @@
     "properties": {
       "exporting_nation": {
         "bsonType": "linked_object",
-		"label": "Exporting Nation",
+		    "label": "Exporting Nation",
         "description": "The nation that is exporting the goods"
       },
-	  "importing_nation": {
+	    "importing_nation": {
         "bsonType": "linked_object",
-		"label": "Importing Nation",
+		  "label": "Importing Nation",
         "description": "The nation that is importing the goods"
       },
-	  "resource": {
+	    "resource": {
         "bsonType": "string",
-		"label": "Resource",
+		    "label": "Resource",
         "description": "The resource that is being traded"
       },
 	  "quantity": {

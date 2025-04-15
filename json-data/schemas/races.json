@@ -12,7 +12,7 @@
         "bsonType": "linked_object",
 		    "label": "Founding Nation",
         "description": "The first nation of this race",
-		    "collection": "nations"
+		    "collections": ["nations"]
       },
       "positive_trait": {
         "bsonType": "enum",
@@ -174,7 +174,7 @@
         "bsonType": "array",
 		    "label": "Pops",
         "description": "Pops that have this race",
-		    "collection": "pops",
+		    "collections": ["pops"],
 		    "queryTargetAttribute": "race",
         "items": {
           "bsonType": "linked_object"

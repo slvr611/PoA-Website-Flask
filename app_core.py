@@ -53,14 +53,10 @@ category_data = {
     "wonders": {"pluralName": "Wonders", "singularName": "Wonder", "database": mongo.db.wonders},
     "markets": {"pluralName": "Markets", "singularName": "Market", "database": mongo.db.markets},
     "wars": {"pluralName": "Wars", "singularName": "War", "database": mongo.db.wars},
-    "war_links": {"pluralName": "War Links", "singularName": "War Link", "database": mongo.db.war_links},
-    "market_links": {"pluralName": "Market Links", "singularName": "Market Link", "database": mongo.db.market_links},
     "diplo_relation": {"pluralName": "Diplomatic Relations", "singularName": "Diplomatic Relation", "database": mongo.db.diplo_relation},
     "pops": {"pluralName": "Pops", "singularName": "Pop", "database": mongo.db.pops},
     "trades": {"pluralName": "Trades", "singularName": "Trade", "database": mongo.db.trades},
     "events": {"pluralName": "Events", "singularName": "Event", "database": mongo.db.events},
-    "units": {"pluralName": "Units", "singularName": "Unit", "database": mongo.db.units},
-    "districts": {"pluralName": "Districts", "singularName": "District", "database": mongo.db.districts},
     "changes": {"pluralName": "Changes", "singularName": "Change", "database": mongo.db.changes}
 }
 

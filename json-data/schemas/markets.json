@@ -12,16 +12,16 @@
         "bsonType": "linked_object",
         "label": "Market Head",
         "description": "The nation that currently heads up the market",
-		"collection": "nations"
+		    "collections": ["nations", "merchant_companies"]
       },
       "members": {
         "bsonType": "array",
-		"label": "Members",
+		    "label": "Members",
         "description": "Nations currently members of this market",
-		"linkCollection": "market_links",
-		"linkQueryTarget": "market",
-		"collection": "nations",
-		"queryTarget": "member"
+		    "linkCollection": "market_links",
+		    "linkQueryTarget": "market",
+        "collection": "nations",
+        "queryTarget": "member"
       }
     }
   }
