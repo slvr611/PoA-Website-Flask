@@ -232,7 +232,9 @@ def sum_node_totals(nodes):
 def sum_job_totals(jobs_assigned, job_details):
     totals = {}
     general_resources = json_data["general_resources"]
+    general_resources = [resource["key"] for resource in general_resources]
     unique_resources = json_data["unique_resources"]
+    unique_resources = [resource["key"] for resource in unique_resources]
 
     for job, count in jobs_assigned.items():
         for field, val in job_details.get(job, {}).get("production", {}).items():
