@@ -153,24 +153,25 @@ def collect_external_requirements(target, schema, target_data_type):
     for field, required_fields in external_reqs.items():
         field_schema = schema["properties"].get(field, {})
 
-        collection = field_schema.get("collection")
-        if not collection:
+        collections = field_schema.get("collections")
+        if not collections:
             continue
 
-        linked_object_schema = category_data.get(collection, {}).get("schema", {})
+        for collection in collections:
+            linked_object_schema = category_data.get(collection, {}).get("schema", {})
 
-        if field_schema.get("queryTargetAttribute"):
-            query_target = field_schema["queryTargetAttribute"]
-            linked_objects = list(mongo.db[collection].find({query_target: str(target["_id"])}))
-            for object in linked_objects:
+            if field_schema.get("queryTargetAttribute"):
+                query_target = field_schema["queryTargetAttribute"]
+                linked_objects = list(mongo.db[collection].find({query_target: str(target["_id"])}))
+                for object in linked_objects:
+                    collected_modifiers.extend(collect_external_modifiers_from_object(object, required_fields, linked_object_schema, target_data_type))
+            else:
+                object_id = target.get(field)
+                if not object_id:
+                    continue
+                
+                object = mongo.db[collection].find_one({"_id": ObjectId(object_id)})
                 collected_modifiers.extend(collect_external_modifiers_from_object(object, required_fields, linked_object_schema, target_data_type))
-        else:
-            object_id = target.get(field)
-            if not object_id:
-                continue
-            
-            object = mongo.db[collection].find_one({"_id": ObjectId(object_id)})
-            collected_modifiers.extend(collect_external_modifiers_from_object(object, required_fields, linked_object_schema, target_data_type))
     
     return collected_modifiers
 

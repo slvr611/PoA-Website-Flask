@@ -65,20 +65,6 @@
 		"noneResult": "Unknown",
 		"collections": ["religions"]
       },
-      "positive_quirk": {
-        "bsonType": "enum",
-		"label": "Positive Quirk",
-        "description": "The positive quirk of the character",
-		"static": true,
-        "enum": ["None", "Articulate", "Brave", "Determined", "Compassionate", "Generous", "Humble", "Imaginative", "Just", "Observant", "Optimistic", "Patient", "Wise"]
-      },
-      "negative_quirk": {
-        "bsonType": "enum",
-		"label": "Negative Quirk",
-        "description": "The negative quirk of the character",
-		"static": true,
-        "enum": ["None", "Aggressive", "Apathetic", "Arrogant", "Boring", "Careless", "Cowardly", "Deceitful", "Empathetic", "Fickle", "Greedy", "Lazy", "Pessimistic", "Repulsive"]
-      },
 	  "character_type": {
         "bsonType": "enum",
 		"label": "Character Type",
@@ -307,6 +293,20 @@
 		"label": "Strategy",
         "description": "The Strategy stat of the character",
 		"calculated": true
+      },
+      "positive_quirk": {
+        "bsonType": "enum",
+		"label": "Positive Quirk",
+        "description": "The positive quirk of the character",
+		"static": true,
+        "enum": ["None", "Articulate", "Brave", "Determined", "Compassionate", "Generous", "Humble", "Imaginative", "Just", "Observant", "Optimistic", "Patient", "Wise"]
+      },
+      "negative_quirk": {
+        "bsonType": "enum",
+		"label": "Negative Quirk",
+        "description": "The negative quirk of the character",
+		"static": true,
+        "enum": ["None", "Aggressive", "Apathetic", "Arrogant", "Boring", "Careless", "Cowardly", "Deceitful", "Empathetic", "Fickle", "Greedy", "Lazy", "Pessimistic", "Repulsive"]
       },
 	  "magic_points": {
         "bsonType": "number",
