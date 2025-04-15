@@ -25,9 +25,10 @@ def change_list():
 
     for preview_item in schema.get("preview", {}):
         query_dict[preview_item] = 1
-        collection_name = schema.get("properties", {}).get(preview_item, {}).get("collection")
-        if collection_name:
-            collections_to_preview[preview_item] = collection_name
+        collection_names = schema.get("properties", {}).get(preview_item, {}).get("collections")
+        if collection_names:
+            for collection_name in collection_names:
+                collections_to_preview[preview_item] = collection_name
 
     pending_changes = list(db.find({"status": "Pending"}, query_dict).sort([("time_requested", ASCENDING), ("time_approved", ASCENDING)]))
     archived_changes = list(db.find({"status": {"$ne": "Pending"}}, query_dict).sort([("time_requested", DESCENDING), ("time_approved", DESCENDING)]))
