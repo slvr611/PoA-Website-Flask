@@ -538,7 +538,7 @@
         "bsonType": "enum",
 		"label": "Military Funding",
         "description": "How well funded the nation's military is",
-		"enum": ["Substandard", "Standard", "Substantial"],
+		"enum": ["Substandard", "Standard", "Notable", "Substantial", "Extreme"],
 		"default": "Standard",
 		"laws": {
 			"Minimal": {

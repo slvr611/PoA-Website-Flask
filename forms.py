@@ -672,7 +672,7 @@ class NationForm(BaseSchemaForm):
         for resource in unique_resources:
             node_choices.append((resource.get("key", resource), resource.get("name", resource)))
 
-        #Handle Districts separately        
+        #Handle Districts separately
         district_choices = [("", "Empty Slot")]
         districts = json_data.get("districts", {})
         for district_key, district_data in districts.items():
