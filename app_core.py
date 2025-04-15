@@ -4,6 +4,7 @@ from flask_pymongo import PyMongo
 from flask_discord import DiscordOAuth2Session
 import os
 import json
+import re
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -20,6 +21,21 @@ app.config["DISCORD_REDIRECT_URI"] = os.getenv("DISCORD_REDIRECT_URI")
 app.config["MONGO_URI"] = os.getenv("MONGO_URI")
 mongo = PyMongo(app)
 discord = DiscordOAuth2Session(app)
+
+@app.template_filter('format_discord_link')
+def format_discord_link(text):
+    # Pattern for Discord message links
+    discord_pattern = r'(https://(?:ptb\.|canary\.)?discord\.com/channels/\d+/\d+/\d+)'
+    
+    def replace_link(match):
+        full_url = match.group(1)
+        # Extract the last part of the URL (message ID) for display
+        message_id = full_url.split('/')[-1]
+        return f'<a href="{full_url}" target="_blank">Discord Message ({message_id})</a>'
+    
+    # Replace Discord links with formatted HTML
+    formatted_text = re.sub(discord_pattern, replace_link, str(text))
+    return formatted_text
 
 category_data = {
     "nations": {"pluralName": "Nations", "singularName": "Nation", "database": mongo.db.nations},

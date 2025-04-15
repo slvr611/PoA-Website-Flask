@@ -477,3 +477,93 @@ h1, h2 {
   border-radius: 8px;
   margin-top: 1rem;
 }
+
+/* Table wrapper for horizontal scrolling */
+.table-wrapper {
+    width: 100%;
+    overflow-x: auto;
+    margin-bottom: 2rem;
+    /* Smooth scrolling on touch devices */
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Adjust info-table styles */
+.info-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0;
+    /* Prevent table from shrinking below its natural size */
+    white-space: nowrap;
+    min-width: 800px; /* Minimum width before scrolling starts */
+}
+
+.info-table th,
+.info-table td {
+    border: 1px solid #444;
+    padding: .5em;
+    vertical-align: middle;
+    /* Allow text wrapping for specific columns */
+    white-space: normal;
+}
+
+/* Allow specific columns to wrap */
+.info-table td.wrap-content {
+    white-space: normal;
+    min-width: 200px; /* Minimum width for wrapped columns */
+    max-width: 300px; /* Maximum width for wrapped columns */
+}
+
+/* Style for the changes column specifically */
+.changes-column {
+    white-space: normal !important;
+    min-width: 250px;
+    max-width: 400px;
+}
+
+/* Style for the reason column */
+.reason-column {
+    white-space: normal !important;
+    min-width: 150px;
+    max-width: 300px;
+    word-break: break-word; /* Breaks long words and URLs */
+    overflow-wrap: break-word;
+}
+
+/* Style for Discord links in reason column */
+.reason-column a {
+    display: inline-block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: #007bff;
+    text-decoration: none;
+}
+
+.reason-column a:hover {
+    text-decoration: underline;
+}
+
+/* Ensure action buttons don't wrap */
+.action-buttons {
+    white-space: nowrap;
+    min-width: 120px;
+}
+
+/* Make buttons more compact in tables */
+.btn {
+    padding: 4px 8px;
+    margin: 2px;
+    display: inline-block;
+    font-size: 0.9em;
+}
+
+.btn-approve {
+    background-color: #1b4522;
+    color: #afffbd;
+}
+
+.btn-deny {
+    background-color: #451b1b;
+    color: #ff9f9f;
+}
