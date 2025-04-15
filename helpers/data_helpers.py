@@ -1,4 +1,4 @@
-from flask import abort
+from flask import abort, g
 from bson import ObjectId
 from app_core import category_data, mongo
 from pymongo import ASCENDING
@@ -52,3 +52,54 @@ def get_dropdown_options(schema):
                 ).sort("name", ASCENDING)
             )
     return dropdown_options
+
+def get_user_entities():
+    """Wrapper to get current user's entities for the navbar"""
+    if not g.user:
+        return None
+        
+    # Get player's database ID
+    player = mongo.db.players.find_one({"id": g.user.get("id")})
+    if not player:
+        return None
+    
+    player_id = str(player["_id"])
+    
+    # Get all characters owned by player
+    characters = list(mongo.db.characters.find(
+        {"player": player_id},
+        {"name": 1, "ruling_nation_org": 1}
+    ).sort("name", ASCENDING))
+    
+    # Get all nations/orgs ruled by player's characters
+    ruled_entity_ids = [str(char.get("ruling_nation_org")) for char in characters if char.get("ruling_nation_org")]
+    
+    nations = list(mongo.db.nations.find(
+        {"_id": {"$in": [ObjectId(id) for id in ruled_entity_ids]}},
+        {"name": 1}
+    ).sort("name", ASCENDING))
+    
+    mercenaries = list(mongo.db.mercenaries.find(
+        {"_id": {"$in": [ObjectId(id) for id in ruled_entity_ids]}},
+        {"name": 1}
+    ).sort("name", ASCENDING))
+
+    merchants = list(mongo.db.merchants.find(
+        {"_id": {"$in": [ObjectId(id) for id in ruled_entity_ids]}},
+        {"name": 1}
+    ).sort("name", ASCENDING))
+
+    factions = list(mongo.db.factions.find(
+        {"_id": {"$in": [ObjectId(id) for id in ruled_entity_ids]}},
+        {"name": 1}
+    ).sort("name", ASCENDING))
+
+
+    
+    return {
+        "characters": characters,
+        "nations": nations,
+        "mercenaries": mercenaries,
+        "merchants": merchants,
+        "factions": factions
+    }

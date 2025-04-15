@@ -1,6 +1,4 @@
 from flask import Blueprint, render_template, session, redirect, url_for, g
-from helpers.data_helpers import generate_id_to_name_dict, compute_demographics
-from helpers.data_helpers import generate_id_to_name_dict, compute_demographics
 from pymongo import ASCENDING
 from app_core import mongo
 
@@ -27,8 +25,3 @@ def home():
 def go_back():
     previous_url = session.get('second_previous_url', url_for("base_routes.home"))
     return redirect(previous_url)
-
-@base_routes.context_processor
-def inject_navbar_pages():
-    from app_core import category_data  # Avoid circular import
-    return {'category_data': category_data}

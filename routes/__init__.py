@@ -1,4 +1,5 @@
 from app_core import app, mongo, discord
+from helpers.data_helpers import get_user_entities
 
 from .base_routes import base_routes
 from .data_item_routes import data_item_routes
@@ -16,3 +17,9 @@ def register_routes(app, mongo, discord):
     app.register_blueprint(character_routes)
     app.register_blueprint(auth_routes)
     app.register_blueprint(admin_tool_routes)
+
+@app.context_processor
+def inject_navbar_data():
+    return {
+        'user_entities': get_user_entities()
+    }
