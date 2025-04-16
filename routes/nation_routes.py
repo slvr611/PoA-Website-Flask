@@ -55,13 +55,15 @@ def edit_nation(item_ref):
     
     dropdown_options = {}
     for field, attributes in schema["properties"].items():
-        if attributes.get("collection"):
-            related_collection = attributes.get("collection")
-            dropdown_options[field] = list(
-                mongo.db[related_collection].find(
-                    {}, {"name": 1, "_id": 1}
-                ).sort("name", ASCENDING)
-            )
+        if attributes.get("collections"):
+            related_collections = attributes.get("collections")
+            dropdown_options[field] = []
+            for related_collection in related_collections:
+                dropdown_options[field] += list(
+                    mongo.db[related_collection].find(
+                        {}, {"name": 1, "_id": 1}
+                    ).sort("name", ASCENDING)
+                )
     
     linked_objects = get_linked_objects(schema, nation)
     calculated_fields = calculate_all_fields(nation, schema, "nation")
