@@ -361,8 +361,9 @@ class BaseSchemaForm(FlaskForm):
 
         field_schema = schema.get("properties", {}).get(field_name, {})
         none_result = field_schema.get("noneResult", "None")
+        default_options = field_schema.get("default_options", [])
         
-        choices = [("", none_result)]
+        choices = [("", none_result)] + [(option, option) for option in default_options]
         if field_name in dropdown_options:
             choices += [(str(option["_id"]), option["name"]) 
                        for option in dropdown_options[field_name]]
@@ -471,6 +472,7 @@ class DynamicSchemaForm(BaseSchemaForm):
         elif field_type == "linked_object":
             field = SelectField(**field_args)
             field.none_result = field_schema.get("noneResult", "None")
+            field.default_options = field_schema.get("default_options", [])
             return field
         
         elif field_type == "array":
@@ -492,6 +494,7 @@ class DynamicSchemaForm(BaseSchemaForm):
                 # For arrays of linked objects
                 subfield = SelectField("Value")
                 subfield.none_result = items_schema.get("noneResult", "None")
+                subfield.default_options = items_schema.get("default_options", [])
                 return FieldList(subfield, min_entries=0)
                 
             elif items_type == "object":

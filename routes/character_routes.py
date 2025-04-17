@@ -66,10 +66,19 @@ def new_character_request():
     if db.find_one({"name": form_data["name"]}):
         flash("Name must be unique!")
         return redirect("/characters/new")
-    
+
+    form_data["age"] = 1
+
+    for strength in form_data["strengths"]:
+        form_data["modifiers"].append({"field": strength, "value": random.randint(1, 2), "duration": -1, "source": "Strength"})
+    for weakness in form_data["weaknesses"]:
+        form_data["modifiers"].append({"field": weakness, "value": random.randint(-2, -1), "duration": -1, "source": "Weakness"})
+
     change_id = request_change(
         data_type="characters",
-        change_type="Create",
+        item_id=None,
+        change_type="Add",
+        before_data={},
         after_data=form_data,
         reason=form_data.pop("reason", "No Reason Given")
     )

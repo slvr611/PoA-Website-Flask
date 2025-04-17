@@ -513,7 +513,7 @@
 			"Low": {
 				"recruit_percentage": 0.2,
 				"strength": 1,
-				"karma": 2
+				"karma": 1
 			},
 			"High": {
 				"recruit_percentage": 0.4,
@@ -521,12 +521,12 @@
 			},
 			"Very High": {
 				"recruit_percentage": 0.5,
-				"strength": -2,
+				"strength": -1,
 				"karma": -2
 			},
 			"Total": {
 				"recruit_percentage": 0.65,
-				"strength": -4,
+				"strength": -2,
 				"karma": -2
 			},
 			"Rebellion": {

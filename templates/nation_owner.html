@@ -137,7 +137,7 @@
 				<tr>
 					<th>{{ schema.properties.primary_culture.label }}:</th>
 					{% if linked_objects['primary_culture'] %}
-						<td><a href="{{ linked_objects['primary_race']['link'] }}">{{ linked_objects['primary_culture']['name'] }}</a></td>
+						<td><a href="{{ linked_objects['primary_culture']['link'] }}">{{ linked_objects['primary_culture']['name'] }}</a></td>
 					{% else %}
 						None
 					{% endif %}
@@ -145,7 +145,7 @@
 				<tr>
 					<th>{{ schema.properties.primary_religion.label }}:</th>
 					{% if linked_objects['primary_religion'] %}
-						<td><a href="{{ linked_objects['primary_race']['link'] }}">{{ linked_objects['primary_religion']['name'] }}</a></td>
+						<td><a href="{{ linked_objects['primary_religion']['link'] }}">{{ linked_objects['primary_religion']['name'] }}</a></td>
 					{% else %}
 						None
 					{% endif %}

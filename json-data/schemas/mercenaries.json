@@ -20,7 +20,7 @@
         },
         "preview": ["name", "character_type"]
       },
-	    "Region": {
+	    "region": {
         "bsonType": "linked_object",
 		    "label": "Region",
         "description": "The region the mercenary company is currently stationed in",

@@ -1,6 +1,7 @@
 {
   "$jsonSchema": {
     "bsonType": "object",
+    "preview": ["characters"],
     "properties": {
       "id": {
         "bsonType": "string",

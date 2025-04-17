@@ -32,7 +32,7 @@
         "bsonType": "linked_object",
         "label": "Owner",
         "description": "The artifact's owner",
-        "noneResult": "Lost",
+        "default_options": ["Unknown", "Lost"],
 		    "collections": ["characters"]
       },
       "creator": {
