@@ -467,6 +467,7 @@ class DynamicSchemaForm(BaseSchemaForm):
         
         elif field_type == "enum":
             field_args["choices"] = [(v, v) for v in field_schema.get("enum", [])]
+
             return SelectField(**field_args)
         
         elif field_type == "linked_object":
@@ -519,7 +520,7 @@ class NationForm(BaseSchemaForm):
     # Basic fields
     name = StringField("Name", validators=[DataRequired()])
     region = SelectField("Region", choices=[])
-    stability = SelectField("Stability", choices=[])
+    stability = SelectField("Stability", choices=[], default="Balanced")
     infamy = IntegerField("Infamy", validators=[NumberRange(min=0)], default=0)
     temporary_karma = IntegerField("Temporary Karma", validators=[NumberRange(min=0)], default=0)
     rolling_karma = IntegerField("Rolling Karma", validators=[NumberRange(min=0)], default=0)
@@ -546,7 +547,7 @@ class NationForm(BaseSchemaForm):
     # Misc fields
     origin = SelectField("Origin", choices=[])
     modifiers = FieldList(FormField(ModifierForm), min_entries=0)
-    temperament = SelectField("Temperament", choices=[])
+    temperament = SelectField("Temperament", choices=[], default="Neutral")
 
     # Add dynamic law fields from schema
     @classmethod
@@ -822,6 +823,7 @@ class NewCharacterForm(BaseSchemaForm):
 
 # Global form generator instance
 form_generator = FormGenerator()
+
 
 
 

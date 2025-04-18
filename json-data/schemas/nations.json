@@ -42,6 +42,7 @@
         "bsonType": "enum",
 		"label": "Temperament",
         "description": "The nation's level of stability",
+		"default": "Neutral",
 		"enum": ["Player", "Neutral", "Friendly", "Hostile", "Withdrawn", "Curious", "Supremacist", "Zealous"],
 		"static": true,
 		"mod_info": true
