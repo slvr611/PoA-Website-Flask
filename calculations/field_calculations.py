@@ -142,6 +142,7 @@ def calculate_job_details(target, modifier_totals, district_totals, city_totals,
             all_resource_upkeep = 0
             all_resource_production_multiplier = 1
             all_resource_upkeep_multiplier = 1
+            all_resource_minimum_production = 1
             for source in modifier_sources:
                 for modifier, value in source.items():
                     if modifier.startswith(job) or modifier.startswith("job"):
@@ -170,6 +171,7 @@ def calculate_job_details(target, modifier_totals, district_totals, city_totals,
                         new_production = int(math.floor(new_production))
                     else:
                         new_production = int(round(new_production))
+                    new_production = max(new_production, all_resource_minimum_production)
                     new_details["production"][resource] = new_production
 
             for resource in new_details.get("upkeep", {}):
