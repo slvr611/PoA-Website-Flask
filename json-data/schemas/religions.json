@@ -30,37 +30,37 @@
                 "bsonType": "enum",
                 "label": "Faith",
                 "description": "The religion's stance on faith",
-                "enum": ["Devotion", "Indifference"]
+                "enum": ["None", "Devotion", "Indifference"]
             },
             "integrity": {
                 "bsonType": "enum",
                 "label": "Integrity",
                 "description": "The religion's stance on integrity",
-                "enum": ["Humility", "Dignity"]
+                "enum": ["None", "Humility", "Dignity"]
             },
             "empathy": {
                 "bsonType": "enum",
                 "label": "Empathy",
                 "description": "The religion's stance on empathy",
-                "enum": ["Compassion", "Strength"]
+                "enum": ["None", "Compassion", "Strength"]
             },
             "death": {
                 "bsonType": "enum",
                 "label": "Death",
                 "description": "The religion's stance on death",
-                "enum": ["Defiance", "Reverence"]
+                "enum": ["None", "Defiance", "Reverence"]
             },
             "pleasure": {
                 "bsonType": "enum",
                 "label": "Pleasure",
                 "description": "The religion's stance on pleasure",
-                "enum": ["Indulgence", "Temperance"]
+                "enum": ["None", "Indulgence", "Temperance"]
             },
             "aspiration": {
                 "bsonType": "enum",
                 "label": "Aspiration",
                 "description": "The religion's stance on aspiration",
-                "enum": ["Ambition", "Patience"]
+                "enum": ["None", "Ambition", "Patience"]
             },
             "funeral": {
                 "bsonType": "enum",
