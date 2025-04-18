@@ -189,7 +189,7 @@ class ModifierForm(Form):
     """Form for handling nation/character modifiers as a dictionary"""
     
     field = StringField("Field", validators=[DataRequired()])
-    value = IntegerField("Value", validators=[NumberRange()], default=1)
+    value = FloatField("Value", default=1)
     duration = IntegerField("Duration", validators=[NumberRange()], default=-1)
     source = StringField("Source", validators=[DataRequired()])
 
@@ -343,7 +343,7 @@ class ExternalModifierForm(Form):
 
     type = SelectField("Type", choices=[("nation", "nation"), ("character", "character")])
     modifier = StringField("Modifier", validators=[])
-    value = IntegerField("Value", validators=[])
+    value = FloatField("Value")
 
 class BaseSchemaForm(FlaskForm):
     """Base form class with common functionality"""

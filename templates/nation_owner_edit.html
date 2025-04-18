@@ -249,71 +249,9 @@
                         <th>{{ form.temperament.label.text }}:</th>
                         <td>{{ form.temperament(class="form-control") }}</td>
                     </tr>
-                    <tr>
-                        
-                        <th>{{ form.modifiers.label.text }}:</th>
-                        <td>
-                            <table class="jobs-table">
-                                <thead>
-                                    <tr>
-                                        <th>Field</th>
-                                        <th>Value</th>
-                                        <th>Duration</th>
-                                        <th>Source</th>
-                                        <th>Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="modifiers-tbody">
-                                    {% for modifier_field in form.modifiers %}
-                                        <tr>
-                                            <td>{{ modifier_field.field(class="form-control") }}</td>
-                                            <td>{{ modifier_field.value(class="form-control") }}</td>
-                                            <td>{{ modifier_field.duration(class="form-control") }}</td>
-                                            <td>{{ modifier_field.source(class="form-control") }}</td>
-                                            <td><button type="button" class="btn btn-danger" onclick="removeModifier(this)">Remove</button></td>
-                                        </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                            <button type="button" class="btn btn-primary" onclick="addModifier()">Add Modifier</button>
-                        </td>
-                    </tr>
                 </table>
             </div>
         </div>
-
-        <script>
-            function addModifier() {
-                const tbody = document.getElementById('modifiers-tbody');
-                const currentCount = tbody.children.length;
-                
-                const newRow = document.createElement('tr');
-                newRow.innerHTML = `
-                    <td><input type="text" class="form-control" name="modifiers-${currentCount}-field" id="modifiers-${currentCount}-field" required></td>
-                    <td><input type="number" class="form-control" name="modifiers-${currentCount}-value" id="modifiers-${currentCount}-value" required></td>
-                    <td><input type="number" class="form-control" name="modifiers-${currentCount}-duration" id="modifiers-${currentCount}-duration" value="0" required></td>
-                    <td><input type="text" class="form-control" name="modifiers-${currentCount}-source" id="modifiers-${currentCount}-source" required></td>
-                    <td><button type="button" class="btn btn-danger" onclick="removeModifier(this)">Remove</button></td>
-                `;
-                
-                tbody.appendChild(newRow);
-            }
-            
-            function removeModifier(button) {
-                const row = button.closest('tr');
-                row.remove();
-                
-                // Reindex remaining modifiers
-                const tbody = document.getElementById('modifiers-tbody');
-                Array.from(tbody.children).forEach((row, index) => {
-                    row.querySelectorAll('input').forEach(input => {
-                        const fieldName = input.name.split('-').pop();
-                        input.name = `modifiers-${index}-${fieldName}`;
-                        input.id = `modifiers-${index}-${fieldName}`;
-                    });
-                });
-            }
-        </script>
 
         <div class="info-column">
             <h2>War Stats</h2>
@@ -494,7 +432,67 @@
                 {% endfor %}
             </div>
         </section>
-        
+
+        <div class="info-column">
+            <h2>{{ form.modifiers.label.text }}</h2>
+            <table class="jobs-table">
+                <thead>
+                    <tr>
+                        <th>Field</th>
+                        <th>Value</th>
+                        <th>Duration</th>
+                        <th>Source</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="modifiers-tbody">
+                    {% for modifier_field in form.modifiers %}
+                        <tr>
+                            <td>{{ modifier_field.field(class="form-control") }}</td>
+                            <td>{{ modifier_field.value(class="form-control") }}</td>
+                            <td>{{ modifier_field.duration(class="form-control") }}</td>
+                            <td>{{ modifier_field.source(class="form-control") }}</td>
+                            <td><button type="button" class="btn btn-danger" onclick="removeModifier(this)">Remove</button></td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        <button type="button" class="btn btn-primary" onclick="addModifier()">Add Modifier</button>
+        </div>
+
+        <script>
+            function addModifier() {
+                const tbody = document.getElementById('modifiers-tbody');
+                const currentCount = tbody.children.length;
+                
+                const newRow = document.createElement('tr');
+                newRow.innerHTML = `
+                    <td><input type="text" class="form-control" name="modifiers-${currentCount}-field" id="modifiers-${currentCount}-field" required></td>
+                    <td><input type="number" class="form-control" name="modifiers-${currentCount}-value" id="modifiers-${currentCount}-value" step="any" required></td>
+                    <td><input type="number" class="form-control" name="modifiers-${currentCount}-duration" id="modifiers-${currentCount}-duration" value="0" required></td>
+                    <td><input type="text" class="form-control" name="modifiers-${currentCount}-source" id="modifiers-${currentCount}-source" required></td>
+                    <td><button type="button" class="btn btn-danger" onclick="removeModifier(this)">Remove</button></td>
+                `;
+                
+                tbody.appendChild(newRow);
+            }
+            
+            function removeModifier(button) {
+                const row = button.closest('tr');
+                row.remove();
+                
+                // Reindex remaining modifiers
+                const tbody = document.getElementById('modifiers-tbody');
+                Array.from(tbody.children).forEach((row, index) => {
+                    row.querySelectorAll('input').forEach(input => {
+                        const fieldName = input.name.split('-').pop();
+                        input.name = `modifiers-${index}-${fieldName}`;
+                        input.id = `modifiers-${index}-${fieldName}`;
+                    });
+                });
+            }
+        </script>
+
         
         <!-- Reason and Submit -->
         <div class="form-actions">

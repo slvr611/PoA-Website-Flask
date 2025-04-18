@@ -617,16 +617,16 @@
 				<tr>
 					<th>Modifier</th>
 					<th>Value</th>
-					<th>Type</th>
+					<th>Duration</th>
 					<th>Source</th>
 				</tr>
 			</thead>
 			<tbody>
 				{% for modifier in nation.modifiers %}
 					<tr>
-						<td>{{ modifier.display_name }}</td>
+						<td>{{ modifier.field }}</td>
 						<td>{{ modifier.value }}</td>
-						<td>{{ modifier.type }}</td>
+						<td>{{ modifier.duration }}</td>
 						<td>{{ modifier.source }}</td>
 					</tr>
 				{% endfor %}

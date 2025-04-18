@@ -748,7 +748,7 @@
 				"karma": -4,
 				"job_resource_production_mult": 0.5,
 				"researcher_resource_production_mult": 2,
-				"node_value": -1
+				"resource_node_value": -1
 			}
 		}
       },

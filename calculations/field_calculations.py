@@ -23,8 +23,8 @@ def calculate_all_fields(target, schema, target_data_type):
     cities = collect_cities(target)
     city_totals = sum_city_totals(cities)
 
-    nodes = collect_nodes(target)
-    node_totals = sum_node_totals(nodes)
+    node_modifiers = collect_nodes(target, modifier_totals, district_totals, city_totals, law_totals)
+    node_totals = sum_node_totals(node_modifiers)
 
     jobs_assigned = collect_jobs_assigned(target)
     job_details = calculate_job_details(target, modifier_totals, district_totals, city_totals, node_totals, law_totals)
@@ -104,11 +104,16 @@ def collect_cities(target):
 
     return collected_modifiers
 
-def collect_nodes(target):
+def collect_nodes(target, modifier_totals, district_totals, city_totals, law_totals):
     nodes = target.get("resource_nodes", {})
     collected_modifiers = []
     for node_key, node_qty in nodes.items():
-        collected_modifiers.append({node_key + "_production": node_qty}) #TODO: Add Node Value
+        keys_to_check = [node_key + "_node_value", "resource_node_value"]
+        node_value = 1
+        for k in keys_to_check:
+            node_value += modifier_totals.get(k, 0) + district_totals.get(k, 0) + city_totals.get(k, 0) + law_totals.get(k, 0)
+
+        collected_modifiers.append({node_key + "_production": node_qty * node_value})
 
     return collected_modifiers
 
@@ -223,27 +228,41 @@ def sum_city_totals(cities):
             totals[key] = totals.get(key, 0) + value
     return totals
 
-def sum_node_totals(nodes):
+def sum_node_totals(node_modifiers):
     totals = {}
-    for d in nodes:
+    for d in node_modifiers:
         for key, value in d.items():
             totals[key] = totals.get(key, 0) + value
     return totals
 
 def sum_job_totals(jobs_assigned, job_details):
     totals = {}
+    original_job_details = json_data["jobs"]
     general_resources = json_data["general_resources"]
     general_resources = [resource["key"] for resource in general_resources]
     unique_resources = json_data["unique_resources"]
     unique_resources = [resource["key"] for resource in unique_resources]
 
     for job, count in jobs_assigned.items():
+        original_job_production = original_job_details.get(job, {}).get("production", {})
+        original_job_upkeep = original_job_details.get(job, {}).get("upkeep", {})
         for field, val in job_details.get(job, {}).get("production", {}).items():
             if field == "money":
                 field = "money_income"
             elif field in general_resources or field in unique_resources:
                 field = field + "_production"
-            totals[field] = totals.get(field, 0) + (val * count)
+            
+            total_value = val * count
+            
+            if val > original_job_production.get(field, 0):
+                total_value = int(math.floor(total_value))
+            elif val < original_job_production.get(field, 0):
+                total_value = int(math.ceil(total_value))
+            else:
+                total_value = int(round(total_value))
+
+            totals[field] = total_value
+
         for field, val in job_details.get(job, {}).get("upkeep", {}).items():
             if field == "money":
                 field = "money_income"
@@ -252,7 +271,17 @@ def sum_job_totals(jobs_assigned, job_details):
                 field = field + "_consumption"
             else:
                 val = -val
-            totals[field] = totals.get(field, 0) + (val * count)
+            
+            total_value = val * count
+            
+            if val > original_job_upkeep.get(field, 0):
+                total_value = int(math.floor(total_value))
+            elif val < original_job_upkeep.get(field, 0):
+                total_value = int(math.ceil(total_value))
+            else:
+                total_value = int(round(total_value))
+
+            totals[field] = total_value
     
     return totals
 
