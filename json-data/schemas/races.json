@@ -18,7 +18,7 @@
         "bsonType": "enum",
 		    "label": "Positive Trait",
         "description": "The positive trait associated with this race",
-		    "enum": ["Airborne", "Abstemious", "Aggressive", "Aquatic", "Charismatic", "Courageous", "Curious", "Docile", "Fecund", "Industrious", "Lucky", "Magical", "Semi-Aquatic", "Sturdy", "Swift", "Venerable"],
+		    "enum": ["None", "Airborne", "Abstemious", "Aggressive", "Aquatic", "Charismatic", "Courageous", "Curious", "Docile", "Fecund", "Industrious", "Lucky", "Magical", "Semi-Aquatic", "Sturdy", "Swift", "Venerable"],
         "laws": {
           "Airborne": {
             "nation_mundane_unit_flight": 1
@@ -79,7 +79,7 @@
         "bsonType": "enum",
 		    "label": "Negative Trait",
         "description": "The negative trait associated with this race",
-		    "enum": ["Acrophobia", "Clumsy", "Craven", "Dim", "Fleeting", "Frail", "Hydrophobic", "Infertile", "Insatiable", "Irksome", "Meek", "Mundane", "Rowdy", "Slow", "Unlucky"],
+		    "enum": ["None", "Acrophobia", "Clumsy", "Craven", "Dim", "Fleeting", "Frail", "Hydrophobic", "Infertile", "Insatiable", "Irksome", "Meek", "Mundane", "Rowdy", "Slow", "Unlucky"],
         "laws": {
           "Acrophobia": {
             "nation_mountain_attrition": 0.25,
@@ -138,7 +138,7 @@
         "bsonType": "enum",
 		    "label": "Preferred Terrain",
         "description": "The preferred terrain of this race",
-		    "enum": ["Plains", "Tundra", "Desert", "Forest", "River", "Dense Forest", "Marsh", "Hill", "Mountain", "Hazardous"],
+		    "enum": ["None", "Plains", "Tundra", "Desert", "Forest", "River", "Dense Forest", "Marsh", "Hill", "Mountain", "Hazardous"],
         "laws": {
           "Plains": {
             "nation_mounts_production": 1
