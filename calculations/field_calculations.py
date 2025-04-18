@@ -124,6 +124,11 @@ def calculate_job_details(target, modifier_totals, district_totals, city_totals,
     job_details = json_data["jobs"]
     district_details = json_data["districts"]
     modifier_sources = [modifier_totals, district_totals, city_totals, law_totals, node_totals]
+    general_resources = json_data["general_resources"]
+    general_resources = [resource["key"] for resource in general_resources]
+    unique_resources = json_data["unique_resources"]
+    unique_resources = [resource["key"] for resource in unique_resources]
+
     district_types = []
     for district in target.get("districts", []):
         if isinstance(district, dict):
@@ -133,20 +138,53 @@ def calculate_job_details(target, modifier_totals, district_totals, city_totals,
     for job, details in job_details.items():
         if "requirements" not in details or ("district" in details["requirements"] and details["requirements"]["district"] in district_types):
             new_details = copy.deepcopy(details)
+            all_resource_production = 0
+            all_resource_upkeep = 0
+            all_resource_production_multiplier = 1
+            all_resource_upkeep_multiplier = 1
             for source in modifier_sources:
                 for modifier, value in source.items():
-                    if modifier.startswith(job):
-                        resource = modifier.replace(job + "_", "").replace("_production", "").replace("_upkeep", "")
-                        if modifier.endswith("production"):
+                    if modifier.startswith(job) or modifier.startswith("job"):
+                        resource = modifier.replace(job + "_", "").replace("job_", "").replace("_production", "").replace("_upkeep", "")
+                        if resource != "resource" and modifier.endswith("production"):
                             new_details.setdefault("production", {})[resource] = new_details.get("production", {}).get(resource, 0) + value
-                        elif modifier.endswith("upkeep"):
+                        elif resource != "resource" and modifier.endswith("upkeep"):
                             new_details.setdefault("upkeep", {})[resource] = new_details.get("upkeep", {}).get(resource, 0) + value
-                    elif modifier.startswith("job"):
-                        resource = modifier.replace("job_", "").replace("_production", "").replace("_upkeep", "")
-                        if modifier.endswith("production"):
-                            new_details.setdefault("production", {})[resource] = new_details.get("production", {}).get(resource, 0) + value
-                        elif modifier.endswith("upkeep"):
-                            new_details.setdefault("upkeep", {})[resource] = new_details.get("upkeep", {}).get(resource, 0) + value
+                        elif modifier.endswith("resource_production"):
+                            all_resource_production = all_resource_production + value
+                        elif modifier.endswith("resource_upkeep"):
+                            all_resource_upkeep = all_resource_upkeep + value
+                        elif modifier.endswith("resource_production_mult"):
+                            all_resource_production_multiplier = all_resource_production_multiplier * value
+                        elif modifier.endswith("resource_upkeep_mult"):
+                            all_resource_upkeep_multiplier = all_resource_upkeep_multiplier * value
+
+            for resource in new_details.get("production", {}):
+                if resource in general_resources or resource in unique_resources:
+                    new_production = new_details["production"][resource]
+                    new_production += all_resource_production
+                    new_production = new_production * all_resource_production_multiplier
+                    if all_resource_production_multiplier < 1:
+                        new_production = int(math.ceil(new_production))
+                    elif all_resource_production_multiplier > 1:
+                        new_production = int(math.floor(new_production))
+                    else:
+                        new_production = int(round(new_production))
+                    new_details["production"][resource] = new_production
+
+            for resource in new_details.get("upkeep", {}):
+                if resource in general_resources or resource in unique_resources:
+                    new_upkeep = new_details["upkeep"][resource]
+                    new_upkeep += all_resource_upkeep
+                    new_upkeep = new_upkeep * all_resource_upkeep_multiplier
+                    if all_resource_upkeep_multiplier < 1:
+                        new_upkeep = int(math.ceil(new_upkeep))
+                    elif all_resource_upkeep_multiplier > 1:
+                        new_upkeep = int(math.floor(new_upkeep))
+                    else:
+                        new_upkeep = int(round(new_upkeep))
+                    new_details["upkeep"][resource] = new_upkeep
+
             new_job_details[job] = new_details
     
     return new_job_details
@@ -260,8 +298,8 @@ def sum_job_totals(jobs_assigned, job_details):
                 total_value = int(math.ceil(total_value))
             else:
                 total_value = int(round(total_value))
-
-            totals[field] = total_value
+            
+            totals[field] = totals.get(field, 0) + total_value
 
         for field, val in job_details.get(job, {}).get("upkeep", {}).items():
             if field == "money":
@@ -281,8 +319,8 @@ def sum_job_totals(jobs_assigned, job_details):
             else:
                 total_value = int(round(total_value))
 
-            totals[field] = total_value
-    
+            totals[field] = totals.get(field, 0) + total_value
+        
     return totals
 
 def sum_external_modifier_totals(external_modifiers):

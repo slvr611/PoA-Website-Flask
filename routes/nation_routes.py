@@ -138,8 +138,6 @@ def nation_edit_approve(item_ref):
     form_data.pop('csrf_token', None)
     form_data.pop('submit', None)
 
-    print(form_data)
-    
     valid, error = validate_form_with_jsonschema(form, schema)
     if not valid:
         flash(f"Validation Error: {error}")

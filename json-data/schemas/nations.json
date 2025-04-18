@@ -411,11 +411,13 @@
 			},
 			"Untamed Lords": {
 				"effective_territory": 6,
-				"nomadic": 1
+				"nomadic": 1,
+				"hunter_food_production": 1
 			},
 			"Far Travelers": {
 				"effective_territory": 3,
-				"nomadic": 1
+				"nomadic": 1,
+				"hunter_food_production": 1
 			},
 			"Iron-Fisted Dictatorship": {
 				"resource_production": 1,
@@ -435,12 +437,14 @@
 			"Great Khanate:": {
 				"morale": 2,
 				"effective_territory_per_tributary": 6,
-				"nomadic": 1
+				"nomadic": 1,
+				"hunter_food_production": 1
 			},
 			"World Warden": {
 				"migration_distance": 6,
 				"effective_territory": 3,
-				"nomadic": 1
+				"nomadic": 1,
+				"hunter_food_production": 1
 			}
 		}
       },
