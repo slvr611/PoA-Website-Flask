@@ -1,0 +1,45 @@
+{% extends "layout.html" %}
+
+{% block title %}Pop Growth Helper{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1>Pop Growth Helper</h1>
+    <form method="post" action="/pop_growth_helper/process">
+        <table class="info-table">
+            <thead>
+                <tr>
+                    <th>Nation</th>
+                    <th>Foreign Pop Source</th>
+                    <th>Include in Growth</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for nation_name, nation_id in dropdown_options.items() %}
+                    <tr>
+                        <td>
+                            <a href="/nations/item/{{ nation_name }}">{{ nation_name }}</a>
+                        </td>
+                        <td>
+                            <select name="foreign_source_{{ nation_id }}" class="form-control">
+                                <option value="">None</option>
+                                {% for other_name, other_id in dropdown_options.items() %}
+                                    {% if other_id != nation_id %}
+                                        <option value="{{ other_id }}">{{ other_name }}</option>
+                                    {% endif %}
+                                {% endfor %}
+                            </select>
+                        </td>
+                        <td>
+                            <input type="checkbox" name="include_{{ nation_id }}">
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <div class="button-container">
+            <button type="submit" class="submit-button">Process Pop Growth</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

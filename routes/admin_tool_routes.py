@@ -1,9 +1,11 @@
-from flask import Blueprint, render_template, redirect
+from flask import Blueprint, render_template, redirect, request, flash
 from helpers.auth_helpers import admin_required
 from helpers.data_helpers import get_data_on_category, generate_id_to_name_dict, compute_demographics
+from helpers.admin_tool_helpers import grow_population
 from calculations.field_calculations import calculate_all_fields
 from app_core import category_data, rarity_rankings, mongo, json_data
 from pymongo import ASCENDING
+from bson import ObjectId
 import random
 
 admin_tool_routes = Blueprint('admin_tool_routes', __name__)
@@ -130,3 +132,51 @@ def roll_karma():
         db.update_one({"_id": nation["_id"]}, {"$set": nation})
     
     return redirect("/karma_helper")
+
+@admin_tool_routes.route("/pop_growth_helper")
+@admin_required
+def pop_growth_helper():
+    schema, db = get_data_on_category("nations")
+    nations = list(db.find().sort("name", ASCENDING))
+
+    dropdown_options = {}
+    for nation in nations:
+        dropdown_options[nation["name"]] = nation["_id"]
+
+    return render_template("pop_growth_helper.html", dropdown_options=dropdown_options)
+
+@admin_tool_routes.route("/pop_growth_helper/process", methods=["POST"])
+@admin_required
+def process_pop_growth():
+    schema, db = get_data_on_category("nations")
+    nations = list(db.find().sort("name", ASCENDING))
+    
+    changes = []
+    for nation in nations:
+        nation_id = str(nation["_id"])
+        include_key = f"include_{nation_id}"
+        foreign_source_key = f"foreign_source_{nation_id}"
+        
+        # Check if this nation should be included in growth
+        if include_key in request.form:
+            foreign_nation_id = request.form.get(foreign_source_key)
+            
+            # Only process if a foreign nation was selected
+            if foreign_nation_id:
+                foreign_nation = db.find_one({"_id": ObjectId(foreign_nation_id)})
+                if foreign_nation:
+                    change_id = grow_population(nation, foreign_nation)
+                    changes.append({
+                        "nation": nation["name"],
+                        "foreign_nation": foreign_nation["name"],
+                        "change_id": change_id
+                    })
+    
+    # Flash a message with the results
+    if changes:
+        change_messages = [f"{c['nation']} (from {c['foreign_nation']})" for c in changes]
+        flash(f"Population growth processed for: {', '.join(change_messages)}")
+    else:
+        flash("No population growth processed. Please select nations and foreign sources.")
+    
+    return redirect("/pop_growth_helper")
