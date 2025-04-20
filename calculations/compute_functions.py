@@ -388,11 +388,12 @@ def compute_age_status(field, target, base_value, field_schema, overall_total_mo
 
 def compute_stat(field, target, base_value, field_schema, overall_total_modifiers):
     value = base_value + overall_total_modifiers.get(field, 0) + overall_total_modifiers.get("stats", 0)
+    ignore_elderly = overall_total_modifiers.get("ignore_elderly", 0) > 0
 
     age_status = target.get("age_status", "Adult")
     if age_status == "Child":
         value -= 1
-    elif age_status == "Elderly":
+    elif age_status == "Elderly" and not ignore_elderly:
         value -= 1
     
     return value

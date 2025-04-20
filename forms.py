@@ -347,7 +347,7 @@ class ExternalModifierForm(Form):
 
 class BaseSchemaForm(FlaskForm):
     """Base form class with common functionality"""
-    reason = StringField("Reason")
+    reason = TextAreaField("Reason")
     submit = SubmitField("Save")
 
     def populate_select_field(self, field_name, schema, dropdown_options):
@@ -548,6 +548,8 @@ class NationForm(BaseSchemaForm):
     origin = SelectField("Origin", choices=[])
     modifiers = FieldList(FormField(ModifierForm), min_entries=0)
     temperament = SelectField("Temperament", choices=[], default="Neutral")
+
+    reason = TextAreaField("Reason")
 
     # Add dynamic law fields from schema
     @classmethod

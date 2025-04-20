@@ -71,7 +71,7 @@
           },
           "Venerable": {
             "character_elderly_age": 1,
-            "character_stats_while_elderly": 1
+            "character_ignore_elderly": 1
           }
         }
       },
