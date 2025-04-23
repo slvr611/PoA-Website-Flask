@@ -415,7 +415,7 @@
 							<td>{{ relation.get("pact_type", "None") }}</td>
 							
 							<td>
-								{% if relation.get("pact_type", "None") != "None" %}
+								{% if relation.get("pact_type", "None") in ["Defensive Pact", "Military Alliance"] %}
 									{{ relation['linked_objects']['nation_2']['temperament'] }}
 								{% else %}
 									Unknown
@@ -443,7 +443,7 @@
 							<td>{{ relation.get("pact_type", "None") }}</td>
 							
 							<td>
-								{% if relation.get("pact_type", "None") != "None" %}
+								{% if relation.get("pact_type", "None") in ["Defensive Pact", "Military Alliance"] %}
 									{{ relation['linked_objects']['nation_1']['temperament'] }}
 								{% else %}
 									Unknown

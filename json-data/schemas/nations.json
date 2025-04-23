@@ -618,7 +618,7 @@
 			"Oppression": {
 				"stability_loss_chance_per_unique_minority": 0.05,
 				"max_stability_loss_chance_per_unique_minority": 0.5,
-				"homogeneous_stability_gain_chance": 0.25
+				"homogeneous_stability_loss_chance": -0.25
 			},
 			"Integration": {
 				"stability_loss_chance_per_unique_minority": 0.03,
