@@ -1,0 +1,12 @@
+{
+	"classical_terrapin": {
+		"display_name": "Classical Terrapin",
+		"recruitment_cost": {
+			"money": 350
+		},
+		"upkeep": {
+			"magic": 1,
+			"bronze": 1
+		}
+	}
+}

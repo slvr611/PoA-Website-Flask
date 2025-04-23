@@ -1,0 +1,93 @@
+{
+	"ancient_battering_ram": {
+		"display_name": "Ancient Battering Ram",
+		"recruitment_cost": {
+			"money": 100
+		},
+		"upkeep": {
+			"wood": 1
+		}
+	},
+	"ancient_civilian": {
+		"display_name": "Ancient Civilian",
+		"recruitment_cost": {},
+		"upkeep": {}
+	},
+	"ancient_elite_infantry": {
+		"display_name": "Ancient Elite Infantry",
+		"recruitment_cost": {
+			"money": 350
+		},
+		"upkeep": {
+			"bronze": 2,
+			"stone": 1
+		}
+	},
+	"ancient_heavy_archers": {
+		"display_name": "Ancient Heavy Archers",
+		"recruitment_cost": {
+			"money": 250
+		},
+		"upkeep": {
+			"bronze": 1
+		}
+	},
+	"ancient_heavy_cavalry": {
+		"display_name": "Ancient Heavy Cavalry",
+		"recruitment_cost": {
+			"money": 300
+		},
+		"upkeep": {
+			"mounts": 1,
+			"bronze": 1
+		}
+	},
+	"ancient_heavy_infantry": {
+		"display_name": "Ancient Heavy Infantry",
+		"recruitment_cost": {
+			"money": 300
+		},
+		"upkeep": {
+			"bronze": 1,
+			"wood": 1
+		}
+	},
+	"ancient_light_archers": {
+		"display_name": "Ancient Light Archers",
+		"recruitment_cost": {
+			"money": 100
+		},
+		"upkeep": {
+			"wood": 1
+		}
+	},
+	"ancient_light_cavalry": {
+		"display_name": "Ancient Light Cavalry",
+		"recruitment_cost": {
+			"money": 250
+		},
+		"upkeep": {
+			"mounts": 1
+		}
+	},
+	"ancient_light_infantry": {
+		"display_name": "Ancient Light Infantry",
+		"recruitment_cost": {
+			"money": 200
+		},
+		"upkeep": {
+			"wood": 1,
+			"stone": 1
+		}
+	},
+	"ancient_siege_weapon": {
+		"display_name": "Ancient Siege Weapon",
+		"recruitment_cost": {
+			"money": 300
+		},
+		"upkeep": {
+			"bronze": 1,
+			"wood": 1
+		}
+	}
+}

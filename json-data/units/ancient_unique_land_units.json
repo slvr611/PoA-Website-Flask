@@ -1,0 +1,40 @@
+{
+	"ancient_ameru_marines": {
+		"display_name": "Ancient Ameru Marines",
+		"recruitment_cost": {
+			"money": 275
+		},
+		"upkeep": {
+			"mounts": 1,
+			"food": 1
+		}
+	},
+	"ancient_fire_shaman": {
+		"display_name": "Ancient Fire Shaman",
+		"recruitment_cost": {
+			"money": 200
+		},
+		"upkeep": {
+			"magic": 1
+		}
+	},
+	"ancient_pheuxthae_hound": {
+		"display_name": "Ancient Pheuxthae Hound",
+		"recruitment_cost": {
+			"money": 275
+		},
+		"upkeep": {
+			"mounts": 1,
+			"food": 1
+		}
+	},
+	"ancient_reman_longbowbird": {
+		"display_name": "Ancient Reman Longbowbird",
+		"recruitment_cost": {
+			"money": 300
+		},
+		"upkeep": {
+			"wood": 2
+		}
+	}
+}

@@ -1,0 +1,50 @@
+{
+	"ancient_beacon": {
+		"display_name": "Ancient Beacon",
+		"recruitment_cost": {
+			"money": 100
+		},
+		"upkeep": {
+			"magic": 1
+		}
+	},
+	"ancient_oakling": {
+		"display_name": "Ancient Oakling",
+		"recruitment_cost": {
+			"money": 200
+		},
+		"upkeep": {
+			"magic": 1,
+			"wood": 1
+		}
+	},
+	"ancient_ravager": {
+		"display_name": "Ancient Ravager",
+		"recruitment_cost": {
+			"money": 400
+		},
+		"upkeep": {
+			"magic": 2,
+			"bronze": 1
+		}
+	},
+	"ancient_vortex": {
+		"display_name": "Ancient Vortex",
+		"recruitment_cost": {
+			"money": 250
+		},
+		"upkeep": {
+			"magic": 2
+		}
+	},
+	"ancient_wyrm": {
+		"display_name": "Ancient Wyrm",
+		"recruitment_cost": {
+			"money": 300
+		},
+		"upkeep": {
+			"magic": 2,
+			"stone": 2
+		}
+	}
+}

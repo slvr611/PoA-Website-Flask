@@ -1,0 +1,38 @@
+{
+	"imperial_arbalest": {
+		"display_name": "Imperial Arbalest",
+		"recruitment_cost": {
+			"money": 600
+		},
+		"upkeep": {
+			"prestige": 2
+		}
+	},
+	"imperial_river_runner": {
+		"display_name": "Imperial River Runner",
+		"recruitment_cost": {
+			"money": 600
+		},
+		"upkeep": {
+			"prestige": 2
+		}
+	},
+	"imperial_vanguard": {
+		"display_name": "Imperial Vanguard",
+		"recruitment_cost": {
+			"money": 600
+		},
+		"upkeep": {
+			"prestige": 2
+		}
+	},
+	"imperial_war_dancer": {
+		"display_name": "Imperial War Dancer",
+		"recruitment_cost": {
+			"money": 600
+		},
+		"upkeep": {
+			"prestige": 2
+		}
+	}
+}

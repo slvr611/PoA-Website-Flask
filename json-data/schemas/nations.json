@@ -316,25 +316,23 @@
         "description": "The list of vassals currently under the control of the nation",
 		"collections": ["nations"],
 		"queryTargetAttribute": "overlord",
-		"preview": ["name", "compliance", "disobey_chance", "rebellion_chance", "concessions_chance"]
+		"preview": ["name", "compliance", "disobey_chance", "rebellion_chance", "concessions_chance", "temperament"]
       },
 	  "diplomatic_relations_1": {
         "bsonType": "array",
 		"label": "Diplomatic Relations",
         "description": "The list of relations this nation has with other nations",
-		"linkCollection": "diplo_relation",
-		"linkQueryTarget": "nation_1",
-		"collections": ["nations"],
-		"queryTarget": "nation_2"
+		"collections": ["diplo_relations"],
+		"queryTargetAttribute": "nation_1",
+		"preview": ["nation_2", "relation", "pact_type"]
       },
 	  "diplomatic_relations_2": {
         "bsonType": "array",
 		"label": "Diplomatic Relations",
         "description": "The list of relations this nation has with other nations",
-		"linkCollection": "diplo_relation",
-		"linkQueryTarget": "nation_2",
-		"collections": ["nations"],
-		"queryTarget": "nation_1"
+		"collections": ["diplo_relations"],
+		"queryTargetAttribute": "nation_2",
+		"preview": ["nation_1", "relation", "pact_type"]
       },
 	  "pop_count": {
         "bsonType": "number",

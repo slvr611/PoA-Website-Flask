@@ -36,7 +36,7 @@
         "bsonType": "enum",
 		    "label": "Control",
         "description": "The amount of control the faction has",
-		    "enum": ["Inisignificant", "Minor", "Moderate", "Strong", "Absolute"],
+		    "enum": ["Insignificant", "Minor", "Moderate", "Strong", "Absolute"],
         "laws":{
           "Inisignificant": {
             "influence_income": 1

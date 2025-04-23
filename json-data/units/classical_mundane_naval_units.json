@@ -1,0 +1,40 @@
+{
+	"classical_boarding_ship": {
+		"display_name": "Classical Boarding Ship",
+		"recruitment_cost": {
+			"money": 200
+		},
+		"upkeep": {
+			"wood": 1
+		}
+	},
+	"classical_missile_ship": {
+		"display_name": "Classical Missile Ship",
+		"recruitment_cost": {
+			"money": 225
+		},
+		"upkeep": {
+			"wood": 1,
+			"stone": 1
+		}
+	},
+	"classical_scout_ship": {
+		"display_name": "Classical Scout Ship",
+		"recruitment_cost": {
+			"money": 125
+		},
+		"upkeep": {
+			"wood": 1
+		}
+	},
+	"classical_transport_ship": {
+		"display_name": "Classical Transport Ship",
+		"recruitment_cost": {
+			"money": 175
+		},
+		"upkeep": {
+			"wood": 1,
+			"food": 1
+		}
+	}
+}

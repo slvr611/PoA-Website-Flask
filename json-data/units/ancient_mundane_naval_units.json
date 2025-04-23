@@ -1,0 +1,39 @@
+{
+	"ancient_boarding_ship": {
+		"display_name": "Ancient Boarding Ship",
+		"recruitment_cost": {
+			"money": 150
+		},
+		"upkeep": {
+			"wood": 1
+		}
+	},
+	"ancient_elite_warship": {
+		"display_name": "Ancient Elite Warship",
+		"recruitment_cost": {
+			"money": 300
+		},
+		"upkeep": {
+			"bronze": 2,
+			"wood": 1
+		}
+	},
+	"ancient_missile_ship": {
+		"display_name": "Ancient Missile Ship",
+		"recruitment_cost": {
+			"money": 125
+		},
+		"upkeep": {
+			"wood": 1
+		}
+	},
+	"ancient_transport_ship": {
+		"display_name": "Ancient Transport Ship",
+		"recruitment_cost": {
+			"money": 125
+		},
+		"upkeep": {
+			"wood": 1
+		}
+	}
+}

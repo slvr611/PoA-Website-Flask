@@ -1,0 +1,47 @@
+{
+	"imperial_cavalier": {
+		"display_name": "Imperial Cavalier",
+		"recruitment_cost": {
+			"money": 600
+		},
+		"upkeep": {
+			"prestige": 2
+		}
+	},
+	"imperial_celestial": {
+		"display_name": "Imperial Celestial",
+		"recruitment_cost": {
+			"money": 600
+		},
+		"upkeep": {
+			"prestige": 2
+		}
+	},
+	"imperial_legionnaire": {
+		"display_name": "Imperial Legionnaire",
+		"recruitment_cost": {
+			"money": 600
+		},
+		"upkeep": {
+			"prestige": 2
+		}
+	},
+	"imperial_marksman": {
+		"display_name": "Imperial Marksman",
+		"recruitment_cost": {
+			"money": 600
+		},
+		"upkeep": {
+			"prestige": 2
+		}
+	},
+	"imperial_tyranus": {
+		"display_name": "Imperial Tyranus",
+		"recruitment_cost": {
+			"money": 600
+		},
+		"upkeep": {
+			"prestige": 2
+		}
+	}
+}

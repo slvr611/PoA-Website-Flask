@@ -11,15 +11,16 @@ def get_linked_objects(schema, item, preview_items=None):
             if attributes.get("collections"):
                 related_collections = attributes["collections"]
 
+                query_dict = {"name": 1, "_id": 1}
+
+                field_preview = attributes.get("preview", None)
+                if field_preview:
+                    for p in field_preview:
+                        query_dict[p] = 1
+
                 if attributes.get("queryTargetAttribute"):
                     query_target = attributes["queryTargetAttribute"]
                     item_id = str(item["_id"])
-
-                    query_dict = {"name": 1, "_id": 1}
-                    field_preview = attributes.get("preview", None)
-                    if field_preview:
-                        for p in field_preview:
-                            query_dict[p] = 1
 
                     related_items = []
                     for related_collection in related_collections:
@@ -28,13 +29,13 @@ def get_linked_objects(schema, item, preview_items=None):
                     if related_items:
                         linked_objects[field] = []
                         for obj in related_items:
-                            object_to_add = {"name": obj.get("name", obj["_id"]), "link": f"/{related_collection}/item/{obj.get('name', obj['_id'])}"}
+                            obj["link"] = f"/{related_collection}/item/{obj.get('name', obj['_id'])}"
 
                             if field_preview:
                                 preview_schema = category_data[related_collection]["schema"]
-                                object_to_add["linked_objects"] = get_linked_objects(preview_schema, obj, preview_items=field_preview)
+                                obj["linked_objects"] = get_linked_objects(preview_schema, obj, preview_items=field_preview)
 
-                            linked_objects[field].append(object_to_add)
+                            linked_objects[field].append(obj)
                 else:
                     if field in item:
                         object_id_to_find = item[field]
@@ -44,9 +45,14 @@ def get_linked_objects(schema, item, preview_items=None):
                             continue
 
                         for related_collection in related_collections:
-                            linked_object = mongo.db[related_collection].find_one({"_id": object_id_to_find})
+                            linked_object = mongo.db[related_collection].find_one({"_id": object_id_to_find}, query_dict)
                             if linked_object:
                                 linked_object["link"] = f"/{related_collection}/item/{linked_object.get('name', linked_object['_id'])}"
+
+                                if field_preview:
+                                    preview_schema = category_data[related_collection]["schema"]
+                                    linked_object["linked_objects"] = get_linked_objects(preview_schema, linked_object, preview_items=field_preview)
+
                                 linked_objects[field] = linked_object
                                 break
     

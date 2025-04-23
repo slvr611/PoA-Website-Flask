@@ -1,0 +1,82 @@
+{
+	"classical_auxiliary": {
+		"display_name": "Classical Auxiliary",
+		"recruitment_cost": {
+			"money": 75
+		},
+		"upkeep": {
+			"wood": 1
+		}
+	},
+	"classical_cavalry_archer": {
+		"display_name": "Classical Cavalry Archer",
+		"recruitment_cost": {
+			"money": 225
+		},
+		"upkeep": {
+			"mounts": 1
+		}
+	},
+	"classical_civilian": {
+		"display_name": "Classical Civilian",
+		"recruitment_cost": {},
+		"upkeep": {}
+	},
+	"classical_light_archers": {
+		"display_name": "Classical Light Archers",
+		"recruitment_cost": {
+			"money": 150
+		},
+		"upkeep": {
+			"wood": 1
+		}
+	},
+	"classical_light_cavalry": {
+		"display_name": "Classical Light Cavalry",
+		"recruitment_cost": {
+			"money": 375
+		},
+		"upkeep": {
+			"mounts": 1
+		}
+	},
+	"classical_light_infantry": {
+		"display_name": "Classical Light Infantry",
+		"recruitment_cost": {
+			"money": 300
+		},
+		"upkeep": {
+			"wood": 1,
+			"bronze": 1
+		}
+	},
+	"classical_siege_weapon": {
+		"display_name": "Classical Siege Weapon",
+		"recruitment_cost": {
+			"money": 425
+		},
+		"upkeep": {
+			"iron": 1,
+			"wood": 1
+		}
+	},
+	"classical_spearmen": {
+		"display_name": "Classical Spearmen",
+		"recruitment_cost": {
+			"money": 300
+		},
+		"upkeep": {
+			"stone": 1,
+			"bronze": 1
+		}
+	},
+	"classical_tactician": {
+		"display_name": "Classical Tactician",
+		"recruitment_cost": {
+			"money": 375
+		},
+		"upkeep": {
+			"iron": 1
+		}
+	}
+}

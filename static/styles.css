@@ -567,3 +567,123 @@ h1, h2 {
     background-color: #451b1b;
     color: #ff9f9f;
 }
+
+/* Units page specific styles */
+.units-container {
+    width: 95%;
+    max-width: 1800px;
+    margin: 0 auto;
+    padding: 1rem;
+}
+
+.unit-category {
+    margin-bottom: 2rem;
+    background: #1e1e1e;
+    border-radius: 8px;
+    padding: 1rem;
+}
+
+.unit-category h2 {
+    color: #fff;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid #333;
+}
+
+.unit-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1rem;
+    padding: 1rem;
+}
+
+.unit-card {
+    position: relative;
+    transition: transform 0.2s ease-in-out;
+    cursor: pointer;
+}
+
+.unit-card:hover {
+    transform: scale(1.05);
+}
+
+.unit-card img {
+    width: 100%;
+    height: auto;
+    border-radius: 8px;
+    display: block;
+}
+
+/* Modal styles */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    padding: 40px;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.9);
+    overflow: auto;
+}
+
+.modal-content {
+    display: block;
+    margin: auto;
+    max-width: 90%;
+    max-height: 90vh;
+    object-fit: contain;
+}
+
+.modal-close {
+    position: fixed;
+    right: 35px;
+    top: 15px;
+    color: #f1f1f1;
+    font-size: 40px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.modal-close:hover,
+.modal-close:focus {
+    color: #bbb;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .units-container {
+        width: 100%;
+        padding: 0.5rem;
+    }
+    
+    .unit-category {
+        margin-bottom: 1rem;
+        padding: 0.5rem;
+    }
+    
+    .unit-grid {
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 0.5rem;
+        padding: 0.5rem;
+    }
+
+    .modal {
+        padding: 20px;
+    }
+
+    .modal-close {
+        right: 20px;
+        top: 10px;
+    }
+}
+
+/* For very small screens */
+@media (max-width: 480px) {
+    .unit-grid {
+        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    }
+}

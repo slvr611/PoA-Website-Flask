@@ -1,0 +1,35 @@
+{
+  "$jsonSchema": {
+    "bsonType": "object",
+    "required": ["nation_1", "nation_2", "relation", "pact_type"],
+    "properties": {
+      "nation_1": {
+        "bsonType": "linked_object",
+        "label": "Nation 1",
+        "description": "The first nation of the relation",
+        "collections": ["nations"],
+        "preview": ["name", "temperament"]
+      },
+      "nation_2": {
+        "bsonType": "linked_object",
+        "label": "Nation 2",
+        "description": "The second nation of the relation",
+        "collections": ["nations"],
+        "preview": ["name", "temperament"]
+      },
+      "relation": {
+        "bsonType": "enum",
+        "label": "Relation",
+        "description": "The relation between the two nations",
+        "default": "Neutral",
+        "enum": ["Hostile", "Unfriendly", "Neutral", "Friendly", "Allied"]
+      },
+      "pact_type": {
+        "bsonType": "enum",
+        "label": "Pact Type",
+        "description": "The type of pact between the two nations",
+        "enum": ["None", "Non-Aggression Pact", "Defensive Pact", "Military Alliance"]
+      }
+    }
+  }
+}

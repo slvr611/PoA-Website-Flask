@@ -53,7 +53,7 @@ category_data = {
     "wonders": {"pluralName": "Wonders", "singularName": "Wonder", "database": mongo.db.wonders},
     "markets": {"pluralName": "Markets", "singularName": "Market", "database": mongo.db.markets},
     "wars": {"pluralName": "Wars", "singularName": "War", "database": mongo.db.wars},
-    "diplo_relation": {"pluralName": "Diplomatic Relations", "singularName": "Diplomatic Relation", "database": mongo.db.diplo_relation},
+    "diplo_relations": {"pluralName": "Diplomatic Relations", "singularName": "Diplomatic Relation", "database": mongo.db.diplo_relations},
     "pops": {"pluralName": "Pops", "singularName": "Pop", "database": mongo.db.pops},
     "trades": {"pluralName": "Trades", "singularName": "Trade", "database": mongo.db.trades},
     "events": {"pluralName": "Events", "singularName": "Event", "database": mongo.db.events},
@@ -63,6 +63,12 @@ category_data = {
 rarity_rankings = {"Mythical": 0, "Legendary": 1, "Great": 2, "Good": 3, "Mundane": 4}
 
 json_files = ["jobs", "districts", "cities", "walls", "titles"]
+unit_json_files = ["ancient_magical_land_units", "ancient_mundane_land_units", "ancient_mundane_naval_units", "ancient_unique_land_units",
+                   "classical_magical_land_units", "classical_magical_naval_units", "classical_mundane_land_units", "classical_mundane_naval_units", "classical_unique_land_units",
+                   "imperial_generic_units", "imperial_unique_units", "ruler_units", "void_units"]
+unit_json_file_titles = ["Ancient Magical Land Units", "Ancient Mundane Land Units", "Ancient Mundane Naval Units", "Ancient Unique Land Units",
+                         "Classical Magical Land Units", "Classical Magical Naval Units", "Classical Mundane Land Units", "Classical Mundane Naval Units", "Classical Unique Land Units",
+                         "Imperial Generic Units", "Imperial Unique Units", "Ruler Units", "Void Units"]
 json_data = {"general_resources": [
             {"key": "food", "name": "Food", "base_storage": 20},
             {"key": "wood", "name": "Wood", "base_storage": 15},
@@ -87,3 +93,6 @@ for data_type in category_data:
 
 for file in json_files:
     json_data[file] = load_json("json-data/" + file + ".json")
+
+for file in unit_json_files:
+    json_data[file] = load_json("json-data/units/" + file + ".json")

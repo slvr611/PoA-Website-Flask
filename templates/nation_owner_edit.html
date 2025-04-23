@@ -237,6 +237,67 @@
                 </table>
             </div>
 
+            <div class="info-column">
+                <h3>Diplomatic Relations</h3>
+                <table class="pops-table">
+                    <thead>
+                        <tr>
+                            <th>Diplomatic Relation</th>
+                            <th>Nation</th>
+                            <th>Relation</th>
+                            <th>Pact Type</th>
+                            <th>Temperament</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for relation in linked_objects["diplomatic_relations_1"] %}
+                            <tr>
+                                <!-- If there's no separate name/ID, just show the loop index -->
+                                <td><a href="{{ relation['link'] }}">{{ loop.index }}</a></td>
+    
+                                <!-- Link to Nation detail page -->
+                                <td>
+                                {% if relation["linked_objects"]["nation_2"] %}
+                                    <a href="{{ relation['linked_objects']['nation_2']['link'] }}">{{ relation['linked_objects']['nation_2']['name'] }}</a>
+                                {% else %}
+                                    None
+                                {% endif %}
+                                </td>
+    
+                                <td>{{ relation["relation"] }}</td>
+    
+                                <td>{{ relation["pact_type"] }}</td>
+    
+                                <!-- TODO: Add Temperament -->
+                                <td></td>
+                            </tr>
+                        {% endfor %}
+                        {% for relation in linked_objects["diplomatic_relations_2"] %}
+                            <tr>
+                                <!-- If there's no separate name/ID, just show the loop index -->
+                                <td><a href="{{ relation['link'] }}">{{ loop.index }}</a></td>
+    
+                                <!-- Link to Nation detail page -->
+                                <td>
+                                {% if relation["linked_objects"]["nation_1"] %}
+                                    <a href="{{ relation['linked_objects']['nation_1']['link'] }}">{{ relation['linked_objects']['nation_1']['name'] }}</a>
+                                {% else %}
+                                    None
+                                {% endif %}
+                                </td>
+    
+                                <td>{{ relation["relation"] }}</td>
+    
+                                <td>{{ relation["pact_type"] }}</td>
+    
+                                <!-- TODO: Add Temperament -->
+                                <td></td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>    
+
             <!-- Miscellaneous: fields not in view -->
             <div class="info-column">
                 <h2>Miscellaneous</h2>

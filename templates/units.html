@@ -1,0 +1,54 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="units-container">
+    <h1>Units Database</h1>
+    
+    {% for category, units in categorized_units.items() %}
+    <div class="unit-category">
+        <h2>{{ category }}</h2>
+        <div class="unit-grid">
+            {% for unit in units %}
+            <div class="unit-card" onclick="openModal('{{ unit.image_path }}')">
+                <img src="{{ unit.image_path }}" alt="{{ unit.name }}" loading="lazy">
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Modal -->
+<div id="imageModal" class="modal">
+    <span class="modal-close" onclick="closeModal()">&times;</span>
+    <img id="modalImage" class="modal-content" src="" alt="Unit Card">
+</div>
+
+<script>
+function openModal(imagePath) {
+    const modal = document.getElementById('imageModal');
+    const modalImg = document.getElementById('modalImage');
+    modal.style.display = "block";
+    modalImg.src = imagePath;
+}
+
+function closeModal() {
+    const modal = document.getElementById('imageModal');
+    modal.style.display = "none";
+}
+
+// Close modal when clicking outside the image
+document.getElementById('imageModal').addEventListener('click', function(event) {
+    if (event.target === this) {
+        closeModal();
+    }
+});
+
+// Close modal with escape key
+document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape') {
+        closeModal();
+    }
+});
+</script>
+{% endblock %}

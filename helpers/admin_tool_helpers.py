@@ -50,7 +50,7 @@ def grow_population(nation, foreign_nation):
         reason="Pop Growth for " + nation["name"]
     )
     
-    #approve_change(change_id)
+    approve_change(change_id)
 
     return change_id
     

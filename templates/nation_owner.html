@@ -34,9 +34,11 @@
 	</div>
 	
 	<div class="main-columns">
-		<div class="info-column">
-			<h2>General</h2>
+		<div class="table-wrapper">
 			<table class="info-table">
+				<tr class="resources-header-row">
+					<th colspan="2" class="resources-header">General</th>
+				</tr>
 				<tr>
 					<th>{{ schema.properties.stability.label }}:</th>
 					<td>{{ nation.stability }}</td>
@@ -81,9 +83,11 @@
 				{% endif %}
 			</table>
 		</div>
-		<div class="info-column">
-			<h2>Administration & Holdings</h2>
+		<div class="table-wrapper">
 			<table class="info-table">
+				<tr class="resources-header-row">
+					<th colspan="2" class="resources-header">Administration & Holdings</th>
+				</tr>
 				<tr>
 					<th>{{ schema.properties.administration.label }}:</th>
 					<td>{{ nation.administration }}</td>
@@ -98,9 +102,11 @@
 				</tr>
 			</table>
 		</div>
-		<div class="info-column">
-			<h2>Income</h2>
+		<div class="table-wrapper">
 			<table class="info-table">
+				<tr class="resources-header-row">
+					<th colspan="2" class="resources-header">Income</th>
+				</tr>
 				<tr>
 					<th>{{ schema.properties.money.label }}:</th>
 					<td>{{ nation.money }} / {{ nation.money_capacity }}</td>
@@ -123,9 +129,11 @@
 				</tr>
 			</table>
 		</div>
-		<div class="info-column">
-			<h2>Demographics</h2>
+		<div class="table-wrapper">
 			<table class="info-table">
+				<tr class="resources-header-row">
+					<th colspan="2" class="resources-header">Demographics</th>
+				</tr>
 				<tr>
 					<th>{{ schema.properties.primary_race.label }}:</th>
 					{% if linked_objects['primary_race'] %}
@@ -155,9 +163,11 @@
 					<td>{{ nation.unique_minority_count }}</td>
 				</tr>
 			</table>
-			<h3>Population Details</h3>
-			<table class="pops-table">
+			<table class="info-table">
 				<thead>
+					<tr class="resources-header-row">
+						<th colspan="4" class="resources-header">Population Details</th>
+					</tr>
 					<tr>
 						<th>#</th>
 						<th>Race</th>
@@ -202,9 +212,11 @@
 				</tbody>
 			</table>
 		</div>
-		<div class="info-column">
-			<h2>Government & Laws</h2>
+		<div class="table-wrapper">
 			<table class="info-table">
+				<tr class="resources-header-row">
+					<th colspan="2" class="resources-header">Government & Laws</th>
+				</tr>
 				<tr>
 					<th>{{ schema.properties.government_type.label }}:</th>
 					<td>{{ nation.government_type }}</td>
@@ -286,9 +298,11 @@
 			</table>
 		</div>
 		{% if "overlord" in nation and nation["overlord"] is not none and nation["overlord"] != "" %}
-			<div class="info-column">
-				<h2>Vassalship</h2>
+			<div class="table-wrapper">
 				<table class="info-table">
+					<tr class="resources-header-row">
+						<th colspan="2" class="resources-header">Vassalship</th>
+					</tr>
 					<tr>
 						<th>{{ schema.properties.overlord.label }}:</th>
 						<td>
@@ -327,12 +341,11 @@
 			</div>
 		{% endif %}
 		{% if "vassals" in linked_objects and linked_objects["vassals"] is not none %} <!-- TODO: Fix this -->
-			<div class="info-column">
-				<h2>Vassals</h2>
+			<div class="table-wrapper">
 				<table class="info-table">
 					<thead>
 						<tr class="resources-header-row">
-							<th colspan="6" class="resources-header">General Resources</th>
+							<th colspan="7" class="resources-header">Vassals</th>
 						</tr>
 						<tr>
 							<th>Nation</th>
@@ -341,6 +354,7 @@
 							<th>Rebellion Chance</th>
 							<th>Concessions Chance</th>
 							<th>Concessions</th>
+							<th>Temperament</th>
 						</tr>
 					</thead>
 					<tbody>
@@ -355,8 +369,10 @@
 								<td>{{ (vassal.get("rebellion_chance", 0) * 100)|int }}%</td>
 
 								<td>{{ (vassal.get("concessions_chance", 0) * 100)|int }}%</td>
-
+								
 								<td>TBA</td>
+
+								<td>{{ vassal.get("temperament", "Unknown") }}</td>
 							</tr>
 						{% endfor %}
 					</tbody>
@@ -364,7 +380,83 @@
 			</div>
 		{% endif %}
 
-		<div class="info-column">
+		<div class="table-wrapper">
+			<table class="info-table">
+				<thead>
+					<tr class="resources-header-row">
+						<th colspan="5" class="resources-header">Diplomatic Relations</th>
+					</tr>
+					<tr>
+						<th>Diplomatic Relation</th>
+						<th>Nation</th>
+						<th>Relation</th>
+						<th>Pact Type</th>
+						<th>Temperament</th>
+					</tr>
+				</thead>
+				<tbody>
+					{% set diplo_index = namespace(value=1) %}
+					{% for relation in linked_objects.get("diplomatic_relations_1", {})%}
+						<tr>
+							<!-- If there's no separate name/ID, just show the loop index -->
+							<td><a href="{{ relation['link'] }}">{{ diplo_index.value }}</a></td>
+
+							<!-- Link to Nation detail page -->
+							<td>
+							{% if relation["linked_objects"]["nation_2"] %}
+								<a href="{{ relation['linked_objects']['nation_2']['link'] }}">{{ relation['linked_objects']['nation_2']['name'] }}</a>
+							{% else %}
+								None
+							{% endif %}
+							</td>
+
+							<td>{{ relation.get("relation", "Neutral") }}</td>
+
+							<td>{{ relation.get("pact_type", "None") }}</td>
+							
+							<td>
+								{% if relation.get("pact_type", "None") != "None" %}
+									{{ relation['linked_objects']['nation_2']['temperament'] }}
+								{% else %}
+									Unknown
+								{% endif %}
+							</td>
+						</tr>
+						{% set diplo_index.value = diplo_index.value + 1 %}
+					{% endfor %}
+					{% for relation in linked_objects.get("diplomatic_relations_2", {})%}
+						<tr>
+							<!-- If there's no separate name/ID, just show the loop index -->
+							<td><a href="{{ relation['link'] }}">{{ diplo_index.value }}</a></td>
+
+							<!-- Link to Nation detail page -->
+							<td>
+							{% if relation["linked_objects"]["nation_1"] %}
+								<a href="{{ relation['linked_objects']['nation_1']['link'] }}">{{ relation['linked_objects']['nation_1']['name'] }}</a>
+							{% else %}
+								None
+							{% endif %}
+							</td>
+
+							<td>{{ relation.get("relation", "Neutral") }}</td>
+
+							<td>{{ relation.get("pact_type", "None") }}</td>
+							
+							<td>
+								{% if relation.get("pact_type", "None") != "None" %}
+									{{ relation['linked_objects']['nation_1']['temperament'] }}
+								{% else %}
+									Unknown
+								{% endif %}
+							</td>
+						</tr>
+						{% set diplo_index.value = diplo_index.value + 1 %}
+					{% endfor %}
+				</tbody>
+			</table>
+		</div>
+
+		<div class="table-wrapper">
 			<h2>War Stats</h2>
 			<table class="info-table">
 				<tr>
@@ -402,7 +494,7 @@
 			</table>
 		</div>
 	
-		<div class="info-column">
+		<div class="table-wrapper">
 			<h2>Nodes</h2>
 			<table class="info-table">
 				{% for resource in general_resources %}
