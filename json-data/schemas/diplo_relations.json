@@ -2,6 +2,7 @@
   "$jsonSchema": {
     "bsonType": "object",
     "required": ["nation_1", "nation_2", "relation", "pact_type"],
+    "preview": ["nation_1", "nation_2", "relation", "pact_type"],
     "properties": {
       "nation_1": {
         "bsonType": "linked_object",
