@@ -205,7 +205,13 @@ def compute_resource_consumption(field, target, base_value, field_schema, overal
             specific_resource_consumption += overall_total_modifiers.get(modifier, 0)
         
         if resource["key"] == "food":
-            specific_resource_consumption += pop_count
+            food_consumption_per_pop = 1 + overall_total_modifiers.get("food_consumption_per_pop", 0)
+            food_consumption = pop_count * food_consumption_per_pop
+            if food_consumption_per_pop < 1:
+                food_consumption = math.ceil(food_consumption)
+            else:
+                food_consumption = math.floor(food_consumption)
+            specific_resource_consumption += food_consumption
         
         specific_resource_consumption = max(specific_resource_consumption, 0)
         

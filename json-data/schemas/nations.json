@@ -574,7 +574,7 @@
 		"enum": ["Bureaucracy", "Creation", "Military", "Persecution", "Manifest"],
 		"laws": {
 			"Bureaucracy": {
-				"administrator_magic_production": 0.33334
+				"administrator_magic_production": 0.3333333333333334
 			},
 			"Creation": {},
 			"Military": {},
@@ -839,7 +839,7 @@
 				"unit_morale": 1
 			},
 			"Comfort": {
-				"food_consumption_per_pop": 0.3334,
+				"food_consumption_per_pop": 0.3333333333333334,
 				"stability_gain_chance": 0.25,
 				"unit_morale": 1
 			},
