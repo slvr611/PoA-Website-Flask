@@ -94,17 +94,17 @@ function addModifier(fieldName) {
     tbody.appendChild(newRow);
 }
 
-function removeModifier(button, fieldName) {
+function removeModifier(button, categoryName) {
     const row = button.closest('tr');
     row.remove();
     
     // Reindex remaining modifiers
-    const tbody = document.getElementById(`${fieldName}-tbody`);
+    const tbody = document.getElementById(`${categoryName}-tbody`);
     Array.from(tbody.children).forEach((row, index) => {
         row.querySelectorAll('input').forEach(input => {
             const fieldName = input.name.split('-').pop();
-            input.name = `${fieldName}-${index}-${fieldName}`;
-            input.id = `${fieldName}-${index}-${fieldName}`;
+            input.name = `${categoryName}-${index}-${fieldName}`;
+            input.id = `${categoryName}-${index}-${fieldName}`;
         });
     });
 }
