@@ -38,9 +38,72 @@
                         <td>{{ change.change_type }}</td>
                         <td>{{ change.status }}</td>
                         <td class="changes-column wrap-content">
-                            {% for key, value in change.before_requested_data.items() %}
-                                {{ target_schemas[change.target_collection].properties.get(key, {}).get("label", key) }}: 
-                                {{ value }} → {{ change.after_requested_data[key] }}<br>
+                            {% for key, before_value in change.before_requested_data.items() %}
+                                {% set label = target_schemas[change.target_collection].properties.get(key, {}).get("label", key) %}
+                                {% set after_value = change.after_requested_data[key] %}
+                                <div class="change-item">
+                                    <div class="change-label">{{ label }}:</div>
+                                    {% if before_value is mapping %}
+                                        {# Handle single dictionary #}
+                                        {% set all_keys = before_value.keys() | list + after_value.keys() | list | unique | sort %}
+                                        {% for dict_key in all_keys %}
+                                            <div class="dict-change">
+                                                <span class="dict-key">{{ dict_key }}:</span>
+                                                <span class="dict-value">
+                                                    {{ before_value.get(dict_key, 'None') }} → {{ after_value.get(dict_key, 'None') }}
+                                                </span>
+                                            </div>
+                                        {% endfor %}
+                                    {% elif before_value is sequence and before_value is not string %}
+                                        {% if before_value and before_value[0] is mapping %}
+                                            {# Handle array of dictionaries #}
+                                            {% for before_dict in before_value or [] %}
+                                                {% if before_dict %}
+                                                    {% set after_dict = after_value[loop.index0] if after_value and loop.index0 < after_value|length else {} %}
+                                                    <div class="array-dict-item">
+                                                        <div class="array-index">Item {{ loop.index }}:</div>
+                                                        {% set before_keys = before_dict.keys()|list if before_dict else [] %}
+                                                        {% set after_keys = after_dict.keys()|list if after_dict else [] %}
+                                                        {% set all_keys = before_keys + after_keys|unique|sort %}
+                                                        {% for dict_key in all_keys %}
+                                                            <div class="dict-change">
+                                                                <span class="dict-key">{{ dict_key }}:</span>
+                                                                <span class="dict-value">
+                                                                    {{ before_dict.get(dict_key, 'None') if before_dict else 'None' }} → {{ after_dict.get(dict_key, 'None') if after_dict else 'None' }}
+                                                                </span>
+                                                            </div>
+                                                        {% endfor %}
+                                                    </div>
+                                                {% endif %}
+                                            {% endfor %}
+                                            {# Show any additional items in after_value #}
+                                            {% if after_value %}
+                                                {% for after_dict in after_value[(before_value|length if before_value else 0):] %}
+                                                    {% if after_dict %}
+                                                        <div class="array-dict-item">
+                                                            <div class="array-index">Item {{ (before_value|length if before_value else 0) + loop.index }}:</div>
+                                                            {% for dict_key, dict_value in after_dict.items() %}
+                                                                <div class="dict-change">
+                                                                    <span class="dict-key">{{ dict_key }}:</span>
+                                                                    <span class="dict-value">None → {{ dict_value }}</span>
+                                                                </div>
+                                                            {% endfor %}
+                                                        </div>
+                                                    {% endif %}
+                                                {% endfor %}
+                                            {% endif %}
+                                        {% else %}
+                                            {# Handle simple arrays #}
+                                            <div class="simple-data">
+                                                {{ before_value }} → {{ after_value }}
+                                            </div>
+                                        {% endif %}
+                                    {% else %}
+                                        <div class="simple-data">
+                                            {{ before_value }} → {{ after_value }}
+                                        </div>
+                                    {% endif %}
+                                </div>
                             {% endfor %}
                         </td>
                         <td class="reason-column wrap-content">
@@ -99,46 +162,80 @@
                         <td>{{ change.change_type }}</td>
                         <td>{{ change.status }}</td>
                         <td class="changes-column wrap-content">
-                            {% if change.status == "Approved" %}
-                                {% for key, value in change.before_implemented_data.items() %}
-                                    {{ target_schemas[change.target_collection].properties.get(key, {}).get("label", key) }}: 
-                                    {{ value }} → {{ change.after_implemented_data[key] }}<br>
-                                {% endfor %}
-                            {% else %}
-                                {% for key, value in change.before_requested_data.items() %}
-                                    {{ target_schemas[change.target_collection].properties.get(key, {}).get("label", key) }}: 
-                                    {{ value }} → {{ change.after_requested_data[key] }}<br>
-                                {% endfor %}
-                            {% endif %}
+                            {% for key, before_value in change.before_requested_data.items() %}
+                                {% set label = target_schemas[change.target_collection].properties.get(key, {}).get("label", key) %}
+                                {% set after_value = change.after_requested_data[key] %}
+                                <div class="change-item">
+                                    <div class="change-label">{{ label }}:</div>
+                                    {% if before_value is mapping and after_value is mapping %}
+                                        {# Handle single dictionary #}
+                                        {% set all_keys = before_value.keys() | list + after_value.keys() | list | unique | sort %}
+                                        {% for dict_key in all_keys %}
+                                            <div class="dict-change">
+                                                <span class="dict-key">{{ dict_key }}:</span>
+                                                <span class="dict-value">
+                                                    {{ before_value.get(dict_key, 'None') }} → {{ after_value.get(dict_key, 'None') }}
+                                                </span>
+                                            </div>
+                                        {% endfor %}
+                                    {% elif before_value is sequence and before_value is not string %}
+                                        {% if before_value and before_value[0] is mapping %}
+                                            {# Handle array of dictionaries #}
+                                            {% for before_dict in before_value or [] %}
+                                                {% if before_dict %}
+                                                    {% set after_dict = after_value[loop.index0] if after_value and loop.index0 < after_value|length else {} %}
+                                                    <div class="array-dict-item">
+                                                        <div class="array-index">Item {{ loop.index }}:</div>
+                                                        {% set before_keys = before_dict.keys()|list if before_dict else [] %}
+                                                        {% set after_keys = after_dict.keys()|list if after_dict else [] %}
+                                                        {% set all_keys = before_keys + after_keys|unique|sort %}
+                                                        {% for dict_key in all_keys %}
+                                                            <div class="dict-change">
+                                                                <span class="dict-key">{{ dict_key }}:</span>
+                                                                <span class="dict-value">
+                                                                    {{ before_dict.get(dict_key, 'None') if before_dict else 'None' }} → {{ after_dict.get(dict_key, 'None') if after_dict else 'None' }}
+                                                                </span>
+                                                            </div>
+                                                        {% endfor %}
+                                                    </div>
+                                                {% endif %}
+                                            {% endfor %}
+                                            {# Show any additional items in after_value #}
+                                            {% if after_value %}
+                                                {% for after_dict in after_value[(before_value|length if before_value else 0):] %}
+                                                    {% if after_dict %}
+                                                        <div class="array-dict-item">
+                                                            <div class="array-index">Item {{ (before_value|length if before_value else 0) + loop.index }}:</div>
+                                                            {% for dict_key, dict_value in after_dict.items() %}
+                                                                <div class="dict-change">
+                                                                    <span class="dict-key">{{ dict_key }}:</span>
+                                                                    <span class="dict-value">None → {{ dict_value }}</span>
+                                                                </div>
+                                                            {% endfor %}
+                                                        </div>
+                                                    {% endif %}
+                                                {% endfor %}
+                                            {% endif %}
+                                        {% else %}
+                                            {# Handle simple arrays #}
+                                            <div class="simple-data">
+                                                {{ before_value }} → {{ after_value }}
+                                            </div>
+                                        {% endif %}
+                                    {% else %}
+                                        <div class="simple-data">
+                                            {{ before_value }} → {{ after_value }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            {% endfor %}
                         </td>
                         <td class="reason-column wrap-content">
                             {{ change.request_reason|format_discord_link|safe }}
                         </td>
+                        <td>{{ change.time_requested.strftime('%Y-%m-%d %H:%M:%S') }}</td>
                         <td>
-                            {% if change.status == "Approved" %}
-                                {{ change.time_implemented.strftime('%Y-%m-%d %H:%M:%S') }}
-                            {% elif change.status == "Denied" %}
-                                {{ change.time_denied.strftime('%Y-%m-%d %H:%M:%S') }}
-                            {% elif change.status == "Reverted" %}
-                                {{ change.time_reverted.strftime('%Y-%m-%d %H:%M:%S') }}
-                            {% else %}
-                                {{ change.time_requested.strftime('%Y-%m-%d %H:%M:%S') }}
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% if change.status == "Approved" and "approver" in preview_references and change.approver|string in preview_references["approver"] %}
-                                <a href="{{ preview_references['approver'][change.approver|string]['link'] }}">
-                                    {{ preview_references['approver'][change.approver|string]['name'] }}
-                                </a>
-                            {% elif change.status == "Denied" and "denier" in preview_references and change.denier|string in preview_references["denier"] %}
-                                <a href="{{ preview_references['denier'][change.denier|string]['link'] }}">
-                                    {{ preview_references['denier'][change.denier|string]['name'] }}
-                                </a>
-                            {% elif change.status == "Reverted" and "reverter" in preview_references and change.reverter|string in preview_references["reverter"] %}
-                                <a href="{{ preview_references['reverter'][change.reverter|string]['link'] }}">
-                                    {{ preview_references['reverter'][change.reverter|string]['name'] }}
-                                </a>
-                            {% elif "requester" in preview_references and change.requester|string in preview_references["requester"] %}
+                            {% if "requester" in preview_references and change.requester|string in preview_references["requester"] %}
                                 <a href="{{ preview_references['requester'][change.requester|string]['link'] }}">
                                     {{ preview_references['requester'][change.requester|string]['name'] }}
                                 </a>

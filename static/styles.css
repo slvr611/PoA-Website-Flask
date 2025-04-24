@@ -687,3 +687,61 @@ h1, h2 {
         grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
     }
 }
+
+/* Changes column styling */
+.change-item {
+    margin-bottom: 15px;
+    padding: 8px;
+    border-bottom: 1px solid #333;
+    background: #1a1a1a;
+    border-radius: 4px;
+}
+
+.change-label {
+    font-weight: bold;
+    color: #4CAF50;
+    margin-bottom: 8px;
+    font-size: 1.1em;
+}
+
+.dict-change {
+    margin-left: 15px;
+    margin-bottom: 4px;
+    font-family: monospace;
+    font-size: 0.9em;
+    line-height: 1.4;
+}
+
+.dict-key {
+    color: #888;
+    margin-right: 8px;
+}
+
+.dict-value {
+    color: #e0e0e0;
+}
+
+.array-dict-item {
+    margin: 10px 0;
+    padding: 8px;
+    background: #222;
+    border-radius: 4px;
+}
+
+.array-index {
+    color: #4CAF50;
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.simple-data {
+    font-family: monospace;
+    padding: 2px 5px;
+    margin-left: 15px;
+}
+
+/* Make the changes column wider */
+.changes-column {
+    min-width: 350px;
+    max-width: 600px;
+}
