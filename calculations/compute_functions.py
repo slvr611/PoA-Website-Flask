@@ -93,7 +93,7 @@ def compute_pop_count(field, target, base_value, field_schema, overall_total_mod
     pop_database = category_data["pops"]["database"]
     target_id = str(target["_id"])
     
-    pop_count = pop_database.count_documents({"nation": target_id})
+    pop_count = int(pop_database.count_documents({"nation": target_id}) + overall_total_modifiers.get(field, 0))
     
     return pop_count
 
