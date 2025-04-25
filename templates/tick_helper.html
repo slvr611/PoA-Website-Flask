@@ -1,0 +1,34 @@
+{% extends "layout.html" %}
+
+{% block title %}Tick Helper{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1>Tick Helper</h1>
+    <form method="post" action="/run_tick">
+        <table class="info-table">
+            <thead>
+                <tr>
+                    <th>Tick Function</th>
+                    <th>Run Function</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for tick_function_label, tick_function in tick_functions.items() %}
+                    <tr>
+                        <td>
+                            {{ tick_function_label}}
+                        </td>
+                        <td>
+                            <input type="checkbox" name="run_{{ tick_function_label }}">
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <div class="button-container">
+            <button type="submit" class="submit-button">Run Tick</button>
+        </div>
+    </form>
+</div>
+{% endblock %}
