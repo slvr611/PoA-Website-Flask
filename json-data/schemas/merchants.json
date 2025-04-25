@@ -3,6 +3,8 @@
     "bsonType": "object",
     "required": ["name", "reputation"],
 	"laws": ["reputation"],
+	"preview": ["location"],
+	"sort": "location",
     "properties": {
       "name": {
         "bsonType": "string",

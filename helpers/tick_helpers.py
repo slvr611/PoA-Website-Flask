@@ -55,7 +55,7 @@ def reset_rolling_karma_to_zero():
             change_type="Update",
             before_data=nation,
             after_data=new_nation,
-            reason="Rolling Karma Update for " + nation["name"]
+            reason="Resetting Rolling Karma for " + nation["name"]
         )
         approve_change(change_id)
 

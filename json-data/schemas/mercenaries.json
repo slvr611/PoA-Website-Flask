@@ -3,6 +3,8 @@
     "bsonType": "object",
     "required": ["name", "reknown"],
 	  "laws": ["reknown", "size"],
+    "preview": ["region", "patron"],
+    "sort": "region",
     "properties": {
       "name": {
         "bsonType": "string",

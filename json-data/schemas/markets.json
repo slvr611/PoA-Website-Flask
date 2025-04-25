@@ -2,6 +2,7 @@
   "$jsonSchema": {
     "bsonType": "object",
     "required": ["name", "market_head"],
+    "preview": ["market_head"],
     "properties": {
       "name": {
         "bsonType": "string",
