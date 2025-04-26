@@ -28,7 +28,7 @@ def update_rolling_karma():
                 reason="Rolling Karma Update for " + nation["name"]
             )
             approve_change(change_id)
-        elif event_type in ["Neutral", "Good", "Very Good", "Fantastic", "Wonderous"]:
+        elif event_type in ["Good", "Very Good", "Fantastic", "Wonderous"]:
             new_nation["rolling_karma"] = int(nation.get("rolling_karma", 0)) - 1
             change_id = request_change(
                 data_type="nations",

@@ -523,7 +523,6 @@ class NationForm(BaseSchemaForm):
     stability = SelectField("Stability", choices=[], default="Balanced")
     infamy = IntegerField("Infamy", validators=[NumberRange(min=0)], default=0)
     temporary_karma = IntegerField("Temporary Karma", validators=[NumberRange(min=0)], default=0)
-    rolling_karma = IntegerField("Rolling Karma", validators=[NumberRange(min=0)], default=0)
     money = IntegerField("Money", validators=[NumberRange(min=0)], default=0)
     
     # Demographics fields
