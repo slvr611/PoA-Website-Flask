@@ -8,6 +8,15 @@
 			"prestige": 2
 		}
 	},
+	"imperial_dunespike": {
+		"display_name": "Imperial Dunespike",
+		"recruitment_cost": {
+			"money": 600
+		},
+		"upkeep": {
+			"prestige": 2
+		}
+	},
 	"imperial_river_runner": {
 		"display_name": "Imperial River Runner",
 		"recruitment_cost": {
