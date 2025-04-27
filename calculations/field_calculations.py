@@ -488,8 +488,8 @@ def collect_external_modifiers_from_object(object, required_fields, linked_objec
     return collected_modifiers
 
 def calculate_effective_territory_modifiers(target):
-    effective_territory = target.get("effective_territory", 0)
-    current_territory = target.get("current_territory", 0)
+    effective_territory = int(target.get("effective_territory", 0))
+    current_territory = int(target.get("current_territory", 0))
 
     over_capacity = current_territory - effective_territory
 
@@ -518,8 +518,8 @@ def calculate_effective_territory_modifiers(target):
     return modifiers
 
 def calculate_road_capacity_modifiers(target):
-    road_capacity = target.get("road_capacity", 0)
-    current_territory = target.get("current_territory", 0)
+    road_capacity = int(target.get("road_capacity", 0))
+    current_territory = int(target.get("current_territory", 0))
 
     over_capacity = current_territory - road_capacity
 
@@ -554,8 +554,8 @@ def calculate_road_capacity_modifiers(target):
     return modifiers
 
 def calculate_effective_pop_capacity_modifiers(target):
-    effective_pop_capacity = target.get("effective_pop_capacity", 0)
-    pop_count = target.get("pop_count", 0)
+    effective_pop_capacity = int(target.get("effective_pop_capacity", 0))
+    pop_count = int(target.get("pop_count", 0))
 
     over_capacity = pop_count - effective_pop_capacity
 
