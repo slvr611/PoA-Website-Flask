@@ -7,6 +7,12 @@
 		"upkeep": {
 			"mounts": 1,
 			"food": 1
+		},
+		"requirements": {
+			"district": ["ancient_workshop", "classical_workshop"],
+			"name": ["Teo'zados'koa"],
+			"defensive_pact": ["Teo'zados'koa"],
+			"military_alliance": ["Teo'zados'koa"]
 		}
 	},
 	"ancient_fire_shaman": {
@@ -16,6 +22,12 @@
 		},
 		"upkeep": {
 			"magic": 1
+		},
+		"requirements": {
+			"district": ["ancient_magic_site", "classical_magic_site"],
+			"name": ["Sishayo"],
+			"defensive_pact": ["Sishayo"],
+			"military_alliance": ["Sishayo"]
 		}
 	},
 	"ancient_pheuxthae_hound": {
@@ -26,6 +38,12 @@
 		"upkeep": {
 			"mounts": 1,
 			"food": 1
+		},
+		"requirements": {
+			"district": ["ancient_ranch", "classical_ranch"],
+			"name": ["Lokhim Empire"],
+			"defensive_pact": ["Lokhim Empire"],
+			"military_alliance": ["Lokhim Empire"]
 		}
 	},
 	"ancient_reman_longbowbird": {
@@ -35,6 +53,12 @@
 		},
 		"upkeep": {
 			"wood": 2
+		},
+		"requirements": {
+			"district": ["ancient_workshop", "classical_workshop"],
+			"name": ["Firenzia"],
+			"defensive_pact": ["Firenzia"],
+			"military_alliance": ["Firenzia"]
 		}
 	}
 }

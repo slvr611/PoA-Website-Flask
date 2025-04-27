@@ -63,9 +63,12 @@ category_data = {
 rarity_rankings = {"Mythical": 0, "Legendary": 1, "Great": 2, "Good": 3, "Mundane": 4}
 
 json_files = ["jobs", "districts", "cities", "walls", "titles"]
-unit_json_files = ["ancient_magical_land_units", "ancient_mundane_land_units", "ancient_mundane_naval_units", "ancient_unique_land_units",
-                   "classical_magical_land_units", "classical_magical_naval_units", "classical_mundane_land_units", "classical_mundane_naval_units", "classical_unique_land_units",
-                   "imperial_generic_units", "imperial_unique_units", "ruler_units", "void_units"]
+land_unit_json_files = ["ancient_magical_land_units", "ancient_mundane_land_units", "ancient_unique_land_units",
+                         "classical_magical_land_units", "classical_mundane_land_units", "classical_unique_land_units",
+                         "imperial_generic_units", "imperial_unique_units"]
+naval_unit_json_files = ["ancient_mundane_naval_units", "classical_magical_naval_units", "classical_mundane_naval_units"]
+misc_unit_json_files = ["ruler_units", "void_units"]
+unit_json_files = land_unit_json_files + naval_unit_json_files + misc_unit_json_files
 unit_json_file_titles = ["Ancient Magical Land Units", "Ancient Mundane Land Units", "Ancient Mundane Naval Units", "Ancient Unique Land Units",
                          "Classical Magical Land Units", "Classical Magical Naval Units", "Classical Mundane Land Units", "Classical Mundane Naval Units", "Classical Unique Land Units",
                          "Imperial Generic Units", "Imperial Unique Units", "Ruler Units", "Void Units"]

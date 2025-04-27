@@ -334,6 +334,12 @@
 		"queryTargetAttribute": "nation_2",
 		"preview": ["nation_1", "relation", "pact_type"]
       },
+	  "working_pop_count": {
+        "bsonType": "number",
+		"label": "Working Pops Count",
+        "description": "The number of pops currently working jobs in the nation",
+		"calculated": true
+      },
 	  "pop_count": {
         "bsonType": "number",
 		"label": "Pop Count",
@@ -943,6 +949,12 @@
 		"label": "Jobs",
         "description": "The jobs that the pops of the nation are assigned to"
       },
+	  "land_unit_count": {
+        "bsonType": "number",
+		"label": "Land Unit Count",
+        "description": "The number of land units the nation has recruited",
+		"calculated": true
+      },
 	  "land_unit_capacity": {
         "bsonType": "number",
 		"label": "Land Unit Capacity",
@@ -953,6 +965,12 @@
         "bsonType": "array",
 		"label": "Land Units",
         "description": "The land units the nation has recruited"
+      },
+	  "naval_unit_count": {
+        "bsonType": "number",
+		"label": "Naval Unit Count",
+        "description": "The number of naval units the nation has recruited",
+		"calculated": true
       },
 	  "naval_unit_capacity": {
         "bsonType": "number",

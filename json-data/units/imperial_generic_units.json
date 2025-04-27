@@ -6,6 +6,10 @@
 		},
 		"upkeep": {
 			"prestige": 2
+		},
+		"requirements": {
+			"district": ["classical_ranch"],
+			"empire": true
 		}
 	},
 	"imperial_celestial": {
@@ -15,6 +19,10 @@
 		},
 		"upkeep": {
 			"prestige": 2
+		},
+		"requirements": {
+			"district": ["classical_magic_site"],
+			"empire": true
 		}
 	},
 	"imperial_legionnaire": {
@@ -24,6 +32,10 @@
 		},
 		"upkeep": {
 			"prestige": 2
+		},
+		"requirements": {
+			"district": ["classical_workshop"],
+			"empire": true
 		}
 	},
 	"imperial_marksman": {
@@ -33,6 +45,10 @@
 		},
 		"upkeep": {
 			"prestige": 2
+		},
+		"requirements": {
+			"district": ["classical_workshop"],
+			"empire": true
 		}
 	},
 	"imperial_tyranus": {
@@ -42,6 +58,10 @@
 		},
 		"upkeep": {
 			"prestige": 2
+		},
+		"requirements": {
+			"district": ["classical_magic_site"],
+			"empire": true
 		}
 	}
 }

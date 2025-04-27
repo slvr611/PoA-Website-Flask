@@ -6,6 +6,9 @@
 		},
 		"upkeep": {
 			"wood": 1
+		},
+		"requirements": {
+			"district": ["ancient_forge", "classical_forge"]
 		}
 	},
 	"ancient_civilian": {
@@ -21,6 +24,9 @@
 		"upkeep": {
 			"bronze": 2,
 			"stone": 1
+		},
+		"requirements": {
+			"district": ["ancient_forge", "classical_forge"]
 		}
 	},
 	"ancient_heavy_archers": {
@@ -30,6 +36,9 @@
 		},
 		"upkeep": {
 			"bronze": 1
+		},
+		"requirements": {
+			"district": ["ancient_workshop", "classical_workshop"]
 		}
 	},
 	"ancient_heavy_cavalry": {
@@ -40,6 +49,9 @@
 		"upkeep": {
 			"mounts": 1,
 			"bronze": 1
+		},
+		"requirements": {
+			"district": ["ancient_ranch", "classical_ranch"]
 		}
 	},
 	"ancient_heavy_infantry": {
@@ -50,6 +62,9 @@
 		"upkeep": {
 			"bronze": 1,
 			"wood": 1
+		},
+		"requirements": {
+			"district": ["ancient_workshop", "classical_workshop"]
 		}
 	},
 	"ancient_light_archers": {
@@ -59,6 +74,9 @@
 		},
 		"upkeep": {
 			"wood": 1
+		},
+		"requirements": {
+			"district": ["ancient_workshop", "classical_workshop"]
 		}
 	},
 	"ancient_light_cavalry": {
@@ -68,6 +86,9 @@
 		},
 		"upkeep": {
 			"mounts": 1
+		},
+		"requirements": {
+			"district": ["ancient_ranch", "classical_ranch"]
 		}
 	},
 	"ancient_light_infantry": {
@@ -78,6 +99,9 @@
 		"upkeep": {
 			"wood": 1,
 			"stone": 1
+		},
+		"requirements": {
+			"district": ["ancient_workshop", "classical_workshop"]
 		}
 	},
 	"ancient_siege_weapon": {
@@ -88,6 +112,9 @@
 		"upkeep": {
 			"bronze": 1,
 			"wood": 1
+		},
+		"requirements": {
+			"district": ["ancient_forge", "classical_forge"]
 		}
 	}
 }

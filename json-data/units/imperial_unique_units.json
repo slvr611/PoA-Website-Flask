@@ -6,6 +6,11 @@
 		},
 		"upkeep": {
 			"prestige": 2
+		},
+		"requirements": {
+			"district": ["classical_workshop"],
+			"empire": true,
+			"name": ["Lyroa"]
 		}
 	},
 	"imperial_dunespike": {
@@ -15,6 +20,11 @@
 		},
 		"upkeep": {
 			"prestige": 2
+		},
+		"requirements": {
+			"district": ["classical_ranch"],
+			"empire": true,
+			"name": ["Qad'ashin"]
 		}
 	},
 	"imperial_river_runner": {
@@ -24,6 +34,11 @@
 		},
 		"upkeep": {
 			"prestige": 2
+		},
+		"requirements": {
+			"district": ["classical_workshop"],
+			"empire": true,
+			"name": ["Lumithal Conclave"]
 		}
 	},
 	"imperial_vanguard": {
@@ -33,6 +48,11 @@
 		},
 		"upkeep": {
 			"prestige": 2
+		},
+		"requirements": {
+			"district": ["classical_workshop"],
+			"empire": true,
+			"name": ["Lokhim Empire"]
 		}
 	},
 	"imperial_war_dancer": {
@@ -42,6 +62,11 @@
 		},
 		"upkeep": {
 			"prestige": 2
+		},
+		"requirements": {
+			"district": ["classical_workshop"],
+			"empire": true,
+			"name": ["Celtearan Empire"]
 		}
 	}
 }

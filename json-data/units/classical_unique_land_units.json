@@ -4,7 +4,10 @@
 		"recruitment_cost": {
 			"food": 2
 		},
-		"upkeep": {}
+		"upkeep": {},
+		"requirements": {
+			"artifact": ["Arkhonic Gryphon"]
+		}
 	},
 	"classical_golem_warrior": {
 		"display_name": "Classical Golem Warrior",
@@ -12,11 +15,17 @@
 			"magic": 2,
 			"stone": 2
 		},
-		"upkeep": {}
+		"upkeep": {},
+		"requirements": {
+			"artifact": ["Golem Manual"]
+		}
 	},
 	"classical_uqnia_guardian": {
 		"display_name": "Classical Uqnia Guardian",
 		"recruitment_cost": {},
-		"upkeep": {}
+		"upkeep": {},
+		"requirements": {
+			"artifact": ["Uqnia Shard"]
+		}
 	}
 }

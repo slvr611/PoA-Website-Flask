@@ -6,6 +6,9 @@
 		},
 		"upkeep": {
 			"magic": 1
+		},
+		"requirements": {
+			"district": ["ancient_magic_site", "classical_magic_site"]
 		}
 	},
 	"ancient_oakling": {
@@ -16,6 +19,9 @@
 		"upkeep": {
 			"magic": 1,
 			"wood": 1
+		},
+		"requirements": {
+			"district": ["ancient_magic_site", "classical_magic_site"]
 		}
 	},
 	"ancient_ravager": {
@@ -26,6 +32,9 @@
 		"upkeep": {
 			"magic": 2,
 			"bronze": 1
+		},
+		"requirements": {
+			"district": ["ancient_magic_site", "classical_magic_site"]
 		}
 	},
 	"ancient_vortex": {
@@ -35,6 +44,9 @@
 		},
 		"upkeep": {
 			"magic": 2
+		},
+		"requirements": {
+			"district": ["ancient_magic_site", "classical_magic_site"]
 		}
 	},
 	"ancient_wyrm": {
@@ -45,6 +57,9 @@
 		"upkeep": {
 			"magic": 2,
 			"stone": 2
+		},
+		"requirements": {
+			"district": ["ancient_magic_site", "classical_magic_site"]
 		}
 	}
 }

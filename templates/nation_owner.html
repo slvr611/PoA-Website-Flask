@@ -493,6 +493,61 @@
 				</tr>
 			</table>
 		</div>
+
+		<section class="jobs-section">
+			<h2>Land Units</h2>
+			<p>Land Units: {{  nation.land_unit_count }}/{{ nation.land_unit_capacity }}</p>
+			<table class="jobs-table">
+				<thead>
+					<tr>
+						<th>Unit</th>
+						<th>Unit Count</th>
+						<th>Upkeep</th>
+					</tr>
+				</thead>
+				<tbody>
+					{% for unit_key, unit in nation.land_unit_details.items() %}
+						<tr>
+							<td>{{ unit.display_name }}</td>
+							<td>{{ nation.get("land_units", {}).get(unit_key, 0) }}</td>
+							<td>
+								{% if "upkeep" in unit %}
+									{% for resource, cost in unit.upkeep.items() %}
+										{{ resource }}: {{ cost }}<br>
+									{% endfor %}
+								{% endif %}
+							</td>
+						</tr>
+					{% endfor %}
+				</tbody>
+			</table>
+			<h2>Naval Units</h2>
+			<p>Naval Units: {{ nation.naval_unit_count }}/{{ nation.naval_unit_capacity }}</p>
+			<table class="jobs-table">
+				<thead>
+					<tr>
+						<th>Unit</th>
+						<th>Unit Count</th>
+						<th>Upkeep</th>
+					</tr>
+				</thead>
+				<tbody>
+					{% for unit_key, unit in nation.naval_unit_details.items() %}
+						<tr>
+							<td>{{ unit.display_name }}</td>
+							<td>{{ nation.get("naval_units", {}).get(unit_key, 0) }}</td>
+							<td>
+								{% if "upkeep" in unit %}
+									{% for resource, cost in unit.upkeep.items() %}
+										{{ resource }}: {{ cost }}<br>
+									{% endfor %}
+								{% endif %}
+							</td>
+						</tr>
+					{% endfor %}
+				</tbody>
+			</table>
+		</section>	
 	
 		<div class="table-wrapper">
 			<h2>Nodes</h2>
@@ -583,6 +638,7 @@
 	
 	<section class="jobs-section">
 		<h2>Jobs</h2>
+		<p>Working Pops: {{ nation.working_pop_count }}/{{ nation.pop_count }}</p>
 		<table class="jobs-table">
 			<thead>
 				<tr>

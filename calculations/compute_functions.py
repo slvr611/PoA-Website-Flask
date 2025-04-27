@@ -89,6 +89,15 @@ def compute_concessions_qty(field, target, base_value, field_schema, overall_tot
     
     return value
 
+def compute_working_pop_count(field, target, base_value, field_schema, overall_total_modifiers):
+    workers_assigned = target.get("jobs", {})
+
+    value = sum(workers_assigned.values())
+    if value is None:
+        value = 0
+
+    return value
+
 def compute_pop_count(field, target, base_value, field_schema, overall_total_modifiers):
     pop_database = category_data["pops"]["database"]
     target_id = str(target["_id"])
@@ -151,6 +160,16 @@ def compute_district_slots(field, target, base_value, field_schema, overall_tota
     
     value = base_value + overall_total_modifiers.get(field, 0)  + math.floor(pop_count / 5)
     
+    return value
+
+def compute_unit_count(field, target, base_value, field_schema, overall_total_modifiers):
+    unit_field = field.replace("_count", "s")
+    units_assigned = target.get(unit_field, {})
+    
+    value = sum(units_assigned.values())
+    if value is None:
+        value = 0
+
     return value
 
 def compute_unit_capacity(field, target, base_value, field_schema, overall_total_modifiers):
@@ -450,11 +469,14 @@ CUSTOM_COMPUTE_FUNCTIONS = {
     "rebellion_chance": compute_rebellion_chance,
     "concessions_chance": compute_concessions_chance,
     "concessions_qty": compute_concessions_qty,
+    "working_pop_count": compute_working_pop_count,
     "pop_count": compute_pop_count,
     "unique_minority_count": compute_minority_count,
     "stability_gain_chance": compute_stability_gain_chance,
     "stability_loss_chance": compute_stability_loss_chance,
     "district_slots": compute_district_slots,
+    "land_unit_count": compute_unit_count,
+    "naval_unit_count": compute_unit_count,
     "land_unit_capacity": compute_unit_capacity,
     "naval_unit_capacity": compute_unit_capacity,
     "resource_production": compute_resource_production,

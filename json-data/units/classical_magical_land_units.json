@@ -7,22 +7,35 @@
 		"upkeep": {
 			"magic": 2,
 			"stone": 1
+		},
+		"requirements": {
+			"district": ["classical_magic_site"],
+			"research": ["novitiates"]
 		}
 	},
 	"classical_extraplanar_bastion": {
 		"display_name": "Classical Extraplanar Bastion",
 		"recruitment_cost": {},
-		"upkeep": {}
+		"upkeep": {},
+		"requirements": {
+			"spell": ["summon_extraplanar"]
+		}
 	},
 	"classical_extraplanar_magi": {
 		"display_name": "Classical Extraplanar Magi",
 		"recruitment_cost": {},
-		"upkeep": {}
+		"upkeep": {},
+		"requirements": {
+			"spell": ["summon_extraplanar"]
+		}
 	},
 	"classical_extraplanar_scouts": {
 		"display_name": "Classical Extraplanar Scouts",
 		"recruitment_cost": {},
-		"upkeep": {}
+		"upkeep": {},
+		"requirements": {
+			"spell": ["summon_extraplanar"]
+		}
 	},
 	"classical_phantom": {
 		"display_name": "Classical Phantom",
@@ -31,11 +44,18 @@
 		},
 		"upkeep": {
 			"magic": 2
+		},
+		"requirements": {
+			"district": ["classical_magic_site"],
+			"research": ["cosmology"]
 		}
 	},
 	"classical_undead_army": {
 		"display_name": "Classical Undead Army",
 		"recruitment_cost": {},
-		"upkeep": {}
+		"upkeep": {},
+		"requirements": {
+			"spell": ["march_of_the_dead"]
+		}
 	}
 }

@@ -6,6 +6,10 @@
 		},
 		"upkeep": {
 			"wood": 1
+		},
+		"requirements": {
+			"district": ["classical_dock"],
+			"research": ["rig_and_sail"]
 		}
 	},
 	"classical_missile_ship": {
@@ -16,6 +20,10 @@
 		"upkeep": {
 			"wood": 1,
 			"stone": 1
+		},
+		"requirements": {
+			"district": ["classical_dock"],
+			"research": ["rig_and_sail"]
 		}
 	},
 	"classical_scout_ship": {
@@ -25,6 +33,10 @@
 		},
 		"upkeep": {
 			"wood": 1
+		},
+		"requirements": {
+			"district": ["classical_dock"],
+			"research": ["rig_and_sail"]
 		}
 	},
 	"classical_transport_ship": {
@@ -35,6 +47,10 @@
 		"upkeep": {
 			"wood": 1,
 			"food": 1
+		},
+		"requirements": {
+			"district": ["classical_dock"],
+			"research": ["deep_hulls"]
 		}
 	}
 }

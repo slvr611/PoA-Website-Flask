@@ -745,3 +745,31 @@ h1, h2 {
     min-width: 350px;
     max-width: 600px;
 }
+
+/* Resource table specific styling */
+.resource-table {
+    width: 100%;
+    max-width: 400px;
+}
+
+.resource-table th {
+    width: 40%;
+    text-align: right;
+    padding-right: 10px;
+    font-weight: bold;
+    color: #e0e0e0;
+}
+
+.resource-table td {
+    width: 60%;
+    text-align: left;
+}
+
+/* Highlight positive and negative values in resource tables */
+.resource-table td.positive {
+    color: #afffbd;
+}
+
+.resource-table td.negative {
+    color: #ff9f9f;
+}

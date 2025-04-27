@@ -1,6 +1,6 @@
 import math
 import copy
-from app_core import mongo, json_data, category_data
+from app_core import mongo, json_data, category_data, land_unit_json_files, naval_unit_json_files
 from calculations.compute_functions import CUSTOM_COMPUTE_FUNCTIONS
 from bson.objectid import ObjectId
 from app_core import json_data
@@ -30,12 +30,20 @@ def calculate_all_fields(target, schema, target_data_type):
     job_details = calculate_job_details(target, modifier_totals, district_totals, city_totals, node_totals, law_totals)
     job_totals = sum_job_totals(jobs_assigned, job_details)
 
+    land_units_assigned = collect_land_units_assigned(target)
+    land_unit_details = calculate_unit_details(target, "land", land_unit_json_files, modifier_totals, district_totals, city_totals, node_totals, law_totals)
+
+    naval_units_assigned = collect_naval_units_assigned(target)
+    naval_unit_details = calculate_unit_details(target, "naval", naval_unit_json_files, modifier_totals, district_totals, city_totals, node_totals, law_totals)
+
+    unit_totals = sum_all_unit_totals(land_units_assigned, land_unit_details, naval_units_assigned, naval_unit_details)
+
     overall_total_modifiers = {}
-    for d in [external_modifiers_total, modifier_totals, district_totals, city_totals, node_totals, law_totals, job_totals]:
+    for d in [external_modifiers_total, modifier_totals, district_totals, city_totals, node_totals, law_totals, job_totals, unit_totals]:
         for key, value in d.items():
             overall_total_modifiers[key] = overall_total_modifiers.get(key, 0) + value
 
-    calculated_values = {"job_details": job_details}
+    calculated_values = {"job_details": job_details, "land_unit_details": land_unit_details, "naval_unit_details": naval_unit_details}
 
     for field, field_schema in schema_properties.items():
         if isinstance(field_schema, dict) and field_schema.get("calculated"):
@@ -191,6 +199,82 @@ def calculate_job_details(target, modifier_totals, district_totals, city_totals,
     
     return new_job_details
 
+def collect_land_units_assigned(target):
+    return target.get("land_units", {})
+
+def collect_naval_units_assigned(target):
+    return target.get("naval_units", {})
+
+def check_unit_requirements(target, unit_details):
+    requirements = unit_details.get("requirements", {})
+    meets_requirements = True
+    district_types = [district.get("type", "") for district in target.get("districts", [])]
+    for requirement, value in requirements.items():
+        if requirement == "district":
+            has_district = False
+            for district in value:
+                if district in district_types:
+                    has_district = True
+            if not has_district:
+                meets_requirements = False
+        elif requirement == "research":
+            meets_requirements = False
+        elif requirement == "spell":
+            meets_requirements = False
+        elif requirement == "artifact":
+            meets_requirements = False # TODO: Implement the check for artifacts
+        elif requirement == "name" and target.get("name", "") not in value:
+            meets_requirements = False
+        elif requirement == "empire" and target.get("empire", False):
+            meets_requirements = False
+        # TODO: Add defensive pacts and mil alliances
+    return meets_requirements
+
+def calculate_unit_details(target, unit_type, unit_json_files, modifier_totals, district_totals, city_totals, node_totals, law_totals):
+    unit_details = {}
+    for unit_file in unit_json_files:
+        unit_details.update(json_data[unit_file])
+
+    modifier_sources = [modifier_totals, district_totals, city_totals, law_totals, node_totals]
+    general_resources = json_data["general_resources"]
+    general_resources = [resource["key"] for resource in general_resources]
+    unique_resources = json_data["unique_resources"]
+    unique_resources = [resource["key"] for resource in unique_resources]
+    
+    new_unit_details = {}
+    for unit, details in unit_details.items():
+        if check_unit_requirements(target, details):
+            new_details = copy.deepcopy(details)
+            all_resource_upkeep = 0
+            all_resource_upkeep_multiplier = 1
+            for source in modifier_sources:
+                for modifier, value in source.items():
+                    if modifier.startswith(unit) or modifier.startswith("unit") or modifier.startswith(unit_type + "_unit"):
+                        resource = modifier.replace(unit + "_", "").replace(unit_type + "_unit_", "").replace("unit_", "").replace("_upkeep", "")
+                        if resource != "resource" and modifier.endswith("upkeep"):
+                            new_details.setdefault("upkeep", {})[resource] = new_details.get("upkeep", {}).get(resource, 0) + value
+                        elif modifier.endswith("resource_upkeep"):
+                            all_resource_upkeep = all_resource_upkeep + value
+                        elif modifier.endswith("resource_upkeep_mult"):
+                            all_resource_upkeep_multiplier = all_resource_upkeep_multiplier * value
+
+            for resource in new_details.get("upkeep", {}):
+                if resource in general_resources or resource in unique_resources:
+                    new_upkeep = new_details["upkeep"][resource]
+                    new_upkeep += all_resource_upkeep
+                    new_upkeep = new_upkeep * all_resource_upkeep_multiplier
+                    if all_resource_upkeep_multiplier < 1:
+                        new_upkeep = int(math.ceil(new_upkeep))
+                    elif all_resource_upkeep_multiplier > 1:
+                        new_upkeep = int(math.floor(new_upkeep))
+                    else:
+                        new_upkeep = int(round(new_upkeep))
+                    new_details["upkeep"][resource] = new_upkeep
+
+            new_unit_details[unit] = new_details
+    
+    return new_unit_details
+
 def collect_external_requirements(target, schema, target_data_type):
     external_reqs = schema.get("external_calculation_requirements", {})
     collected_modifiers = []
@@ -317,6 +401,54 @@ def sum_job_totals(jobs_assigned, job_details):
             if val > original_job_upkeep.get(field, 0):
                 total_value = int(math.floor(total_value))
             elif val < original_job_upkeep.get(field, 0):
+                total_value = int(math.ceil(total_value))
+            else:
+                total_value = int(round(total_value))
+
+            totals[field] = totals.get(field, 0) + total_value
+        
+    return totals
+
+def sum_all_unit_totals(land_units_assigned, land_unit_details, naval_units_assigned, naval_unit_details):
+    land_unit_totals = sum_unit_totals(land_units_assigned, land_unit_details, land_unit_json_files)
+    naval_unit_totals = sum_unit_totals(naval_units_assigned, naval_unit_details, naval_unit_json_files)
+    totals = {}
+    for key, value in land_unit_totals.items():
+        totals[key] = value
+    for key, value in naval_unit_totals.items():
+        totals[key] = totals.get(key, 0) + value
+    return totals
+
+def sum_unit_totals(units_assigned, unit_details, unit_json_files):
+    original_unit_details = {}
+    for unit_file in unit_json_files:
+        original_unit_details.update(json_data[unit_file])
+
+    totals = {}
+    general_resources = json_data["general_resources"]
+    general_resources = [resource["key"] for resource in general_resources]
+    unique_resources = json_data["unique_resources"]
+    unique_resources = [resource["key"] for resource in unique_resources]
+
+    for unit, count in units_assigned.items():
+        original_unit_upkeep = original_unit_details.get(unit, {}).get("upkeep", {})
+        for field, val in unit_details.get(unit, {}).get("upkeep", {}).items():
+            if field == "money":
+                field = "money_income"
+                val = -val
+            if field == "prestige":
+                field = "prestige_income"
+                val = -val
+            elif field in general_resources or field in unique_resources:
+                field = field + "_consumption"
+            else:
+                val = -val
+            
+            total_value = val * count
+            
+            if val > original_unit_upkeep.get(field, 0):
+                total_value = int(math.floor(total_value))
+            elif val < original_unit_upkeep.get(field, 0):
                 total_value = int(math.ceil(total_value))
             else:
                 total_value = int(round(total_value))

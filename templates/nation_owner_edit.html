@@ -352,6 +352,63 @@
             </table>
         </div>
 
+        <section class="jobs-section">
+            <h2>Land Units</h2>
+            <p>Land Unit Capacity: {{ nation.land_unit_capacity }}</p>
+            <table class="jobs-table">
+                <thead>
+                    <tr>
+                        <th>Unit</th>
+                        <th>Unit Count</th>
+                        <th>Upkeep</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for unit, details in nation.land_unit_details.items() %}
+                        <tr>
+                            <td>{{ details.display_name }}</td>
+                            <td>{{ form.land_units[unit] }}</td>
+                            <td>
+                            {% if details.upkeep is defined %}
+                                {% for resource, cost in details.upkeep.items() %}
+                                    {{ resource }}: {{ cost }}<br>
+                                {% endfor %}
+                            {% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            <h2>Naval Units</h2>
+            <p>Naval Unit Capacity: {{ nation.naval_unit_capacity }}</p>
+            <table class="jobs-table">
+                <thead>
+                    <tr>
+                        <th>Unit</th>
+                        <th>Unit Count</th>
+                        <th>Upkeep</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for unit, details in nation.naval_unit_details.items() %}
+                        <tr>
+                            <td>{{ details.display_name }}</td>
+                            <td>{{ form.naval_units[unit] }}</td>
+                            <td>
+                            {% if details.upkeep is defined %}
+                                {% for resource, cost in details.upkeep.items() %}
+                                    {{ resource }}: {{ cost }}<br>
+                                {% endfor %}
+                            {% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+        </section>
+
         <!-- Resources Section -->
         <section class="resources-section">
             <h2>Resources</h2>
@@ -410,6 +467,7 @@
         <!-- Jobs Section -->
         <section class="jobs-section">
             <h2>Jobs</h2>
+            <p>Pop Count: {{ nation.pop_count }}</p>
             <table class="jobs-table">
                 <thead>
                     <tr>

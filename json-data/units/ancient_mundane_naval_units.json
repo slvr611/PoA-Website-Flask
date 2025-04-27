@@ -6,6 +6,9 @@
 		},
 		"upkeep": {
 			"wood": 1
+		},
+		"requirements": {
+			"district": ["ancient_dock", "classical_dock"]
 		}
 	},
 	"ancient_elite_warship": {
@@ -16,6 +19,9 @@
 		"upkeep": {
 			"bronze": 2,
 			"wood": 1
+		},
+		"requirements": {
+			"district": ["ancient_dock", "classical_dock"]
 		}
 	},
 	"ancient_missile_ship": {
@@ -25,6 +31,9 @@
 		},
 		"upkeep": {
 			"wood": 1
+		},
+		"requirements": {
+			"district": ["ancient_dock", "classical_dock"]
 		}
 	},
 	"ancient_transport_ship": {
@@ -34,6 +43,9 @@
 		},
 		"upkeep": {
 			"wood": 1
+		},
+		"requirements": {
+			"district": ["ancient_dock", "classical_dock"]
 		}
 	}
 }

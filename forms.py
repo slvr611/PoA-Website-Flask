@@ -17,9 +17,13 @@ class FormGenerator:
         """Gets or creates a form instance"""
         if data_type == "nations":
             job_details = {}
+            land_unit_details = {}
+            naval_unit_details = {}
             if item:
                 job_details = item.get("job_details", {})
-            return NationForm.create_form(schema, item, formdata, job_details)
+                land_unit_details = item.get("land_unit_details", {})
+                naval_unit_details = item.get("naval_unit_details", {})
+            return NationForm.create_form(schema, item, formdata, job_details, land_unit_details, naval_unit_details)
 
         elif data_type == "jobs":
             job_details = {}
@@ -53,37 +57,19 @@ class ResourceStorageDict(Form):
         return cls
 
     def load_form_from_item(self, item):
-        """Loads form data from a database item"""
-        for field_name, field in self._fields.items():
-                if isinstance(field, SelectField) and field.data:
-                    field.data = str(field.data)
-                    
-                # Handle nested data structures
-                if field_name in item:
-                    field_value = item[field_name]
-                    
-                    if isinstance(field_value, ObjectId):
-                        field.data = str(field_value)
-                    elif isinstance(field, FieldList):
-                        # Clear existing entries
-                        while len(field.entries) > 0:
-                            field.pop_entry()
-                            
-                        # Add new entries from the data
-                        for value in field_value:
-                            if isinstance(value, dict):
-                                # For object arrays
-                                field.append_entry(value)
-                            elif isinstance(value, ObjectId):
-                                # For linked object arrays
-                                field.append_entry(str(value))
-                            else:
-                                # For simple value arrays
-                                field.append_entry(value)
-                    elif isinstance(field, FormField):
-                        field.load_form_from_item(field_value)
-                    else:
-                        field.data = field_value
+        # Handle resource storage
+        if item:
+            general_resources = json_data.get("general_resources", [])
+            for resource in general_resources:
+                resource_field = getattr(self, resource["key"], None)
+                resource_field.data = item.get("resource_storage", {}).get(resource["key"], 0)
+            
+            # Unique resources
+            unique_resources = json_data.get("unique_resources", [])
+            for resource in unique_resources:
+                resource_field = getattr(self, resource["key"], None)
+                resource_field.data = item.get("resource_storage", {}).get(resource["key"], 0)
+
 
 class NodeDict(Form):
     """Form for handling resources nodes as a dictionary"""
@@ -139,7 +125,7 @@ class NodeDict(Form):
                         field.data = field_value
 
 class JobAssignmentDict(Form):
-    """Form for handling nation modifiers as a dictionary"""
+    """Form for handling job assignment as a dictionary"""
     
     class Meta:
         csrf = False
@@ -149,6 +135,100 @@ class JobAssignmentDict(Form):
         for job in job_details.keys():
             field = IntegerField(job, validators=[NumberRange(min=0)], default=0)
             setattr(cls, job, field)
+        
+        return cls
+    
+    def load_form_from_item(self, item):
+        """Loads form data from a database item"""
+        for field_name, field in self._fields.items():
+                if isinstance(field, SelectField) and field.data:
+                    field.data = str(field.data)
+                    
+                # Handle nested data structures
+                if field_name in item:
+                    field_value = item[field_name]
+                    
+                    if isinstance(field_value, ObjectId):
+                        field.data = str(field_value)
+                    elif isinstance(field, FieldList):
+                        # Clear existing entries
+                        while len(field.entries) > 0:
+                            field.pop_entry()
+                            
+                        # Add new entries from the data
+                        for value in field_value:
+                            if isinstance(value, dict):
+                                # For object arrays
+                                field.append_entry(value)
+                            elif isinstance(value, ObjectId):
+                                # For linked object arrays
+                                field.append_entry(str(value))
+                            else:
+                                # For simple value arrays
+                                field.append_entry(value)
+                    elif isinstance(field, FormField):
+                        field.load_form_from_item(field_value)
+                    else:
+                        field.data = field_value
+
+class LandUnitAssignmentDict(Form):
+    """Form for handling Land Unit assignment as a dictionary"""
+    
+    class Meta:
+        csrf = False
+
+    @classmethod
+    def create_form_class(cls, unit_details):
+        for unit in unit_details.keys():
+            field = IntegerField(unit, validators=[NumberRange(min=0)], default=0)
+            setattr(cls, unit, field)
+        
+        return cls
+    
+    def load_form_from_item(self, item):
+        """Loads form data from a database item"""
+        for field_name, field in self._fields.items():
+                if isinstance(field, SelectField) and field.data:
+                    field.data = str(field.data)
+                    
+                # Handle nested data structures
+                if field_name in item:
+                    field_value = item[field_name]
+                    
+                    if isinstance(field_value, ObjectId):
+                        field.data = str(field_value)
+                    elif isinstance(field, FieldList):
+                        # Clear existing entries
+                        while len(field.entries) > 0:
+                            field.pop_entry()
+                            
+                        # Add new entries from the data
+                        for value in field_value:
+                            if isinstance(value, dict):
+                                # For object arrays
+                                field.append_entry(value)
+                            elif isinstance(value, ObjectId):
+                                # For linked object arrays
+                                field.append_entry(str(value))
+                            else:
+                                # For simple value arrays
+                                field.append_entry(value)
+                    elif isinstance(field, FormField):
+                        field.load_form_from_item(field_value)
+                    else:
+                        field.data = field_value
+
+class NavalUnitAssignmentDict(Form):
+    """Form for handling Naval Unit assignment as a dictionary"""
+    
+    class Meta:
+        csrf = False
+
+    @classmethod
+    def create_form_class(cls, unit_details):
+        for unit in unit_details.keys():
+            field = IntegerField(unit, validators=[NumberRange(min=0)], default=0)
+            setattr(cls, unit, field)
         
         return cls
     
@@ -437,7 +517,7 @@ class DynamicSchemaForm(BaseSchemaForm):
             form.load_form_from_item(item)
         else:
             form = form_class()
-            
+        
         return form
 
     @classmethod
@@ -475,6 +555,11 @@ class DynamicSchemaForm(BaseSchemaForm):
             field.none_result = field_schema.get("noneResult", "None")
             field.default_options = field_schema.get("default_options", [])
             return field
+        
+        elif field_type == "object":
+            if field_name == "resource_storage":
+                ResourceStorageDict.create_form_class()
+                return FormField(ResourceStorageDict)
         
         elif field_type == "array":
             # Handle different types of arrays
@@ -552,7 +637,7 @@ class NationForm(BaseSchemaForm):
 
     # Add dynamic law fields from schema
     @classmethod
-    def create_form_class(cls, schema, job_details):
+    def create_form_class(cls, schema, job_details, land_unit_details, naval_unit_details):
         """Creates a form class with additional fields from schema"""
         for field_name, field_schema in schema.get("properties", {}).items():
             if field_schema.get("bsonType") == "enum" and not hasattr(cls, field_name):
@@ -573,13 +658,18 @@ class NationForm(BaseSchemaForm):
         JobAssignmentDict.create_form_class(job_details)
         cls.jobs = FormField(JobAssignmentDict)
 
+        LandUnitAssignmentDict.create_form_class(land_unit_details)
+        cls.land_units = FormField(LandUnitAssignmentDict)
+        NavalUnitAssignmentDict.create_form_class(naval_unit_details)
+        cls.naval_units = FormField(NavalUnitAssignmentDict)
+
         return cls
     
     @classmethod
-    def create_form(cls, schema, nation=None, formdata=None, job_details={}):
+    def create_form(cls, schema, nation=None, formdata=None, job_details={}, land_unit_details={}, naval_unit_details={}):
         """Creates and populates a nation form"""
         # First create the form class with all fields
-        form_class = cls.create_form_class(schema, job_details)
+        form_class = cls.create_form_class(schema, job_details, land_unit_details, naval_unit_details)
         
         # Create form instance
         if formdata:
@@ -603,7 +693,7 @@ class NationForm(BaseSchemaForm):
                              [("Unknown", "Unknown"), ("Settled", "Settled"), ("Conquered", "Conquered")]
         
         # Handle resource storage
-        if nation: #These if nation checks prevent overwriting existing data when using an existing form.  Try to find a better way at some point
+        if nation: #These if nation checks prevent overwriting existing data when using an existing form.  TODO: MOVE THIS TO load_form_from_item
             general_resources = json_data.get("general_resources", [])
             for resource in general_resources:
                 resource_field = getattr(form.resource_storage, resource["key"], None)
@@ -621,6 +711,17 @@ class NationForm(BaseSchemaForm):
                 job_field = getattr(form.jobs, job_key, None)
                 if job_field:
                     job_field.data = job_val
+
+        # Handle units
+        if nation:
+            for unit_key, unit_val in nation.get("land_units", {}).items():
+                unit_field = getattr(form.land_units, unit_key, None)
+                if unit_field:
+                    unit_field.data = unit_val
+            for unit_key, unit_val in nation.get("naval_units", {}).items():
+                unit_field = getattr(form.naval_units, unit_key, None)
+                if unit_field:
+                    unit_field.data = unit_val
                 
         # Handle districts
         if nation:
