@@ -10,7 +10,7 @@
 			<a href="{{ request.path.replace('item', 'edit') }}" class="edit-button">Edit</a>
 		{% endif %}
 		<div class="nation-summary">
-			<span>{{ schema.properties.region.label }}: 
+			<span>{{ schema.properties.region.label }}:
 				{% if linked_objects["region"] %}
 					<td><a href="{{ linked_objects['region']['link'] }}">{{ linked_objects["region"]["name"] }}</a></td>
 				{% else %}
@@ -21,6 +21,7 @@
 			{% if nation.empire %}
 				<span>Empire</span>
 				<span>{{ schema.properties.prestige.label }}: {{ nation.prestige }}</span>
+				<span>{{ schema.properties.prestige_gain.label }}: {{ nation.prestige_gain }}</span>
 			{% endif %}
 			{% if "rulers" in linked_objects and linked_objects["rulers"] is not none %}
 				<span>
@@ -552,13 +553,13 @@
 		<div class="table-wrapper">
 			<h2>Nodes</h2>
 			<table class="info-table">
-				{% for resource in general_resources %}
+				{% for resource in json_data["general_resources"] %}
 					<tr>
 						<th>{{ resource.name }}</th>
 						<td>{{ nation.get("resource_nodes", {}).get(resource["key"], 0) }}</td>
 					</tr>
 				{% endfor %}
-				{% for resource in unique_resources %}
+				{% for resource in json_data["unique_resources"] %}
 					<tr>
 						<th>{{ resource.name }}</th>
 						<td>{{ nation.get("resource_nodes", {}).get(resource["key"], 0) }}</td>
@@ -585,7 +586,7 @@
 				</tr>
 			</thead>
 			<tbody>
-				{% for resource in general_resources %}
+				{% for resource in json_data["general_resources"] %}
 					<tr>
 						<td>{{ resource.name }}</td>
 						<td>{{ nation.get("resource_production", {}).get(resource["key"], 0) }}</td>
@@ -616,7 +617,7 @@
 				</tr>
 			</thead>
 			<tbody>
-				{% for resource in unique_resources %}
+				{% for resource in json_data["unique_resources"] %}
 					<tr>
 						<td>{{ resource.name }}</td>
 						<td>{{ nation.get("resource_production", {}).get(resource["key"], 0) }}</td>
@@ -683,7 +684,7 @@
 			{% for i in range(0, nation.district_slots) %}
 				<div class="district-slot">
 					{% if nation.districts | length > i and nation.districts[i] and nation.districts[i]["type"] != "" %}
-						{% set district = districts_config.get(nation.districts[i]["type"], {}) %}
+						{% set district = json_data["nation_districts"].get(nation.districts[i]["type"], {}) %}
 						<h3>{{ district.get("display_name", "") }}</h3>
 						<p>Type: {{ district.get("type", "") }}</p>
 						<p>
@@ -714,6 +715,42 @@
 				</div>
 			{% endfor %}
 		</div>
+		</br>
+		{% if nation.get("empire", False) %}
+			{% if nation.imperial_district and nation.imperial_district["type"] != "" %}
+				<div class="district-slot">
+					{% set district = json_data["nation_imperial_districts"].get(nation.imperial_district["type"], {}) %}
+					<h3>{{ district.get("display_name", "") }}</h3>
+					<p>Type: {{ district.get("type", "") }}</p>
+					<p>
+						Cost:
+						{% for resource, cost in district.get("cost", {}).items() %}
+							{{ resource }}: {{ cost }}<br>
+						{% endfor %}
+					</p>
+					<p>
+						Modifiers:
+						{% for mod, value in district.get("modifiers", {}).items() %}
+							{{ mod }}: {{ value }}<br>
+						{% endfor %}
+					</p>
+					<p>
+						Node:
+						{% if nation.imperial_district["node"] != "" %}
+							{{ nation.imperial_district["node"] }}
+						{% else %}
+							None
+						{% endif %}
+					</p>
+				</div>
+			{% else %}
+				<div class="district-slot">
+					<div class="empty-slot">
+						<p>Empty Slot</p>
+					</div>
+				</div>
+			{% endif %}
+		{% endif %}
 	</section>
 
 	{% if nation.city_slots > 0 %}
@@ -724,7 +761,7 @@
 				{% for i in range(0, nation.city_slots) %}
 					<div class="district-slot">
 						{% if nation.cities | length > i and nation.cities[i] and nation.cities[i]["type"] != "" %}
-							{% set city = cities_config[nation.cities[i]["type"]] %}
+							{% set city = json_data["cities"][nation.cities[i]["type"]] %}
 							<h3>{{ city.get("display_name", "") }}</h3>
 							<p>Name: {{ nation.cities[i].get("name", "") }}</p>
 							<p>

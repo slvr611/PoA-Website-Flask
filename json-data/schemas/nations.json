@@ -31,6 +31,12 @@
         "description": "The empire's current prestige",
 		"hideIfNone": "empire"
       },
+	  "prestige_gain": {
+        "bsonType": "number",
+		"label": "Prestige Gain",
+        "description": "The amount of prestige the empire gains each session",
+		"calculated": true
+      },
 	  "rulers": {
         "bsonType": "array",
 		"label": "Rulers",
@@ -1119,20 +1125,32 @@
 			"bsonType": "object",
 			"properties": {
 				"type": {
-					"bsonType": "string",
-					"label": "City Type",
-					"description": "The type of the city"
+					"bsonType": "json_district_enum",
+					"label": "District Type",
+					"description": "The type of the district"
 				},
-				"nodes": {
-					"bsonType": "array",
-					"label": "City Nodes",
-					"description": "The nodes under the city",
-					"items":{
-						"bsonType": "string",
-						"label": "Node Type",
-						"description": "The type of the node"
-					}
+				"node": {
+					"bsonType": "string",
+					"label": "District Node",
+					"description": "The node under the district"
 				}
+			}
+		}
+      },
+	  "imperial_district": {
+        "bsonType": "object",
+		"label": "Imperial District",
+        "description": "The empire's current imperial district",
+		"properties": {
+			"type": {
+				"bsonType": "json_district_enum",
+				"label": "District Type",
+				"description": "The type of the district"
+			},
+			"node": {
+				"bsonType": "string",
+				"label": "District Nodes",
+				"description": "The nodes under the district"
 			}
 		}
       },

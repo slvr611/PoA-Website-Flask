@@ -42,15 +42,38 @@ def calculate_all_fields(target, schema, target_data_type):
 
     unit_totals = sum_all_unit_totals(land_units_assigned, land_unit_details, naval_units_assigned, naval_unit_details)
 
+    prestige_modifiers = {}
+    if target.get("empire", False):
+        prestige_modifiers = calculate_prestige_modifiers(target, schema_properties)
+
+    attributes_to_precalculate = ["effective_territory", "road_capacity", "effective_pop_capacity", "pop_count"]
+
     overall_total_modifiers = {}
-    for d in [external_modifiers_total, modifier_totals, district_totals, city_totals, node_totals, law_totals, job_totals, unit_totals]:
+    calculated_values = {"job_details": job_details, "land_unit_details": land_unit_details, "naval_unit_details": naval_unit_details}
+    for d in [external_modifiers_total, modifier_totals, district_totals, city_totals, node_totals, law_totals, job_totals, unit_totals, prestige_modifiers]:
         for key, value in d.items():
             overall_total_modifiers[key] = overall_total_modifiers.get(key, 0) + value
 
-    calculated_values = {"job_details": job_details, "land_unit_details": land_unit_details, "naval_unit_details": naval_unit_details}
+    for field in attributes_to_precalculate:
+        base_value = schema_properties.get(field, {}).get("base_value", 0)
+        calculated_values[field] = compute_field(
+            field, target, base_value, schema_properties.get(field, {}),
+            overall_total_modifiers
+        )
+        target[field] = calculated_values[field]
+
+    effective_territory_modifiers = calculate_effective_territory_modifiers(target)
+
+    road_capacity_modifiers = calculate_road_capacity_modifiers(target)
+
+    effective_pop_capacity_modifiers = calculate_effective_pop_capacity_modifiers(target)
+
+    for d in [effective_territory_modifiers, road_capacity_modifiers, effective_pop_capacity_modifiers]:
+        for key, value in d.items():
+            overall_total_modifiers[key] = overall_total_modifiers.get(key, 0) + value
 
     for field, field_schema in schema_properties.items():
-        if isinstance(field_schema, dict) and field_schema.get("calculated"):
+        if isinstance(field_schema, dict) and field_schema.get("calculated") and field not in calculated_values.keys():
             base_value = field_schema.get("base_value", 0)
             calculated_values[field] = compute_field(
                 field, target, base_value, field_schema,
@@ -66,6 +89,87 @@ def compute_field(field, target, base_value, field_schema, overall_total_modifie
 
 def compute_field_default(field, target, base_value, field_schema, overall_total_modifiers):
     return base_value + overall_total_modifiers.get(field, 0)
+
+def calculate_prestige_modifiers(target, schema_properties):
+    prestige = target.get("prestige", 50)
+    gov_type = target.get("government_type", "Unknown")
+    nomadic = schema_properties.get("government_type", {}).get("laws", {}).get(gov_type, {}).get("nomadic", 0)
+
+    prestige_modifiers = {}
+    if prestige > 90:
+        prestige_modifiers["karma"] = 6
+        prestige_modifiers["stability_gain_chance"] = 0.25
+        prestige_modifiers["strength"] = 2
+        prestige_modifiers["effective_pop_capacity"] = 6
+        if nomadic > 0:
+            prestige_modifiers["effective_territory"] = 25
+        else:
+            prestige_modifiers["effective_territory"] = 50
+    elif prestige > 80:
+        prestige_modifiers["karma"] = 4
+        prestige_modifiers["stability_gain_chance"] = 0.20
+        prestige_modifiers["strength"] = 2
+        prestige_modifiers["effective_pop_capacity"] = 5
+        if nomadic > 0:
+            prestige_modifiers["effective_territory"] = 20
+        else:
+            prestige_modifiers["effective_territory"] = 45
+    elif prestige > 70:
+        prestige_modifiers["karma"] = 2
+        prestige_modifiers["stability_gain_chance"] = 0.15
+        prestige_modifiers["strength"] = 1
+        prestige_modifiers["effective_pop_capacity"] = 4
+        if nomadic > 0:
+            prestige_modifiers["effective_territory"] = 15
+        else:
+            prestige_modifiers["effective_territory"] = 40
+    elif prestige > 60:
+        prestige_modifiers["stability_gain_chance"] = 0.10
+        prestige_modifiers["strength"] = 1
+        prestige_modifiers["effective_pop_capacity"] = 3
+        if nomadic > 0:
+            prestige_modifiers["effective_territory"] = 12
+        else:
+            prestige_modifiers["effective_territory"] = 35
+    elif prestige > 40:
+        prestige_modifiers["stability_gain_chance"] = 0.05
+        prestige_modifiers["effective_pop_capacity"] = 2
+        if nomadic > 0:
+            prestige_modifiers["effective_territory"] = 10
+        else:
+            prestige_modifiers["effective_territory"] = 30
+    elif prestige > 30:
+        prestige_modifiers["karma"] = -2
+        prestige_modifiers["stability_loss_chance"] = 0.10
+        prestige_modifiers["strength"] = -1
+        if nomadic > 0:
+            prestige_modifiers["effective_territory"] = 8
+        else:
+            prestige_modifiers["effective_territory"] = 25
+    elif prestige > 20:
+        prestige_modifiers["karma"] = -4
+        prestige_modifiers["stability_loss_chance"] = 0.15
+        prestige_modifiers["strength"] = -1
+        if nomadic > 0:
+            prestige_modifiers["effective_territory"] = 5
+        else:
+            prestige_modifiers["effective_territory"] = 15
+    elif prestige > 10:
+        prestige_modifiers["karma"] = -6
+        prestige_modifiers["stability_loss_chance"] = 0.20
+        prestige_modifiers["strength"] = -2
+        prestige_modifiers["effective_pop_capacity"] = -1
+        if nomadic > 0:
+            prestige_modifiers["effective_territory"] = 3
+        else:
+            prestige_modifiers["effective_territory"] = 10
+    else:
+        prestige_modifiers["karma"] = -8
+        prestige_modifiers["stability_loss_chance"] = 0.25
+        prestige_modifiers["strength"] = -3
+        prestige_modifiers["effective_pop_capacity"] = -2
+
+    return prestige_modifiers
 
 def collect_modifiers(target):
     return target.get("modifiers", [])
@@ -97,6 +201,23 @@ def collect_nation_districts(target):
                     collected_modifiers.append({district_node + "_production": 1})
             elif district_node != "":
                 collected_modifiers.append({district_node + "_production": 1})
+
+    imperial_district_json_data = json_data["nation_imperial_districts"]
+
+    if target.get("empire", False):
+        imperial_district = target.get("imperial_district", {})
+        imperial_district_type = imperial_district.get("type", "")
+        imperial_district_node = imperial_district.get("node", "")
+        imperial_district_synergy_node = imperial_district_json_data.get(imperial_district_type, {}).get("synergy_requirement", "")
+        imperial_district_synergy_node_active = imperial_district_json_data.get(imperial_district_type, {}).get("synergy_node_active", True)
+        imperial_district_modifiers = imperial_district_json_data.get(imperial_district_type, {}).get("modifiers", {})
+        collected_modifiers.append(imperial_district_modifiers)
+        if imperial_district_node == imperial_district_synergy_node or (imperial_district_synergy_node == "any" and imperial_district_node != ""):
+            collected_modifiers.append(imperial_district_json_data.get(imperial_district_type, {}).get("synergy_modifiers", {}))
+            if imperial_district_synergy_node_active:
+                collected_modifiers.append({imperial_district_node + "_production": 1})
+        elif imperial_district_node != "":
+            collected_modifiers.append({imperial_district_node + "_production": 1})
 
     return collected_modifiers
 
@@ -131,8 +252,31 @@ def collect_cities(target):
     return collected_modifiers
 
 def collect_nodes(target, modifier_totals, district_totals, city_totals, law_totals):
-    nodes = target.get("resource_nodes", {})
+    nodes = target.get("resource_nodes", {}).copy()
     collected_modifiers = []
+
+    nation_districts = target.get("districts", [])
+    district_json_data = json_data["nation_districts"]
+    imperial_district_json_data = json_data["nation_imperial_districts"]
+
+    for district in nation_districts:
+        if isinstance(district, dict):
+            district_type = district.get("type", "")
+            district_node = district.get("node", "")
+            district_synergy_node = district_json_data.get(district_type, {}).get("synergy_requirement", "")
+            district_synergy_node_active = district_json_data.get(district_type, {}).get("synergy_node_active", True)
+            if not district_synergy_node_active and (district_node == district_synergy_node or (district_synergy_node == "any" and district_node != "")):
+                nodes[district_node] = nodes.get(district_node, 0) - 1
+    
+    if target.get("empire", False):
+        district = target.get("imperial_district", {})
+        district_type = district.get("type", "")
+        district_node = district.get("node", "")
+        district_synergy_node = imperial_district_json_data.get(district_type, {}).get("synergy_requirement", "")
+        district_synergy_node_active = imperial_district_json_data.get(district_type, {}).get("synergy_node_active", True)
+        if not district_synergy_node_active and (district_node == district_synergy_node or (district_synergy_node == "any" and district_node != "")):
+            nodes[district_node] = nodes.get(district_node, 0) - 1
+
     for node_key, node_qty in nodes.items():
         keys_to_check = [node_key + "_node_value", "resource_node_value"]
         node_value = 1
@@ -342,6 +486,105 @@ def collect_external_modifiers_from_object(object, required_fields, linked_objec
                         collected_modifiers.append({key.replace(target_data_type + "_", ""): value})
     
     return collected_modifiers
+
+def calculate_effective_territory_modifiers(target):
+    effective_territory = target.get("effective_territory", 0)
+    current_territory = target.get("current_territory", 0)
+
+    over_capacity = current_territory - effective_territory
+
+    modifiers = {}
+
+    if over_capacity >= 30:
+        modifiers["karma"] = -8
+        modifiers["stability_loss_chance"] = 1
+        modifiers["strength"] = -3
+    elif over_capacity >= 20:
+        modifiers["karma"] = -6
+        modifiers["stability_loss_chance"] = 0.5
+        modifiers["strength"] = -2
+    elif over_capacity >= 10:
+        modifiers["karma"] = -4
+        modifiers["stability_loss_chance"] = 0.3
+        modifiers["strength"] = -1
+    elif over_capacity >= 5:
+        modifiers["karma"] = -2
+        modifiers["stability_loss_chance"] = 0.2
+        modifiers["strength"] = -1
+    elif over_capacity > 0:
+        modifiers["karma"] = -2
+        modifiers["stability_loss_chance"] = 0.1
+
+    return modifiers
+
+def calculate_road_capacity_modifiers(target):
+    road_capacity = target.get("road_capacity", 0)
+    current_territory = target.get("current_territory", 0)
+
+    over_capacity = current_territory - road_capacity
+
+    modifiers = {}
+
+    if over_capacity >= 50:
+        modifiers["wood_consumption"] = 5
+        modifiers["stone_consumption"] = 5
+        modifiers["mount_consumption"] = 5
+    elif over_capacity >= 40:
+        modifiers["wood_consumption"] = 4
+        modifiers["stone_consumption"] = 4
+        modifiers["mount_consumption"] = 4
+    elif over_capacity >= 30:
+        modifiers["wood_consumption"] = 3
+        modifiers["stone_consumption"] = 3
+        modifiers["mount_consumption"] = 3
+    elif over_capacity >= 20:
+        modifiers["wood_consumption"] = 2
+        modifiers["stone_consumption"] = 2
+        modifiers["mount_consumption"] = 2
+    elif over_capacity > 10:
+        modifiers["wood_consumption"] = 1
+        modifiers["stone_consumption"] = 1
+        modifiers["mount_consumption"] = 1
+    elif over_capacity > 5:
+        modifiers["wood_consumption"] = 1
+        modifiers["stone_consumption"] = 1
+    elif over_capacity > 0:
+        modifiers["wood_consumption"] = 1
+    
+    return modifiers
+
+def calculate_effective_pop_capacity_modifiers(target):
+    effective_pop_capacity = target.get("effective_pop_capacity", 0)
+    pop_count = target.get("pop_count", 0)
+
+    over_capacity = pop_count - effective_pop_capacity
+
+    modifiers = {}
+
+    if over_capacity >= 6:
+        modifiers["karma"] = -8
+        modifiers["stability_loss_chance"] = 1
+        modifiers["food_consumption_per_pop"] = 1
+    elif over_capacity == 5:
+        modifiers["karma"] = -8
+        modifiers["stability_loss_chance"] = 0.5
+        modifiers["food_consumption_per_pop"] = 1
+    elif over_capacity == 4:
+        modifiers["karma"] = -6
+        modifiers["stability_loss_chance"] = 0.4
+        modifiers["food_consumption_per_pop"] = 0.333333333333334
+    elif over_capacity == 3:
+        modifiers["karma"] = -4
+        modifiers["stability_loss_chance"] = 0.3
+        modifiers["food_consumption_per_pop"] = 0.25
+    elif over_capacity == 2:
+        modifiers["karma"] = -2
+        modifiers["stability_loss_chance"] = 0.25
+    elif over_capacity == 1:
+        modifiers["karma"] = -2
+        modifiers["stability_loss_chance"] = 0.1
+    
+    return modifiers
 
 def sum_modifier_totals(modifiers):
     totals = {}

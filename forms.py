@@ -312,8 +312,8 @@ class ModifierForm(Form):
 class DistrictDict(Form):
     """Form for handling each district as a dictionary"""
     
-    type = SelectField("District Type")
-    node = SelectField("Node Type")
+    type = SelectField("District Type", choices=[("", "None")], default="")
+    node = SelectField("Node Type", choices=[("", "None")], default="")
 
     class Meta:
         csrf = False
@@ -610,6 +610,7 @@ class NationForm(BaseSchemaForm):
     # Basic fields
     name = StringField("Name", validators=[DataRequired()])
     region = SelectField("Region", choices=[])
+    prestige = IntegerField("Prestige", validators=[NumberRange(min=0)], default=0)
     stability = SelectField("Stability", choices=[], default="Balanced")
     infamy = IntegerField("Infamy", validators=[NumberRange(min=0)], default=0)
     temporary_karma = IntegerField("Temporary Karma", validators=[NumberRange(min=0)], default=0)
@@ -631,6 +632,7 @@ class NationForm(BaseSchemaForm):
     
     # Lists
     districts = FieldList(FormField(DistrictDict), min_entries=0)
+    imperial_district = FormField(DistrictDict)
     cities = FieldList(FormField(CityDict), min_entries=0)
     
     # Misc fields
@@ -750,8 +752,6 @@ class NationForm(BaseSchemaForm):
             if len(cities) < city_slots:
                 cities.extend([{"type": "", "node": "", "wall": ""}] * (city_slots - len(cities)))
             
-            print(cities)
-
             form.cities.entries = []
             for city in cities:
                 form.cities.append_entry(city)
@@ -789,6 +789,14 @@ class NationForm(BaseSchemaForm):
                 
         for district_field in self.districts:
             district_field.form.populate_linked_fields(type_options=district_choices, node_options=node_choices)
+        
+        #Handle Imperial Districts separately
+        imperial_district_choices = [("", "Empty Slot")]
+        imperial_districts = json_data.get("nation_imperial_districts", {})
+        for district_key, district_data in imperial_districts.items():
+            imperial_district_choices.append((district_key, district_data["display_name"]))
+        
+        self.imperial_district.form.populate_linked_fields(type_options=imperial_district_choices, node_options=node_choices)
         
         #Handle Cities separately        
         city_choices = [("", "Empty Slot")]

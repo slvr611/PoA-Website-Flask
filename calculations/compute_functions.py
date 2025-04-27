@@ -1,6 +1,60 @@
 import math
 from app_core import category_data, json_data
 
+def compute_prestige_gain(field, target, base_value, field_schema, overall_total_modifiers):
+    value = base_value
+
+    overlord = target.get("overlord", {})
+    if overlord and overlord != "" and overlord != "None":
+        value -= 15
+    
+    diplomatic_pacts = []
+    
+    diplomatic_pacts += list(category_data["diplo_relations"]["database"].find({"nation_1": str(target["_id"])}))
+    diplomatic_pacts += list(category_data["diplo_relations"]["database"].find({"nation_2": str(target["_id"])}))
+
+    pact_prestige_loss = 0
+    for pact in diplomatic_pacts:
+        if pact.get("pact_type", "") == "Defensive Pact":
+            pact_prestige_loss += 2
+        elif pact.get("pact_type", "") == "Military Alliance":
+            pact_prestige_loss += 2
+    
+    value -= min(pact_prestige_loss, 8)
+
+    vassals = list(category_data["nations"]["database"].find({"overlord": str(target["_id"])}, {"_id": 1, "vassal_type": 1}))
+    non_provincial_vassal_prestige_gain = 0
+    provincial_vassal_prestige_gain = 0
+
+    for vassal in vassals:
+        if vassal.get("vassal_type", "") == "Provincial":
+            provincial_vassal_prestige_gain += 1
+        else:
+            non_provincial_vassal_prestige_gain += 1
+    
+    value += min(non_provincial_vassal_prestige_gain, 2)
+    value += min(provincial_vassal_prestige_gain, 2)
+
+    artifacts = []
+    rulers = list(category_data["characters"]["database"].find({"ruling_nation_org": str(target["_id"])}, {"_id": 1}))
+    for ruler in rulers:
+        artifacts += list(category_data["artifacts"]["database"].find({"owner": str(ruler["_id"])}, {"_id": 1, "rarity": 1}))
+    legendary_artifact_prestige_gain = 0
+    mythical_artifact_prestige_gain = 0
+
+    for artifact in artifacts:
+        if artifact.get("rarity", "") == "Legendary":
+            legendary_artifact_prestige_gain += 1
+        elif artifact.get("rarity", "") == "Mythical":
+            mythical_artifact_prestige_gain += 2
+
+    value += min(legendary_artifact_prestige_gain, 2)
+    value += min(mythical_artifact_prestige_gain, 2)
+
+    value += overall_total_modifiers.get(field, 0)
+
+    return value
+
 def compute_field_effective_territory(field, target, base_value, field_schema, overall_total_modifiers):
     administration = target.get("administration", 0)
     
@@ -462,6 +516,7 @@ def compute_magic_point_capacity(field, target, base_value, field_schema, overal
 ##############################################################
 
 CUSTOM_COMPUTE_FUNCTIONS = {
+    "prestige_gain": compute_prestige_gain,
     "effective_territory": compute_field_effective_territory,
     "road_capacity": compute_field_road_capacity,
     "karma": compute_field_karma,

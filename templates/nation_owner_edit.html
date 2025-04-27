@@ -30,6 +30,12 @@
                         <th>{{ form.region.label.text }}:</th>
                         <td>{{ form.region(class="form-control") }}</td>
                     </tr>
+                    {% if nation.empire %}
+                        <tr>
+                            <th>{{ form.prestige.label.text }}:</th>
+                            <td>{{ form.prestige(class="form-control") }}</td>
+                        </tr>
+                    {% endif %}
                     <tr>
                         <th>{{ form.stability.label.text }}:</th>
                         <td>{{ form.stability(class="form-control") }}</td>
@@ -533,6 +539,14 @@
                     </div>
                 {% endfor %}
             </div>
+            </br>
+            {% if nation.get("empire", False) %}
+                <h2>Imperial District</h2>
+                <div class="district-slot">
+                    {{ form.imperial_district.form.type.label }}: {{ form.imperial_district.form.type(class="form-control") }}
+                    {{ form.imperial_district.form.node.label }}: {{ form.imperial_district.form.node(class="form-control") }}
+                </div>
+            {% endif %}
         </section>
 
         <!-- City Section -->
