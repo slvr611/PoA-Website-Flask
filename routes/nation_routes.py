@@ -43,7 +43,7 @@ def nation_item(item_ref):
         linked_objects=linked_objects,
         general_resources=json_data["general_resources"],
         unique_resources=json_data["unique_resources"],
-        districts_config=json_data["districts"],
+        districts_config=json_data["nation_districts"],
         cities_config=json_data["cities"],
         user_is_owner=user_is_owner
     )

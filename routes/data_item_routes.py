@@ -6,7 +6,7 @@ from helpers.render_helpers import get_linked_objects
 from helpers.form_helpers import validate_form_with_jsonschema
 from routes.nation_routes import edit_nation, nation_edit_request, nation_edit_approve
 from calculations.field_calculations import calculate_all_fields
-from app_core import category_data, mongo, rarity_rankings
+from app_core import category_data, mongo, rarity_rankings, json_data
 from helpers.auth_helpers import admin_required
 from pymongo import ASCENDING
 
@@ -63,7 +63,8 @@ def data_item(data_type, item_ref):
         title=item_ref,
         schema=schema,
         item=item,
-        linked_objects=linked_objects
+        linked_objects=linked_objects,
+        json_data=json_data
     )
 
 @data_item_routes.route("/<data_type>/edit")

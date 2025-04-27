@@ -1,0 +1,172 @@
+{
+	"subsistence_farm": {
+		"display_name": "Subsistence Farm",
+		"cost": {
+			"money": 200
+		},
+		"modifiers": {
+			"income": -25,
+			"food_production": 1
+		},
+		"requirements": {}
+	},
+	"large_farm": {
+		"display_name": "Large Farm",
+		"cost": {
+			"money": 500
+		},
+		"modifiers": {
+			"income": -50,
+			"food_production": 3
+		},
+		"requirements": {
+			"reputation": ["Acceptable", "Great", "Flawless"]
+		}
+	},
+	"small_forester": {
+		"display_name": "Small Forester",
+		"cost": {
+			"money": 225
+		},
+		"modifiers": {
+			"income": -25,
+			"wood_production": 1
+		},
+		"requirements": {}
+	},
+	"logging_mill": {
+		"display_name": "Logging Mill",
+		"cost": {
+			"money": 550
+		},
+		"modifiers": {
+			"income": -50,
+			"wood_production": 3
+		},
+		"requirements": {
+			"reputation": ["Acceptable", "Great", "Flawless"]
+		}
+	},
+	"stone_mine": {
+		"display_name": "Stone Mine",
+		"cost": {
+			"money": 250
+		},
+		"modifiers": {
+			"income": -25,
+			"stone_production": 1
+		},
+		"requirements": {}
+	},
+	"stone_quarry": {
+		"display_name": "Stone Quarry",
+		"cost": {
+			"money": 600
+		},
+		"modifiers": {
+			"income": -50,
+			"stone_production": 3
+		},
+		"requirements": {
+			"reputation": ["Acceptable", "Great", "Flawless"]
+		}
+	},
+	"village_herd": {
+		"display_name": "Village Herd",
+		"cost": {
+			"money": 300
+		},
+		"modifiers": {
+			"income": -25,
+			"mounts_production": 1
+		},
+		"requirements": {}
+	},
+	"professional_stables": {
+		"display_name": "Professional Stables",
+		"cost": {
+			"money": 650
+		},
+		"modifiers": {
+			"income": -50,
+			"mounts_production": 2
+		},
+		"requirements": {
+			"reputation": ["Great", "Flawless"]
+		}
+	},
+	"humble_altars": {
+		"display_name": "Humble Altars",
+		"cost": {
+			"money": 350
+		},
+		"modifiers": {
+			"income": -50,
+			"magic_production": 1
+		},
+		"requirements": {}
+	},
+	"prestigious_shrines": {
+		"display_name": "Prestigious Shrines",
+		"cost": {
+			"money": 700
+		},
+		"modifiers": {
+			"income": -100,
+			"magic_production": 2
+		},
+		"requirements": {
+			"reputation": ["Great", "Flawless"]
+		}
+	},
+	"simple_smithy": {
+		"display_name": "Simple Smithy",
+		"cost": {
+			"money": 500
+		},
+		"modifiers": {
+			"income": -75,
+			"bronze_production": 1
+		},
+		"requirements": {}
+	},
+	"great_forge": {
+		"display_name": "Great Forge",
+		"cost": {
+			"money": 1000
+		},
+		"modifiers": {
+			"income": -150,
+			"bronze_production": 2
+		},
+		"requirements": {
+			"reputation": ["Great", "Flawless"]
+		}
+	},
+	"shallow_mines": {
+		"display_name": "Shallow Mines",
+		"cost": {
+			"money": 500
+		},
+		"modifiers": {
+			"income": -75,
+			"iron_production": 1
+		},
+		"requirements": {
+			"reputation": ["Flawless"]
+		}
+	},
+	"deep_excavations": {
+		"display_name": "Deep Excavations",
+		"cost": {
+			"money": 1000
+		},
+		"modifiers": {
+			"income": -150,
+			"iron_production": 2
+		},
+		"requirements": {
+			"reputation": ["Flawless"]
+		}
+	}
+}

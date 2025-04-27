@@ -1,0 +1,119 @@
+{
+	"narcotics_den": {
+		"display_name": "Narcotics Den",
+		"cost": {
+			"money": 500
+		},
+		"modifiers": {
+			"income": -100,
+			"narcotics": 1
+		},
+		"requirements": {
+			"reputation": ["Great", "Flawless"]
+		}
+	},
+	"spice_fields": {
+		"display_name": "Spice Fields",
+		"cost": {
+			"money": 500
+		},
+		"modifiers": {
+			"income": -100,
+			"spice": 1
+		},
+		"requirements": {
+			"reputation": ["Great", "Flawless"]
+		}
+	},
+	"herb_garden": {
+		"display_name": "Herb Garden",
+		"cost": {
+			"money": 500
+		},
+		"modifiers": {
+			"income": -100,
+			"medicinal_herbs": 1
+		},
+		"requirements": {
+			"reputation": ["Great", "Flawless"]
+		}
+	},
+	"dye_pottsman": {
+		"display_name": "Dye Pottsman",
+		"cost": {
+			"money": 500
+		},
+		"modifiers": {
+			"income": -100,
+			"dye": 1
+		},
+		"requirements": {
+			"reputation": ["Great", "Flawless"]
+		}
+	},
+	"crystal_caves": {
+		"display_name": "Crystal Caves",
+		"cost": {
+			"money": 500
+		},
+		"modifiers": {
+			"income": -100,
+			"magic_crystals": 1
+		},
+		"requirements": {
+			"reputation": ["Great", "Flawless"]
+		}
+	},
+	"gold_mines": {
+		"display_name": "Gold Mines",
+		"cost": {
+			"money": 500
+		},
+		"modifiers": {
+			"income": -100,
+			"gold": 1
+		},
+		"requirements": {
+			"reputation": ["Great", "Flawless"]
+		}
+	},
+	"moonstone_craters": {
+		"display_name": "Moonstone Craters",
+		"cost": {
+			"money": 500
+		},
+		"modifiers": {
+			"income": -100,
+			"moonstone": 1
+		},
+		"requirements": {
+			"reputation": ["Great", "Flawless"]
+		}
+	},
+	"trappers_den": {
+		"display_name": "Trappers Den",
+		"cost": {
+			"money": 1000
+		},
+		"modifiers": {
+			"income": -150,
+			"fur": 1
+		},
+		"requirements": {
+			"reputation": ["Flawless"]
+		}
+	},
+	"ichor_pits": {
+		"display_name": "Ichor Pits",
+		"cost": {
+			"money": 1000
+		},
+		"modifiers": {
+			"income": -150,
+			"quintessence": 1
+		},
+		"requirements": {
+			"reputation": ["Flawless"]
+		}
+	}
+}

@@ -14,9 +14,12 @@
 				<th>Event Type</th>
 				<th>Event Roll</th>
 				<th>Raw Roll</th>
-				<th>Karma</th>
-				<th>Rolling Karma</th>
-				<th>Temp Karma</th>
+				<th>Karma at Time of Roll</th>
+				<th>Rolling Karma at Time of Roll</th>
+				<th>Temp Karma at Time of Roll</th>
+				<th>Current Karma</th>
+				<th>Current Rolling Karma</th>
+				<th>Current Temp Karma</th>
 			</tr>
 		</thead>
 		<tbody>
@@ -24,11 +27,14 @@
 				<tr>
 					<td><a href="/nations/item/{{ nation.get('name', '') }}">{{ nation.get("name", "") }}</a></td>
 					<td>{{ nation.get("event_type", "Unknown") }}</td>
-					<td>{{ nation.get("event_roll", 0) }}</td>
-					<td>{{ nation.get("raw_roll", 0) }}</td>
-					<td>{{ nation.get("karma", 0) }}</td>
-					<td>{{ nation.get("rolling_karma", 0) }}</td>
-					<td>{{ nation.get("temporary_karma", 0) }}</td>
+					<td>{{ nation.get("event_roll", "Unknown") }}</td>
+					<td>{{ nation.get("raw_roll", "Unknown") }}</td>
+					<td>{{ nation.get("previous_karma", "Unknown") }}</td>
+					<td>{{ nation.get("previous_rolling_karma", "Unknown") }}</td>
+					<td>{{ nation.get("previous_temporary_karma", "Unknown") }}</td>
+					<td>{{ nation.get("karma", "Unknown") }}</td>
+					<td>{{ nation.get("rolling_karma", "Unknown") }}</td>
+					<td>{{ nation.get("temporary_karma", "Unknown") }}</td>
 				</tr>
 			{% endfor %}
 		</tbody>
@@ -41,9 +47,12 @@
 				<th>Event Type</th>
 				<th>Event Roll</th>
 				<th>Raw Roll</th>
-				<th>Karma</th>
-				<th>Rolling Karma</th>
-				<th>Temp Karma</th>
+				<th>Karma at Time of Roll</th>
+				<th>Rolling Karma at Time of Roll</th>
+				<th>Temp Karma at Time of Roll</th>
+				<th>Current Karma</th>
+				<th>Current Rolling Karma</th>
+				<th>Current Temp Karma</th>
 			</tr>
 		</thead>
 		<tbody>
@@ -51,11 +60,14 @@
 				<tr>
 					<td><a href="/nations/item/{{ nation.get('name', '') }}">{{ nation.get("name", "") }}</a></td>
 					<td>{{ nation.get("event_type", "Unknown") }}</td>
-					<td>{{ nation.get("event_roll", 0) }}</td>
-					<td>{{ nation.get("raw_roll", 0) }}</td>
-					<td>{{ nation.get("karma", 0) }}</td>
-					<td>{{ nation.get("rolling_karma", 0) }}</td>
-					<td>{{ nation.get("temporary_karma", 0) }}</td>
+					<td>{{ nation.get("event_roll", "Unknown") }}</td>
+					<td>{{ nation.get("raw_roll", "Unknown") }}</td>
+					<td>{{ nation.get("previous_karma", "Unknown") }}</td>
+					<td>{{ nation.get("previous_rolling_karma", "Unknown") }}</td>
+					<td>{{ nation.get("previous_temporary_karma", "Unknown") }}</td>
+					<td>{{ nation.get("karma", "Unknown") }}</td>
+					<td>{{ nation.get("rolling_karma", "Unknown") }}</td>
+					<td>{{ nation.get("temporary_karma", "Unknown") }}</td>
 				</tr>
 			{% endfor %}
 		</tbody>

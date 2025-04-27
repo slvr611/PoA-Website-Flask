@@ -49,7 +49,8 @@
         "bsonType": "number",
 		"label": "Hostile Encounter Chance",
         "description": "The percentage chance of having a hostile encounter when the merchant company moves",
-		"calculated": true
+		"calculated": true,
+		"format": "percentage"
       },
 	  "location": {
         "bsonType": "linked_object",
@@ -75,16 +76,16 @@
 		"calculated": true,
 		"base_value": 15
       },
-	  "import_capacity": {
+	  "import_slots": {
         "bsonType": "number",
-		"label": "Import Capacity",
+		"label": "Import Slots",
         "description": "The amount of resources the merchant company can import each session",
 		"calculated": true,
 		"base_value": 9
       },
-	  "export_capacity": {
+	  "export_slots": {
         "bsonType": "number",
-		"label": "Export Capacity",
+		"label": "Export Slots",
         "description": "The amount of resources the merchant company can export each session",
 		"calculated": true,
 		"base_value": 9
@@ -101,29 +102,34 @@
 		"calculated": true
       },
 	  "production_district_1": {
-        "bsonType": "enum",
+        "bsonType": "json_district_enum",
 		"label": "Production District 1",
-        "description": "The first production district of the merchant company"
+        "description": "The first production district of the merchant company",
+		"json_data": "merchant_production_districts"
       },
 	  "production_district_2": {
-        "bsonType": "enum",
+        "bsonType": "json_district_enum",
 		"label": "Production District 2",
-        "description": "The second production district of the merchant company"
+        "description": "The second production district of the merchant company",
+		"json_data": "merchant_production_districts"
       },
 	  "production_district_3": {
-        "bsonType": "enum",
+        "bsonType": "json_district_enum",
 		"label": "Production District 3",
-        "description": "The second production district of the merchant company"
+        "description": "The second production district of the merchant company",
+		"json_data": "merchant_production_districts"
       },
 	  "specialty_district": {
-        "bsonType": "enum",
+        "bsonType": "json_district_enum",
 		"label": "Specialty District",
-        "description": "The specialty district of the merchant company"
+        "description": "The specialty district of the merchant company",
+		"json_data": "merchant_specialty_districts"
       },
 	  "luxury_district": {
-        "bsonType": "enum",
+        "bsonType": "json_district_enum",
 		"label": "Luxury District",
-        "description": "The luxury district of the merchant company"
+        "description": "The luxury district of the merchant company",
+		"json_data": "merchant_luxury_districts"
       }
     }
   }

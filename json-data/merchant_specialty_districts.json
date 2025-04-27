@@ -1,0 +1,60 @@
+{
+	"luxurious_displays": {
+		"display_name": "Luxurious Displays",
+		"cost": {
+			"money": 500
+		},
+		"modifiers": {
+			"income": 45
+		},
+		"requirements": {
+			"reputation": ["Acceptable", "Great", "Flawless"]
+		}
+	},
+	"personal_hawker": {
+		"display_name": "Personal Hawker",
+		"cost": {
+			"money": 750
+		},
+		"modifiers": {
+			"trade_distance": 9
+		},
+		"requirements": {
+			"reputation": ["Acceptable", "Great", "Flawless"]
+		}
+	},
+	"seal_of_approval": {
+		"display_name": "Seal of Approval",
+		"cost": {
+			"money": 1000
+		},
+		"modifiers": {},
+		"requirements": {
+			"reputation": ["Acceptable", "Great", "Flawless"]
+		}
+	},
+	"custom_boxes": {
+		"display_name": "Custom Boxes",
+		"cost": {
+			"money": 750
+		},
+		"modifiers": {
+			"trade_slots": 3
+		},
+		"requirements": {
+			"reputation": ["Acceptable", "Great", "Flawless"]
+		}
+	},
+	"secure_transport": {
+		"display_name": "Secure Transport",
+		"cost": {
+			"money": 750
+		},
+		"modifiers": {
+			"hostile_encounter_chance": -0.1
+		},
+		"requirements": {
+			"reputation": ["Acceptable", "Great", "Flawless"]
+		}
+	}
+}

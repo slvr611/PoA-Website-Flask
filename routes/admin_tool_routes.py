@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, redirect, request, flash
 from helpers.auth_helpers import admin_required
 from helpers.data_helpers import get_data_on_category, generate_id_to_name_dict, compute_demographics
 from helpers.admin_tool_helpers import grow_population
+from helpers.change_helpers import request_change, approve_change
 from calculations.field_calculations import calculate_all_fields
 from app_core import category_data, rarity_rankings, mongo, json_data
 from pymongo import ASCENDING
@@ -128,8 +129,18 @@ def roll_karma():
         elif event_roll <= -10:
             event_type = "Horrendous"
 
-        nation.update({"temp_karma": 0, "event_roll": event_roll, "raw_roll": raw_roll, "event_type": event_type})
-        db.update_one({"_id": nation["_id"]}, {"$set": nation})
+        new_nation = nation.copy()
+        new_nation.update({"temporary_karma": 0, "event_roll": event_roll, "raw_roll": raw_roll, "event_type": event_type,
+                           "previous_karma": nation.get("karma", 0), "previous_temporary_karma": nation.get("temporary_karma", 0), "previous_rolling_karma": nation.get("rolling_karma", 0)})
+        change_id = request_change(
+            data_type="nations",
+            item_id=nation["_id"],
+            change_type="Update",
+            before_data=nation,
+            after_data=new_nation,
+            reason="Karma Roll for " + nation["name"]
+        )
+        approve_change(change_id)
     
     return redirect("/karma_helper")
 

@@ -17,7 +17,11 @@ def calculate_all_fields(target, schema, target_data_type):
     laws = collect_laws(target, schema)
     law_totals = sum_law_totals(laws)
 
-    districts = collect_districts(target)
+    districts = []
+    if target_data_type == "nation":
+        districts = collect_nation_districts(target)
+    elif target_data_type == "merchant":
+        districts = collect_merchant_districts(target)
     district_totals = sum_district_totals(districts)
 
     cities = collect_cities(target)
@@ -77,10 +81,10 @@ def collect_laws(target, schema):
             collected_laws.append(law)
     return collected_laws
 
-def collect_districts(target):
+def collect_nation_districts(target):
     nation_districts = target.get("districts", [])
     collected_modifiers = []
-    district_json_data = json_data["districts"]
+    district_json_data = json_data["nation_districts"]
     for district in nation_districts:
         if isinstance(district, dict):
             district_type = district.get("type", "")
@@ -95,6 +99,20 @@ def collect_districts(target):
                 collected_modifiers.append({district_node + "_production": 1})
 
     return collected_modifiers
+
+def collect_merchant_districts(target):
+    collected_modifiers = []
+
+    for i in range(1, 4):
+        production_district = target.get("production_district_" + str(i), "")
+        if production_district:
+            collected_modifiers.append(json_data["merchant_production_districts"].get(production_district, "").get("modifiers", {}))
+    
+    collected_modifiers.append(json_data["merchant_specialty_districts"].get(target.get("specialty_district", ""), {}).get("modifiers", {}))
+    collected_modifiers.append(json_data["merchant_luxury_districts"].get(target.get("luxury_district", ""), {}).get("modifiers", {}))
+
+    return collected_modifiers
+
 
 def collect_cities(target):
     nation_cities = target.get("cities", [])
@@ -130,7 +148,7 @@ def collect_jobs_assigned(target):
 
 def calculate_job_details(target, modifier_totals, district_totals, city_totals, node_totals, law_totals):
     job_details = json_data["jobs"]
-    district_details = json_data["districts"]
+    district_details = json_data["nation_districts"]
     modifier_sources = [modifier_totals, district_totals, city_totals, law_totals, node_totals]
     general_resources = json_data["general_resources"]
     general_resources = [resource["key"] for resource in general_resources]

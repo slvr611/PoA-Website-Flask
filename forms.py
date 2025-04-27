@@ -62,13 +62,13 @@ class ResourceStorageDict(Form):
             general_resources = json_data.get("general_resources", [])
             for resource in general_resources:
                 resource_field = getattr(self, resource["key"], None)
-                resource_field.data = item.get("resource_storage", {}).get(resource["key"], 0)
+                resource_field.data = item.get(resource["key"], 0)
             
             # Unique resources
             unique_resources = json_data.get("unique_resources", [])
             for resource in unique_resources:
                 resource_field = getattr(self, resource["key"], None)
-                resource_field.data = item.get("resource_storage", {}).get(resource["key"], 0)
+                resource_field.data = item.get(resource["key"], 0)
 
 
 class NodeDict(Form):
@@ -550,6 +550,11 @@ class DynamicSchemaForm(BaseSchemaForm):
 
             return SelectField(**field_args)
         
+        elif field_type == "json_district_enum":
+            field_args["choices"] = [("", "None")] + [(key, data.get("display_name", key))
+                for key, data in json_data[field_schema["json_data"]].items()]
+            return SelectField(**field_args)
+        
         elif field_type == "linked_object":
             field = SelectField(**field_args)
             field.none_result = field_schema.get("noneResult", "None")
@@ -778,7 +783,7 @@ class NationForm(BaseSchemaForm):
 
         #Handle Districts separately
         district_choices = [("", "Empty Slot")]
-        districts = json_data.get("districts", {})
+        districts = json_data.get("nation_districts", {})
         for district_key, district_data in districts.items():
             district_choices.append((district_key, district_data["display_name"]))
                 
@@ -925,6 +930,7 @@ class NewCharacterForm(BaseSchemaForm):
 
 # Global form generator instance
 form_generator = FormGenerator()
+
 
 
 

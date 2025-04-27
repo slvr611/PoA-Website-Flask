@@ -35,6 +35,12 @@
 							{% else %}
 								<td>{{ item[field] }}</td>
 							{% endif %}
+						{% elif properties.bsonType == "json_district_enum" %}
+							{% if item[field] and item[field] in json_data[properties.json_data] %}
+								<td>{{ json_data[properties.json_data][item[field]]["display_name"] }}</td>
+							{% else %}
+								<td>{{ item[field] }}</td>
+							{% endif %}
 						{% elif properties.bsonType == "number" %}
 							{% if properties.format == "percentage" %}
 								<td>{{ (item[field] * 100)|int }}%</td>
@@ -56,7 +62,7 @@
 								{% if properties.resource_storage or field == "resource_storage" or field == "resource_capacity" or field == "resource_production" or field == "resource_consumption" or field == "resource_excess" %}
 									<table class="compact-table resource-table">
 										<tbody>
-											{% for resource_key, resource_value in item[field].items()|sort %}
+											{% for resource_key, resource_value in item.get(field, {}).items()|sort %}
 												<tr>
 													<th>{{ resource_key }}</th>
 													<td>{{ resource_value }}</td>
