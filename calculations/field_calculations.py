@@ -91,7 +91,7 @@ def compute_field_default(field, target, base_value, field_schema, overall_total
     return base_value + overall_total_modifiers.get(field, 0)
 
 def calculate_prestige_modifiers(target, schema_properties):
-    prestige = target.get("prestige", 50)
+    prestige = int(target.get("prestige", 50))
     gov_type = target.get("government_type", "Unknown")
     nomadic = schema_properties.get("government_type", {}).get("laws", {}).get(gov_type, {}).get("nomadic", 0)
 
