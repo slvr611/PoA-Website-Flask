@@ -291,7 +291,7 @@ def artifact_loss_tick(old_artifact, new_artifact, schema):
     new_artifact["loss_chance_at_tick"] = old_artifact.get("passive_loss_chance", 0)
     if loss_roll <= old_artifact.get("passive_loss_chance", 0):
         new_artifact["owner"] = "Lost"
-        result = f"{old_artifact.get("name", "Unknown")} has been lost.\n"
+        result = f"{old_artifact.get('name', 'Unknown')} has been lost.\n"
     return result
 
 ###########################################################
