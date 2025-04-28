@@ -180,18 +180,18 @@ def give_tick_summary(tick_summary):
 
 def character_death_tick(old_character, new_character, schema):
     result = ""
-    if new_character["health_status"] == "Dead":
+    if new_character.get("health_status", "Healthy") == "Dead":
         return ""
     death_roll = random.random()
     new_character["death_roll"] = death_roll
     new_character["death_chance_at_tick"] = old_character.get("death_chance", 0)
     if death_roll <= old_character.get("death_chance", 0):
         new_character["health_status"] = "Dead"
-        result = f"{old_character['name']} has died.\n"
+        result = f"{old_character.get("name", "Unknown")} has died.\n"
 
-        if old_character["ruling_nation_org"] != "":
+        if old_character.get("ruling_nation_org", "") != "":
             nation_schema, nation_db = get_data_on_category("nations")
-            old_nation = nation_db.find_one({"_id": old_character["ruling_nation_org"]})
+            old_nation = nation_db.find_one({"_id": old_character.get("ruling_nation_org", "")})
             if old_nation:
                 new_nation = old_nation.copy()
                 calculated_fields = calculate_all_fields(old_nation, nation_schema, "nation")
@@ -261,7 +261,7 @@ def character_heal_tick(old_character, new_character, schema):
     return result
 
 def character_mana_tick(old_character, new_character, schema):
-    new_character["current_magic_points"] = min(old_character["current_magic_points"] + old_character.get("magic_point_income", 0), old_character.get("magic_point_capacity", 0))
+    new_character["current_magic_points"] = min(old_character.get("current_magic_points", 0) + old_character.get("magic_point_income", 0), old_character.get("magic_point_capacity", 0))
     return ""
 
 def character_age_tick(old_character, new_character, schema):
@@ -291,7 +291,7 @@ def artifact_loss_tick(old_artifact, new_artifact, schema):
     new_artifact["loss_chance_at_tick"] = old_artifact.get("passive_loss_chance", 0)
     if loss_roll <= old_artifact.get("passive_loss_chance", 0):
         new_artifact["owner"] = "Lost"
-        result = f"{old_artifact['name']} has been lost.\n"
+        result = f"{old_artifact.get("name", "Unknown")} has been lost.\n"
     return result
 
 ###########################################################
@@ -299,7 +299,7 @@ def artifact_loss_tick(old_artifact, new_artifact, schema):
 ###########################################################
 
 def merchant_income_tick(old_merchant, new_merchant, schema):
-    new_merchant["treasury"] = old_merchant["treasury"] + old_merchant.get("income", 0)
+    new_merchant["treasury"] = old_merchant.get("treasury", 0) + old_merchant.get("income", 0)
 
     for resource, amount in old_merchant.get("resource_income", {}).items():
         new_merchant[resource] = old_merchant[resource] + amount
@@ -310,7 +310,7 @@ def merchant_income_tick(old_merchant, new_merchant, schema):
 ###########################################################
 
 def mercenary_upkeep_tick(old_mercenary, new_mercenary, schema):
-    new_mercenary["treasury"] = old_mercenary["treasury"] - old_mercenary.get("upkeep", 0)
+    new_mercenary["treasury"] = old_mercenary.get("treasury", 0) - old_mercenary.get("upkeep", 0)
     return ""
 
 ###########################################################
@@ -318,7 +318,7 @@ def mercenary_upkeep_tick(old_mercenary, new_mercenary, schema):
 ###########################################################
 
 def nation_income_tick(old_nation, new_nation, schema):
-    new_nation["money"] = old_nation["money"] + old_nation.get("money_income", 0)
+    new_nation["money"] = old_nation.get("money", 0) + old_nation.get("money_income", 0)
     for resource, amount in old_nation.get("resource_income", {}).items():
         new_nation[resource] = old_nation[resource] + amount
     
@@ -339,31 +339,31 @@ def nation_infamy_decay_tick(old_nation, new_nation, schema):
         new_nation["infamy"] = 0
         return ""
     else:
-        new_nation["infamy"] = int(round(old_nation["infamy"] / 10)) * 5
+        new_nation["infamy"] = int(round(old_nation.get("infamy", 0) / 10)) * 5
     return ""
 
 def nation_prestige_gain_tick(old_nation, new_nation, schema):
-    new_nation["prestige"] = old_nation["prestige"] + old_nation.get("prestige_gain", 0)
+    new_nation["prestige"] = old_nation.get("prestige", 0) + old_nation.get("prestige_gain", 0)
     return ""
 
 def nation_stability_tick(old_nation, new_nation, schema):
     result = ""
     stability_enum = schema["properties"]["stability"]["enum"]
-    stability_index = stability_enum.find(old_nation["stability"])
+    stability_index = stability_enum.find(old_nation.get("stability", "Balanced"))
 
     stability_gain_roll = random.random()
     new_nation["stability_gain_roll"] = stability_gain_roll
     new_nation["stability_gain_chance_at_tick"] = old_nation.get("stability_gain_chance", 0)
     if stability_gain_roll <= old_nation.get("stability_gain_chance", 0):
         stability_index = min(stability_index + 1, len(stability_enum) - 1)
-        result += f"{old_nation['name']} has gained stability.\n"
+        result += f"{old_nation.get('name', 'Unknown')} has gained stability.\n"
 
     stability_loss_roll = random.random()
     new_nation["stability_loss_roll"] = stability_loss_roll
     new_nation["stability_loss_chance_at_tick"] = old_nation.get("stability_loss_chance", 0)
     if stability_loss_roll <= old_nation.get("stability_loss_chance", 0):
         stability_index = max(stability_index - 1, 0)
-        result += f"{old_nation['name']} has lost stability.\n"
+        result += f"{old_nation.get('name', 'Unknown')} has lost stability.\n"
 
     new_nation["stability"] = stability_enum[stability_index]
 
@@ -397,7 +397,7 @@ def nation_concessions_tick(old_nation, new_nation, schema):
             second_resource: second_amount
         }
 
-        result += f"{old_nation['name']} has demanded concessions from their overlord.\n"
+        result += f"{old_nation.get('name', 'Unknown')} has demanded concessions from their overlord.\n"
     return result
 
 def nation_rebellion_tick(old_nation, new_nation, schema):
@@ -408,7 +408,7 @@ def nation_rebellion_tick(old_nation, new_nation, schema):
     new_nation["rebellion_roll"] = rebellion_roll
     new_nation["rebellion_chance_at_tick"] = old_nation.get("rebellion_chance", 0)
     if rebellion_roll <= old_nation.get("rebellion_chance", 0):
-        result += f"{old_nation['name']} has rebelled against their overlord.\n"
+        result += f"{old_nation.get('name', 'Unknown')} has rebelled against their overlord.\n"
 
     return result
 
@@ -418,12 +418,12 @@ def nation_passive_expansion_tick(old_nation, new_nation, schema):
     new_nation["expansion_roll"] = expansion_roll
     new_nation["expansion_chance_at_tick"] = old_nation.get("passive_expansion_chance", 0)
     if expansion_roll <= old_nation.get("passive_expansion_chance", 0):
-        result += f"{old_nation['name']} has expanded into adjacent territory.\n"
+        result += f"{old_nation.get('name', 'Unknown')} has expanded into adjacent territory.\n"
     return result
 
 def nation_modifier_decay_tick(old_nation, new_nation, schema):
     new_modifiers = []
-    for modifier in old_nation["modifiers"]:
+    for modifier in old_nation.get("modifiers", []):
         if modifier["duration"] > 0:
             modifier["duration"] -= 1
         if modifier["duration"] != 0:
@@ -433,7 +433,7 @@ def nation_modifier_decay_tick(old_nation, new_nation, schema):
 
 def nation_job_cleanup_tick(old_nation, new_nation, schema):
     new_jobs = {}
-    for job in old_nation["jobs"].keys():
+    for job in old_nation.get("jobs", {}).keys():
         new_jobs[job] = 0
     new_nation["jobs"] = new_jobs
     return ""
