@@ -92,7 +92,7 @@ def calculate_all_fields(target, schema, target_data_type):
                 overall_total_modifiers
             )
             target[field] = calculated_values[field]
-
+    
     return calculated_values
 
 def compute_field(field, target, base_value, field_schema, overall_total_modifiers):
@@ -538,7 +538,7 @@ def calculate_effective_territory_modifiers(target):
 
 def calculate_road_capacity_modifiers(target):
     road_capacity = int(target.get("road_capacity", 0))
-    current_territory = int(target.get("current_territory", 0))
+    current_territory = int(target.get("road_usage", 0))
 
     over_capacity = current_territory - road_capacity
 
