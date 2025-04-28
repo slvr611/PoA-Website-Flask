@@ -23,4 +23,4 @@ def admin_run_tick():
     message = run_tick_async(form_data)
     flash(message, "info")
     
-    return redirect(url_for('admin_tools'))
+    return redirect("/tick_helper")
