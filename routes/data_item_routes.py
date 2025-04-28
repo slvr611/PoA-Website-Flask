@@ -247,6 +247,9 @@ def data_item_edit(data_type, item_ref):
                     ).sort("name", ASCENDING)
                 )
 
+    calculated_fields = calculate_all_fields(item, schema, category_data[data_type]["singularName"].lower())
+    item.update(calculated_fields)
+
     form = form_generator.get_form(data_type, schema, item=item)
     form.populate_linked_fields(schema, dropdown_options)
     

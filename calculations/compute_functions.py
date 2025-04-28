@@ -1,5 +1,5 @@
 import math
-from app_core import category_data, json_data
+from app_core import category_data, json_data, land_unit_json_files, naval_unit_json_files
 
 def compute_prestige_gain(field, target, base_value, field_schema, overall_total_modifiers):
     value = base_value
@@ -20,6 +20,7 @@ def compute_prestige_gain(field, target, base_value, field_schema, overall_total
         elif pact.get("pact_type", "") == "Military Alliance":
             pact_prestige_loss += 2
     
+    print("Pact prestige loss: " + str(pact_prestige_loss))
     value -= min(pact_prestige_loss, 8)
 
     vassals = list(category_data["nations"]["database"].find({"overlord": str(target["_id"])}, {"_id": 1, "vassal_type": 1}))
@@ -32,6 +33,8 @@ def compute_prestige_gain(field, target, base_value, field_schema, overall_total
         else:
             non_provincial_vassal_prestige_gain += 1
     
+    print("Non-provincial vassal prestige gain: " + str(non_provincial_vassal_prestige_gain))
+    print("Provincial vassal prestige gain: " + str(provincial_vassal_prestige_gain))
     value += min(non_provincial_vassal_prestige_gain, 2)
     value += min(provincial_vassal_prestige_gain, 2)
 
@@ -48,6 +51,8 @@ def compute_prestige_gain(field, target, base_value, field_schema, overall_total
         elif artifact.get("rarity", "") == "Mythical":
             mythical_artifact_prestige_gain += 2
 
+    print("Legendary artifact prestige gain: " + str(legendary_artifact_prestige_gain))
+    print("Mythical artifact prestige gain: " + str(mythical_artifact_prestige_gain))
     value += min(legendary_artifact_prestige_gain, 2)
     value += min(mythical_artifact_prestige_gain, 2)
 
@@ -513,6 +518,37 @@ def compute_magic_point_capacity(field, target, base_value, field_schema, overal
 
     return value
 
+def compute_budget_spent(field, target, base_value, field_schema, overall_total_modifiers):
+    value = overall_total_modifiers.get(field, 0)
+
+    combined_json_data = {}
+    for file_name in land_unit_json_files:
+        combined_json_data.update(json_data[file_name])
+    
+    for file_name in naval_unit_json_files:
+        combined_json_data.update(json_data[file_name])
+
+    units = target.get("units", [])
+    for unit in units:
+        value += combined_json_data.get(unit, {}).get("recruitment_cost", {}).get("money", 0)
+    
+    print("Budget spent: " + str(value))
+    
+    return value
+
+def compute_hiring_cost(field, target, base_value, field_schema, overall_total_modifiers):
+    value = overall_total_modifiers.get(field, 0)
+    
+    value += target.get("upkeep", 0)
+    
+    value += target.get("budget_spent", 0)
+
+    value *= 1 + overall_total_modifiers.get("hiring_cost_mult", 0)
+
+    print("Hiring cost: " + str(value))
+
+    return value
+
 ##############################################################
 
 CUSTOM_COMPUTE_FUNCTIONS = {
@@ -561,4 +597,7 @@ CUSTOM_COMPUTE_FUNCTIONS = {
     "heal_chance": compute_heal_chance,
     "magic_point_income": compute_magic_point_income,
     "magic_point_capacity": compute_magic_point_capacity,
+    "budget_spent": compute_budget_spent,
+    "hiring_cost": compute_hiring_cost,
+
 }

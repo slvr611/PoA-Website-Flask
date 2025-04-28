@@ -39,7 +39,7 @@
 							{% if item[field] and item[field] in json_data[properties.json_data] %}
 								<td>{{ json_data[properties.json_data][item[field]]["display_name"] }}</td>
 							{% else %}
-								<td>{{ item[field] }}</td>
+								<td>None</td>
 							{% endif %}
 						{% elif properties.bsonType == "number" %}
 							{% if properties.format == "percentage" %}
@@ -103,6 +103,51 @@
 									<ul>
 										{% for sub_item in item[field] %}
 											<li>{{ sub_item }}</li>
+										{% endfor %}
+									</ul>
+								</td>
+							{% elif properties.get("items", {}).get("bsonType", "None") == "json_district_enum" %}
+								<td>
+									<ul>
+										{% set length = item[field]|length %}
+										{% set max_length = properties.get("max_length") %}
+										{% if max_length and max_length is string %}
+											{% set max_length = item.get(max_length, 0) %}
+										{% endif %}
+										{% if max_length and length < max_length %}
+											{% set length = max_length %}
+										{% endif %}
+										{% set district_data = json_data[properties.get("items", {}).get("json_data")] %}
+										{% for i in range(0, length) %}
+											{% if item[field][i] and item[field][i] in district_data %}
+												<li>{{ district_data[item[field][i]]["display_name"] }}</li>
+											{% else %}
+												<li>None</li>
+											{% endif %}
+										{% endfor %}
+									</ul>
+								</td>
+							{% elif properties.get("items", {}).get("bsonType", "None") == "json_unit_enum" %}
+								<td>
+									<ul>
+										{% set length = item[field]|length %}
+										{% set max_length = properties.get("max_length") %}
+										{% if max_length and max_length is string %}
+											{% set max_length = item.get(max_length, 0) %}
+										{% endif %}
+										{% if max_length and length < max_length %}
+											{% set length = max_length %}
+										{% endif %}
+										{% set combined_data = {} %}
+										{% for file_name in properties.get("items", {}).get("json_data", []) %}
+											{% set combined_data = combined_data.update(json_data[file_name]) %}
+										{% endfor %}
+										{% for i in range(0, length) %}
+											{% if item[field][i] and item[field][i] in combined_data %}
+												<li>{{ combined_data[item[field][i]]["display_name"] }}</li>
+											{% else %}
+												<li>None</li>
+											{% endif %}
 										{% endfor %}
 									</ul>
 								</td>

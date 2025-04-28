@@ -21,7 +21,7 @@
 		    "enum": ["None", "Airborne", "Abstemious", "Aggressive", "Aquatic", "Charismatic", "Courageous", "Curious", "Docile", "Fecund", "Industrious", "Lucky", "Magical", "Semi-Aquatic", "Sturdy", "Swift", "Venerable"],
         "laws": {
           "Airborne": {
-            "nation_mundane_unit_flight": 1
+            "nation_mundane_unit_terrain_speed_cost": -1
           },
           "Abstemious": {
             "nation_food_consumption": -3,

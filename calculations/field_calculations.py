@@ -22,29 +22,41 @@ def calculate_all_fields(target, schema, target_data_type):
         districts = collect_nation_districts(target)
     elif target_data_type == "merchant":
         districts = collect_merchant_districts(target)
+    elif target_data_type == "mercenary":
+        districts = collect_mercenary_districts(target)
     district_totals = sum_district_totals(districts)
 
-    cities = collect_cities(target)
-    city_totals = sum_city_totals(cities)
-
-    node_modifiers = collect_nodes(target, modifier_totals, district_totals, city_totals, law_totals)
-    node_totals = sum_node_totals(node_modifiers)
-
-    jobs_assigned = collect_jobs_assigned(target)
-    job_details = calculate_job_details(target, modifier_totals, district_totals, city_totals, node_totals, law_totals)
-    job_totals = sum_job_totals(jobs_assigned, job_details)
-
-    land_units_assigned = collect_land_units_assigned(target)
-    land_unit_details = calculate_unit_details(target, "land", land_unit_json_files, modifier_totals, district_totals, city_totals, node_totals, law_totals)
-
-    naval_units_assigned = collect_naval_units_assigned(target)
-    naval_unit_details = calculate_unit_details(target, "naval", naval_unit_json_files, modifier_totals, district_totals, city_totals, node_totals, law_totals)
-
-    unit_totals = sum_all_unit_totals(land_units_assigned, land_unit_details, naval_units_assigned, naval_unit_details)
-
+    city_totals = {}
+    node_totals = {}
+    job_details = {}
+    job_totals = {}
+    land_unit_details = {}
+    naval_unit_details = {}
+    unit_totals = {}
     prestige_modifiers = {}
-    if target.get("empire", False):
-        prestige_modifiers = calculate_prestige_modifiers(target, schema_properties)
+
+    if target_data_type == "nation":
+        cities = collect_cities(target)
+        city_totals = sum_city_totals(cities)
+
+        node_modifiers = collect_nodes(target, modifier_totals, district_totals, city_totals, law_totals)
+        node_totals = sum_node_totals(node_modifiers)
+
+        jobs_assigned = collect_jobs_assigned(target)
+        job_details = calculate_job_details(target, modifier_totals, district_totals, city_totals, node_totals, law_totals)
+        job_totals = sum_job_totals(jobs_assigned, job_details)
+
+        land_units_assigned = collect_land_units_assigned(target)
+        land_unit_details = calculate_unit_details(target, "land", land_unit_json_files, modifier_totals, district_totals, city_totals, node_totals, law_totals)
+
+        naval_units_assigned = collect_naval_units_assigned(target)
+        naval_unit_details = calculate_unit_details(target, "naval", naval_unit_json_files, modifier_totals, district_totals, city_totals, node_totals, law_totals)
+
+        unit_totals = sum_all_unit_totals(land_units_assigned, land_unit_details, naval_units_assigned, naval_unit_details)
+
+        prestige_modifiers = {}
+        if target.get("empire", False):
+            prestige_modifiers = calculate_prestige_modifiers(target, schema_properties)
 
     attributes_to_precalculate = ["effective_territory", "road_capacity", "effective_pop_capacity", "pop_count"]
 
@@ -227,13 +239,20 @@ def collect_merchant_districts(target):
     for i in range(1, 4):
         production_district = target.get("production_district_" + str(i), "")
         if production_district:
-            collected_modifiers.append(json_data["merchant_production_districts"].get(production_district, "").get("modifiers", {}))
+            collected_modifiers.append(json_data["merchant_production_districts"].get(production_district, {}).get("modifiers", {}))
     
-    collected_modifiers.append(json_data["merchant_specialty_districts"].get(target.get("specialty_district", ""), {}).get("modifiers", {}))
+    collected_modifiers.append(json_data["merchant_specialty_districts"].get(target.get("specialty_district", {}), {}).get("modifiers", {}))
     collected_modifiers.append(json_data["merchant_luxury_districts"].get(target.get("luxury_district", ""), {}).get("modifiers", {}))
 
     return collected_modifiers
 
+def collect_mercenary_districts(target):
+    collected_modifiers = []
+
+    for district in target.get("districts", []):
+        collected_modifiers.append(json_data["mercenary_districts"].get(district, {}).get("modifiers", {}))
+    
+    return collected_modifiers
 
 def collect_cities(target):
     nation_cities = target.get("cities", [])

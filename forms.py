@@ -4,7 +4,7 @@ from wtforms import FieldList, FormField, HiddenField, SubmitField, MultipleFile
 from wtforms import widgets
 from wtforms.validators import DataRequired, NumberRange, Optional, ValidationError
 from bson import ObjectId
-from app_core import json_data, category_data
+from app_core import json_data, category_data, land_unit_json_files, naval_unit_json_files
 import json
 import copy
 
@@ -56,7 +56,7 @@ class ResourceStorageDict(Form):
         
         return cls
 
-    def load_form_from_item(self, item):
+    def load_form_from_item(self, item, schema):
         # Handle resource storage
         if item:
             general_resources = json_data.get("general_resources", [])
@@ -91,7 +91,7 @@ class NodeDict(Form):
         
         return cls
 
-    def load_form_from_item(self, item):
+    def load_form_from_item(self, item, schema):
         """Loads form data from a database item"""
         for field_name, field in self._fields.items():
                 if isinstance(field, SelectField) and field.data:
@@ -120,7 +120,7 @@ class NodeDict(Form):
                                 # For simple value arrays
                                 field.append_entry(value)
                     elif isinstance(field, FormField):
-                        field.load_form_from_item(field_value)
+                        field.load_form_from_item(field_value, schema)
                     else:
                         field.data = field_value
 
@@ -138,7 +138,7 @@ class JobAssignmentDict(Form):
         
         return cls
     
-    def load_form_from_item(self, item):
+    def load_form_from_item(self, item, schema):
         """Loads form data from a database item"""
         for field_name, field in self._fields.items():
                 if isinstance(field, SelectField) and field.data:
@@ -167,7 +167,7 @@ class JobAssignmentDict(Form):
                                 # For simple value arrays
                                 field.append_entry(value)
                     elif isinstance(field, FormField):
-                        field.load_form_from_item(field_value)
+                        field.load_form_from_item(field_value, schema)
                     else:
                         field.data = field_value
 
@@ -185,7 +185,7 @@ class LandUnitAssignmentDict(Form):
         
         return cls
     
-    def load_form_from_item(self, item):
+    def load_form_from_item(self, item, schema):
         """Loads form data from a database item"""
         for field_name, field in self._fields.items():
                 if isinstance(field, SelectField) and field.data:
@@ -214,7 +214,7 @@ class LandUnitAssignmentDict(Form):
                                 # For simple value arrays
                                 field.append_entry(value)
                     elif isinstance(field, FormField):
-                        field.load_form_from_item(field_value)
+                        field.load_form_from_item(field_value, schema)
                     else:
                         field.data = field_value
 
@@ -232,7 +232,7 @@ class NavalUnitAssignmentDict(Form):
         
         return cls
     
-    def load_form_from_item(self, item):
+    def load_form_from_item(self, item, schema):
         """Loads form data from a database item"""
         for field_name, field in self._fields.items():
                 if isinstance(field, SelectField) and field.data:
@@ -261,7 +261,7 @@ class NavalUnitAssignmentDict(Form):
                                 # For simple value arrays
                                 field.append_entry(value)
                     elif isinstance(field, FormField):
-                        field.load_form_from_item(field_value)
+                        field.load_form_from_item(field_value, schema)
                     else:
                         field.data = field_value
 
@@ -276,7 +276,7 @@ class ModifierForm(Form):
     class Meta:
         csrf = False
     
-    def load_form_from_item(self, item):
+    def load_form_from_item(self, item, schema):
         """Loads form data from a database item"""
         for field_name, field in self._fields.items():
                 if isinstance(field, SelectField) and field.data:
@@ -305,7 +305,7 @@ class ModifierForm(Form):
                                 # For simple value arrays
                                 field.append_entry(value)
                     elif isinstance(field, FormField):
-                        field.load_form_from_item(field_value)
+                        field.load_form_from_item(field_value, schema)
                     else:
                         field.data = field_value
 
@@ -327,7 +327,7 @@ class DistrictDict(Form):
         for node in node_options:
             self.node.choices.append(node)
     
-    def load_form_from_item(self, item):
+    def load_form_from_item(self, item, schema):
         """Loads form data from a database item"""
         for field_name, field in self._fields.items():
                 if isinstance(field, SelectField) and field.data:
@@ -356,7 +356,7 @@ class DistrictDict(Form):
                                 # For simple value arrays
                                 field.append_entry(value)
                     elif isinstance(field, FormField):
-                        field.load_form_from_item(field_value)
+                        field.load_form_from_item(field_value, schema)
                     else:
                         field.data = field_value
 
@@ -383,7 +383,7 @@ class CityDict(Form):
         for wall in wall_options:
             self.wall.choices.append(wall)
 
-    def load_form_from_item(self, item):
+    def load_form_from_item(self, item, schema):
         """Loads form data from a database item"""
         for field_name, field in self._fields.items():
                 if isinstance(field, SelectField) and field.data:
@@ -412,7 +412,7 @@ class CityDict(Form):
                                 # For simple value arrays
                                 field.append_entry(value)
                     elif isinstance(field, FormField):
-                        field.load_form_from_item(field_value)
+                        field.load_form_from_item(field_value, schema)
                     else:
                         field.data = field_value
 
@@ -430,12 +430,16 @@ class BaseSchemaForm(FlaskForm):
     reason = TextAreaField("Reason")
     submit = SubmitField("Save")
 
-    def populate_select_field(self, field_name, schema, dropdown_options):
+    def populate_select_field(self, field_name, field, schema, dropdown_options):
         """Populates a select field with options"""
-        if not hasattr(self, field_name):
+
+        if isinstance(field, FieldList):
+            print("Field list")
+            for entry in field.entries:
+                print(entry)
+                self.populate_select_field(field_name, entry, schema, dropdown_options)
             return
 
-        field = getattr(self, field_name)
         if not isinstance(field, SelectField):
             return
 
@@ -444,7 +448,18 @@ class BaseSchemaForm(FlaskForm):
         default_options = field_schema.get("default_options", [])
         
         choices = [("", none_result)] + [(option, option) for option in default_options]
-        if field_name in dropdown_options:
+        if field_name == "districts":
+            choices += [(district, json_data["mercenary_districts"][district]["display_name"]) for district in json_data["mercenary_districts"]]
+        
+        elif field_name == "units":
+            combined_data = {}
+            json_files = land_unit_json_files + naval_unit_json_files
+            for file_name in json_files:
+                combined_data.update(json_data[file_name])
+            choices += [(key, data.get("display_name", key))
+                        for key, data in combined_data.items()]
+        
+        elif field_name in dropdown_options:
             choices += [(str(option["_id"]), option["name"]) 
                        for option in dropdown_options[field_name]]
         
@@ -454,9 +469,15 @@ class BaseSchemaForm(FlaskForm):
         """Populates all linked fields with their options"""
         for field_name, field_schema in schema.get("properties", {}).items():
             if field_schema.get("collections"):
-                self.populate_select_field(field_name, schema, dropdown_options)
+                field = getattr(self, field_name)
+                if field:
+                    self.populate_select_field(field_name, self[field_name], schema, dropdown_options)
+            elif field_schema.get("bsonType") == "array" and (field_schema.get("items", {}).get("bsonType") == "json_district_enum" or field_schema.get("items", {}).get("bsonType") == "json_unit_enum"):
+                field = getattr(self, field_name)
+                for entry in field.entries:
+                    self.populate_select_field(field_name, entry, schema, dropdown_options)
     
-    def load_form_from_item(self, item):
+    def load_form_from_item(self, item, schema):
         """Loads form data from a database item"""
         for field_name, field in self._fields.items():
                 if isinstance(field, SelectField) and field.data:
@@ -472,20 +493,46 @@ class BaseSchemaForm(FlaskForm):
                         # Clear existing entries
                         while len(field.entries) > 0:
                             field.pop_entry()
+                        
+                        if field_name == "districts":
+                            districts = item.get("districts", [])
+                            max_districts = schema.get("properties", {}).get(field_name, {}).get("max_length", 0)
+                            if isinstance(max_districts, str):
+                                max_districts = item.get(max_districts, 0)
                             
-                        # Add new entries from the data
-                        for value in field_value:
-                            if isinstance(value, dict):
-                                # For object arrays
-                                field.append_entry(value)
-                            elif isinstance(value, ObjectId):
-                                # For linked object arrays
-                                field.append_entry(str(value))
-                            else:
-                                # For simple value arrays
-                                field.append_entry(value)
+                            if len(districts) < max_districts:
+                                districts.extend([""] * (max_districts - len(districts)))
+                            
+
+                            for district in districts:
+                                field.append_entry(district)
+                            
+                        elif field_name == "units":
+                            units = item.get("units", [])
+                            max_units = schema.get("properties", {}).get(field_name, {}).get("max_length", 0)
+                            if isinstance(max_units, str):
+                                max_units = item.get(max_units, 0)
+                            
+                            if len(units) < max_units:
+                                units.extend([""] * (max_units - len(units)))
+                            
+                            for unit in units:
+                                field.append_entry(unit)
+                            
+                        else:
+                            # Add new entries from the data
+                            for value in field_value:
+                                if isinstance(value, dict):
+                                    # For object arrays
+                                    field.append_entry(value)
+                                elif isinstance(value, ObjectId):
+                                    # For linked object arrays
+                                    field.append_entry(str(value))
+                                else:
+                                    # For simple value arrays
+                                    field.append_entry(value)
                     elif isinstance(field, FormField):
-                        field.load_form_from_item(field_value)
+                        field.load_form_from_item(field_value, schema)
                     else:
                         field.data = field_value
 
@@ -514,7 +561,7 @@ class DynamicSchemaForm(BaseSchemaForm):
             form = form_class(formdata=formdata)
         elif item:
             form = form_class()
-            form.load_form_from_item(item)
+            form.load_form_from_item(item, schema)
         else:
             form = form_class()
         
@@ -580,6 +627,24 @@ class DynamicSchemaForm(BaseSchemaForm):
             elif items_type == "string":
                 # For simple string arrays
                 return FieldList(StringField("Value"), min_entries=0)
+            
+            elif items_type == "json_district_enum":
+                subfield = SelectField("Value")
+                subfield.choices = [("", "None")] + [(key, data.get("display_name", key))
+                    for key, data in json_data[items_schema["json_data"]].items()]
+                
+                return FieldList(subfield, min_entries=0)
+
+            elif items_type == "json_unit_enum":
+                subfield = SelectField("Value")
+
+                combined_data = {}
+                for file_name in items_schema["json_data"]:
+                    combined_data.update(json_data[file_name])
+                subfield.choices = [("", "None")] + [(key, data.get("display_name", key))
+                for key, data in combined_data.items()]
+                
+                return FieldList(subfield, min_entries=0)
                 
             elif items_type == "linked_object":
                 # For arrays of linked objects
@@ -683,7 +748,7 @@ class NationForm(BaseSchemaForm):
             form = form_class(formdata=formdata)
         elif nation:
             form = form_class()
-            form.load_form_from_item(nation)
+            form.load_form_from_item(nation, schema)
         else:
             form = form_class()
         
@@ -834,7 +899,7 @@ class JobForm(BaseSchemaForm):
             form = form_class(formdata=formdata)
         elif nation:
             form = form_class()
-            form.load_form_from_item(nation)
+            form.load_form_from_item(nation, schema)
         else:
             form = form_class()
         
@@ -930,7 +995,7 @@ class NewCharacterForm(BaseSchemaForm):
             form = form_class(formdata=formdata)
         elif item:
             form = form_class()
-            form.load_form_from_item(item)
+            form.load_form_from_item(item, schema)
         else:
             form = form_class()
 
@@ -938,6 +1003,8 @@ class NewCharacterForm(BaseSchemaForm):
 
 # Global form generator instance
 form_generator = FormGenerator()
+
+
 
 
 

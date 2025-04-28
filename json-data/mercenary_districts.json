@@ -1,0 +1,387 @@
+{
+	"tollerable_conditions": {
+		"display_name": "Tollerable Conditions",
+		"cost": {
+			"money": 400
+		},
+		"modifiers": {
+			"upkeep": 50,
+			"unit_hp": 1,
+			"unit_morale": 1
+		},
+		"size": "Small"
+	},
+	"cheap_weapons": {
+		"display_name": "Cheap Weapons",
+		"cost": {
+			"money": 400
+		},
+		"modifiers": {
+			"upkeep": 50,
+			"unit_attack": 1
+		},
+		"size": "Small"
+	},
+	"cheap_armor": {
+		"display_name": "Cheap Armor",
+		"cost": {
+			"money": 400
+		},
+		"modifiers": {
+			"upkeep": 50,
+			"unit_defense": 1
+		},
+		"size": "Small"
+	},
+	"spearhead_initiative": {
+		"display_name": "Spearhead Initiative",
+		"cost": {
+			"money": 400
+		},
+		"modifiers": {
+			"upkeep": 50,
+			"unit_speed_first_turn": 1
+		},
+		"size": "Small"
+	},
+	"self-esteem": {
+		"display_name": "Self-Esteem",
+		"cost": {
+			"money": 400
+		},
+		"modifiers": {
+			"upkeep": 50
+		},
+		"size": "Small"
+	},
+	"strategist_camp": {
+		"display_name": "Strategist Camp",
+		"cost": {
+			"money": 600
+		},
+		"modifiers": {
+			"upkeep": 75,
+			"maneuvers": 1
+		},
+		"size": "Medium"
+	},
+	"competitive_spirit": {
+		"display_name": "Competitive Spirit",
+		"cost": {
+			"money": 600
+		},
+		"modifiers": {
+			"upkeep": 75,
+			"unit_damage_against_mercenaries": 1
+		},
+		"size": "Medium"
+	},
+	"private_docks": {
+		"display_name": "Private Docks",
+		"cost": {
+			"money": 600
+		},
+		"modifiers": {
+			"upkeep": 75,
+			"random_previous_era_naval_units": 2
+		},
+		"size": "Medium"
+	},
+	"rage_lessons": {
+		"display_name": "Rage Lessons",
+		"cost": {
+			"money": 600
+		},
+		"modifiers": {
+			"upkeep": 75,
+			"unit_retaliation": 1
+		},
+		"size": "Medium"
+	},
+	"valiant_speeches": {
+		"display_name": "Valiant Speeches",
+		"cost": {
+			"money": 600
+		},
+		"modifiers": {
+			"upkeep": 75,
+			"civilian_unit_hp": 1,
+			"civilian_unit_damage": 1
+		},
+		"size": "Medium"
+	},
+	"personal_training": {
+		"display_name": "Personal Training",
+		"cost": {
+			"money": 600
+		},
+		"modifiers": {
+			"upkeep": 75,
+			"leader_unit_strength": 1
+		},
+		"size": "Medium"
+	},
+	"unrelenting_leader": {
+		"display_name": "Unrelenting Leader",
+		"cost": {
+			"money": 600
+		},
+		"modifiers": {
+			"upkeep": 75,
+			"leader_unit_morale_immune": 1
+		},
+		"size": "Medium"
+	},
+	"loyal_apprentices": {
+		"display_name": "Loyal Apprentices",
+		"cost": {
+			"money": 600
+		},
+		"modifiers": {
+			"upkeep": 75,
+			"previous_era_civilian_units": 2
+		},
+		"size": "Medium"
+	},
+	"training_camps": {
+		"display_name": "Training Camps",
+		"cost": {
+			"money": 600
+		},
+		"modifiers": {
+			"upkeep": 75
+		},
+		"size": "Medium"
+	},
+	"oaths_of_silence": {
+		"display_name": "Oaths of Silence",
+		"cost": {
+			"money": 600
+		},
+		"modifiers": {
+			"upkeep": 75
+		},
+		"size": "Medium"
+	},
+	"personal_chef": {
+		"display_name": "Personal Chef",
+		"cost": {
+			"money": 600
+		},
+		"modifiers": {
+			"upkeep": 75,
+			"leader_unit_hp": 3,
+			"leader_unit_morale": 1
+		},
+		"size": "Medium"
+	},
+	"decent_weapons": {
+		"display_name": "Decent Weapons",
+		"cost": {
+			"money": 900
+		},
+		"modifiers": {
+			"upkeep": 100,
+			"unit_attack": 2
+		},
+		"size": "Large"
+	},
+	"decent_armor": {
+		"display_name": "Decent Armor",
+		"cost": {
+			"money": 900
+		},
+		"modifiers": {
+			"upkeep": 100,
+			"unit_defense": 2
+		},
+		"size": "Large"
+	},
+	"expert_planners": {
+		"display_name": "Expert Planners",
+		"cost": {
+			"money": 900
+		},
+		"modifiers": {
+			"upkeep": 100
+		},
+		"size": "Large"
+	},
+	"reliable_talent": {
+		"display_name": "Reliable Talent",
+		"cost": {
+			"money": 900
+		},
+		"modifiers": {
+			"upkeep": 100,
+			"attack_rerolls": 1,
+			"defense_rerolls": 1
+		},
+		"size": "Large"
+	},
+	"breathing_exercises": {
+		"display_name": "Breathing Exercises",
+		"cost": {
+			"money": 900
+		},
+		"modifiers": {
+			"upkeep": 100,
+			"strength_on_water": 1,
+			"naval_unit_speed": 1
+		},
+		"size": "Large"
+	},
+	"unique_plate": {
+		"display_name": "Unique Plate",
+		"cost": {
+			"money": 900
+		},
+		"modifiers": {
+			"upkeep": 100,
+			"unit_defense": 1,
+			"unit_armor_cannot_be_ignored": 1
+		},
+		"size": "Large"
+	},
+	"well-kept_blade": {
+		"display_name": "Well-Kept Blade",
+		"cost": {
+			"money": 900
+		},
+		"modifiers": {
+			"upkeep": 100,
+			"leader_unit_damage": 1,
+			"leader_unit_attack": 1
+		},
+		"size": "Large"
+	},
+	"old-world_connections": {
+		"display_name": "Old-World Connections",
+		"cost": {
+			"money": 900
+		},
+		"modifiers": {
+			"upkeep": 100,
+			"random_previous_era_land_units": 2
+		},
+		"size": "Large"
+	},
+	"established_cache": {
+		"display_name": "Established Cache",
+		"cost": {
+			"money": 900
+		},
+		"modifiers": {
+			"upkeep": 100
+		},
+		"size": "Large"
+	},
+	"honor_placards": {
+		"display_name": "Honor Placards",
+		"cost": {
+			"money": 900
+		},
+		"modifiers": {
+			"upkeep": 100
+		},
+		"size": "Large"
+	},
+	"mystical_tutelage": {
+		"display_name": "Mystical Tutelage",
+		"cost": {
+			"money": 900
+		},
+		"modifiers": {
+			"upkeep": 100
+		},
+		"size": "Large"
+	},
+	"perfect_form": {
+		"display_name": "Perfect Form",
+		"cost": {
+			"money": 900
+		},
+		"modifiers": {
+			"upkeep": 100,
+			"duel_rerolls": 1
+		},
+		"size": "Large"
+	},
+	"well-paid_messengers": {
+		"display_name": "Well-Paid Messengers",
+		"cost": {
+			"money": 1250
+		},
+		"modifiers": {
+			"upkeep": 150,
+			"unit_speed": 1
+		},
+		"size": "Massive"
+	},
+	"windrunners": {
+		"display_name": "Windrunners",
+		"cost": {
+			"money": 1250
+		},
+		"modifiers": {
+			"upkeep": 150,
+			"mundane_unit_terrain_speed_cost": -1
+		},
+		"size": "Massive"
+	},
+	"unwavering_loyalty": {
+		"display_name": "Unwavering Loyalty",
+		"cost": {
+			"money": 1250
+		},
+		"modifiers": {
+			"upkeep": 150,
+			"undead_army_units": 2
+		},
+		"size": "Massive"
+	},
+	"recruiting_grounds": {
+		"display_name": "Recruiting Grounds",
+		"cost": {
+			"money": 1250
+		},
+		"modifiers": {
+			"upkeep": 150,
+			"unlocks_all_mundane_units": 1
+		},
+		"size": "Massive"
+	},
+	"permanent_portals": {
+		"display_name": "Permanent Portals",
+		"cost": {
+			"money": 1250
+		},
+		"modifiers": {
+			"upkeep": 150,
+			"unlocks_all_magical_units": 1
+		},
+		"size": "Massive"
+	},
+	"unique_metal": {
+		"display_name": "Unique Metal",
+		"cost": {
+			"money": 1250
+		},
+		"modifiers": {
+			"upkeep": 150,
+			"unit_attack": 1
+		},
+		"size": "Massive"
+	},
+	"new-world_connections": {
+		"display_name": "New-World Connections",
+		"cost": {
+			"money": 1250
+		},
+		"modifiers": {
+			"upkeep": 150,
+			"current_era_random_land_units": 2
+		},
+		"size": "Massive"
+	}
+}

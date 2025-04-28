@@ -137,12 +137,6 @@
 		    "label": "Treasury",
         "description": "The amount of money the mercenary company has in its coffers"
       },
-      "hiring_cost": {
-        "bsonType": "number",
-		    "label": "Hiring Cost",
-        "description": "The minimum amount of money the mercenary company charges to hire",
-		    "calculated": true
-      },
       "budget": {
         "bsonType": "number",
 		    "label": "Budget",
@@ -155,6 +149,12 @@
         "description": "The amount of money the mercenary company has spent to recruit units",
 		    "calculated": true
       },
+      "hiring_cost": {
+        "bsonType": "number",
+		    "label": "Hiring Cost",
+        "description": "The minimum amount of money the mercenary company charges to hire",
+		    "calculated": true
+      },
       "max_units": {
         "bsonType": "number",
 		    "label": "Max Units",
@@ -165,16 +165,23 @@
         "bsonType": "array",
 		    "label": "Districts",
         "description": "The districts the mercenary company owns",
+        "max_length": 3,
         "items":{
-          "bsonType": "string"
+          "bsonType": "json_district_enum",
+		      "json_data": "mercenary_districts"
         }
       },
       "units": {
         "bsonType": "array",
 		    "label": "Units",
         "description": "The units the mercenary company owns",
+        "max_length": "max_units",
         "items":{
-          "bsonType": "string"
+          "bsonType": "json_unit_enum",
+          "json_data": ["ancient_magical_land_units", "ancient_mundane_land_units",
+                         "classical_magical_land_units", "classical_mundane_land_units",
+                         "ancient_mundane_naval_units", "classical_magical_naval_units",
+                         "classical_mundane_naval_units"]
         }
       }
     }
