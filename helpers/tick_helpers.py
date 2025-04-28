@@ -1,8 +1,8 @@
 from helpers.data_helpers import get_data_on_category
-from calculations.compute_functions import calculate_all_fields
+from calculations.field_calculations import calculate_all_fields
 from pymongo import ASCENDING
 from helpers.change_helpers import request_change, approve_change
-from app_core import mongo, general_resources, unique_resources
+from app_core import mongo, json_data
 from flask import flash
 from app_core import backup_mongodb
 import random
@@ -318,10 +318,10 @@ def nation_concessions_tick(old_nation, new_nation, schema):
     if concessions_roll <= old_nation.get("concessions_chance", 0):
         concessions_qty = old_nation.get("concessions_qty", 0)
         resources = []
-        for resource in general_resources:
+        for resource in json_data["general_resources"]:
             if resource["key"] != "research":
                 resources.append(resource["key"])
-        for resource in unique_resources:
+        for resource in json_data["unique_resources"]:
             resources.append(resource["key"])
         
         first_resource = random.choice(resources)
