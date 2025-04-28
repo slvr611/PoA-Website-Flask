@@ -299,9 +299,9 @@ def character_age_tick(old_character, new_character, schema):
 def character_modifier_decay_tick(old_character, new_character, schema):
     new_modifiers = []
     for modifier in old_character.get("modifiers", []):
-        if modifier["duration"] > 0:
-            modifier["duration"] -= 1
-        if modifier["duration"] != 0:
+        if int(modifier["duration"]) > 0:
+            modifier["duration"] = int(modifier["duration"]) - 1
+        if int(modifier["duration"]) != 0:
             new_modifiers.append(modifier)
     new_character["modifiers"] = new_modifiers
     return ""
@@ -380,7 +380,12 @@ def nation_infamy_decay_tick(old_nation, new_nation, schema):
     return ""
 
 def nation_prestige_gain_tick(old_nation, new_nation, schema):
-    new_nation["prestige"] = int(old_nation.get("prestige", 0)) + old_nation.get("prestige_gain", 0)
+    if not old_nation["empire"]:
+        return ""
+    old_nation_prestige = old_nation.get("prestige", 0)
+    if old_nation_prestige == "":
+        old_nation_prestige = 0
+    new_nation["prestige"] = old_nation_prestige + old_nation.get("prestige_gain", 0)
     return ""
 
 def nation_stability_tick(old_nation, new_nation, schema):
