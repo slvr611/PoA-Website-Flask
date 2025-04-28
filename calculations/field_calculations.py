@@ -327,7 +327,8 @@ def calculate_job_details(target, modifier_totals, district_totals, city_totals,
     
     new_job_details = {}
     for job, details in job_details.items():
-        if "requirements" not in details or ("district" in details["requirements"] and details["requirements"]["district"] in district_types):
+        locked = modifier_totals.get("locks_" + job, 0) + district_totals.get("locks_" + job, 0) + city_totals.get("locks_" + job, 0) + law_totals.get("locks_" + job, 0) + node_totals.get("locks_" + job, 0)
+        if ("requirements" not in details or ("district" in details["requirements"] and details["requirements"]["district"] in district_types)) and not locked:
             new_details = copy.deepcopy(details)
             all_resource_production = 0
             all_resource_upkeep = 0
