@@ -1,7 +1,7 @@
 from helpers.data_helpers import get_data_on_category
 from calculations.field_calculations import calculate_all_fields
 from pymongo import ASCENDING
-from helpers.change_helpers import request_change, approve_change
+from helpers.change_helpers import request_change, system_approve_change
 from app_core import mongo, json_data
 from flask import flash
 from app_core import backup_mongodb
@@ -151,7 +151,7 @@ def tick(form_data):
             after_data=new_characters[i],
             reason="Tick Update for " + old_characters[i]["name"]
         )
-        approve_change(change_id)
+        system_approve_change(change_id)
     
     for i in range(len(old_artifacts)):
         change_id = request_change(
@@ -162,7 +162,7 @@ def tick(form_data):
             after_data=new_artifacts[i],
             reason="Tick Update for " + old_artifacts[i]["name"]
         )
-        approve_change(change_id)
+        system_approve_change(change_id)
 
     for i in range(len(old_merchants)):
         change_id = request_change(
@@ -173,7 +173,7 @@ def tick(form_data):
             after_data=new_merchants[i],
             reason="Tick Update for " + old_merchants[i]["name"]
         )
-        approve_change(change_id)
+        system_approve_change(change_id)
 
     for i in range(len(old_mercenaries)):
         change_id = request_change(
@@ -184,7 +184,7 @@ def tick(form_data):
             after_data=new_mercenaries[i],
             reason="Tick Update for " + old_mercenaries[i]["name"]
         )
-        approve_change(change_id)
+        system_approve_change(change_id)
     
     for i in range(len(old_factions)):
         change_id = request_change(
@@ -195,7 +195,7 @@ def tick(form_data):
             after_data=new_factions[i],
             reason="Tick Update for " + old_factions[i]["name"]
         )
-        approve_change(change_id)
+        system_approve_change(change_id)
 
     for i in range(len(old_nations)):
         change_id = request_change(
@@ -206,7 +206,7 @@ def tick(form_data):
             after_data=new_nations[i],
             reason="Tick Update for " + old_nations[i]["name"]
         )
-        approve_change(change_id)
+        system_approve_change(change_id)
 
     if "run_Give Tick Summary" in form_data:
         give_tick_summary(tick_summary)
@@ -274,7 +274,7 @@ def character_death_tick(old_character, new_character, calculated_character, sch
                         after_data=new_nation,
                         reason="Death of " + old_character.get('name', 'Unknown') + " has caused a stability loss for " + old_nation.get('name', 'Unknown')
                     )
-                    approve_change(change_id)
+                    system_approve_change(change_id)
         
         artifact_schema, artifact_db = get_data_on_category("artifacts")
         artifacts = list(artifact_db.find({"owner": old_character["_id"]}))
@@ -298,7 +298,7 @@ def character_death_tick(old_character, new_character, calculated_character, sch
                         after_data=new_artifact,
                         reason="Death of " + old_character.get('name', 'Unknown') + " has caused " + old_artifact.get('name', 'Unknown') + " to be lost"
                     )
-                    approve_change(change_id)
+                    system_approve_change(change_id)
 
     return result
 
