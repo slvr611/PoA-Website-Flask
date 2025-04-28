@@ -372,7 +372,7 @@ def update_rolling_karma(old_nation, new_nation, schema):
 
 def nation_infamy_decay_tick(old_nation, new_nation, schema):
     # TODO: Prevent Decay while at war
-    if old_nation["infamy"] < 5:
+    if int(old_nation.get("infamy", 0)) < 5:
         new_nation["infamy"] = 0
         return ""
     else:
@@ -461,9 +461,9 @@ def nation_passive_expansion_tick(old_nation, new_nation, schema):
 def nation_modifier_decay_tick(old_nation, new_nation, schema):
     new_modifiers = []
     for modifier in old_nation.get("modifiers", []):
-        if modifier["duration"] > 0:
-            modifier["duration"] -= 1
-        if modifier["duration"] != 0:
+        if int(modifier["duration"]) > 0:
+            modifier["duration"] = int(modifier["duration"]) - 1
+        if int(modifier["duration"]) != 0:
             new_modifiers.append(modifier)
     new_nation["modifiers"] = new_modifiers
     return ""
