@@ -13,7 +13,7 @@
         "bsonType": "linked_object",
         "label": "Market Head",
         "description": "The nation that currently heads up the market",
-		    "collections": ["nations", "merchant_companies"]
+		    "collections": ["nations", "merchants"]
       },
       "members": {
         "bsonType": "array",
