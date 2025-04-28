@@ -532,8 +532,6 @@ def compute_budget_spent(field, target, base_value, field_schema, overall_total_
     for unit in units:
         value += combined_json_data.get(unit, {}).get("recruitment_cost", {}).get("money", 0)
     
-    print("Budget spent: " + str(value))
-    
     return value
 
 def compute_hiring_cost(field, target, base_value, field_schema, overall_total_modifiers):
@@ -544,8 +542,6 @@ def compute_hiring_cost(field, target, base_value, field_schema, overall_total_m
     value += target.get("budget_spent", 0)
 
     value *= 1 + overall_total_modifiers.get("hiring_cost_mult", 0)
-
-    print("Hiring cost: " + str(value))
 
     return value
 
