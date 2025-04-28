@@ -212,6 +212,14 @@ def tick(form_data):
 
     return tick_summary
 
+def run_tick_async(form_data):
+    """Queue the tick process to run in the background"""
+    from threading import Thread
+    thread = Thread(target=tick, args=(form_data,))
+    thread.daemon = True
+    thread.start()
+    return "Tick process started in background. Check logs for results."
+
 ###########################################################
 # General Tick Functions
 ###########################################################
@@ -225,7 +233,6 @@ def backup_database():
     return success, message
 
 def give_tick_summary(tick_summary):
-    flash(tick_summary)
     print(tick_summary)
     return
 
