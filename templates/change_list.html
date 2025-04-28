@@ -43,7 +43,7 @@
                                 {% set after_value = change.after_requested_data[key] %}
                                 <div class="change-item">
                                     <div class="change-label">{{ label }}:</div>
-                                    {% if before_value is mapping %}
+                                    {% if before_value is mapping and after_value is mapping %}
                                         {# Handle single dictionary #}
                                         {% set all_keys = (before_value.keys() | list + after_value.keys() | list) | unique | sort %}
                                         {% for dict_key in all_keys %}
