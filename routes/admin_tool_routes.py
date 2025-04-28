@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, redirect, request, flash, url_for
+from flask import Blueprint, render_template, redirect, request, flash, url_for, send_file
 from helpers.auth_helpers import admin_required
 from helpers.data_helpers import get_data_on_category, generate_id_to_name_dict, compute_demographics
 from helpers.admin_tool_helpers import grow_population
@@ -300,3 +300,59 @@ def restore_database_route():
         flash(f"Database restoration failed: {message}", "error")
     
     return redirect(url_for("admin_tool_routes.database_management"))
+
+@admin_tool_routes.route('/tick_summaries', methods=['GET'])
+@admin_required
+def admin_tick_summaries():
+    """View available tick summaries"""
+    summary_dir = os.path.join(os.getcwd(), 'summaries')
+    os.makedirs(summary_dir, exist_ok=True)
+    
+    # Get all summary files
+    summaries = []
+    for filename in os.listdir(summary_dir):
+        if filename.startswith('tick_summary_') and filename.endswith('.txt'):
+            file_path = os.path.join(summary_dir, filename)
+            file_stats = os.stat(file_path)
+            
+            # Extract timestamp from filename
+            timestamp_str = filename.replace('tick_summary_', '').replace('.txt', '')
+            try:
+                timestamp = datetime.datetime.strptime(timestamp_str, '%Y%m%d_%H%M%S')
+                formatted_date = timestamp.strftime('%Y-%m-%d %H:%M:%S')
+            except:
+                formatted_date = "Unknown"
+            
+            summaries.append({
+                'filename': filename,
+                'path': file_path,
+                'size': file_stats.st_size,
+                'date': formatted_date,
+                'timestamp': timestamp_str
+            })
+    
+    # Sort by date (newest first)
+    summaries.sort(key=lambda x: x['timestamp'], reverse=True)
+    
+    return render_template('admin/tick_summaries.html', summaries=summaries)
+
+@admin_tool_routes.route('/tick_summaries/<filename>', methods=['GET'])
+@admin_required
+def download_tick_summary(filename):
+    """Download a specific tick summary"""
+    summary_dir = os.path.join(os.getcwd(), 'summaries')
+    file_path = os.path.join(summary_dir, filename)
+    
+    if not os.path.exists(file_path):
+        flash("Summary file not found", "error")
+        return redirect(url_for('admin_tick_summaries'))
+    
+    # Read file content
+    with open(file_path, 'r') as f:
+        content = f.read()
+    
+    # Option to download or view
+    if request.args.get('download') == 'true':
+        return send_file(file_path, as_attachment=True)
+    
+    return render_template('admin/view_tick_summary.html', content=content, filename=filename)

@@ -2,10 +2,12 @@ from helpers.data_helpers import get_data_on_category
 from calculations.field_calculations import calculate_all_fields
 from pymongo import ASCENDING
 from helpers.change_helpers import system_request_change, system_approve_change
-from app_core import mongo, json_data
+from app_core import mongo, json_data, upload_to_s3
 from flask import flash
 from app_core import backup_mongodb
 import random
+import os
+import datetime
 
 def tick(form_data):
     if "run_Backup Database" in form_data:
@@ -230,8 +232,29 @@ def backup_database():
     return success, message
 
 def give_tick_summary(tick_summary):
-    print(tick_summary)
-    return
+    """Save tick summary to a file and optionally email it"""
+    print(tick_summary)  # Keep console logging
+    
+    # Create a timestamp for the filename
+    timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+    
+    # Create summaries directory if it doesn't exist
+    summary_dir = os.path.join(os.getcwd(), 'summaries')
+    os.makedirs(summary_dir, exist_ok=True)
+    
+    # Save to file
+    summary_filename = f"tick_summary_{timestamp}.txt"
+    summary_path = os.path.join(summary_dir, summary_filename)
+    
+    with open(summary_path, 'w') as f:
+        f.write(tick_summary)
+    
+    
+    # If S3 is configured, upload the summary
+    if os.getenv("S3_BUCKET_NAME"):
+        upload_to_s3(summary_path, f"tick_summaries/{summary_filename}")
+    
+    return summary_path
 
 ###########################################################
 # Character Tick Functions
@@ -391,7 +414,7 @@ def faction_income_tick(old_faction, new_faction, calculated_faction, schema):
 def nation_income_tick(old_nation, new_nation, calculated_nation, schema):
     new_nation["money"] = int(old_nation.get("money", 0)) + calculated_nation.get("money_income", 0)
     for resource, amount in calculated_nation.get("resource_excess", {}).items():
-        new_nation["resource_storage"] = min(old_nation.get("resource_storage", {}).get(resource, 0) + amount, old_nation.get("resource_capacity", {}).get(resource, 0))
+        new_nation["resource_storage"][resource] = min(old_nation.get("resource_storage", {}).get(resource, 0) + amount, old_nation.get("resource_capacity", {}).get(resource, 0))
     
     return ""
 

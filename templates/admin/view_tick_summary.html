@@ -1,0 +1,21 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>Tick Summary: {{ filename }}</h1>
+    
+    <div class="mb-3">
+        <a href="{{ url_for('admin_tool_routes.admin_tick_summaries') }}" class="btn btn-secondary">Back to Summaries</a>
+        <a href="{{ url_for('admin_tool_routes.download_tick_summary', filename=filename, download='true') }}" class="btn btn-primary">Download</a>
+    </div>
+    
+    <div class="card">
+        <div class="card-header bg-primary text-white">
+            <h3 class="mb-0">Summary Content</h3>
+        </div>
+        <div class="card-body">
+            <pre class="bg-light p-3" style="white-space: pre-wrap;">{{ content }}</pre>
+        </div>
+    </div>
+</div>
+{% endblock %}
