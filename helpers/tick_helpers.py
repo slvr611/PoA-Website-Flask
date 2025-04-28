@@ -350,8 +350,8 @@ def faction_income_tick(old_faction, new_faction, schema):
 
 def nation_income_tick(old_nation, new_nation, schema):
     new_nation["money"] = int(old_nation.get("money", 0)) + old_nation.get("money_income", 0)
-    for resource, amount in old_nation.get("resource_income", {}).items():
-        new_nation[resource] = old_nation[resource] + amount
+    for resource, amount in old_nation.get("resource_excess", {}).items():
+        new_nation["resource_storage"] = min(max(old_nation.get("resource_storage", {}).get(resource, 0) + amount, 0), old_nation.get("resource_capacity", {}).get(resource, 0))
     
     return ""
 

@@ -20,7 +20,6 @@ def compute_prestige_gain(field, target, base_value, field_schema, overall_total
         elif pact.get("pact_type", "") == "Military Alliance":
             pact_prestige_loss += 2
     
-    print("Pact prestige loss: " + str(pact_prestige_loss))
     value -= min(pact_prestige_loss, 8)
 
     vassals = list(category_data["nations"]["database"].find({"overlord": str(target["_id"])}, {"_id": 1, "vassal_type": 1}))
@@ -33,8 +32,6 @@ def compute_prestige_gain(field, target, base_value, field_schema, overall_total
         else:
             non_provincial_vassal_prestige_gain += 1
     
-    print("Non-provincial vassal prestige gain: " + str(non_provincial_vassal_prestige_gain))
-    print("Provincial vassal prestige gain: " + str(provincial_vassal_prestige_gain))
     value += min(non_provincial_vassal_prestige_gain, 2)
     value += min(provincial_vassal_prestige_gain, 2)
 
@@ -51,8 +48,6 @@ def compute_prestige_gain(field, target, base_value, field_schema, overall_total
         elif artifact.get("rarity", "") == "Mythical":
             mythical_artifact_prestige_gain += 2
 
-    print("Legendary artifact prestige gain: " + str(legendary_artifact_prestige_gain))
-    print("Mythical artifact prestige gain: " + str(mythical_artifact_prestige_gain))
     value += min(legendary_artifact_prestige_gain, 2)
     value += min(mythical_artifact_prestige_gain, 2)
 
