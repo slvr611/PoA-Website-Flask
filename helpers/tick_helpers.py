@@ -41,6 +41,13 @@ def tick(form_data):
         if mercenary:
             new_mercenaries.append(mercenary.copy())
         
+    faction_schema, faction_db = get_data_on_category("factions")
+    old_factions = list(faction_db.find().sort("name", ASCENDING))
+    new_factions = []
+    for faction in old_factions:
+        if faction:
+            new_factions.append(faction.copy())
+
     nation_schema, nation_db = get_data_on_category("nations")
     old_nations = list(nation_db.find().sort("name", ASCENDING))
     new_nations = []
@@ -63,6 +70,10 @@ def tick(form_data):
     for i in range(len(old_mercenaries)):
         calculated_fields = calculate_all_fields(old_mercenaries[i], mercenary_schema, "mercenary")
         old_mercenaries[i].update(calculated_fields)
+
+    for i in range(len(old_factions)):
+        calculated_fields = calculate_all_fields(old_factions[i], faction_schema, "faction")
+        old_factions[i].update(calculated_fields)
 
     for i in range(len(old_nations)):
         calculated_fields = calculate_all_fields(old_nations[i], nation_schema, "nation")
@@ -91,6 +102,12 @@ def tick(form_data):
         if run_key in form_data:
             for i in range(len(old_mercenaries)):
                 tick_summary += tick_function(old_mercenaries[i], new_mercenaries[i], mercenary_schema)
+
+    for tick_function_label, tick_function in FACTION_TICK_FUNCTIONS.items():
+        run_key = f"run_{tick_function_label}"
+        if run_key in form_data:
+            for i in range(len(old_nations)):
+                tick_summary += tick_function(old_factions[i], new_factions[i], faction_schema)
 
     for tick_function_label, tick_function in NATION_TICK_FUNCTIONS.items():
         run_key = f"run_{tick_function_label}"
@@ -139,6 +156,17 @@ def tick(form_data):
             before_data=old_mercenaries[i],
             after_data=new_mercenaries[i],
             reason="Tick Update for " + old_mercenaries[i]["name"]
+        )
+        approve_change(change_id)
+    
+    for i in range(len(old_factions)):
+        change_id = request_change(
+            data_type="factions",
+            item_id=old_factions[i]["_id"],
+            change_type="Update",
+            before_data=old_factions[i],
+            after_data=new_factions[i],
+            reason="Tick Update for " + old_factions[i]["name"]
         )
         approve_change(change_id)
 
@@ -314,6 +342,15 @@ def mercenary_upkeep_tick(old_mercenary, new_mercenary, schema):
     return ""
 
 ###########################################################
+# Faction Tick Functions
+###########################################################
+
+def faction_income_tick(old_faction, new_faction, schema):
+    new_faction["influence"] = int(old_faction.get("influence", 0)) + old_faction.get("influence_income", 0)
+    return ""
+
+
+###########################################################
 # Nation Tick Functions
 ###########################################################
 
@@ -470,6 +507,10 @@ MERCHANT_TICK_FUNCTIONS = {
 
 MERCENARY_TICK_FUNCTIONS = {
     "Mercenary Upkeep Tick": mercenary_upkeep_tick,
+}
+
+FACTION_TICK_FUNCTIONS = {
+    "Faction Income Tick": faction_income_tick,
 }
 
 NATION_TICK_FUNCTIONS = {
