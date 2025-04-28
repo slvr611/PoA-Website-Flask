@@ -242,7 +242,7 @@ def collect_merchant_districts(target):
             collected_modifiers.append(json_data["merchant_production_districts"].get(production_district, {}).get("modifiers", {}))
     
     collected_modifiers.append(json_data["merchant_specialty_districts"].get(target.get("specialty_district", ""), {}).get("modifiers", {}))
-    collected_modifiers.append(json_data["merchant_luxury_districts"].get(target.get("luxury_district", ""), "").get("modifiers", {}))
+    collected_modifiers.append(json_data["merchant_luxury_districts"].get(target.get("luxury_district", ""), {}).get("modifiers", {}))
 
     return collected_modifiers
 
