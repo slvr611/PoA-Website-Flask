@@ -57,6 +57,8 @@ def calculate_all_fields(target, schema, target_data_type):
         prestige_modifiers = {}
         if target.get("empire", False):
             prestige_modifiers = calculate_prestige_modifiers(target, schema_properties)
+    elif target_data_type == "nation_jobs":
+        job_details = calculate_job_details(target, modifier_totals, district_totals, city_totals, node_totals, law_totals)
 
     attributes_to_precalculate = ["effective_territory", "road_capacity", "effective_pop_capacity", "pop_count"]
 
