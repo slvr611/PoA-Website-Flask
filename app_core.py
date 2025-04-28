@@ -366,9 +366,6 @@ def restore_mongodb(backup_path=None, backup_date=None, s3_key=None, s3_bucket=N
         if '?' in db_name:
             db_name = db_name.split('?')[0]
         
-        # Create a backup before restoring
-        backup_mongodb()
-
         # Use PyMongo to restore
         from pymongo import MongoClient
         import json

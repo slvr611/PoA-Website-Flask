@@ -110,7 +110,7 @@ def system_approve_change(change_id):
                 "status": "Approved",
                 "time_implemented": now,
                 "approver": approver["_id"],
-                "before_implemented_data": before_data,
+                "before_implemented_data": target,
                 "after_implemented_data": after_data
             }})
             return True

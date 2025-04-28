@@ -8,9 +8,10 @@ from app_core import backup_mongodb
 import random
 
 def tick(form_data):
-    success, message = backup_database()
-    if not success:
-        return message
+    if "run_Backup Database" in form_data:
+        success, message = backup_database()
+        if not success:
+            return message
     tick_summary = ""
 
 
@@ -226,10 +227,6 @@ def run_tick_async(form_data):
 
 def backup_database():
     success, message = backup_mongodb()
-    if not success:
-        flash(f"Database backup failed: {message}", "error")
-    else:
-        flash(f"Database backup successful: {message}", "success")
     return success, message
 
 def give_tick_summary(tick_summary):
@@ -335,10 +332,11 @@ def character_age_tick(old_character, new_character, calculated_character, schem
 def character_modifier_decay_tick(old_character, new_character, calculated_character, schema):
     new_modifiers = []
     for modifier in old_character.get("modifiers", []):
-        if int(modifier["duration"]) > 0:
-            modifier["duration"] = int(modifier["duration"]) - 1
-        if int(modifier["duration"]) != 0:
-            new_modifiers.append(modifier)
+        new_modifier = modifier.copy()
+        if int(new_modifier["duration"]) > 0:
+            new_modifier["duration"] = int(new_modifier["duration"]) - 1
+        if int(new_modifier["duration"]) != 0:
+            new_modifiers.append(new_modifier)
     new_character["modifiers"] = new_modifiers
     return ""
 
@@ -502,10 +500,11 @@ def nation_passive_expansion_tick(old_nation, new_nation, calculated_nation, sch
 def nation_modifier_decay_tick(old_nation, new_nation, calculated_nation, schema):
     new_modifiers = []
     for modifier in old_nation.get("modifiers", []):
-        if int(modifier["duration"]) > 0:
-            modifier["duration"] = int(modifier["duration"]) - 1
-        if int(modifier["duration"]) != 0:
-            new_modifiers.append(modifier)
+        new_modifier = modifier.copy()
+        if int(new_modifier["duration"]) > 0:
+            new_modifier["duration"] = int(new_modifier["duration"]) - 1
+        if int(new_modifier["duration"]) != 0:
+            new_modifiers.append(new_modifier)
     new_nation["modifiers"] = new_modifiers
     return ""
 
