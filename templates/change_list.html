@@ -204,7 +204,11 @@
                         <td class="reason-column wrap-content">
                             {{ change.request_reason|format_discord_link|safe }}
                         </td>
-                        <td>{{ change.time_requested.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                        {% if change.time_requested is defined and change.time_requested is not none and change.time_requested|string is not string and change.time_requested.__class__.__name__ == 'datetime' %}
+                            <td>{{ change.time_requested.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                        {% else %}
+                            <td>{{ change.time_requested }}</td>
+                        {% endif %}
                         <td>
                             {% if "requester" in preview_references and change.requester|string in preview_references["requester"] %}
                                 <a href="{{ preview_references['requester'][change.requester|string]['link'] }}">
@@ -423,7 +427,11 @@
                         <td class="reason-column wrap-content">
                             {{ change.request_reason|format_discord_link|safe }}
                         </td>
-                        <td>{{ change.time_requested.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                        {% if change.time_requested is defined and change.time_requested is not none and change.time_requested|string is not string and change.time_requested.__class__.__name__ == 'datetime' %}
+                            <td>{{ change.time_requested.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                        {% else %}
+                            <td>{{ change.time_requested }}</td>
+                        {% endif %}
                         <td>
                             {% if "requester" in preview_references and change.requester|string in preview_references["requester"] %}
                                 <a href="{{ preview_references['requester'][change.requester|string]['link'] }}">

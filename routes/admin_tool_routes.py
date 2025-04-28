@@ -7,6 +7,7 @@ from calculations.field_calculations import calculate_all_fields
 from app_core import category_data, rarity_rankings, mongo, json_data
 from pymongo import ASCENDING
 from bson import ObjectId
+from app_core import restore_mongodb
 import random
 import os
 import datetime
@@ -269,9 +270,7 @@ def backup_database_route():
 @admin_tool_routes.route("/restore_database", methods=["POST"])
 @admin_required
 def restore_database_route():
-    """Restore database from a backup"""
-    from app_core import restore_mongodb
-    
+    """Restore database from a backup"""    
     backup_path = request.form.get('backup_path')
     if not backup_path:
         flash("No backup selected for restoration", "error")
@@ -285,7 +284,16 @@ def restore_database_route():
         flash("Invalid confirmation code. Database restoration aborted.", "error")
         return redirect(url_for("admin_tool_routes.database_management"))
     
-    success, message = restore_mongodb(backup_path=backup_path)
+    # Check if this is an S3 backup
+    if backup_path.startswith('s3://'):
+        # Parse S3 path
+        s3_parts = backup_path.replace('s3://', '').split('/')
+        s3_bucket = s3_parts[0]
+        s3_key = '/'.join(s3_parts[1:])
+        success, message = restore_mongodb(s3_key=s3_key, s3_bucket=s3_bucket)
+    else:
+        # Local backup
+        success, message = restore_mongodb(backup_path=backup_path)
     if success:
         flash(f"Database restored successfully: {message}", "success")
     else:

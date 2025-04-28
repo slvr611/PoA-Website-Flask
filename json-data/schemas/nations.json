@@ -94,6 +94,13 @@
         "description": "The amount of road capacity the nation is currently using",
 		"default": 0
       },
+	  "passive_expansion_chance": {
+        "bsonType": "number",
+		"label": "Passive Expansion Chance",
+        "description": "The nation's percentage chance of expanding into adjacent territory each tick",
+		"calculated": true,
+		"format": "percentage"
+      },
 	  "stability": {
         "bsonType": "enum",
 		"label": "Stability",
