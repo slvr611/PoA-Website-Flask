@@ -277,7 +277,7 @@ def character_heal_tick(old_character, new_character, schema):
         return ""
     
     health_status_enum = schema["properties"]["health_status"]["enum"]
-    health_index = health_status_enum.find(old_character["health_status"])
+    health_index = health_status_enum.index(old_character["health_status"])
 
     heal_roll = random.random()
     new_character["heal_roll"] = heal_roll
@@ -391,7 +391,7 @@ def nation_prestige_gain_tick(old_nation, new_nation, schema):
 def nation_stability_tick(old_nation, new_nation, schema):
     result = ""
     stability_enum = schema["properties"]["stability"]["enum"]
-    stability_index = stability_enum.find(old_nation.get("stability", "Balanced"))
+    stability_index = stability_enum.index(old_nation.get("stability", "Balanced"))
 
     stability_gain_roll = random.random()
     new_nation["stability_gain_roll"] = stability_gain_roll
