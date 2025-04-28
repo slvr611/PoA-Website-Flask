@@ -1,0 +1,96 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>Database Management</h1>
+    
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white">
+            <h3 class="mb-0">Create Database Backup</h3>
+        </div>
+        <div class="card-body">
+            <p>Create a new backup of the entire database. This will be stored on the server and sent via email if configured.</p>
+            <form action="{{ url_for('admin_tool_routes.backup_database_route') }}" method="POST">
+                <button type="submit" class="btn btn-primary">Create Backup</button>
+            </form>
+        </div>
+    </div>
+    
+    <div class="card mb-4">
+        <div class="card-header bg-danger text-white">
+            <h3 class="mb-0">Restore Database</h3>
+        </div>
+        <div class="card-body">
+            <div class="alert alert-warning">
+                Restoring a database will create a backup of the current state of the database before restoring the selected backup.
+            </div>
+            
+            {% if backups %}
+                <form action="{{ url_for('admin_tool_routes.restore_database_route') }}" method="POST">
+                    <div class="form-group mb-3">
+                        <label for="backup_path">Select Backup to Restore:</label>
+                        <select name="backup_path" id="backup_path" class="form-control" required>
+                            <option value="">-- Select a Backup --</option>
+                            {% for backup in backups %}
+                                <option value="{{ backup.path }}">
+                                    {{ backup.date }} ({{ "ZIP" if backup.is_zip else "Directory" }})
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="form-group mb-3">
+                        <label for="confirmation_code">Confirmation Code:</label>
+                        <input type="text" name="confirmation_code" id="confirmation_code" 
+                               class="form-control" required 
+                               placeholder="Enter today's date in format YYYYMMDD">
+                        <small class="form-text text-muted">
+                            To confirm restoration, enter today's date in format YYYYMMDD (e.g., {{ now.strftime('%Y%m%d') }})
+                        </small>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-danger">Restore Database</button>
+                </form>
+            {% else %}
+                <div class="alert alert-info">
+                    No backups available for restoration.
+                </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <div class="card">
+        <div class="card-header bg-secondary text-white">
+            <h3 class="mb-0">Available Backups</h3>
+        </div>
+        <div class="card-body">
+            {% if backups %}
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Type</th>
+                                <th>Path</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for backup in backups %}
+                                <tr>
+                                    <td>{{ backup.date }}</td>
+                                    <td>{{ "ZIP" if backup.is_zip else "Directory" }}</td>
+                                    <td><code>{{ backup.path }}</code></td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="alert alert-info">
+                    No backups found.
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,9 +1,14 @@
 from flask import Blueprint, render_template, session, redirect, url_for, g
 from pymongo import ASCENDING
 from app_core import mongo
+import datetime
 
 
 base_routes = Blueprint('base_routes', __name__)
+
+@base_routes.context_processor
+def inject_now():
+    return {'now': datetime.datetime.now()}
 
 @base_routes.before_app_request
 def load_user():

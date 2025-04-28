@@ -834,8 +834,8 @@ class NationForm(BaseSchemaForm):
     def populate_linked_fields(self, schema, dropdown_options):
         """Populates all linked fields with their options"""
         for field_name, field_schema in schema.get("properties", {}).items():
-            if field_schema.get("collections"):
-                self.populate_select_field(field_name, schema, dropdown_options)
+            if field_schema.get("bsonType") == "linked_object":
+                self.populate_select_field(field_name, self[field_name], schema, dropdown_options)
         
         node_choices = [("", "None")]
         general_resources = json_data.get("general_resources", [])
@@ -916,7 +916,7 @@ class JobForm(BaseSchemaForm):
         """Populates all linked fields with their options"""
         for field_name, field_schema in schema.get("properties", {}).items():
             if field_schema.get("collections"):
-                self.populate_select_field(field_name, schema, dropdown_options)
+                self.populate_select_field(field_name, self[field_name], schema, dropdown_options)
 
 class NewCharacterForm(BaseSchemaForm):
     """Form for creating a new character"""

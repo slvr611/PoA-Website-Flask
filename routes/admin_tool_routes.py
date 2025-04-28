@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, redirect, request, flash
+from flask import Blueprint, render_template, redirect, request, flash, url_for
 from helpers.auth_helpers import admin_required
 from helpers.data_helpers import get_data_on_category, generate_id_to_name_dict, compute_demographics
 from helpers.admin_tool_helpers import grow_population
@@ -8,6 +8,8 @@ from app_core import category_data, rarity_rankings, mongo, json_data
 from pymongo import ASCENDING
 from bson import ObjectId
 import random
+import os
+import datetime
 
 admin_tool_routes = Blueprint('admin_tool_routes', __name__)
 
@@ -191,3 +193,80 @@ def process_pop_growth():
         flash("No population growth processed. Please select nations and foreign sources.")
     
     return redirect("/pop_growth_helper")
+
+@admin_tool_routes.route("/database_management", methods=["GET"])
+@admin_required
+def database_management():
+    """Database backup and restore management page"""
+    backup_dir = os.path.join(os.getcwd(), 'backups')
+    
+    # Get list of available backups
+    backups = []
+    if os.path.exists(backup_dir):
+        # Get directories and zip files
+        for item in os.listdir(backup_dir):
+            item_path = os.path.join(backup_dir, item)
+            if (os.path.isdir(item_path) or item.endswith('.zip')) and item.startswith('mongodb_backup_'):
+                # Extract timestamp from filename
+                timestamp = item.replace('mongodb_backup_', '').replace('.zip', '')
+                try:
+                    # Convert to datetime for better display
+                    date_obj = datetime.datetime.strptime(timestamp, '%Y%m%d_%H%M%S')
+                    formatted_date = date_obj.strftime('%Y-%m-%d %H:%M:%S')
+                    
+                    backups.append({
+                        'path': item_path,
+                        'name': item,
+                        'timestamp': timestamp,
+                        'date': formatted_date,
+                        'is_zip': item.endswith('.zip')
+                    })
+                except ValueError:
+                    # Skip if timestamp format is invalid
+                    continue
+    
+    # Sort backups by timestamp (newest first)
+    backups.sort(key=lambda x: x['timestamp'], reverse=True)
+    
+    return render_template("admin/database_management.html", backups=backups)
+
+@admin_tool_routes.route("/backup_database", methods=["POST"])
+@admin_required
+def backup_database_route():
+    """Create a database backup"""
+    from app_core import backup_mongodb
+    
+    success, message = backup_mongodb()
+    if success:
+        flash(f"Database backup successful: {message}", "success")
+    else:
+        flash(f"Database backup failed: {message}", "error")
+    
+    return redirect(url_for("admin_tool_routes.database_management"))
+
+@admin_tool_routes.route("/restore_database", methods=["POST"])
+@admin_required
+def restore_database_route():
+    """Restore database from a backup"""
+    from app_core import restore_mongodb
+    
+    backup_path = request.form.get('backup_path')
+    if not backup_path:
+        flash("No backup selected for restoration", "error")
+        return redirect(url_for("admin_tool_routes.database_management"))
+    
+    # Confirm restoration with a confirmation code
+    confirmation_code = request.form.get('confirmation_code')
+    expected_code = datetime.datetime.now().strftime('%Y%m%d')
+    
+    if confirmation_code != expected_code:
+        flash("Invalid confirmation code. Database restoration aborted.", "error")
+        return redirect(url_for("admin_tool_routes.database_management"))
+    
+    success, message = restore_mongodb(backup_path=backup_path)
+    if success:
+        flash(f"Database restored successfully: {message}", "success")
+    else:
+        flash(f"Database restoration failed: {message}", "error")
+    
+    return redirect(url_for("admin_tool_routes.database_management"))
