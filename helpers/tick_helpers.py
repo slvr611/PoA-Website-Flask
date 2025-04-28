@@ -192,10 +192,10 @@ def character_death_tick(old_character, new_character, schema):
         if old_character["ruling_nation_org"] != "":
             nation_schema, nation_db = get_data_on_category("nations")
             old_nation = nation_db.find_one({"_id": old_character["ruling_nation_org"]})
-            new_nation = old_nation.copy()
-            calculated_fields = calculate_all_fields(old_nation, nation_schema, "nation")
-            old_nation.update(calculated_fields)
             if old_nation:
+                new_nation = old_nation.copy()
+                calculated_fields = calculate_all_fields(old_nation, nation_schema, "nation")
+                old_nation.update(calculated_fields)
                 leader_death_stab_loss_roll = random.random()
                 new_nation["leader_death_stab_loss_roll"] = leader_death_stab_loss_roll
                 new_nation["leader_death_stab_loss_chance_at_tick"] = old_nation.get("stability_loss_chance_on_leader_death", 0)
@@ -219,24 +219,25 @@ def character_death_tick(old_character, new_character, schema):
         artifact_schema, artifact_db = get_data_on_category("artifacts")
         artifacts = list(artifact_db.find({"_id": old_character["ruling_artifact"]}))
         for old_artifact in artifacts:
-            new_artifact = old_artifact.copy()
-            calculated_fields = calculate_all_fields(old_artifact, artifact_schema, "artifact")
-            old_artifact.update(calculated_fields)
+            if old_artifact:
+                new_artifact = old_artifact.copy()
+                calculated_fields = calculate_all_fields(old_artifact, artifact_schema, "artifact")
+                old_artifact.update(calculated_fields)
 
-            loss_roll = random.random()
-            new_artifact["owner_death_loss_roll"] = loss_roll
-            new_artifact["owner_death_loss_chance_at_tick"] = old_artifact.get("owner_death_loss_chance", 0)
-            if loss_roll <= old_artifact.get("owner_death_loss_chance", 0):
-                new_artifact["owner"] = "Lost"
-                change_id = request_change(
-                    data_type="artifacts",
-                    item_id=old_artifact["_id"],
-                    change_type="Update",
-                    before_data=old_artifact,
-                    after_data=new_artifact,
-                    reason="Death of " + old_character["name"] + " has caused " + old_artifact["name"] + " to be lost"
-                )
-                approve_change(change_id)
+                loss_roll = random.random()
+                new_artifact["owner_death_loss_roll"] = loss_roll
+                new_artifact["owner_death_loss_chance_at_tick"] = old_artifact.get("owner_death_loss_chance", 0)
+                if loss_roll <= old_artifact.get("owner_death_loss_chance", 0):
+                    new_artifact["owner"] = "Lost"
+                    change_id = request_change(
+                        data_type="artifacts",
+                        item_id=old_artifact["_id"],
+                        change_type="Update",
+                        before_data=old_artifact,
+                        after_data=new_artifact,
+                        reason="Death of " + old_character["name"] + " has caused " + old_artifact["name"] + " to be lost"
+                    )
+                    approve_change(change_id)
 
     return result
 
