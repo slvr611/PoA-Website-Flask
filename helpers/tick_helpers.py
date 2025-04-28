@@ -144,6 +144,7 @@ def character_death_tick(old_character, new_character, schema):
         return
     death_roll = random.random()
     new_character["death_roll"] = death_roll
+    new_character["death_chance_at_tick"] = old_character.get("death_chance", 0)
     if death_roll <= old_character.get("death_chance", 0):
         new_character["health_status"] = "Dead"
         result = f"{old_character['name']} has died.\n"
@@ -157,6 +158,7 @@ def character_death_tick(old_character, new_character, schema):
             if old_nation:
                 leader_death_stab_loss_roll = random.random()
                 new_nation["leader_death_stab_loss_roll"] = leader_death_stab_loss_roll
+                new_nation["leader_death_stab_loss_chance_at_tick"] = old_nation.get("stability_loss_chance_on_leader_death", 0)
                 if leader_death_stab_loss_roll <= old_nation.get("stability_loss_chance_on_leader_death", 0):
                     result += f"{old_nation['name']} has lost stability due to the death of their leader.\n"
                     stability_enum = nation_schema["properties"]["stability"]["enum"]
@@ -181,16 +183,20 @@ def character_death_tick(old_character, new_character, schema):
             calculated_fields = calculate_all_fields(old_artifact, artifact_schema, "artifact")
             old_artifact.update(calculated_fields)
 
-            new_artifact["owner"] = "Lost"
-            change_id = request_change(
-                data_type="artifacts",
-                item_id=old_artifact["_id"],
-                change_type="Update",
-                before_data=old_artifact,
-                after_data=new_artifact,
-                reason="Death of " + old_character["name"] + " has caused " + old_artifact["name"] + " to be lost"
-            )
-            approve_change(change_id)
+            loss_roll = random.random()
+            new_artifact["owner_death_loss_roll"] = loss_roll
+            new_artifact["owner_death_loss_chance_at_tick"] = old_artifact.get("owner_death_loss_chance", 0)
+            if loss_roll <= old_artifact.get("owner_death_loss_chance", 0):
+                new_artifact["owner"] = "Lost"
+                change_id = request_change(
+                    data_type="artifacts",
+                    item_id=old_artifact["_id"],
+                    change_type="Update",
+                    before_data=old_artifact,
+                    after_data=new_artifact,
+                    reason="Death of " + old_character["name"] + " has caused " + old_artifact["name"] + " to be lost"
+                )
+                approve_change(change_id)
 
     return result
 
@@ -206,6 +212,7 @@ def character_heal_tick(old_character, new_character, schema):
 
     heal_roll = random.random()
     new_character["heal_roll"] = heal_roll
+    new_character["heal_chance_at_tick"] = old_character.get("heal_chance", 0)
     if heal_roll <= old_character.get("heal_chance", 0):
         health_index = max(health_index - 1, 0)
         new_character["health_status"] = health_status_enum[health_index]
@@ -230,6 +237,7 @@ def artifact_loss_tick(old_artifact, new_artifact, schema):
         return
     loss_roll = random.random()
     new_artifact["loss_roll"] = loss_roll
+    new_artifact["loss_chance_at_tick"] = old_artifact.get("passive_loss_chance", 0)
     if loss_roll <= old_artifact.get("passive_loss_chance", 0):
         new_artifact["owner"] = "Lost"
         result = f"{old_artifact['name']} has been lost.\n"
@@ -294,12 +302,14 @@ def nation_stability_tick(old_nation, new_nation, schema):
 
     stability_gain_roll = random.random()
     new_nation["stability_gain_roll"] = stability_gain_roll
+    new_nation["stability_gain_chance_at_tick"] = old_nation.get("stability_gain_chance", 0)
     if stability_gain_roll <= old_nation.get("stability_gain_chance", 0):
         stability_index = min(stability_index + 1, len(stability_enum) - 1)
         result += f"{old_nation['name']} has gained stability.\n"
 
     stability_loss_roll = random.random()
     new_nation["stability_loss_roll"] = stability_loss_roll
+    new_nation["stability_loss_chance_at_tick"] = old_nation.get("stability_loss_chance", 0)
     if stability_loss_roll <= old_nation.get("stability_loss_chance", 0):
         stability_index = max(stability_index - 1, 0)
         result += f"{old_nation['name']} has lost stability.\n"
@@ -315,6 +325,7 @@ def nation_concessions_tick(old_nation, new_nation, schema):
     result = ""
     concessions_roll = random.random()
     new_nation["concessions_roll"] = concessions_roll
+    new_nation["concessions_chance_at_tick"] = old_nation.get("concessions_chance", 0)
     if concessions_roll <= old_nation.get("concessions_chance", 0):
         concessions_qty = old_nation.get("concessions_qty", 0)
         resources = []
@@ -344,6 +355,7 @@ def nation_rebellion_tick(old_nation, new_nation, schema):
     result = ""
     rebellion_roll = random.random()
     new_nation["rebellion_roll"] = rebellion_roll
+    new_nation["rebellion_chance_at_tick"] = old_nation.get("rebellion_chance", 0)
     if rebellion_roll <= old_nation.get("rebellion_chance", 0):
         result += f"{old_nation['name']} has rebelled against their overlord.\n"
 
@@ -353,6 +365,7 @@ def nation_passive_expansion_tick(old_nation, new_nation, schema):
     result = ""
     expansion_roll = random.random()
     new_nation["expansion_roll"] = expansion_roll
+    new_nation["expansion_chance_at_tick"] = old_nation.get("passive_expansion_chance", 0)
     if expansion_roll <= old_nation.get("passive_expansion_chance", 0):
         result += f"{old_nation['name']} has expanded into adjacent territory.\n"
     return result
