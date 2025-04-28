@@ -13,101 +13,133 @@ def tick(form_data):
         return message
     tick_summary = ""
 
+
+
     character_schema, character_db = get_data_on_category("characters")
     old_characters = list(character_db.find().sort("name", ASCENDING))
-    for i in range(len(old_characters)):
-        calculated_fields = calculate_all_fields(old_characters[i], character_schema, "character")
-        old_characters[i].update(calculated_fields)
     new_characters = []
+    calculated_characters = []
     for character in old_characters:
         if character:
             new_characters.append(character.copy())
-        
-    artifact_schema, artifact_db = get_data_on_category("artifacts")
-    old_artifacts = list(artifact_db.find().sort("name", ASCENDING))
-    for i in range(len(old_artifacts)):
-        calculated_fields = calculate_all_fields(old_artifacts[i], artifact_schema, "artifact")
-        old_artifacts[i].update(calculated_fields)
-    new_artifacts = []
-    for artifact in old_artifacts:
-        if artifact:
-            new_artifacts.append(artifact.copy())
+            calculated_characters.append(character.copy())
     
-    merchant_schema, merchant_db = get_data_on_category("merchants")
-    old_merchants = list(merchant_db.find().sort("name", ASCENDING))
-    for i in range(len(old_merchants)):
-        calculated_fields = calculate_all_fields(old_merchants[i], merchant_schema, "merchant")
-        old_merchants[i].update(calculated_fields)
-    new_merchants = []
-    for merchant in old_merchants:
-        if merchant:
-            new_merchants.append(merchant.copy())
-        
-    mercenary_schema, mercenary_db = get_data_on_category("mercenaries")
-    old_mercenaries = list(mercenary_db.find().sort("name", ASCENDING))
-    for i in range(len(old_mercenaries)):
-        calculated_fields = calculate_all_fields(old_mercenaries[i], mercenary_schema, "mercenary")
-        old_mercenaries[i].update(calculated_fields)
-    new_mercenaries = []
-    for mercenary in old_mercenaries:
-        if mercenary:
-            new_mercenaries.append(mercenary.copy())
-        
-    faction_schema, faction_db = get_data_on_category("factions")
-    old_factions = list(faction_db.find().sort("name", ASCENDING))
-    for i in range(len(old_factions)):
-        calculated_fields = calculate_all_fields(old_factions[i], faction_schema, "faction")
-        old_factions[i].update(calculated_fields)
-    new_factions = []
-    for faction in old_factions:
-        if faction:
-            new_factions.append(faction.copy())
-
-    nation_schema, nation_db = get_data_on_category("nations")
-    old_nations = list(nation_db.find().sort("name", ASCENDING))
-    for i in range(len(old_nations)):
-        calculated_fields = calculate_all_fields(old_nations[i], nation_schema, "nation")
-        old_nations[i].update(calculated_fields)
-    new_nations = []
-    for nation in old_nations:
-        if nation:
-            new_nations.append(nation.copy())
-
+    for character in calculated_characters:
+        calculated_fields = calculate_all_fields(character, character_schema, "character")
+        character.update(calculated_fields)
+    
     for tick_function_label, tick_function in CHARACTER_TICK_FUNCTIONS.items():
         run_key = f"run_{tick_function_label}"
         if run_key in form_data:
             for i in range(len(old_characters)):
-                tick_summary += tick_function(old_characters[i], new_characters[i], character_schema)
+                tick_summary += tick_function(old_characters[i], new_characters[i], calculated_characters[i], character_schema)
+
+
+        
+    artifact_schema, artifact_db = get_data_on_category("artifacts")
+    old_artifacts = list(artifact_db.find().sort("name", ASCENDING))
+    new_artifacts = []
+    calculated_artifacts = []
+    for artifact in old_artifacts:
+        if artifact:
+            new_artifacts.append(artifact.copy())
+            calculated_artifacts.append(artifact.copy())
+    
+    for artifact in calculated_artifacts:
+        calculated_fields = calculate_all_fields(artifact, artifact_schema, "artifact")
+        artifact.update(calculated_fields)
 
     for tick_function_label, tick_function in ARTIFACT_TICK_FUNCTIONS.items():
         run_key = f"run_{tick_function_label}"
         if run_key in form_data:
             for i in range(len(old_artifacts)):
-                tick_summary += tick_function(old_artifacts[i], new_artifacts[i], artifact_schema)
+                tick_summary += tick_function(old_artifacts[i], new_artifacts[i], calculated_artifacts[i], artifact_schema)
+
+
+
+    merchant_schema, merchant_db = get_data_on_category("merchants")
+    old_merchants = list(merchant_db.find().sort("name", ASCENDING))
+    new_merchants = []
+    calculated_merchants = []
+    for merchant in old_merchants:
+        if merchant:
+            new_merchants.append(merchant.copy())
+            calculated_merchants.append(merchant.copy())
+    
+    for merchant in calculated_merchants:
+        calculated_fields = calculate_all_fields(merchant, merchant_schema, "merchant")
+        merchant.update(calculated_fields)
 
     for tick_function_label, tick_function in MERCHANT_TICK_FUNCTIONS.items():
         run_key = f"run_{tick_function_label}"
         if run_key in form_data:
             for i in range(len(old_merchants)):
-                tick_summary += tick_function(old_merchants[i], new_merchants[i], merchant_schema)
+                tick_summary += tick_function(old_merchants[i], new_merchants[i], calculated_merchants[i], merchant_schema)
+
+
+
+    mercenary_schema, mercenary_db = get_data_on_category("mercenaries")
+    old_mercenaries = list(mercenary_db.find().sort("name", ASCENDING))
+    new_mercenaries = []
+    calculated_mercenaries = []
+    for mercenary in old_mercenaries:
+        if mercenary:
+            new_mercenaries.append(mercenary.copy())
+            calculated_mercenaries.append(mercenary.copy())
     
+    for mercenary in calculated_mercenaries:
+        calculated_fields = calculate_all_fields(mercenary, mercenary_schema, "mercenary")
+        mercenary.update(calculated_fields)
+
     for tick_function_label, tick_function in MERCENARY_TICK_FUNCTIONS.items():
         run_key = f"run_{tick_function_label}"
         if run_key in form_data:
             for i in range(len(old_mercenaries)):
-                tick_summary += tick_function(old_mercenaries[i], new_mercenaries[i], mercenary_schema)
+                tick_summary += tick_function(old_mercenaries[i], new_mercenaries[i], calculated_mercenaries[i], mercenary_schema)
+
+
+
+    faction_schema, faction_db = get_data_on_category("factions")
+    old_factions = list(faction_db.find().sort("name", ASCENDING))
+    new_factions = []
+    calculated_factions = []
+    for faction in old_factions:
+        if faction:
+            new_factions.append(faction.copy())
+            calculated_factions.append(faction.copy())
+
+    for faction in calculated_factions:
+        calculated_fields = calculate_all_fields(faction, faction_schema, "faction")
+        faction.update(calculated_fields)
 
     for tick_function_label, tick_function in FACTION_TICK_FUNCTIONS.items():
         run_key = f"run_{tick_function_label}"
         if run_key in form_data:
             for i in range(len(old_nations)):
-                tick_summary += tick_function(old_factions[i], new_factions[i], faction_schema)
+                tick_summary += tick_function(old_factions[i], new_factions[i], calculated_factions[i], faction_schema)
+
+
+
+    nation_schema, nation_db = get_data_on_category("nations")
+    old_nations = list(nation_db.find().sort("name", ASCENDING))
+    new_nations = []
+    calculated_nations = []
+    for nation in old_nations:
+        if nation:
+            new_nations.append(nation.copy())
+            calculated_nations.append(nation.copy())
+    
+    for nation in calculated_nations:
+        calculated_fields = calculate_all_fields(nation, nation_schema, "nation")
+        nation.update(calculated_fields)
 
     for tick_function_label, tick_function in NATION_TICK_FUNCTIONS.items():
         run_key = f"run_{tick_function_label}"
         if run_key in form_data:
             for i in range(len(old_nations)):
-                tick_summary += tick_function(old_nations[i], new_nations[i], nation_schema)
+                tick_summary += tick_function(old_nations[i], new_nations[i], calculated_nations[i], nation_schema)
+
+
     
     for i in range(len(old_characters)):
         change_id = request_change(
@@ -194,20 +226,21 @@ def backup_database():
 
 def give_tick_summary(tick_summary):
     flash(tick_summary)
+    print(tick_summary)
     return
 
 ###########################################################
 # Character Tick Functions
 ###########################################################
 
-def character_death_tick(old_character, new_character, schema):
+def character_death_tick(old_character, new_character, calculated_character, schema):
     result = ""
     if new_character.get("health_status", "Healthy") == "Dead":
         return ""
     death_roll = random.random()
     new_character["death_roll"] = death_roll
-    new_character["death_chance_at_tick"] = old_character.get("death_chance", 0)
-    if death_roll <= old_character.get("death_chance", 0):
+    new_character["death_chance_at_tick"] = calculated_character.get("death_chance", 0)
+    if death_roll <= calculated_character.get("death_chance", 0):
         new_character["health_status"] = "Dead"
         result = f"{old_character.get('name', 'Unknown')} has died.\n"
 
@@ -216,12 +249,13 @@ def character_death_tick(old_character, new_character, schema):
             old_nation = nation_db.find_one({"_id": old_character.get("ruling_nation_org", "")})
             if old_nation:
                 new_nation = old_nation.copy()
+                calculated_nation = old_nation.copy()
                 calculated_fields = calculate_all_fields(old_nation, nation_schema, "nation")
-                old_nation.update(calculated_fields)
+                calculated_nation.update(calculated_fields)
                 leader_death_stab_loss_roll = random.random()
                 new_nation["leader_death_stab_loss_roll"] = leader_death_stab_loss_roll
-                new_nation["leader_death_stab_loss_chance_at_tick"] = old_nation.get("stability_loss_chance_on_leader_death", 0)
-                if leader_death_stab_loss_roll <= old_nation.get("stability_loss_chance_on_leader_death", 0):
+                new_nation["leader_death_stab_loss_chance_at_tick"] = calculated_nation.get("stability_loss_chance_on_leader_death", 0)
+                if leader_death_stab_loss_roll <= calculated_nation.get("stability_loss_chance_on_leader_death", 0):
                     result += f"{old_nation.get('name', 'Unknown')} has lost stability due to the death of their leader.\n"
                     stability_enum = nation_schema["properties"]["stability"]["enum"]
                     stability_index = stability_enum.find(old_nation["stability"])
@@ -239,17 +273,18 @@ def character_death_tick(old_character, new_character, schema):
                     approve_change(change_id)
         
         artifact_schema, artifact_db = get_data_on_category("artifacts")
-        artifacts = list(artifact_db.find({"_id": old_character["ruling_artifact"]}))
+        artifacts = list(artifact_db.find({"owner": old_character["_id"]}))
         for old_artifact in artifacts:
             if old_artifact:
                 new_artifact = old_artifact.copy()
+                calculated_artifact = old_artifact.copy()
                 calculated_fields = calculate_all_fields(old_artifact, artifact_schema, "artifact")
-                old_artifact.update(calculated_fields)
+                calculated_artifact.update(calculated_fields)
 
                 loss_roll = random.random()
                 new_artifact["owner_death_loss_roll"] = loss_roll
-                new_artifact["owner_death_loss_chance_at_tick"] = old_artifact.get("owner_death_loss_chance", 0)
-                if loss_roll <= old_artifact.get("owner_death_loss_chance", 0):
+                new_artifact["owner_death_loss_chance_at_tick"] = calculated_artifact.get("owner_death_loss_chance", 0)
+                if loss_roll <= calculated_artifact.get("owner_death_loss_chance", 0):
                     new_artifact["owner"] = "Lost"
                     change_id = request_change(
                         data_type="artifacts",
@@ -263,7 +298,7 @@ def character_death_tick(old_character, new_character, schema):
 
     return result
 
-def character_heal_tick(old_character, new_character, schema):
+def character_heal_tick(old_character, new_character, calculated_character, schema):
     result = ""
     if new_character["health_status"] == "Healthy":
         return ""
@@ -275,22 +310,22 @@ def character_heal_tick(old_character, new_character, schema):
 
     heal_roll = random.random()
     new_character["heal_roll"] = heal_roll
-    new_character["heal_chance_at_tick"] = old_character.get("heal_chance", 0)
-    if heal_roll <= old_character.get("heal_chance", 0):
+    new_character["heal_chance_at_tick"] = calculated_character.get("heal_chance", 0)
+    if heal_roll <= calculated_character.get("heal_chance", 0):
         health_index = max(health_index - 1, 0)
         new_character["health_status"] = health_status_enum[health_index]
         result = f"{old_character.get('name', 'Unknown')} has healed from {old_character.get('health_status', 'Unknown')} to {new_character.get('health_status', 'Unknown')}.\n"
     return result
 
-def character_mana_tick(old_character, new_character, schema):
-    new_character["current_magic_points"] = min(old_character.get("current_magic_points", 0) + old_character.get("magic_point_income", 0), old_character.get("magic_point_capacity", 0))
+def character_mana_tick(old_character, new_character, calculated_character, schema):
+    new_character["current_magic_points"] = min(old_character.get("current_magic_points", 0) + calculated_character.get("magic_point_income", 0), calculated_character.get("magic_point_capacity", 0))
     return ""
 
-def character_age_tick(old_character, new_character, schema):
+def character_age_tick(old_character, new_character, calculated_character, schema):
     new_character["age"] = old_character["age"] + 1
     return ""
 
-def character_modifier_decay_tick(old_character, new_character, schema):
+def character_modifier_decay_tick(old_character, new_character, calculated_character, schema):
     new_modifiers = []
     for modifier in old_character.get("modifiers", []):
         if int(modifier["duration"]) > 0:
@@ -304,14 +339,14 @@ def character_modifier_decay_tick(old_character, new_character, schema):
 # Artifact Tick Functions
 ###########################################################
 
-def artifact_loss_tick(old_artifact, new_artifact, schema):
+def artifact_loss_tick(old_artifact, new_artifact, calculated_artifact, schema):
     result = ""
     if old_artifact["owner"] == "Lost":
         return ""
     loss_roll = random.random()
     new_artifact["loss_roll"] = loss_roll
-    new_artifact["loss_chance_at_tick"] = old_artifact.get("passive_loss_chance", 0)
-    if loss_roll <= old_artifact.get("passive_loss_chance", 0):
+    new_artifact["loss_chance_at_tick"] = calculated_artifact.get("passive_loss_chance", 0)
+    if loss_roll <= calculated_artifact.get("passive_loss_chance", 0):
         new_artifact["owner"] = "Lost"
         result = f"{old_artifact.get('name', 'Unknown')} has been lost.\n"
     return result
@@ -320,27 +355,27 @@ def artifact_loss_tick(old_artifact, new_artifact, schema):
 # Merchant Tick Functions
 ###########################################################
 
-def merchant_income_tick(old_merchant, new_merchant, schema):
-    new_merchant["treasury"] = int(old_merchant.get("treasury", 0)) + old_merchant.get("income", 0)
+def merchant_income_tick(old_merchant, new_merchant, calculated_merchant, schema):
+    new_merchant["treasury"] = int(old_merchant.get("treasury", 0)) + calculated_merchant.get("income", 0)
 
-    for resource, amount in old_merchant.get("resource_income", {}).items():
-        new_merchant[resource] = old_merchant[resource] + amount
+    for resource, amount in calculated_merchant.get("resource_income", {}).items():
+        new_merchant["resource_storage"][resource] = old_merchant["resource_storage"][resource] + amount
     return ""
 
 ###########################################################
 # Mercenary Tick Functions
 ###########################################################
 
-def mercenary_upkeep_tick(old_mercenary, new_mercenary, schema):
-    new_mercenary["treasury"] = int(old_mercenary.get("treasury", 0)) - old_mercenary.get("upkeep", 0)
+def mercenary_upkeep_tick(old_mercenary, new_mercenary, calculated_mercenary, schema):
+    new_mercenary["treasury"] = int(old_mercenary.get("treasury", 0)) - calculated_mercenary.get("upkeep", 0)
     return ""
 
 ###########################################################
 # Faction Tick Functions
 ###########################################################
 
-def faction_income_tick(old_faction, new_faction, schema):
-    new_faction["influence"] = int(old_faction.get("influence", 0)) + old_faction.get("influence_income", 0)
+def faction_income_tick(old_faction, new_faction, calculated_faction, schema):
+    new_faction["influence"] = int(old_faction.get("influence", 0)) + calculated_faction.get("influence_income", 0)
     return ""
 
 
@@ -348,14 +383,14 @@ def faction_income_tick(old_faction, new_faction, schema):
 # Nation Tick Functions
 ###########################################################
 
-def nation_income_tick(old_nation, new_nation, schema):
-    new_nation["money"] = int(old_nation.get("money", 0)) + old_nation.get("money_income", 0)
-    for resource, amount in old_nation.get("resource_excess", {}).items():
-        new_nation["resource_storage"] = min(max(old_nation.get("resource_storage", {}).get(resource, 0) + amount, 0), old_nation.get("resource_capacity", {}).get(resource, 0))
+def nation_income_tick(old_nation, new_nation, calculated_nation, schema):
+    new_nation["money"] = int(old_nation.get("money", 0)) + calculated_nation.get("money_income", 0)
+    for resource, amount in calculated_nation.get("resource_excess", {}).items():
+        new_nation["resource_storage"] = min(old_nation.get("resource_storage", {}).get(resource, 0) + amount, old_nation.get("resource_capacity", {}).get(resource, 0))
     
     return ""
 
-def update_rolling_karma(old_nation, new_nation, schema):
+def update_rolling_karma(old_nation, new_nation, calculated_nation, schema):
     event_type = old_nation.get("event_type", "Unknown")
     if event_type in ["Horrendous", "Abysmal", "Very Bad", "Bad"]:
         new_nation["rolling_karma"] = int(old_nation.get("rolling_karma", 0)) + 1
@@ -364,7 +399,7 @@ def update_rolling_karma(old_nation, new_nation, schema):
 
     return ""
 
-def nation_infamy_decay_tick(old_nation, new_nation, schema):
+def nation_infamy_decay_tick(old_nation, new_nation, calculated_nation, schema):
     # TODO: Prevent Decay while at war
     if int(old_nation.get("infamy", 0)) < 5:
         new_nation["infamy"] = 0
@@ -373,31 +408,31 @@ def nation_infamy_decay_tick(old_nation, new_nation, schema):
         new_nation["infamy"] = int(round(old_nation.get("infamy", 0) / 10)) * 5
     return ""
 
-def nation_prestige_gain_tick(old_nation, new_nation, schema):
+def nation_prestige_gain_tick(old_nation, new_nation, calculated_nation, schema):
     if not old_nation.get("empire", False):
         return ""
     old_nation_prestige = old_nation.get("prestige", 0)
     if old_nation_prestige == "":
         old_nation_prestige = 0
-    new_nation["prestige"] = old_nation_prestige + old_nation.get("prestige_gain", 0)
+    new_nation["prestige"] = old_nation_prestige + calculated_nation.get("prestige_gain", 0)
     return ""
 
-def nation_stability_tick(old_nation, new_nation, schema):
+def nation_stability_tick(old_nation, new_nation, calculated_nation, schema):
     result = ""
     stability_enum = schema["properties"]["stability"]["enum"]
     stability_index = stability_enum.index(old_nation.get("stability", "Balanced"))
 
     stability_gain_roll = random.random()
     new_nation["stability_gain_roll"] = stability_gain_roll
-    new_nation["stability_gain_chance_at_tick"] = old_nation.get("stability_gain_chance", 0)
-    if stability_gain_roll <= old_nation.get("stability_gain_chance", 0):
+    new_nation["stability_gain_chance_at_tick"] = calculated_nation.get("stability_gain_chance", 0)
+    if stability_gain_roll <= calculated_nation.get("stability_gain_chance", 0):
         stability_index = min(stability_index + 1, len(stability_enum) - 1)
         result += f"{old_nation.get('name', 'Unknown')} has gained stability.\n"
 
     stability_loss_roll = random.random()
     new_nation["stability_loss_roll"] = stability_loss_roll
-    new_nation["stability_loss_chance_at_tick"] = old_nation.get("stability_loss_chance", 0)
-    if stability_loss_roll <= old_nation.get("stability_loss_chance", 0):
+    new_nation["stability_loss_chance_at_tick"] = calculated_nation.get("stability_loss_chance", 0)
+    if stability_loss_roll <= calculated_nation.get("stability_loss_chance", 0):
         stability_index = max(stability_index - 1, 0)
         result += f"{old_nation.get('name', 'Unknown')} has lost stability.\n"
 
@@ -405,16 +440,16 @@ def nation_stability_tick(old_nation, new_nation, schema):
 
     return result
 
-def nation_concessions_tick(old_nation, new_nation, schema):
+def nation_concessions_tick(old_nation, new_nation, calculated_nation, schema):
     if old_nation["overlord"] == "":
         return ""
 
     result = ""
     concessions_roll = random.random()
     new_nation["concessions_roll"] = concessions_roll
-    new_nation["concessions_chance_at_tick"] = old_nation.get("concessions_chance", 0)
-    if concessions_roll <= old_nation.get("concessions_chance", 0):
-        concessions_qty = old_nation.get("concessions_qty", 0)
+    new_nation["concessions_chance_at_tick"] = calculated_nation.get("concessions_chance", 0)
+    if concessions_roll <= calculated_nation.get("concessions_chance", 0):
+        concessions_qty = calculated_nation.get("concessions_qty", 0)
         resources = []
         for resource in json_data["general_resources"]:
             if resource["key"] != "research":
@@ -436,28 +471,28 @@ def nation_concessions_tick(old_nation, new_nation, schema):
         result += f"{old_nation.get('name', 'Unknown')} has demanded concessions from their overlord.\n"
     return result
 
-def nation_rebellion_tick(old_nation, new_nation, schema):
+def nation_rebellion_tick(old_nation, new_nation, calculated_nation, schema):
     if old_nation["overlord"] == "":
         return ""
     result = ""
     rebellion_roll = random.random()
     new_nation["rebellion_roll"] = rebellion_roll
-    new_nation["rebellion_chance_at_tick"] = old_nation.get("rebellion_chance", 0)
-    if rebellion_roll <= old_nation.get("rebellion_chance", 0):
+    new_nation["rebellion_chance_at_tick"] = calculated_nation.get("rebellion_chance", 0)
+    if rebellion_roll <= calculated_nation.get("rebellion_chance", 0):
         result += f"{old_nation.get('name', 'Unknown')} has rebelled against their overlord.\n"
 
     return result
 
-def nation_passive_expansion_tick(old_nation, new_nation, schema):
+def nation_passive_expansion_tick(old_nation, new_nation, calculated_nation, schema):
     result = ""
     expansion_roll = random.random()
     new_nation["expansion_roll"] = expansion_roll
-    new_nation["expansion_chance_at_tick"] = old_nation.get("passive_expansion_chance", 0)
-    if expansion_roll <= old_nation.get("passive_expansion_chance", 0):
+    new_nation["expansion_chance_at_tick"] = calculated_nation.get("passive_expansion_chance", 0)
+    if expansion_roll <= calculated_nation.get("passive_expansion_chance", 0):
         result += f"{old_nation.get('name', 'Unknown')} has expanded into adjacent territory.\n"
     return result
 
-def nation_modifier_decay_tick(old_nation, new_nation, schema):
+def nation_modifier_decay_tick(old_nation, new_nation, calculated_nation, schema):
     new_modifiers = []
     for modifier in old_nation.get("modifiers", []):
         if int(modifier["duration"]) > 0:
@@ -467,7 +502,7 @@ def nation_modifier_decay_tick(old_nation, new_nation, schema):
     new_nation["modifiers"] = new_modifiers
     return ""
 
-def nation_job_cleanup_tick(old_nation, new_nation, schema):
+def nation_job_cleanup_tick(old_nation, new_nation, calculated_nation, schema):
     new_jobs = {}
     for job in old_nation.get("jobs", {}).keys():
         new_jobs[job] = 0
