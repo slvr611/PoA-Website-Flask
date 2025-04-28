@@ -15,7 +15,9 @@ def tick(form_data):
 
     character_schema, character_db = get_data_on_category("characters")
     old_characters = list(character_db.find().sort("name", ASCENDING))
-    new_characters = old_characters.deepcopy()
+    new_characters = []
+    for character in old_characters:
+        new_characters.append(character.copy())
 
     for i in range(len(old_characters)):
         calculated_fields = calculate_all_fields(old_characters[i], character_schema, "character")
@@ -29,7 +31,9 @@ def tick(form_data):
         
     artifact_schema, artifact_db = get_data_on_category("artifacts")
     old_artifacts = list(artifact_db.find().sort("name", ASCENDING))
-    new_artifacts = old_artifacts.deepcopy()
+    new_artifacts = []
+    for artifact in old_artifacts:
+        new_artifacts.append(artifact.copy())
 
     for i in range(len(old_artifacts)):
         calculated_fields = calculate_all_fields(old_artifacts[i], artifact_schema, "artifact")
@@ -43,7 +47,9 @@ def tick(form_data):
     
     merchant_schema, merchant_db = get_data_on_category("merchants")
     old_merchants = list(merchant_db.find().sort("name", ASCENDING))
-    new_merchants = old_merchants.deepcopy()
+    new_merchants = []
+    for merchant in old_merchants:
+        new_merchants.append(merchant.copy())
 
     for i in range(len(old_merchants)):
         calculated_fields = calculate_all_fields(old_merchants[i], merchant_schema, "merchant")
@@ -57,7 +63,9 @@ def tick(form_data):
         
     mercenary_schema, mercenary_db = get_data_on_category("mercenaries")
     old_mercenaries = list(mercenary_db.find().sort("name", ASCENDING))
-    new_mercenaries = old_mercenaries.deepcopy()
+    new_mercenaries = []
+    for mercenary in old_mercenaries:
+        new_mercenaries.append(mercenary.copy())
 
     for i in range(len(old_mercenaries)):
         calculated_fields = calculate_all_fields(old_mercenaries[i], mercenary_schema, "mercenary")
@@ -71,7 +79,9 @@ def tick(form_data):
         
     nation_schema, nation_db = get_data_on_category("nations")
     old_nations = list(nation_db.find().sort("name", ASCENDING))
-    new_nations = old_nations.deepcopy()
+    new_nations = []
+    for nation in old_nations:
+        new_nations.append(nation.copy())
     
     for i in range(len(old_nations)):
         calculated_fields = calculate_all_fields(old_nations[i], nation_schema, "nation")
