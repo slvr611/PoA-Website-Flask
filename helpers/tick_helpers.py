@@ -34,6 +34,7 @@ def tick(form_data):
     for tick_function_label, tick_function in CHARACTER_TICK_FUNCTIONS.items():
         run_key = f"run_{tick_function_label}"
         if run_key in form_data:
+            print(tick_function_label)
             for i in range(len(old_characters)):
                 tick_summary += tick_function(old_characters[i], new_characters[i], calculated_characters[i], character_schema)
 
@@ -55,6 +56,7 @@ def tick(form_data):
     for tick_function_label, tick_function in ARTIFACT_TICK_FUNCTIONS.items():
         run_key = f"run_{tick_function_label}"
         if run_key in form_data:
+            print(tick_function_label)
             for i in range(len(old_artifacts)):
                 tick_summary += tick_function(old_artifacts[i], new_artifacts[i], calculated_artifacts[i], artifact_schema)
 
@@ -76,6 +78,7 @@ def tick(form_data):
     for tick_function_label, tick_function in MERCHANT_TICK_FUNCTIONS.items():
         run_key = f"run_{tick_function_label}"
         if run_key in form_data:
+            print(tick_function_label)
             for i in range(len(old_merchants)):
                 tick_summary += tick_function(old_merchants[i], new_merchants[i], calculated_merchants[i], merchant_schema)
 
@@ -97,6 +100,7 @@ def tick(form_data):
     for tick_function_label, tick_function in MERCENARY_TICK_FUNCTIONS.items():
         run_key = f"run_{tick_function_label}"
         if run_key in form_data:
+            print(tick_function_label)
             for i in range(len(old_mercenaries)):
                 tick_summary += tick_function(old_mercenaries[i], new_mercenaries[i], calculated_mercenaries[i], mercenary_schema)
 
@@ -118,6 +122,7 @@ def tick(form_data):
     for tick_function_label, tick_function in FACTION_TICK_FUNCTIONS.items():
         run_key = f"run_{tick_function_label}"
         if run_key in form_data:
+            print(tick_function_label)
             for i in range(len(old_nations)):
                 tick_summary += tick_function(old_factions[i], new_factions[i], calculated_factions[i], faction_schema)
 
@@ -139,6 +144,7 @@ def tick(form_data):
     for tick_function_label, tick_function in NATION_TICK_FUNCTIONS.items():
         run_key = f"run_{tick_function_label}"
         if run_key in form_data:
+            print(tick_function_label)
             for i in range(len(old_nations)):
                 tick_summary += tick_function(old_nations[i], new_nations[i], calculated_nations[i], nation_schema)
 
@@ -386,6 +392,7 @@ def artifact_loss_tick(old_artifact, new_artifact, calculated_artifact, schema):
 def merchant_income_tick(old_merchant, new_merchant, calculated_merchant, schema):
     new_merchant["treasury"] = int(old_merchant.get("treasury", 0)) + calculated_merchant.get("income", 0)
 
+    new_merchant["resource_storage"] = {}
     for resource, amount in calculated_merchant.get("resource_income", {}).items():
         new_merchant["resource_storage"][resource] = old_merchant["resource_storage"][resource] + amount
     return ""
@@ -413,6 +420,7 @@ def faction_income_tick(old_faction, new_faction, calculated_faction, schema):
 
 def nation_income_tick(old_nation, new_nation, calculated_nation, schema):
     new_nation["money"] = int(old_nation.get("money", 0)) + calculated_nation.get("money_income", 0)
+    new_nation["resource_storage"] = {}
     for resource, amount in calculated_nation.get("resource_excess", {}).items():
         new_nation["resource_storage"][resource] = min(old_nation.get("resource_storage", {}).get(resource, 0) + amount, old_nation.get("resource_capacity", {}).get(resource, 0))
     
