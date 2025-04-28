@@ -15,6 +15,9 @@ def tick(form_data):
 
     character_schema, character_db = get_data_on_category("characters")
     old_characters = list(character_db.find().sort("name", ASCENDING))
+    for i in range(len(old_characters)):
+        calculated_fields = calculate_all_fields(old_characters[i], character_schema, "character")
+        old_characters[i].update(calculated_fields)
     new_characters = []
     for character in old_characters:
         if character:
@@ -22,6 +25,9 @@ def tick(form_data):
         
     artifact_schema, artifact_db = get_data_on_category("artifacts")
     old_artifacts = list(artifact_db.find().sort("name", ASCENDING))
+    for i in range(len(old_artifacts)):
+        calculated_fields = calculate_all_fields(old_artifacts[i], artifact_schema, "artifact")
+        old_artifacts[i].update(calculated_fields)
     new_artifacts = []
     for artifact in old_artifacts:
         if artifact:
@@ -29,6 +35,9 @@ def tick(form_data):
     
     merchant_schema, merchant_db = get_data_on_category("merchants")
     old_merchants = list(merchant_db.find().sort("name", ASCENDING))
+    for i in range(len(old_merchants)):
+        calculated_fields = calculate_all_fields(old_merchants[i], merchant_schema, "merchant")
+        old_merchants[i].update(calculated_fields)
     new_merchants = []
     for merchant in old_merchants:
         if merchant:
@@ -36,6 +45,9 @@ def tick(form_data):
         
     mercenary_schema, mercenary_db = get_data_on_category("mercenaries")
     old_mercenaries = list(mercenary_db.find().sort("name", ASCENDING))
+    for i in range(len(old_mercenaries)):
+        calculated_fields = calculate_all_fields(old_mercenaries[i], mercenary_schema, "mercenary")
+        old_mercenaries[i].update(calculated_fields)
     new_mercenaries = []
     for mercenary in old_mercenaries:
         if mercenary:
@@ -43,6 +55,9 @@ def tick(form_data):
         
     faction_schema, faction_db = get_data_on_category("factions")
     old_factions = list(faction_db.find().sort("name", ASCENDING))
+    for i in range(len(old_factions)):
+        calculated_fields = calculate_all_fields(old_factions[i], faction_schema, "faction")
+        old_factions[i].update(calculated_fields)
     new_factions = []
     for faction in old_factions:
         if faction:
@@ -50,34 +65,13 @@ def tick(form_data):
 
     nation_schema, nation_db = get_data_on_category("nations")
     old_nations = list(nation_db.find().sort("name", ASCENDING))
+    for i in range(len(old_nations)):
+        calculated_fields = calculate_all_fields(old_nations[i], nation_schema, "nation")
+        old_nations[i].update(calculated_fields)
     new_nations = []
     for nation in old_nations:
         if nation:
             new_nations.append(nation.copy())
-
-    for i in range(len(old_characters)):
-        calculated_fields = calculate_all_fields(old_characters[i], character_schema, "character")
-        old_characters[i].update(calculated_fields)
-
-    for i in range(len(old_artifacts)):
-        calculated_fields = calculate_all_fields(old_artifacts[i], artifact_schema, "artifact")
-        old_artifacts[i].update(calculated_fields)
-
-    for i in range(len(old_merchants)):
-        calculated_fields = calculate_all_fields(old_merchants[i], merchant_schema, "merchant")
-        old_merchants[i].update(calculated_fields)
-
-    for i in range(len(old_mercenaries)):
-        calculated_fields = calculate_all_fields(old_mercenaries[i], mercenary_schema, "mercenary")
-        old_mercenaries[i].update(calculated_fields)
-
-    for i in range(len(old_factions)):
-        calculated_fields = calculate_all_fields(old_factions[i], faction_schema, "faction")
-        old_factions[i].update(calculated_fields)
-
-    for i in range(len(old_nations)):
-        calculated_fields = calculate_all_fields(old_nations[i], nation_schema, "nation")
-        old_nations[i].update(calculated_fields)
 
     for tick_function_label, tick_function in CHARACTER_TICK_FUNCTIONS.items():
         run_key = f"run_{tick_function_label}"
