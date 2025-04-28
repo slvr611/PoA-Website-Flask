@@ -14,7 +14,7 @@ def tick_helper():
     TICK_FUNCTIONS.update(NATION_TICK_FUNCTIONS)
     return render_template("tick_helper.html", tick_functions=TICK_FUNCTIONS)
 
-@tick_routes.route('/admin/run_tick', methods=['POST'])
+@tick_routes.route('/run_tick', methods=['POST'])
 @admin_required
 def admin_run_tick():
     form_data = request.form.to_dict()
