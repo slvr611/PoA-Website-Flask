@@ -6,9 +6,9 @@ import datetime
 
 base_routes = Blueprint('base_routes', __name__)
 
-@base_routes.context_processor
+@base_routes.before_app_request
 def inject_now():
-    return {'now': datetime.datetime.now()}
+    g.now = datetime.datetime.now()
 
 @base_routes.before_app_request
 def load_user():

@@ -14,6 +14,8 @@ from email.mime.base import MIMEBase
 from email.mime.text import MIMEText
 from email.utils import formatdate
 from email import encoders
+import boto3
+from botocore.exceptions import ClientError
 
 load_dotenv()
 
@@ -108,9 +110,36 @@ for file in json_files:
 for file in unit_json_files:
     json_data[file] = load_json("json-data/units/" + file + ".json")
 
+def upload_to_s3(file_path, s3_key):
+    """Upload a file to S3 bucket"""
+    try:
+        
+        # S3 configuration
+        s3_bucket = os.getenv("S3_BUCKET_NAME")
+        aws_access_key = os.getenv("AWS_ACCESS_KEY_ID")
+        aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+        
+        if not s3_bucket or not aws_access_key or not aws_secret_key:
+            return False, "S3 configuration missing"
+        
+        # Create S3 client
+        s3_client = boto3.client(
+            's3',
+            aws_access_key_id=aws_access_key,
+            aws_secret_access_key=aws_secret_key
+        )
+        
+        # Upload file
+        s3_client.upload_file(file_path, s3_bucket, s3_key)
+        
+        return True, f"File uploaded to S3: {s3_bucket}/{s3_key}"
+    except Exception as e:
+        return False, f"S3 upload failed: {str(e)}"
+
 def backup_mongodb():
     """
     Creates a backup of the MongoDB database and sends it via email.
+    Uses PyMongo directly instead of mongodump for Heroku compatibility.
     Returns a tuple of (success, message)
     """
     try:
@@ -122,38 +151,82 @@ def backup_mongodb():
         timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
         backup_filename = f"mongodb_backup_{timestamp}"
         backup_path = os.path.join(backup_dir, backup_filename)
+        os.makedirs(backup_path, exist_ok=True)
         
-        # Get MongoDB connection details from environment variables
+        # Get MongoDB connection details
         mongo_uri = os.getenv("MONGO_URI", "")
-        db_name = mongo_uri.split("/")[-1]  # Extract database name from URI
+        
+        # Properly extract database name from URI without query parameters
+        from urllib.parse import urlparse
+        
+        # Parse the MongoDB URI
+        parsed_uri = urlparse(mongo_uri)
+        
+        # Extract just the database name (path without leading slash)
+        db_name = parsed_uri.path.lstrip('/')
+        
+        # If there's a question mark in the db_name, only take what's before it
+        if '?' in db_name:
+            db_name = db_name.split('?')[0]
         
         print(f"Backing up {db_name} to {backup_path}")
 
-        # Run mongodump to create the backup
-        cmd = [
-            "mongodump",
-            f"--uri={mongo_uri}",
-            f"--out={backup_path}"
-        ]
-
-        print(f"Running command: {' '.join(cmd)}")
+        # Use PyMongo to create backup
+        from pymongo import MongoClient
+        import json
         
-        subprocess.run(cmd, check=True)
+        client = MongoClient(mongo_uri)
+        db = client[db_name]
         
-        print("Backup created successfully")
-
+        # Get all collections
+        collections = db.list_collection_names()
+        
+        # Create a directory for each collection
+        for collection_name in collections:
+            collection_dir = os.path.join(backup_path, db_name)
+            os.makedirs(collection_dir, exist_ok=True)
+            
+            # Get all documents from the collection
+            collection = db[collection_name]
+            documents = list(collection.find({}))
+            
+            # Convert ObjectId to string for JSON serialization
+            for doc in documents:
+                if '_id' in doc and hasattr(doc['_id'], '__str__'):
+                    doc['_id'] = str(doc['_id'])
+                
+                # Convert any other ObjectId fields
+                for key, value in doc.items():
+                    if hasattr(value, '__str__') and str(type(value)) == "<class 'bson.objectid.ObjectId'>":
+                        doc[key] = str(value)
+            
+            # Write to JSON file
+            with open(os.path.join(collection_dir, f"{collection_name}.json"), 'w') as f:
+                json.dump(documents, f, default=str, indent=2)
+        
         # Create a zip file of the backup
-        zip_path = f"{backup_path}.zip"
-        cmd_zip = ["zip", "-r", zip_path, backup_path]
-        subprocess.run(cmd_zip, check=True)
-
-        print("Backup zipped successfully")
+        import zipfile
         
+        zip_path = f"{backup_path}.zip"
+        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            for root, dirs, files in os.walk(backup_path):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    arcname = os.path.relpath(file_path, os.path.dirname(backup_path))
+                    zipf.write(file_path, arcname)
+
         # Send email with the backup attached
         email_success, email_message = send_backup_email(zip_path, db_name, timestamp)
         
-        return True, f"Backup created successfully at {backup_path} and {zip_path}. Email status: {email_message}"
-    
+        # Clean up the unzipped directory to save space on Heroku
+        import shutil
+        shutil.rmtree(backup_path)
+        
+        # Upload to S3 if configured
+        s3_success, s3_message = upload_to_s3(zip_path, f"backups/{os.path.basename(zip_path)}")
+        
+        return True, f"Backup created successfully. Email: {email_message}. S3: {s3_message}"
+
     except Exception as e:
         return False, f"Backup failed: {str(e)}"
 
@@ -202,13 +275,16 @@ def send_backup_email(attachment_path, db_name, timestamp):
     except Exception as e:
         return False, f"Email failed: {str(e)}"
 
-def restore_mongodb(backup_path=None, backup_date=None):
+def restore_mongodb(backup_path=None, backup_date=None, s3_key=None, s3_bucket=None):
     """
     Restores MongoDB database from a backup.
+    Uses PyMongo directly instead of mongorestore for Heroku compatibility.
     
     Args:
-        backup_path: Direct path to the backup directory or zip file
+        backup_path: Direct path to the backup zip file
         backup_date: Date string in format 'YYYYMMDD_HHMMSS' to find a specific backup
+        s3_key: S3 object key for the backup file
+        s3_bucket: S3 bucket name containing the backup
         
     Returns:
         tuple: (success, message)
@@ -216,11 +292,38 @@ def restore_mongodb(backup_path=None, backup_date=None):
     try:
         backup_dir = os.path.join(os.getcwd(), 'backups')
         
+        # If S3 backup is specified, download it first
+        if s3_key and s3_bucket:
+            try:
+                # Create S3 client
+                s3_client = boto3.client(
+                    's3',
+                    aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+                    aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY")
+                )
+                
+                # Ensure backup directory exists
+                os.makedirs(backup_dir, exist_ok=True)
+                
+                # Set local path for downloaded file
+                local_filename = os.path.basename(s3_key)
+                local_path = os.path.join(backup_dir, local_filename)
+                
+                # Download the file
+                print(f"Downloading {s3_key} from S3 bucket {s3_bucket} to {local_path}")
+                s3_client.download_file(s3_bucket, s3_key, local_path)
+                
+                # Set backup_path to the downloaded file
+                backup_path = local_path
+                
+            except Exception as e:
+                return False, f"Failed to download backup from S3: {str(e)}"
+        
         # If no specific backup is provided, find the most recent one
         if not backup_path and not backup_date:
-            # List all backups and sort by name (which includes timestamp)
+            # List all backup zip files and sort by name (which includes timestamp)
             backups = [f for f in os.listdir(backup_dir) 
-                      if os.path.isdir(os.path.join(backup_dir, f)) and f.startswith('mongodb_backup_')]
+                      if f.endswith('.zip') and f.startswith('mongodb_backup_')]
             
             if not backups:
                 return False, "No backups found"
@@ -231,43 +334,90 @@ def restore_mongodb(backup_path=None, backup_date=None):
             
         # If date is provided, find that specific backup
         elif backup_date:
-            backup_name = f"mongodb_backup_{backup_date}"
+            backup_name = f"mongodb_backup_{backup_date}.zip"
             backup_path = os.path.join(backup_dir, backup_name)
             
-            # Check if it's a zip file
-            if os.path.exists(f"{backup_path}.zip") and not os.path.exists(backup_path):
-                # Extract the zip file
-                cmd_unzip = ["unzip", f"{backup_path}.zip", "-d", backup_dir]
-                subprocess.run(cmd_unzip, check=True)
-        
-        # Handle zip files
-        if backup_path.endswith('.zip'):
-            # Extract the zip file
-            cmd_unzip = ["unzip", backup_path, "-d", backup_dir]
-            subprocess.run(cmd_unzip, check=True)
-            # Update backup_path to the extracted directory
-            backup_path = backup_path[:-4]  # Remove .zip extension
-        
-        # Ensure the backup directory exists
+        # Ensure the backup file exists
         if not os.path.exists(backup_path):
-            return False, f"Backup directory not found: {backup_path}"
+            return False, f"Backup file not found: {backup_path}"
+        
+        # Create a temporary directory for extraction
+        import tempfile
+        temp_dir = tempfile.mkdtemp()
+        
+        # Extract the zip file
+        import zipfile
+        with zipfile.ZipFile(backup_path, 'r') as zip_ref:
+            zip_ref.extractall(temp_dir)
         
         # Get MongoDB connection details
         mongo_uri = os.getenv("MONGO_URI", "")
-        db_name = mongo_uri.split("/")[-1]  # Extract database name from URI
+        
+        # Properly extract database name from URI without query parameters
+        from urllib.parse import urlparse
+        
+        # Parse the MongoDB URI
+        parsed_uri = urlparse(mongo_uri)
+        
+        # Extract just the database name (path without leading slash)
+        db_name = parsed_uri.path.lstrip('/')
+        
+        # If there's a question mark in the db_name, only take what's before it
+        if '?' in db_name:
+            db_name = db_name.split('?')[0]
         
         # Create a backup before restoring
         backup_mongodb()
 
-        # Run mongorestore to restore the backup
-        cmd = [
-            "mongorestore",
-            f"--uri={mongo_uri}",
-            "--drop",  # Drop existing collections before restoring
-            os.path.join(backup_path, db_name)
-        ]
+        # Use PyMongo to restore
+        from pymongo import MongoClient
+        import json
+        from bson import json_util, ObjectId
         
-        subprocess.run(cmd, check=True)
+        client = MongoClient(mongo_uri)
+        db = client[db_name]
+        
+        # Find the extracted db directory
+        db_dir = os.path.join(temp_dir, db_name)
+        if not os.path.exists(db_dir):
+            # Try to find any directory that might contain the backup
+            for root, dirs, files in os.walk(temp_dir):
+                if any(f.endswith('.json') for f in files):
+                    db_dir = root
+                    break
+        
+        if not os.path.exists(db_dir):
+            return False, f"Could not find database directory in the backup"
+        
+        # Get all JSON files (collections)
+        collection_files = [f for f in os.listdir(db_dir) if f.endswith('.json')]
+        
+        for collection_file in collection_files:
+            collection_name = collection_file.replace('.json', '')
+            
+            # Read the JSON file
+            with open(os.path.join(db_dir, collection_file), 'r') as f:
+                documents = json.load(f)
+            
+            # Convert string IDs back to ObjectId
+            for doc in documents:
+                if '_id' in doc and isinstance(doc['_id'], str):
+                    try:
+                        doc['_id'] = ObjectId(doc['_id'])
+                    except:
+                        pass  # Keep as string if not a valid ObjectId
+            
+            # Drop the existing collection
+            if collection_name in db.list_collection_names():
+                db[collection_name].drop()
+            
+            # Insert the documents
+            if documents:
+                db[collection_name].insert_many(documents)
+        
+        # Clean up
+        import shutil
+        shutil.rmtree(temp_dir)
         
         return True, f"Database restored successfully from {backup_path}"
     

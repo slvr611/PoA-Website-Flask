@@ -198,32 +198,54 @@ def process_pop_growth():
 @admin_required
 def database_management():
     """Database backup and restore management page"""
-    backup_dir = os.path.join(os.getcwd(), 'backups')
-    
     # Get list of available backups
     backups = []
-    if os.path.exists(backup_dir):
-        # Get directories and zip files
-        for item in os.listdir(backup_dir):
-            item_path = os.path.join(backup_dir, item)
-            if (os.path.isdir(item_path) or item.endswith('.zip')) and item.startswith('mongodb_backup_'):
-                # Extract timestamp from filename
-                timestamp = item.replace('mongodb_backup_', '').replace('.zip', '')
-                try:
-                    # Convert to datetime for better display
-                    date_obj = datetime.datetime.strptime(timestamp, '%Y%m%d_%H%M%S')
-                    formatted_date = date_obj.strftime('%Y-%m-%d %H:%M:%S')
-                    
-                    backups.append({
-                        'path': item_path,
-                        'name': item,
-                        'timestamp': timestamp,
-                        'date': formatted_date,
-                        'is_zip': item.endswith('.zip')
-                    })
-                except ValueError:
-                    # Skip if timestamp format is invalid
-                    continue
+    try:
+        # S3 configuration
+        s3_bucket = os.getenv("S3_BUCKET_NAME")
+        aws_access_key = os.getenv("AWS_ACCESS_KEY_ID")
+        aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+        
+        if s3_bucket and aws_access_key and aws_secret_key:
+            # Create S3 client
+            import boto3
+            s3_client = boto3.client(
+                's3',
+                aws_access_key_id=aws_access_key,
+                aws_secret_access_key=aws_secret_key
+            )
+            
+            # List objects in the backups folder
+            response = s3_client.list_objects_v2(
+                Bucket=s3_bucket,
+                Prefix='backups/'
+            )
+            
+            if 'Contents' in response:
+                for item in response['Contents']:
+                    key = item['Key']
+                    if key.endswith('.zip') and 'mongodb_backup_' in key:
+                        # Extract filename and timestamp
+                        filename = os.path.basename(key)
+                        timestamp = filename.replace('mongodb_backup_', '').replace('.zip', '')
+                        try:
+                            date_obj = datetime.datetime.strptime(timestamp, '%Y%m%d_%H%M%S')
+                            formatted_date = date_obj.strftime('%Y-%m-%d %H:%M:%S')
+                            
+                            backups.append({
+                                'path': f"s3://{s3_bucket}/{key}",
+                                'name': filename,
+                                'timestamp': timestamp,
+                                'date': formatted_date,
+                                'is_zip': True,
+                                'location': 's3',
+                                's3_key': key,
+                                's3_bucket': s3_bucket
+                            })
+                        except ValueError:
+                            continue
+    except Exception as e:
+        flash(f"Error retrieving S3 backups: {str(e)}", "error")
     
     # Sort backups by timestamp (newest first)
     backups.sort(key=lambda x: x['timestamp'], reverse=True)
