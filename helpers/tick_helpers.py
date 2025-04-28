@@ -17,75 +17,80 @@ def tick(form_data):
     old_characters = list(character_db.find().sort("name", ASCENDING))
     new_characters = []
     for character in old_characters:
-        new_characters.append(character.copy())
+        if character:
+            new_characters.append(character.copy())
+        
+    artifact_schema, artifact_db = get_data_on_category("artifacts")
+    old_artifacts = list(artifact_db.find().sort("name", ASCENDING))
+    new_artifacts = []
+    for artifact in old_artifacts:
+        if artifact:
+            new_artifacts.append(artifact.copy())
+    
+    merchant_schema, merchant_db = get_data_on_category("merchants")
+    old_merchants = list(merchant_db.find().sort("name", ASCENDING))
+    new_merchants = []
+    for merchant in old_merchants:
+        if merchant:
+            new_merchants.append(merchant.copy())
+        
+    mercenary_schema, mercenary_db = get_data_on_category("mercenaries")
+    old_mercenaries = list(mercenary_db.find().sort("name", ASCENDING))
+    new_mercenaries = []
+    for mercenary in old_mercenaries:
+        if mercenary:
+            new_mercenaries.append(mercenary.copy())
+        
+    nation_schema, nation_db = get_data_on_category("nations")
+    old_nations = list(nation_db.find().sort("name", ASCENDING))
+    new_nations = []
+    for nation in old_nations:
+        if nation:
+            new_nations.append(nation.copy())
 
     for i in range(len(old_characters)):
         calculated_fields = calculate_all_fields(old_characters[i], character_schema, "character")
         old_characters[i].update(calculated_fields)
+
+    for i in range(len(old_artifacts)):
+        calculated_fields = calculate_all_fields(old_artifacts[i], artifact_schema, "artifact")
+        old_artifacts[i].update(calculated_fields)
+
+    for i in range(len(old_merchants)):
+        calculated_fields = calculate_all_fields(old_merchants[i], merchant_schema, "merchant")
+        old_merchants[i].update(calculated_fields)
+
+    for i in range(len(old_mercenaries)):
+        calculated_fields = calculate_all_fields(old_mercenaries[i], mercenary_schema, "mercenary")
+        old_mercenaries[i].update(calculated_fields)
+
+    for i in range(len(old_nations)):
+        calculated_fields = calculate_all_fields(old_nations[i], nation_schema, "nation")
+        old_nations[i].update(calculated_fields)
 
     for tick_function_label, tick_function in CHARACTER_TICK_FUNCTIONS.items():
         run_key = f"run_{tick_function_label}"
         if run_key in form_data:
             for i in range(len(old_characters)):
                 tick_summary += tick_function(old_characters[i], new_characters[i], character_schema)
-        
-    artifact_schema, artifact_db = get_data_on_category("artifacts")
-    old_artifacts = list(artifact_db.find().sort("name", ASCENDING))
-    new_artifacts = []
-    for artifact in old_artifacts:
-        new_artifacts.append(artifact.copy())
-
-    for i in range(len(old_artifacts)):
-        calculated_fields = calculate_all_fields(old_artifacts[i], artifact_schema, "artifact")
-        old_artifacts[i].update(calculated_fields)
 
     for tick_function_label, tick_function in ARTIFACT_TICK_FUNCTIONS.items():
         run_key = f"run_{tick_function_label}"
         if run_key in form_data:
-            for i in range(len(old_characters)):
-                tick_summary += tick_function(old_characters[i], new_characters[i], character_schema)
-    
-    merchant_schema, merchant_db = get_data_on_category("merchants")
-    old_merchants = list(merchant_db.find().sort("name", ASCENDING))
-    new_merchants = []
-    for merchant in old_merchants:
-        new_merchants.append(merchant.copy())
-
-    for i in range(len(old_merchants)):
-        calculated_fields = calculate_all_fields(old_merchants[i], merchant_schema, "merchant")
-        old_merchants[i].update(calculated_fields)
+            for i in range(len(old_artifacts)):
+                tick_summary += tick_function(old_artifacts[i], new_artifacts[i], artifact_schema)
 
     for tick_function_label, tick_function in MERCHANT_TICK_FUNCTIONS.items():
         run_key = f"run_{tick_function_label}"
         if run_key in form_data:
             for i in range(len(old_merchants)):
                 tick_summary += tick_function(old_merchants[i], new_merchants[i], merchant_schema)
-        
-    mercenary_schema, mercenary_db = get_data_on_category("mercenaries")
-    old_mercenaries = list(mercenary_db.find().sort("name", ASCENDING))
-    new_mercenaries = []
-    for mercenary in old_mercenaries:
-        new_mercenaries.append(mercenary.copy())
-
-    for i in range(len(old_mercenaries)):
-        calculated_fields = calculate_all_fields(old_mercenaries[i], mercenary_schema, "mercenary")
-        old_mercenaries[i].update(calculated_fields)
-
+    
     for tick_function_label, tick_function in MERCENARY_TICK_FUNCTIONS.items():
         run_key = f"run_{tick_function_label}"
         if run_key in form_data:
             for i in range(len(old_mercenaries)):
                 tick_summary += tick_function(old_mercenaries[i], new_mercenaries[i], mercenary_schema)
-        
-    nation_schema, nation_db = get_data_on_category("nations")
-    old_nations = list(nation_db.find().sort("name", ASCENDING))
-    new_nations = []
-    for nation in old_nations:
-        new_nations.append(nation.copy())
-    
-    for i in range(len(old_nations)):
-        calculated_fields = calculate_all_fields(old_nations[i], nation_schema, "nation")
-        old_nations[i].update(calculated_fields)
 
     for tick_function_label, tick_function in NATION_TICK_FUNCTIONS.items():
         run_key = f"run_{tick_function_label}"
