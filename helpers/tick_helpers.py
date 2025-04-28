@@ -187,7 +187,7 @@ def character_death_tick(old_character, new_character, schema):
     new_character["death_chance_at_tick"] = old_character.get("death_chance", 0)
     if death_roll <= old_character.get("death_chance", 0):
         new_character["health_status"] = "Dead"
-        result = f"{old_character.get("name", "Unknown")} has died.\n"
+        result = f"{old_character.get('name', 'Unknown')} has died.\n"
 
         if old_character.get("ruling_nation_org", "") != "":
             nation_schema, nation_db = get_data_on_category("nations")
@@ -200,7 +200,7 @@ def character_death_tick(old_character, new_character, schema):
                 new_nation["leader_death_stab_loss_roll"] = leader_death_stab_loss_roll
                 new_nation["leader_death_stab_loss_chance_at_tick"] = old_nation.get("stability_loss_chance_on_leader_death", 0)
                 if leader_death_stab_loss_roll <= old_nation.get("stability_loss_chance_on_leader_death", 0):
-                    result += f"{old_nation['name']} has lost stability due to the death of their leader.\n"
+                    result += f"{old_nation.get('name', 'Unknown')} has lost stability due to the death of their leader.\n"
                     stability_enum = nation_schema["properties"]["stability"]["enum"]
                     stability_index = stability_enum.find(old_nation["stability"])
                     stability_index = max(stability_index - 1, 0)
@@ -212,7 +212,7 @@ def character_death_tick(old_character, new_character, schema):
                         change_type="Update",
                         before_data=old_nation,
                         after_data=new_nation,
-                        reason="Death of " + old_character["name"] + " has caused a stability loss for " + old_nation["name"]
+                        reason="Death of " + old_character.get('name', 'Unknown') + " has caused a stability loss for " + old_nation.get('name', 'Unknown')
                     )
                     approve_change(change_id)
         
@@ -235,7 +235,7 @@ def character_death_tick(old_character, new_character, schema):
                         change_type="Update",
                         before_data=old_artifact,
                         after_data=new_artifact,
-                        reason="Death of " + old_character["name"] + " has caused " + old_artifact["name"] + " to be lost"
+                        reason="Death of " + old_character.get('name', 'Unknown') + " has caused " + old_artifact.get('name', 'Unknown') + " to be lost"
                     )
                     approve_change(change_id)
 
@@ -257,7 +257,7 @@ def character_heal_tick(old_character, new_character, schema):
     if heal_roll <= old_character.get("heal_chance", 0):
         health_index = max(health_index - 1, 0)
         new_character["health_status"] = health_status_enum[health_index]
-        result = f"{old_character['name']} has healed from {old_character['health_status']} to {new_character['health_status']}.\n"
+        result = f"{old_character.get('name', 'Unknown')} has healed from {old_character.get('health_status', 'Unknown')} to {new_character.get('health_status', 'Unknown')}.\n"
     return result
 
 def character_mana_tick(old_character, new_character, schema):
@@ -270,7 +270,7 @@ def character_age_tick(old_character, new_character, schema):
 
 def character_modifier_decay_tick(old_character, new_character, schema):
     new_modifiers = []
-    for modifier in old_character["modifiers"]:
+    for modifier in old_character.get("modifiers", []):
         if modifier["duration"] > 0:
             modifier["duration"] -= 1
         if modifier["duration"] != 0:
