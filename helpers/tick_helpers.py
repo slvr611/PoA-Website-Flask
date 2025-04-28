@@ -181,7 +181,7 @@ def give_tick_summary(tick_summary):
 def character_death_tick(old_character, new_character, schema):
     result = ""
     if new_character["health_status"] == "Dead":
-        return
+        return ""
     death_roll = random.random()
     new_character["death_roll"] = death_roll
     new_character["death_chance_at_tick"] = old_character.get("death_chance", 0)
@@ -243,9 +243,9 @@ def character_death_tick(old_character, new_character, schema):
 def character_heal_tick(old_character, new_character, schema):
     result = ""
     if new_character["health_status"] == "Healthy":
-        return
+        return ""
     if new_character["health_status"] == "Dead":
-        return
+        return ""
     
     health_status_enum = schema["properties"]["health_status"]["enum"]
     health_index = health_status_enum.find(old_character["health_status"])
@@ -261,11 +261,11 @@ def character_heal_tick(old_character, new_character, schema):
 
 def character_mana_tick(old_character, new_character, schema):
     new_character["current_magic_points"] = min(old_character["current_magic_points"] + old_character.get("magic_point_income", 0), old_character.get("magic_point_capacity", 0))
-    return
+    return ""
 
 def character_age_tick(old_character, new_character, schema):
     new_character["age"] = old_character["age"] + 1
-    return
+    return ""
 
 def character_modifier_decay_tick(old_character, new_character, schema):
     new_modifiers = []
@@ -275,7 +275,7 @@ def character_modifier_decay_tick(old_character, new_character, schema):
         if modifier["duration"] != 0:
             new_modifiers.append(modifier)
     new_character["modifiers"] = new_modifiers
-    return
+    return ""
 
 ###########################################################
 # Artifact Tick Functions
@@ -284,7 +284,7 @@ def character_modifier_decay_tick(old_character, new_character, schema):
 def artifact_loss_tick(old_artifact, new_artifact, schema):
     result = ""
     if old_artifact["owner"] == "Lost":
-        return
+        return ""
     loss_roll = random.random()
     new_artifact["loss_roll"] = loss_roll
     new_artifact["loss_chance_at_tick"] = old_artifact.get("passive_loss_chance", 0)
@@ -302,7 +302,7 @@ def merchant_income_tick(old_merchant, new_merchant, schema):
 
     for resource, amount in old_merchant.get("resource_income", {}).items():
         new_merchant[resource] = old_merchant[resource] + amount
-    return
+    return ""
 
 ###########################################################
 # Mercenary Tick Functions
@@ -310,7 +310,7 @@ def merchant_income_tick(old_merchant, new_merchant, schema):
 
 def mercenary_upkeep_tick(old_mercenary, new_mercenary, schema):
     new_mercenary["treasury"] = old_mercenary["treasury"] - old_mercenary.get("upkeep", 0)
-    return
+    return ""
 
 ###########################################################
 # Nation Tick Functions
@@ -320,8 +320,8 @@ def nation_income_tick(old_nation, new_nation, schema):
     new_nation["money"] = old_nation["money"] + old_nation.get("money_income", 0)
     for resource, amount in old_nation.get("resource_income", {}).items():
         new_nation[resource] = old_nation[resource] + amount
-
-    return
+    
+    return ""
 
 def update_rolling_karma(old_nation, new_nation, schema):
     event_type = old_nation.get("event_type", "Unknown")
@@ -330,20 +330,20 @@ def update_rolling_karma(old_nation, new_nation, schema):
     elif event_type in ["Good", "Very Good", "Fantastic", "Wonderous"]:
         new_nation["rolling_karma"] = int(old_nation.get("rolling_karma", 0)) - 1
 
-    return
+    return ""
 
 def nation_infamy_decay_tick(old_nation, new_nation, schema):
     # TODO: Prevent Decay while at war
     if old_nation["infamy"] < 5:
         new_nation["infamy"] = 0
-        return
+        return ""
     else:
         new_nation["infamy"] = int(round(old_nation["infamy"] / 10)) * 5
-    return
+    return ""
 
 def nation_prestige_gain_tick(old_nation, new_nation, schema):
     new_nation["prestige"] = old_nation["prestige"] + old_nation.get("prestige_gain", 0)
-    return
+    return ""
 
 def nation_stability_tick(old_nation, new_nation, schema):
     result = ""
@@ -370,7 +370,7 @@ def nation_stability_tick(old_nation, new_nation, schema):
 
 def nation_concessions_tick(old_nation, new_nation, schema):
     if old_nation["overlord"] == "":
-        return
+        return ""
 
     result = ""
     concessions_roll = random.random()
@@ -401,7 +401,7 @@ def nation_concessions_tick(old_nation, new_nation, schema):
 
 def nation_rebellion_tick(old_nation, new_nation, schema):
     if old_nation["overlord"] == "":
-        return
+        return ""
     result = ""
     rebellion_roll = random.random()
     new_nation["rebellion_roll"] = rebellion_roll
@@ -428,19 +428,19 @@ def nation_modifier_decay_tick(old_nation, new_nation, schema):
         if modifier["duration"] != 0:
             new_modifiers.append(modifier)
     new_nation["modifiers"] = new_modifiers
-    return
+    return ""
 
 def nation_job_cleanup_tick(old_nation, new_nation, schema):
     new_jobs = {}
     for job in old_nation["jobs"].keys():
         new_jobs[job] = 0
     new_nation["jobs"] = new_jobs
-    return
+    return ""
 
 def reset_rolling_karma_to_zero(old_nation, new_nation, schema):
     new_nation["rolling_karma"] = 0
 
-    return
+    return ""
 
 ###########################################################
 # Tick Function Constants
