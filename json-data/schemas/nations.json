@@ -564,24 +564,24 @@
 		"default": "Standard",
 		"laws": {
 			"Minimal": {
-				"unit_food_consumption": -1,
+				"unit_food_upkeep": -1,
 				"strength": -2
 			},
 			"Substandard": {
-				"unit_food_consumption": -0.5,
+				"unit_food_upkeep": -0.5,
 				"strength": -1
 			},
 			"Standard": {},
 			"Notable": {
-				"unit_food_consumption": 1,
+				"unit_food_upkeep": 1,
 				"strength": 1
 			},
 			"Substantial": {
-				"unit_food_consumption": 2,
+				"unit_food_upkeep": 2,
 				"strength": 2
 			},
 			"Extreme": {
-				"unit_food_consumption": 3,
+				"unit_food_upkeep": 3,
 				"strength": 3
 			}
 		}
