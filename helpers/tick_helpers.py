@@ -26,19 +26,22 @@ def tick(form_data):
         if run_key in form_data:
             for i in range(len(old_characters)):
                 tick_summary += tick_function(old_characters[i], new_characters[i], character_schema)
+        
+    artifact_schema, artifact_db = get_data_on_category("artifacts")
+    old_artifacts = list(artifact_db.find().sort("name", ASCENDING))
+    new_artifacts = old_artifacts.deepcopy()
+
+    for i in range(len(old_artifacts)):
+        calculated_fields = calculate_all_fields(old_artifacts[i], artifact_schema, "artifact")
+        old_artifacts[i].update(calculated_fields)
+
+    for tick_function_label, tick_function in ARTIFACT_TICK_FUNCTIONS.items():
+        run_key = f"run_{tick_function_label}"
+        if run_key in form_data:
+            for i in range(len(old_characters)):
+                tick_summary += tick_function(old_characters[i], new_characters[i], character_schema)
     
-    for i in range(len(old_characters)):
-        change_id = request_change(
-            data_type="characters",
-            item_id=old_characters[i]["_id"],
-            change_type="Update",
-            before_data=old_characters[i],
-            after_data=new_characters[i],
-            reason="Tick Update for " + old_characters[i]["name"]
-        )
-        approve_change(change_id)
-    
-    merchant_schema, merchant_db = get_data_on_category("characters")
+    merchant_schema, merchant_db = get_data_on_category("merchants")
     old_merchants = list(merchant_db.find().sort("name", ASCENDING))
     new_merchants = old_merchants.deepcopy()
 
@@ -51,19 +54,8 @@ def tick(form_data):
         if run_key in form_data:
             for i in range(len(old_merchants)):
                 tick_summary += tick_function(old_merchants[i], new_merchants[i], merchant_schema)
-    
-    for i in range(len(old_merchants)):
-        change_id = request_change(
-            data_type="merchants",
-            item_id=old_merchants[i]["_id"],
-            change_type="Update",
-            before_data=old_merchants[i],
-            after_data=new_merchants[i],
-            reason="Tick Update for " + old_merchants[i]["name"]
-        )
-        approve_change(change_id)
-    
-    mercenary_schema, mercenary_db = get_data_on_category("characters")
+        
+    mercenary_schema, mercenary_db = get_data_on_category("mercenaries")
     old_mercenaries = list(mercenary_db.find().sort("name", ASCENDING))
     new_mercenaries = old_mercenaries.deepcopy()
 
@@ -76,18 +68,7 @@ def tick(form_data):
         if run_key in form_data:
             for i in range(len(old_mercenaries)):
                 tick_summary += tick_function(old_mercenaries[i], new_mercenaries[i], mercenary_schema)
-    
-    for i in range(len(old_mercenaries)):
-        change_id = request_change(
-            data_type="mercenaries",
-            item_id=old_mercenaries[i]["_id"],
-            change_type="Update",
-            before_data=old_mercenaries[i],
-            after_data=new_mercenaries[i],
-            reason="Tick Update for " + old_mercenaries[i]["name"]
-        )
-        approve_change(change_id)
-    
+        
     nation_schema, nation_db = get_data_on_category("nations")
     old_nations = list(nation_db.find().sort("name", ASCENDING))
     new_nations = old_nations.deepcopy()
@@ -102,6 +83,50 @@ def tick(form_data):
             for i in range(len(old_nations)):
                 tick_summary += tick_function(old_nations[i], new_nations[i], nation_schema)
     
+    for i in range(len(old_characters)):
+        change_id = request_change(
+            data_type="characters",
+            item_id=old_characters[i]["_id"],
+            change_type="Update",
+            before_data=old_characters[i],
+            after_data=new_characters[i],
+            reason="Tick Update for " + old_characters[i]["name"]
+        )
+        approve_change(change_id)
+    
+    for i in range(len(old_artifacts)):
+        change_id = request_change(
+            data_type="artifacts",
+            item_id=old_artifacts[i]["_id"],
+            change_type="Update",
+            before_data=old_artifacts[i],
+            after_data=new_artifacts[i],
+            reason="Tick Update for " + old_artifacts[i]["name"]
+        )
+        approve_change(change_id)
+
+    for i in range(len(old_merchants)):
+        change_id = request_change(
+            data_type="merchants",
+            item_id=old_merchants[i]["_id"],
+            change_type="Update",
+            before_data=old_merchants[i],
+            after_data=new_merchants[i],
+            reason="Tick Update for " + old_merchants[i]["name"]
+        )
+        approve_change(change_id)
+
+    for i in range(len(old_mercenaries)):
+        change_id = request_change(
+            data_type="mercenaries",
+            item_id=old_mercenaries[i]["_id"],
+            change_type="Update",
+            before_data=old_mercenaries[i],
+            after_data=new_mercenaries[i],
+            reason="Tick Update for " + old_mercenaries[i]["name"]
+        )
+        approve_change(change_id)
+
     for i in range(len(old_nations)):
         change_id = request_change(
             data_type="nations",
@@ -225,6 +250,16 @@ def character_mana_tick(old_character, new_character, schema):
 
 def character_age_tick(old_character, new_character, schema):
     new_character["age"] = old_character["age"] + 1
+    return
+
+def character_modifier_decay_tick(old_character, new_character, schema):
+    new_modifiers = []
+    for modifier in old_character["modifiers"]:
+        if modifier["duration"] > 0:
+            modifier["duration"] -= 1
+        if modifier["duration"] != 0:
+            new_modifiers.append(modifier)
+    new_character["modifiers"] = new_modifiers
     return
 
 ###########################################################
@@ -406,6 +441,7 @@ CHARACTER_TICK_FUNCTIONS = {
     "Character Heal Tick": character_heal_tick,
     "Character Mana Tick": character_mana_tick,
     "Character Age Tick": character_age_tick,
+    "Character Modifier Decay Tick": character_modifier_decay_tick,
 }
 
 ARTIFACT_TICK_FUNCTIONS = {
