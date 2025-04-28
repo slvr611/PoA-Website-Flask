@@ -32,6 +32,37 @@ def request_change(data_type, item_id, change_type, before_data, after_data, rea
     result = changes_collection.insert_one(change_doc)
     return result.inserted_id
 
+def system_request_change(data_type, item_id, change_type, before_data, after_data, reason):
+    requester = mongo.db.players.find_one({"name": "System"})
+    if requester is None:
+        return None
+
+    changes_collection = mongo.db.changes
+    now = datetime.now()
+
+    after_data.pop("reason", None)
+    before_data.pop("_id", None)
+    after_data.pop("_id", None)
+
+    before_data, after_data = keep_only_differences(before_data, after_data, change_type)
+    differential = calculate_int_changes(before_data, after_data)
+
+    change_doc = {
+        "target_collection": data_type,
+        "target": item_id,
+        "time_requested": now,
+        "requester": requester,
+        "change_type": change_type,
+        "before_requested_data": before_data,
+        "after_requested_data": after_data,
+        "differential_data": differential,
+        "request_reason": reason,
+        "status": "Pending"
+    }
+    result = changes_collection.insert_one(change_doc)
+    return result.inserted_id
+
+
 def approve_change(change_id):
     approver = mongo.db.players.find_one({"id": g.user.get("id", None)})
     if approver is None or not approver.get("is_admin", False):

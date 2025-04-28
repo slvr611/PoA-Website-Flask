@@ -1,7 +1,7 @@
 from helpers.data_helpers import get_data_on_category
 from calculations.field_calculations import calculate_all_fields
 from pymongo import ASCENDING
-from helpers.change_helpers import request_change, system_approve_change
+from helpers.change_helpers import system_request_change, system_approve_change
 from app_core import mongo, json_data
 from flask import flash
 from app_core import backup_mongodb
@@ -143,7 +143,7 @@ def tick(form_data):
 
     
     for i in range(len(old_characters)):
-        change_id = request_change(
+        change_id = system_request_change(
             data_type="characters",
             item_id=old_characters[i]["_id"],
             change_type="Update",
@@ -154,7 +154,7 @@ def tick(form_data):
         system_approve_change(change_id)
     
     for i in range(len(old_artifacts)):
-        change_id = request_change(
+        change_id = system_request_change(
             data_type="artifacts",
             item_id=old_artifacts[i]["_id"],
             change_type="Update",
@@ -165,7 +165,7 @@ def tick(form_data):
         system_approve_change(change_id)
 
     for i in range(len(old_merchants)):
-        change_id = request_change(
+        change_id = system_request_change(
             data_type="merchants",
             item_id=old_merchants[i]["_id"],
             change_type="Update",
@@ -176,7 +176,7 @@ def tick(form_data):
         system_approve_change(change_id)
 
     for i in range(len(old_mercenaries)):
-        change_id = request_change(
+        change_id = system_request_change(
             data_type="mercenaries",
             item_id=old_mercenaries[i]["_id"],
             change_type="Update",
@@ -187,7 +187,7 @@ def tick(form_data):
         system_approve_change(change_id)
     
     for i in range(len(old_factions)):
-        change_id = request_change(
+        change_id = system_request_change(
             data_type="factions",
             item_id=old_factions[i]["_id"],
             change_type="Update",
@@ -198,7 +198,7 @@ def tick(form_data):
         system_approve_change(change_id)
 
     for i in range(len(old_nations)):
-        change_id = request_change(
+        change_id = system_request_change(
             data_type="nations",
             item_id=old_nations[i]["_id"],
             change_type="Update",
@@ -266,7 +266,7 @@ def character_death_tick(old_character, new_character, calculated_character, sch
                     stability_index = max(stability_index - 1, 0)
                     new_nation["stability"] = stability_enum[stability_index]
                     # TODO: Add code to account for Autocracy increased stab loss on leader death based on age
-                    change_id = request_change(
+                    change_id = system_request_change(
                         data_type="nations",
                         item_id=old_nation["_id"],
                         change_type="Update",
@@ -290,7 +290,7 @@ def character_death_tick(old_character, new_character, calculated_character, sch
                 new_artifact["owner_death_loss_chance_at_tick"] = calculated_artifact.get("owner_death_loss_chance", 0)
                 if loss_roll <= calculated_artifact.get("owner_death_loss_chance", 0):
                     new_artifact["owner"] = "Lost"
-                    change_id = request_change(
+                    change_id = system_request_change(
                         data_type="artifacts",
                         item_id=old_artifact["_id"],
                         change_type="Update",
