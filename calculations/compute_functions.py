@@ -179,6 +179,8 @@ def compute_minority_count(field, target, base_value, field_schema, overall_tota
             known_religions.append(pop.get("religion", ""))
             minority_count += 1
     
+    minority_count += overall_total_modifiers.get(field, 0)
+    
     return minority_count
 
 def compute_stability_gain_chance(field, target, base_value, field_schema, overall_total_modifiers):
