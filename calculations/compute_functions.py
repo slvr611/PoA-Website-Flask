@@ -314,9 +314,9 @@ def compute_resource_storage_capacity(field, target, base_value, field_schema, o
     
     for resource in all_resources:
         specific_resource_storage = resource["base_storage"]
-        modifiers_to_check = [resource["key"] + "_storage", "resource_storage"]
-        for modifier in modifiers_to_check:
-            specific_resource_storage += overall_total_modifiers.get(modifier, 0)
+        specific_resource_storage += overall_total_modifiers.get(resource["key"] + "_storage_capacity", 0)
+        if specific_resource_storage > 0:
+            specific_resource_storage += overall_total_modifiers.get("resource_storage_capacity", 0)
         storage_dict[resource["key"]] = specific_resource_storage
     
     return storage_dict

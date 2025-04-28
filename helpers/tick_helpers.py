@@ -351,7 +351,7 @@ def character_heal_tick(old_character, new_character, calculated_character, sche
     return result
 
 def character_mana_tick(old_character, new_character, calculated_character, schema):
-    new_character["current_magic_points"] = min(old_character.get("current_magic_points", 0) + calculated_character.get("magic_point_income", 0), calculated_character.get("magic_point_capacity", 0))
+    new_character["magic_points"] = min(old_character.get("magic_points", 0) + calculated_character.get("magic_point_income", 0), calculated_character.get("magic_point_capacity", 0))
     return ""
 
 def character_age_tick(old_character, new_character, calculated_character, schema):

@@ -790,7 +790,8 @@
 			},
 			"Production": {
 				"harvester_stone_upkeep": -1,
-				"miner_wood_upkeep": -1
+				"miner_wood_upkeep": -1,
+				"resource_storage_capacity": 5
 			},
 			"Commerce": {
 				"stability_gain_chance_per_road_capacity_used": 0.01,

@@ -10,13 +10,13 @@
 		},
 		"modifiers": {
 			"magic_consumption": 1,
-			"artifact_death_loss_chance": -0.05,
-			"minimum_artifact_death_loss_chance": 0.1
+			"artifact_owner_death_loss_chance": -0.05,
+			"minimum_artifact_owner_death_loss_chance": 0.1
 		},
 		"synergy_requirement": "magic",
 		"synergy_node_active": true,
 		"synergy_modifiers": {
-			"artifact_death_loss_chance": -0.05
+			"artifact_owner_death_loss_chance": -0.05
 		},
 		"count": 1
 	},
@@ -28,7 +28,9 @@
 			"magic": 4
 		},
 		"modifiers": {
-			"magic_consumption": 1
+			"magic_consumption": 1,
+			"nation_spell_cost": -1,
+			"nation_spell_cost_minimum": 2
 		},
 		"synergy_requirement": "magic",
 		"synergy_node_active": true,
@@ -46,18 +48,18 @@
 			"bronze": 1
 		},
 		"modifiers": {
-			"wood_storage": 5,
-			"stone_storage": 5,
-			"mounts_storage": 5,
-			"bronze_storage": 5
+			"wood_storage_capacity": 5,
+			"stone_storage_capacity": 5,
+			"mounts_storage_capacity": 5,
+			"bronze_storage_capacity": 5
 		},
 		"synergy_requirement": "stone",
 		"synergy_node_active": true,
 		"synergy_modifiers": {
-			"wood_storage": 5,
-			"stone_storage": 5,
-			"mounts_storage": 5,
-			"bronze_storage": 5
+			"wood_storage_capacity": 5,
+			"stone_storage_capacity": 5,
+			"mounts_storage_capacity": 5,
+			"bronze_storage_capacity": 5
 		},
 		"count": 1
 	},
@@ -111,7 +113,7 @@
 		"synergy_requirement": "food",
 		"synergy_node_active": true,
 		"synergy_modifiers": {
-			"food": 1
+			"food_production": 1
 		},
 		"count": 1
 	},
@@ -131,7 +133,7 @@
 		"synergy_requirement": "bronze",
 		"synergy_node_active": true,
 		"synergy_modifiers": {
-			"bronze_production": 1
+			"mundane_unit_defense": 1
 		},
 		"count": 1
 	},
@@ -164,12 +166,12 @@
 			"wood": 5
 		},
 		"modifiers": {
-			"food_storage": 5
+			"food_storage_capacity": 5
 		},
 		"synergy_requirement": "food",
 		"synergy_node_active": true,
 		"synergy_modifiers": {
-			"food_storage": 5
+			"food_storage_capacity": 5
 		},
 		"count": 1
 	},
@@ -183,7 +185,7 @@
 		},
 		"modifiers": {
 			"wood_consumption": 1,
-			"effective_pop_capacity": 3
+			"effective_pop_capacity": 2
 		},
 		"synergy_requirement": "food",
 		"synergy_node_active": true,
@@ -302,7 +304,7 @@
 		"synergy_requirement": "food",
 		"synergy_node_active": true,
 		"synergy_modifiers": {
-			"food_storage": 5
+			"food_storage_capacity": 5
 		},
 		"count": 1
 	},
@@ -314,7 +316,7 @@
 			"stone": 3
 		},
 		"modifiers": {
-			"stone_production": 1
+			"miner_stone_production": 0.5
 		},
 		"synergy_requirement": "stone",
 		"synergy_node_active": true,
@@ -351,7 +353,7 @@
 			"stone": 2
 		},
 		"modifiers": {
-			"wood_production": 1
+			"harvester_wood_production": 0.5
 		},
 		"synergy_requirement": "wood",
 		"synergy_node_active": true,
@@ -394,7 +396,7 @@
 		"synergy_requirement": "research",
 		"synergy_node_active": true,
 		"synergy_modifiers": {
-			"mundane_unit_strength": 1
+			"mundane_unit_attack": 1
 		},
 		"count": 1
 	}

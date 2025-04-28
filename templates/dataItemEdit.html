@@ -53,6 +53,30 @@
 								</tbody>
 							</table>
 							<button type="button" class="btn btn-primary" onclick="addModifier('{{ field.name }}')">Add Modifier</button>
+						{% elif field.type == 'FieldList' and field.name == 'modifiers' %}
+							<table class="modifiers-table">
+								<thead>
+									<tr>
+										<th>Field</th>
+										<th>Value</th>
+										<th>Duration</th>
+										<th>Source</th>
+										<th>Actions</th>
+									</tr>
+								</thead>
+								<tbody id="{{ field.name }}-tbody">
+									{% for modifier_field in field %}
+										<tr>
+											<td>{{ modifier_field.form.field(class="form-control") }}</td>
+											<td>{{ modifier_field.form.value(class="form-control") }}</td>
+											<td>{{ modifier_field.form.duration(class="form-control") }}</td>
+											<td>{{ modifier_field.form.source(class="form-control") }}</td>
+											<td><button type="button" class="btn btn-danger" onclick="removeModifier(this, '{{ field.name }}')">Remove</button></td>
+										</tr>
+									{% endfor %}
+								</tbody>
+							</table>
+							<button type="button" class="btn btn-primary" onclick="addModifier('{{ field.name }}')">Add Modifier</button>
 						{% else %}
 							{{ field(class="form-control") }}
 						{% endif %}
@@ -115,7 +139,7 @@
 				<td><input type="text" class="form-control" name="${fieldName}-${currentCount}-source" id="${fieldName}-${currentCount}-source" required></td>
 				<td><button type="button" class="btn btn-danger" onclick="removeModifier(this, '${fieldName}')">Remove</button></td>
 			`;
-		}		
+		}
 		tbody.appendChild(newRow);
 	}
 

@@ -62,13 +62,17 @@ class ResourceStorageDict(Form):
             general_resources = json_data.get("general_resources", [])
             for resource in general_resources:
                 resource_field = getattr(self, resource["key"], None)
-                resource_field.data = item.get(resource["key"], 0)
+                print(int(item.get(resource["key"], 0)))
+                resource_field.data = int(item.get(resource["key"], 0))
+                print(resource_field.data)
             
             # Unique resources
             unique_resources = json_data.get("unique_resources", [])
             for resource in unique_resources:
                 resource_field = getattr(self, resource["key"], None)
-                resource_field.data = item.get(resource["key"], 0)
+                print(int(item.get(resource["key"], 0)))
+                resource_field.data = int(item.get(resource["key"], 0))
+                print(resource_field.data)
 
 
 class NodeDict(Form):
@@ -122,6 +126,7 @@ class NodeDict(Form):
                     elif isinstance(field, FormField):
                         field.load_form_from_item(field_value, schema)
                     else:
+                        
                         field.data = field_value
 
 class JobAssignmentDict(Form):
@@ -478,62 +483,76 @@ class BaseSchemaForm(FlaskForm):
                     self.populate_select_field(field_name, entry, schema, dropdown_options)
     
     def load_form_from_item(self, item, schema):
-        """Loads form data from a database item"""
+        """Loads form data from a database item with proper type conversion"""
         for field_name, field in self._fields.items():
-                if isinstance(field, SelectField) and field.data:
-                    field.data = str(field.data)
+            if isinstance(field, SelectField) and field.data:
+                field.data = str(field.data)
+                
+            # Handle nested data structures
+            if field_name in item:
+                field_value = item[field_name]
+                
+                if isinstance(field_value, ObjectId):
+                    field.data = str(field_value)
+                elif isinstance(field, FieldList):
+                    # Clear existing entries
+                    while len(field.entries) > 0:
+                        field.pop_entry()
                     
-                # Handle nested data structures
-                if field_name in item:
-                    field_value = item[field_name]
-                    
-                    if isinstance(field_value, ObjectId):
-                        field.data = str(field_value)
-                    elif isinstance(field, FieldList):
-                        # Clear existing entries
-                        while len(field.entries) > 0:
-                            field.pop_entry()
+                    if field_name == "districts":
+                        districts = item.get("districts", [])
+                        max_districts = schema.get("properties", {}).get(field_name, {}).get("max_length", 0)
+                        if isinstance(max_districts, str):
+                            max_districts = item.get(max_districts, 0)
                         
-                        if field_name == "districts":
-                            districts = item.get("districts", [])
-                            max_districts = schema.get("properties", {}).get(field_name, {}).get("max_length", 0)
-                            if isinstance(max_districts, str):
-                                max_districts = item.get(max_districts, 0)
-                            
-                            if len(districts) < max_districts:
-                                districts.extend([""] * (max_districts - len(districts)))
-                            
+                        if len(districts) < max_districts:
+                            districts.extend([""] * (max_districts - len(districts)))
+                        
 
-                            for district in districts:
-                                field.append_entry(district)
-                            
-                        elif field_name == "units":
-                            units = item.get("units", [])
-                            max_units = schema.get("properties", {}).get(field_name, {}).get("max_length", 0)
-                            if isinstance(max_units, str):
-                                max_units = item.get(max_units, 0)
-                            
-                            if len(units) < max_units:
-                                units.extend([""] * (max_units - len(units)))
-                            
-                            for unit in units:
-                                field.append_entry(unit)
-                            
-                        else:
-                            # Add new entries from the data
-                            for value in field_value:
-                                if isinstance(value, dict):
-                                    # For object arrays
-                                    field.append_entry(value)
-                                elif isinstance(value, ObjectId):
-                                    # For linked object arrays
-                                    field.append_entry(str(value))
-                                else:
-                                    # For simple value arrays
-                                    field.append_entry(value)
-                    elif isinstance(field, FormField):
-                        field.load_form_from_item(field_value, schema)
+                        for district in districts:
+                            field.append_entry(district)
+                        
+                    elif field_name == "units":
+                        units = item.get("units", [])
+                        max_units = schema.get("properties", {}).get(field_name, {}).get("max_length", 0)
+                        if isinstance(max_units, str):
+                            max_units = item.get(max_units, 0)
+                        
+                        if len(units) < max_units:
+                            units.extend([""] * (max_units - len(units)))
+                        
+                        for unit in units:
+                            field.append_entry(unit)
+                        
                     else:
+                        # Add new entries from the data
+                        for value in field_value:
+                            if isinstance(value, dict):
+                                # For object arrays
+                                field.append_entry(value)
+                            elif isinstance(value, ObjectId):
+                                # For linked object arrays
+                                field.append_entry(str(value))
+                            else:
+                                # For simple value arrays
+                                field.append_entry(value)
+                elif isinstance(field, FormField):
+                    field.load_form_from_item(field_value, schema)
+                else:
+                    # Type conversion based on field type
+                    try:
+                        if isinstance(field, IntegerField) and not isinstance(field_value, int):
+                            field.data = int(field_value)
+                        elif isinstance(field, FloatField) and not isinstance(field_value, float):
+                            field.data = float(field_value)
+                        elif isinstance(field, BooleanField) and not isinstance(field_value, bool):
+                            field.data = bool(field_value)
+                        elif isinstance(field, StringField) and not isinstance(field_value, str):
+                            field.data = str(field_value)
+                        else:
+                            field.data = field_value
+                    except (ValueError, TypeError):
+                        # If conversion fails, use the original value
                         field.data = field_value
 
 class DynamicSchemaForm(BaseSchemaForm):
@@ -769,13 +788,11 @@ class NationForm(BaseSchemaForm):
             general_resources = json_data.get("general_resources", [])
             for resource in general_resources:
                 resource_field = getattr(form.resource_storage, resource["key"], None)
-                resource_field.data = nation.get("resource_storage", {}).get(resource["key"], 0)
             
             # Unique resources
             unique_resources = json_data.get("unique_resources", [])
             for resource in unique_resources:
                 resource_field = getattr(form.resource_storage, resource["key"], None)
-                resource_field.data = nation.get("resource_storage", {}).get(resource["key"], 0)
         
         # Handle jobs
         if nation:
@@ -1003,6 +1020,7 @@ class NewCharacterForm(BaseSchemaForm):
 
 # Global form generator instance
 form_generator = FormGenerator()
+
 
 
 
