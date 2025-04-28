@@ -380,7 +380,7 @@ def nation_infamy_decay_tick(old_nation, new_nation, schema):
     return ""
 
 def nation_prestige_gain_tick(old_nation, new_nation, schema):
-    if not old_nation["empire"]:
+    if not old_nation.get("empire", False):
         return ""
     old_nation_prestige = old_nation.get("prestige", 0)
     if old_nation_prestige == "":
