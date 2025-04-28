@@ -299,7 +299,7 @@ def artifact_loss_tick(old_artifact, new_artifact, schema):
 ###########################################################
 
 def merchant_income_tick(old_merchant, new_merchant, schema):
-    new_merchant["treasury"] = old_merchant.get("treasury", 0) + old_merchant.get("income", 0)
+    new_merchant["treasury"] = int(old_merchant.get("treasury", 0)) + old_merchant.get("income", 0)
 
     for resource, amount in old_merchant.get("resource_income", {}).items():
         new_merchant[resource] = old_merchant[resource] + amount
@@ -310,7 +310,7 @@ def merchant_income_tick(old_merchant, new_merchant, schema):
 ###########################################################
 
 def mercenary_upkeep_tick(old_mercenary, new_mercenary, schema):
-    new_mercenary["treasury"] = old_mercenary.get("treasury", 0) - old_mercenary.get("upkeep", 0)
+    new_mercenary["treasury"] = int(old_mercenary.get("treasury", 0)) - old_mercenary.get("upkeep", 0)
     return ""
 
 ###########################################################
@@ -318,7 +318,7 @@ def mercenary_upkeep_tick(old_mercenary, new_mercenary, schema):
 ###########################################################
 
 def nation_income_tick(old_nation, new_nation, schema):
-    new_nation["money"] = old_nation.get("money", 0) + old_nation.get("money_income", 0)
+    new_nation["money"] = int(old_nation.get("money", 0)) + old_nation.get("money_income", 0)
     for resource, amount in old_nation.get("resource_income", {}).items():
         new_nation[resource] = old_nation[resource] + amount
     
@@ -343,7 +343,7 @@ def nation_infamy_decay_tick(old_nation, new_nation, schema):
     return ""
 
 def nation_prestige_gain_tick(old_nation, new_nation, schema):
-    new_nation["prestige"] = old_nation.get("prestige", 0) + old_nation.get("prestige_gain", 0)
+    new_nation["prestige"] = int(old_nation.get("prestige", 0)) + old_nation.get("prestige_gain", 0)
     return ""
 
 def nation_stability_tick(old_nation, new_nation, schema):
