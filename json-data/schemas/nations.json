@@ -440,8 +440,8 @@
 			},
 			"Iron-Fisted Dictatorship": {
 				"resource_production": 1,
-				"high_stability_strength": 4,
-				"low_stability_strength": -4,
+				"high_stability_strength": 2,
+				"low_stability_strength": -2,
 				"city_slots": 5
 			},
 			"Imperial Council": {
