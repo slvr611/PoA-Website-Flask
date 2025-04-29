@@ -8,21 +8,6 @@
 		    "label": "Name",
         "description": "The name of the region"
       },
-      "current_event": {
-        "bsonType": "linked_object",
-		    "label": "Current Event",
-        "description": "The current event of the region",
-		    "collections": ["events"],
-        "hidden": true
-      },
-      "events": {
-        "bsonType": "array",
-		    "label": "Events",
-        "description": "All events that have ocurred in the region",
-		    "collections": ["events"],
-		    "queryTargetAttribute": "target",
-        "hidden": true
-      },
 	    "nations": {
         "bsonType": "array",
 		    "label": "Nations",
@@ -71,6 +56,33 @@
 		    "queryTargetAttribute": "region",
         "items": {
           "bsonType": "linked_object"
+        }
+      },
+      "external_modifiers": {
+        "bsonType": "array",
+        "label": "Mechanical Modifiers",
+        "description": "The mechanical modifiers that affect the owner",
+        "hidden": true,
+        "items":{
+          "bsonType": "object",
+          "properties": {
+            "type": {
+              "bsonType": "enum",
+              "label": "Type",
+              "description": "The type of entity the modifier affects",
+              "enum": ["nation", "character"]
+            },
+            "modifier": {
+              "bsonType": "string",
+              "label": "Modifier",
+              "description": "The modifier"
+            },
+            "value": {
+              "bsonType": "number",
+              "label": "Modifier Value",
+              "description": "The value of the modifier"
+            }
+          }
         }
       }
     }

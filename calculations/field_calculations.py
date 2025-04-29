@@ -39,26 +39,26 @@ def calculate_all_fields(target, schema, target_data_type):
         cities = collect_cities(target)
         city_totals = sum_city_totals(cities)
 
-        node_modifiers = collect_nodes(target, modifier_totals, district_totals, city_totals, law_totals)
+        node_modifiers = collect_nodes(target, modifier_totals, district_totals, city_totals, law_totals, external_modifiers_total)
         node_totals = sum_node_totals(node_modifiers)
 
         jobs_assigned = collect_jobs_assigned(target)
-        job_details = calculate_job_details(target, modifier_totals, district_totals, city_totals, node_totals, law_totals)
+        job_details = calculate_job_details(target, modifier_totals, district_totals, city_totals, node_totals, law_totals, external_modifiers_total)
         job_totals = sum_job_totals(jobs_assigned, job_details)
 
         land_units_assigned = collect_land_units_assigned(target)
-        land_unit_details = calculate_unit_details(target, "land", land_unit_json_files, modifier_totals, district_totals, city_totals, node_totals, law_totals)
+        land_unit_details = calculate_unit_details(target, "land", land_unit_json_files, modifier_totals, district_totals, city_totals, node_totals, law_totals, external_modifiers_total)
 
         naval_units_assigned = collect_naval_units_assigned(target)
-        naval_unit_details = calculate_unit_details(target, "naval", naval_unit_json_files, modifier_totals, district_totals, city_totals, node_totals, law_totals)
+        naval_unit_details = calculate_unit_details(target, "naval", naval_unit_json_files, modifier_totals, district_totals, city_totals, node_totals, law_totals, external_modifiers_total)
 
-        unit_totals = sum_all_unit_totals(land_units_assigned, land_unit_details, naval_units_assigned, naval_unit_details)
+        unit_totals = sum_all_unit_totals(land_units_assigned, land_unit_details, naval_units_assigned, naval_unit_details, external_modifiers_total)
 
         prestige_modifiers = {}
         if target.get("empire", False):
             prestige_modifiers = calculate_prestige_modifiers(target, schema_properties)
     elif target_data_type == "nation_jobs":
-        job_details = calculate_job_details(target, modifier_totals, district_totals, city_totals, node_totals, law_totals)
+        job_details = calculate_job_details(target, modifier_totals, district_totals, city_totals, node_totals, law_totals, external_modifiers_total)
 
     attributes_to_precalculate = ["effective_territory", "road_capacity", "effective_pop_capacity", "pop_count"]
 
@@ -272,7 +272,7 @@ def collect_cities(target):
 
     return collected_modifiers
 
-def collect_nodes(target, modifier_totals, district_totals, city_totals, law_totals):
+def collect_nodes(target, modifier_totals, district_totals, city_totals, law_totals, external_modifiers_total):
     nodes = target.get("resource_nodes", {}).copy()
     collected_modifiers = []
 
@@ -302,7 +302,7 @@ def collect_nodes(target, modifier_totals, district_totals, city_totals, law_tot
         keys_to_check = [node_key + "_node_value", "resource_node_value"]
         node_value = 1
         for k in keys_to_check:
-            node_value += modifier_totals.get(k, 0) + district_totals.get(k, 0) + city_totals.get(k, 0) + law_totals.get(k, 0)
+            node_value += modifier_totals.get(k, 0) + district_totals.get(k, 0) + city_totals.get(k, 0) + law_totals.get(k, 0) + external_modifiers_total.get(k, 0)
 
         collected_modifiers.append({node_key + "_production": node_qty * node_value})
 
@@ -311,10 +311,10 @@ def collect_nodes(target, modifier_totals, district_totals, city_totals, law_tot
 def collect_jobs_assigned(target):
     return target.get("jobs", {})
 
-def calculate_job_details(target, modifier_totals, district_totals, city_totals, node_totals, law_totals):
+def calculate_job_details(target, modifier_totals, district_totals, city_totals, node_totals, law_totals, external_modifiers_total):
     job_details = json_data["jobs"]
     district_details = json_data["nation_districts"]
-    modifier_sources = [modifier_totals, district_totals, city_totals, law_totals, node_totals]
+    modifier_sources = [modifier_totals, district_totals, city_totals, law_totals, node_totals, external_modifiers_total]
     general_resources = json_data["general_resources"]
     general_resources = [resource["key"] for resource in general_resources]
     unique_resources = json_data["unique_resources"]
@@ -327,7 +327,7 @@ def calculate_job_details(target, modifier_totals, district_totals, city_totals,
     
     new_job_details = {}
     for job, details in job_details.items():
-        locked = modifier_totals.get("locks_" + job, 0) + district_totals.get("locks_" + job, 0) + city_totals.get("locks_" + job, 0) + law_totals.get("locks_" + job, 0) + node_totals.get("locks_" + job, 0)
+        locked = modifier_totals.get("locks_" + job, 0) + district_totals.get("locks_" + job, 0) + city_totals.get("locks_" + job, 0) + law_totals.get("locks_" + job, 0) + node_totals.get("locks_" + job, 0) + external_modifiers_total.get("locks_" + job, 0)
         if ("requirements" not in details or ("district" in details["requirements"] and details["requirements"]["district"] in district_types)) and not locked:
             new_details = copy.deepcopy(details)
             all_resource_production = 0
@@ -414,12 +414,12 @@ def check_unit_requirements(target, unit_details):
         # TODO: Add defensive pacts and mil alliances
     return meets_requirements
 
-def calculate_unit_details(target, unit_type, unit_json_files, modifier_totals, district_totals, city_totals, node_totals, law_totals):
+def calculate_unit_details(target, unit_type, unit_json_files, modifier_totals, district_totals, city_totals, node_totals, law_totals, external_modifiers_total):
     unit_details = {}
     for unit_file in unit_json_files:
         unit_details.update(json_data[unit_file])
 
-    modifier_sources = [modifier_totals, district_totals, city_totals, law_totals, node_totals]
+    modifier_sources = [modifier_totals, district_totals, city_totals, law_totals, node_totals, external_modifiers_total]
     general_resources = json_data["general_resources"]
     general_resources = [resource["key"] for resource in general_resources]
     unique_resources = json_data["unique_resources"]
@@ -692,7 +692,7 @@ def sum_job_totals(jobs_assigned, job_details):
         
     return totals
 
-def sum_all_unit_totals(land_units_assigned, land_unit_details, naval_units_assigned, naval_unit_details):
+def sum_all_unit_totals(land_units_assigned, land_unit_details, naval_units_assigned, naval_unit_details, external_modifiers_total):
     land_unit_totals = sum_unit_totals(land_units_assigned, land_unit_details, land_unit_json_files)
     naval_unit_totals = sum_unit_totals(naval_units_assigned, naval_unit_details, naval_unit_json_files)
     totals = {}

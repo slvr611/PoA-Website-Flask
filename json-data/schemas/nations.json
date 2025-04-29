@@ -11,7 +11,8 @@
 		"overlord": ["subject_stance"],
 		"primary_race": ["positive_trait", "negative_trait", "preferred_terrain"],
 		"primary_religion": ["external_modifiers"],
-		"wonders": ["external_modifiers"]
+		"wonders": ["external_modifiers"],
+		"region": ["external_modifiers"]
 	},
     "properties": {
       "name": {
