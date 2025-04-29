@@ -489,7 +489,7 @@ def compute_death_chance(field, target, base_value, field_schema, overall_total_
     age = target.get("age", 1)
     elderly_age = target.get("elderly_age", 3)
 
-    value = round(max((age - elderly_age) * 0.2, 0), 2)
+    value = round(max((age - elderly_age) * (0.2 + overall_total_modifiers.get("death_chance_per_elderly_age", 0)), 0), 2)
     value += overall_total_modifiers.get(field, 0)
 
     return value
