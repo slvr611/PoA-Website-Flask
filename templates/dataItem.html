@@ -92,11 +92,40 @@
 								</td>
 							{% elif properties.get("items", {}).get("bsonType", "None") == "linked_object" %}
 								<td>
-									<ul>
-										{% for item in linked_objects[field] %}
-											<li><a href="{{ item['link'] }}">{{ item["name"] }}</a></li>
-										{% endfor %}
-									</ul>
+									{% if linked_objects[field] %}
+										<table class="linked-objects-table">
+											<thead>
+												<tr>
+													<th>Name</th>
+													{% if linked_objects[field][0] and linked_objects[field][0].get("linked_objects") %}
+														{% for preview_field in linked_objects[field][0].get("linked_objects", {}).keys() %}
+															<th>{{ preview_field|title }}</th>
+														{% endfor %}
+													{% endif %}
+												</tr>
+											</thead>
+											<tbody>
+												{% for item in linked_objects[field] %}
+													<tr>
+														<td><a href="{{ item['link'] }}">{{ item["name"] }}</a></td>
+														{% if item.get("linked_objects") %}
+															{% for preview_field, preview_obj in item.get("linked_objects", {}).items() %}
+																<td>
+																	{% if preview_obj %}
+																		<a href="{{ preview_obj['link'] }}">{{ preview_obj["name"] }}</a>
+																	{% else %}
+																		None
+																	{% endif %}
+																</td>
+															{% endfor %}
+														{% endif %}
+													</tr>
+												{% endfor %}
+											</tbody>
+										</table>
+									{% else %}
+										None
+									{% endif %}
 								</td>
 							{% elif properties.get("items", {}).get("bsonType", "None") == "object" %}
 								<td>

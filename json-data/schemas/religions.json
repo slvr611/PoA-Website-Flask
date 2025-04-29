@@ -107,6 +107,7 @@
                 "description": "Pops that have this race",
                 "collections": ["pops"],
                 "queryTargetAttribute": "religion",
+                "preview": ["nation", "race", "culture"],
                 "items": {
                     "bsonType": "linked_object"
                 }
