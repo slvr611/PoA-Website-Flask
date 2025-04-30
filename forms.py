@@ -473,7 +473,7 @@ class BaseSchemaForm(FlaskForm):
     def populate_linked_fields(self, schema, dropdown_options):
         """Populates all linked fields with their options"""
         for field_name, field_schema in schema.get("properties", {}).items():
-            if field_schema.get("collections"):
+            if field_schema.get("collections") and field_name in self._fields:
                 field = getattr(self, field_name)
                 if field:
                     self.populate_select_field(field_name, self[field_name], schema, dropdown_options)
