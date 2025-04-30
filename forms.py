@@ -46,12 +46,12 @@ class ResourceStorageDict(Form):
     def create_form_class(cls):
         general_resources = json_data.get("general_resources", [])
         for resource in general_resources:
-            field = IntegerField(resource["name"], validators=[NumberRange(min=0)], default=0)
+            field = IntegerField(resource["name"], default=0)
             setattr(cls, resource["key"], field)
         
         unique_resources = json_data.get("unique_resources", [])
         for resource in unique_resources:
-            field = IntegerField(resource["name"], validators=[NumberRange(min=0)], default=0)
+            field = IntegerField(resource["name"], default=0)
             setattr(cls, resource["key"], field)
         
         return cls

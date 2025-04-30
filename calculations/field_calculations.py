@@ -19,7 +19,7 @@ def calculate_all_fields(target, schema, target_data_type):
 
     districts = []
     if target_data_type == "nation":
-        districts = collect_nation_districts(target)
+        districts = collect_nation_districts(target, law_totals)
     elif target_data_type == "merchant":
         districts = collect_merchant_districts(target)
     elif target_data_type == "mercenary":
@@ -199,10 +199,13 @@ def collect_laws(target, schema):
             collected_laws.append(law)
     return collected_laws
 
-def collect_nation_districts(target):
+def collect_nation_districts(target, law_totals):
     nation_districts = target.get("districts", [])
     collected_modifiers = []
     district_json_data = json_data["nation_districts"]
+
+    ignore_nodes = law_totals.get("ignore_nodes", 0)
+    
     for district in nation_districts:
         if isinstance(district, dict):
             district_type = district.get("type", "")
@@ -211,9 +214,9 @@ def collect_nation_districts(target):
             collected_modifiers.append(district_modifiers)
             if district_node == district_json_data.get(district_type, {}).get("synergy_requirement", ""):
                 collected_modifiers.append(district_json_data.get(district_type, {}).get("synergy_modifiers", {}))
-                if district_json_data.get(district_type, {}).get("synergy_node_active", True):
+                if district_json_data.get(district_type, {}).get("synergy_node_active", True) and ignore_nodes < 1:
                     collected_modifiers.append({district_node + "_production": 1})
-            elif district_node != "":
+            elif district_node != "" and ignore_nodes < 1:
                 collected_modifiers.append({district_node + "_production": 1})
 
     imperial_district_json_data = json_data["nation_imperial_districts"]
@@ -228,9 +231,9 @@ def collect_nation_districts(target):
         collected_modifiers.append(imperial_district_modifiers)
         if imperial_district_node == imperial_district_synergy_node or (imperial_district_synergy_node == "any" and imperial_district_node != ""):
             collected_modifiers.append(imperial_district_json_data.get(imperial_district_type, {}).get("synergy_modifiers", {}))
-            if imperial_district_synergy_node_active:
+            if imperial_district_synergy_node_active and ignore_nodes < 1:
                 collected_modifiers.append({imperial_district_node + "_production": 1})
-        elif imperial_district_node != "":
+        elif imperial_district_node != "" and ignore_nodes < 1:
             collected_modifiers.append({imperial_district_node + "_production": 1})
 
     return collected_modifiers
@@ -273,6 +276,11 @@ def collect_cities(target):
     return collected_modifiers
 
 def collect_nodes(target, modifier_totals, district_totals, city_totals, law_totals, external_modifiers_total):
+    ignore_nodes = modifier_totals.get("ignore_nodes", 0) + district_totals.get("ignore_nodes", 0) + city_totals.get("ignore_nodes", 0) + law_totals.get("ignore_nodes", 0) + external_modifiers_total.get("ignore_nodes", 0)
+
+    if ignore_nodes > 0:
+        return []
+
     nodes = target.get("resource_nodes", {}).copy()
     collected_modifiers = []
 
