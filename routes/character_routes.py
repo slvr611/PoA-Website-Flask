@@ -68,6 +68,7 @@ def new_character_request():
         return redirect("/characters/new")
 
     form_data["age"] = 1
+    form_data["_id"] = "None"
 
     for strength in form_data["strengths"]:
         form_data["modifiers"].append({"field": strength, "value": random.randint(1, 2), "duration": -1, "source": "Strength"})
@@ -120,6 +121,7 @@ def new_character_approve():
         return redirect("/characters/new")
 
     form_data["age"] = 1
+    form_data["_id"] = "None"
 
     for strength in form_data["strengths"]:
         form_data["modifiers"].append({"field": strength, "value": random.randint(1, 2), "duration": -1, "source": "Strength"})
