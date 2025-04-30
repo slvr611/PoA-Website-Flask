@@ -74,6 +74,13 @@ def new_character_request():
     for weakness in form_data["weaknesses"]:
         form_data["modifiers"].append({"field": weakness, "value": random.randint(-2, -1), "duration": -1, "source": "Weakness"})
 
+    calculated_fields = calculate_all_fields(form_data, schema, "character")
+
+    calculated_character = form_data.copy()
+    calculated_character.update(calculated_fields)
+
+    form_data["magic_points"] = min(form_data["magic_point_capacity"], form_data["magic_point_income"])
+
     change_id = request_change(
         data_type="characters",
         item_id=None,
@@ -119,7 +126,7 @@ def new_character_approve():
     for weakness in form_data["weaknesses"]:
         form_data["modifiers"].append({"field": weakness, "value": random.randint(-2, -1), "duration": -1, "source": "Weakness"})
     
-    calculated_fields = calculate_all_fields(form_data)
+    calculated_fields = calculate_all_fields(form_data, schema, "character")
 
     calculated_character = form_data.copy()
     calculated_character.update(calculated_fields)
