@@ -64,7 +64,7 @@ def compute_field_effective_territory(field, target, base_value, field_schema, o
 
 def compute_field_road_capacity(field, target, base_value, field_schema, overall_total_modifiers):
     administration = target.get("administration", 0)
-    
+
     value = base_value + overall_total_modifiers.get(field, 0) + (field_schema.get("road_capacity_per_admin", 0) * administration)
     
     return value

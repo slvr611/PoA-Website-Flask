@@ -60,7 +60,7 @@ def calculate_all_fields(target, schema, target_data_type):
     elif target_data_type == "nation_jobs":
         job_details = calculate_job_details(target, modifier_totals, district_totals, city_totals, node_totals, law_totals, external_modifiers_total)
 
-    attributes_to_precalculate = ["effective_territory", "road_capacity", "effective_pop_capacity", "pop_count"]
+    attributes_to_precalculate = ["administration", "effective_territory", "road_capacity", "effective_pop_capacity", "pop_count"]
 
     overall_total_modifiers = {}
     calculated_values = {"job_details": job_details, "land_unit_details": land_unit_details, "naval_unit_details": naval_unit_details}
@@ -472,6 +472,7 @@ def collect_external_requirements(target, schema, target_data_type):
     collected_modifiers = []
     
     for field, required_fields in external_reqs.items():
+
         field_schema = schema["properties"].get(field, {})
 
         collections = field_schema.get("collections")
@@ -514,6 +515,12 @@ def collect_external_modifiers_from_object(object, required_fields, linked_objec
                 for key, value in law_modifiers.items():
                     if key.startswith(target_data_type + "_"):
                         collected_modifiers.append({key.replace(target_data_type + "_", ""): value})
+            
+            elif field_type == "array" and req_field == "modifiers":
+                for modifier in object[req_field]:
+                    if modifier.get("field").startswith(target_data_type + "_"):
+                        field = modifier["field"].replace(target_data_type + "_", "")
+                        collected_modifiers.append({field: modifier["value"]})
     
     return collected_modifiers
 
