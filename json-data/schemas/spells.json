@@ -2,40 +2,46 @@
   "$jsonSchema": {
     "bsonType": "object",
     "required": ["name", "complexity", "cast_time", "initial_cost", "usable_by", "effect"],
+    "preview": ["name", "complexity", "cast_time", "initial_cost", "usable_by", "hidden"],
     "properties": {
       "name": {
         "bsonType": "string",
         "label": "Name",
         "description": "The name of the spell"
       },
-	  "complexity": {
+	    "complexity": {
         "bsonType": "enum",
         "label": "Complexity",
         "description": "The complexity of the spell",
-		"enum": ["Easy", "Average", "Hard", "Very Hard", "Impossible"]
+		    "enum": ["Easy", "Average", "Hard", "Very Hard", "Impossible"]
       },
-	  "cast_time": {
+	    "cast_time": {
         "bsonType": "enum",
         "label": "Cast Time",
         "description": "How long it takes to cast the spell",
-		"enum": ["Ritual", "War", "Instant"]
+		    "enum": ["Ritual", "War", "Instant"]
       },
-	  "initial_cost": {
+	    "initial_cost": {
         "bsonType": "number",
-		"label": "Initial Cost",
+		    "label": "Initial Cost",
         "description": "How much the spell costs to cast"
       },
-	  "upkeep_cost": {
+	    "upkeep_cost": {
         "bsonType": "number",
-		"label": "Upkeep Cost",
+		    "label": "Upkeep Cost",
         "description": "How much the spell costs each session to upkeep",
-		"noneResult": "-"
+		    "noneResult": "-"
       },
-	  "usable_by": {
+      "usable_by": {
         "bsonType": "enum",
         "label": "Usable By",
         "description": "Whether the spell can be cast using character magic, nation magic, or either",
-		"enum": ["Characters", "Nations", "Either"]
+		    "enum": ["Either", "Characters", "Nations"]
+      },
+      "hidden": {
+        "bsonType": "boolean",
+        "label": "Hidden",
+        "description": "Whether the spell is hidden from the public"
       },
       "effect": {
         "bsonType": "string",
