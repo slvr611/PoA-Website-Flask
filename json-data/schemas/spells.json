@@ -13,7 +13,7 @@
         "bsonType": "enum",
         "label": "Complexity",
         "description": "The complexity of the spell",
-		    "enum": ["Easy", "Average", "Hard", "Very Hard", "Impossible"]
+		    "enum": ["Easy", "Average", "Hard", "Very Hard", "Improbable", "Impossible"]
       },
 	    "cast_time": {
         "bsonType": "enum",
