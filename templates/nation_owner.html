@@ -338,6 +338,14 @@
 						<th>{{ schema.properties.concessions_qty.label }}:</th>
 						<td>{{ nation.concessions_qty }}</td>
 					</tr>
+					<tr>
+						<th>{{ schema.properties.get("concessions").label }}:</th>
+						<td>
+							{% for resource, amount in nation.get("concessions", {}).items() %}
+								{{ resource }}: {{ amount }}<br>
+							{% endfor %}
+						</td>
+					</tr>
 				</table>
 			</div>
 		{% endif %}
@@ -371,7 +379,11 @@
 
 								<td>{{ (vassal.get("concessions_chance", 0) * 100)|int }}%</td>
 								
-								<td>TBA</td>
+								<td>
+									{% for resource, amount in vassal.get("concessions", {}).items() %}
+										{{ resource }}: {{ amount }}<br>
+									{% endfor %}
+								</td>
 
 								<td>{{ vassal.get("temperament", "Unknown") }}</td>
 							</tr>

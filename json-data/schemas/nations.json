@@ -325,13 +325,19 @@
 		"base_value": 4,
 		"hideIfNone": "overlord"
       },
+	  "concessions": {
+        "bsonType": "object",
+		"label": "Concessions",
+        "description": "The amount of concessions currently demanded by the vassal",
+		"hideIfNone": "overlord"
+      },
 	  "vassals": {
         "bsonType": "array",
 		"label": "Vassals",
         "description": "The list of vassals currently under the control of the nation",
 		"collections": ["nations"],
 		"queryTargetAttribute": "overlord",
-		"preview": ["name", "compliance", "disobey_chance", "rebellion_chance", "concessions_chance", "temperament"]
+		"preview": ["name", "compliance", "disobey_chance", "rebellion_chance", "concessions_chance", "concessions", "temperament"]
       },
 	  "diplomatic_relations_1": {
         "bsonType": "array",

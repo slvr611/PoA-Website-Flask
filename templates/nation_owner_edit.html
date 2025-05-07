@@ -240,6 +240,17 @@
                         <th>{{ schema.properties.concessions_qty.label }}:</th>
                         <td>{{ nation.concessions_qty }}</td>
                     </tr>
+                    <tr>
+                        <th>{{ schema.properties.concessions.label }}:</th>
+                        <td>
+                            <div id="concessions">
+                                {% for resource, amount in nation.get("concessions", {}).items() %}
+                                    {{ resource }}: {{ amount }}<br>
+                                {% endfor %}
+                            </div>
+                            <button type="button" class="btn btn-primary" onclick="resetConcessions()">Reset Concessions</button>
+                        </td>
+                    </tr>
                 </table>
             </div>
 
@@ -623,6 +634,12 @@
                         input.id = `modifiers-${index}-${fieldName}`;
                     });
                 });
+            }
+
+            function resetConcessions() {
+                const concessions = document.getElementById('concessions');
+                concessions.textContent = '';
+                //TODO: Add a hidden input section and remove its value with this section
             }
         </script>
 
