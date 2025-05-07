@@ -784,7 +784,8 @@
 				"miner_resource_production": -1
 			},
 			"Construction": {
-				"chance_to_lose_stability": 0.15
+				"district_resource_consumption": -1,
+				"district_pop_requirement": -1
 			},
 			"Production": {
 				"harvester_stone_upkeep": -1,

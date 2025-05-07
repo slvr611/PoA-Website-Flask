@@ -5,8 +5,8 @@
 			"money": 275
 		},
 		"upkeep": {
-			"mounts": 1,
-			"food": 1
+			"food": 2,
+			"wood": 1
 		},
 		"requirements": {
 			"district": ["ancient_workshop", "classical_workshop"],
