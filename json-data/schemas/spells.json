@@ -2,7 +2,7 @@
   "$jsonSchema": {
     "bsonType": "object",
     "required": ["name", "complexity", "cast_time", "initial_cost", "usable_by", "effect"],
-    "preview": ["name", "complexity", "cast_time", "initial_cost", "usable_by", "hidden"],
+    "preview": ["complexity", "cast_time", "initial_cost", "usable_by", "hidden"],
     "properties": {
       "name": {
         "bsonType": "string",

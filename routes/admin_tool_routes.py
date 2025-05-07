@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, redirect, request, flash, url_for, send_file
 from helpers.auth_helpers import admin_required
 from helpers.data_helpers import get_data_on_category, generate_id_to_name_dict, compute_demographics
-from helpers.admin_tool_helpers import grow_population
+from helpers.admin_tool_helpers import grow_all_population_async, roll_events_async
 from helpers.change_helpers import request_change, approve_change
 from calculations.field_calculations import calculate_all_fields
 from app_core import category_data, rarity_rankings, mongo, json_data
@@ -100,51 +100,12 @@ def karma_helper():
                            player_nations=player_nations,
                            ai_nations=ai_nations)
 
-@admin_tool_routes.route("/roll_karma")
+@admin_tool_routes.route("/roll_events", methods=['POST'])
 @admin_required
-def roll_karma():
-    schema, db = get_data_on_category("nations")
+def roll_events():
+    message = roll_events_async()
+    flash(message, "info")
 
-    nations = list(db.find().sort("name", ASCENDING))
-
-    for nation in nations:
-        calculated_fields = calculate_all_fields(nation, schema, "nation")
-        nation.update(calculated_fields)
-        raw_roll = random.randint(1, 20)
-        event_roll = raw_roll + nation.get("karma", 0)
-        event_type = "Unknown"
-        if raw_roll == 20 and event_roll >= 30:
-            event_type = "Wonderous"
-        elif raw_roll == 20 or event_roll >= 23:
-            event_type = "Fantastic"
-        elif event_roll >= 18:
-            event_type = "Very Good"
-        elif event_roll >= 15:
-            event_type = "Good"
-        elif event_roll >= 7:
-            event_type = "Neutral"
-        elif event_roll >= 5:
-            event_type = "Bad"
-        elif event_roll >= 2:
-            event_type = "Very Bad"
-        elif event_roll <= 1:
-            event_type = "Abysmal"
-        elif event_roll <= -10:
-            event_type = "Horrendous"
-
-        new_nation = nation.copy()
-        new_nation.update({"temporary_karma": 0, "event_roll": event_roll, "raw_roll": raw_roll, "event_type": event_type,
-                           "previous_karma": nation.get("karma", 0), "previous_temporary_karma": nation.get("temporary_karma", 0), "previous_rolling_karma": nation.get("rolling_karma", 0)})
-        change_id = request_change(
-            data_type="nations",
-            item_id=nation["_id"],
-            change_type="Update",
-            before_data=nation,
-            after_data=new_nation,
-            reason="Karma Roll for " + nation["name"]
-        )
-        approve_change(change_id)
-    
     return redirect("/karma_helper")
 
 @admin_tool_routes.route("/pop_growth_helper")
@@ -162,37 +123,9 @@ def pop_growth_helper():
 @admin_tool_routes.route("/pop_growth_helper/process", methods=["POST"])
 @admin_required
 def process_pop_growth():
-    schema, db = get_data_on_category("nations")
-    nations = list(db.find().sort("name", ASCENDING))
-    
-    changes = []
-    for nation in nations:
-        nation_id = str(nation["_id"])
-        include_key = f"include_{nation_id}"
-        foreign_source_key = f"foreign_source_{nation_id}"
-        
-        # Check if this nation should be included in growth
-        if include_key in request.form:
-            foreign_nation_id = request.form.get(foreign_source_key)
-            
-            # Only process if a foreign nation was selected
-            if foreign_nation_id:
-                foreign_nation = db.find_one({"_id": ObjectId(foreign_nation_id)})
-                if foreign_nation:
-                    change_id = grow_population(nation, foreign_nation)
-                    changes.append({
-                        "nation": nation["name"],
-                        "foreign_nation": foreign_nation["name"],
-                        "change_id": change_id
-                    })
-    
-    # Flash a message with the results
-    if changes:
-        change_messages = [f"{c['nation']} (from {c['foreign_nation']})" for c in changes]
-        flash(f"Population growth processed for: {', '.join(change_messages)}")
-    else:
-        flash("No population growth processed. Please select nations and foreign sources.")
-    
+    message = grow_all_population_async(request.form)()
+    flash(message, "info")
+
     return redirect("/pop_growth_helper")
 
 @admin_tool_routes.route("/database_management", methods=["GET"])
