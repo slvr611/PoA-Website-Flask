@@ -18,7 +18,7 @@
         "bsonType": "enum",
         "label": "Cast Time",
         "description": "How long it takes to cast the spell",
-		"enum": ["Instant", "One Session"]
+		"enum": ["Ritual", "War", "Instant"]
       },
 	  "initial_cost": {
         "bsonType": "number",
