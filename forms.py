@@ -465,8 +465,15 @@ class BaseSchemaForm(FlaskForm):
                         for key, data in combined_data.items()]
         
         elif field_name in dropdown_options:
-            choices += [(str(option["_id"]), option["name"]) 
-                       for option in dropdown_options[field_name]]
+            for option in dropdown_options[field_name]:
+                name = ""
+                if "name" in dropdown_options[field_name][0]:
+                    name = option["name"]
+                elif "display_name" in dropdown_options[field_name][0]:
+                    name = option["display_name"]
+                else:
+                    name = option["_id"]
+                choices += [(str(option["_id"]), name)]
         
         field.choices = choices
 
