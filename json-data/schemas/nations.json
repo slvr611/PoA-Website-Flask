@@ -413,7 +413,7 @@
         "bsonType": "enum",
 		"label": "Government Type",
         "description": "The type of government of the nation",
-		"enum": ["Autocracy", "Representative Council", "City State", "Trade Federation", "Untamed Lords", "Far Travelers",
+		"enum": ["Autocracy", "Representative Council", "City State", "Trade Federation", "Archivist State", "Untamed Lords", "Far Travelers",
 			"Iron-Fisted Dictatorship", "Imperial Council", "Sacred Vicar", "Great Khanate", "World Warden"],
 		"laws":{
 			"Autocracy": {
