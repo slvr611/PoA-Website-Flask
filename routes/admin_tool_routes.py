@@ -124,7 +124,7 @@ def pop_growth_helper():
 @admin_required
 def process_pop_growth():
     form_data = request.form.to_dict()
-    message = grow_all_population_async(form_data)()
+    message = grow_all_population_async(form_data)
     flash(message, "info")
 
     return redirect("/pop_growth_helper")
