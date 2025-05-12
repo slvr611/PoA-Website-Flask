@@ -248,6 +248,7 @@
                                     {{ resource }}: {{ amount }}<br>
                                 {% endfor %}
                             </div>
+                            {{ form.concessions(id="concessions-field") }}
                             <button type="button" class="btn btn-primary" onclick="resetConcessions()">Reset Concessions</button>
                         </td>
                     </tr>
@@ -637,9 +638,12 @@
             }
 
             function resetConcessions() {
-                const concessions = document.getElementById('concessions');
-                concessions.textContent = '';
-                //TODO: Add a hidden input section and remove its value in this function
+                const concessionsDiv = document.getElementById('concessions');
+                concessionsDiv.textContent = '';
+                
+                // Clear the hidden input field
+                const concessionsField = document.getElementById('concessions-field');
+                concessionsField.value = JSON.stringify({});
             }
         </script>
 

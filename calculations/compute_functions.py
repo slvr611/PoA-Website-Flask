@@ -296,6 +296,9 @@ def compute_resource_production(field, target, base_value, field_schema, overall
 
         specific_resource_production = max(specific_resource_production, 0)
 
+        if overall_total_modifiers.get("locks_" + resource["key"] + "_production", 0) > 0:
+            specific_resource_production = 0
+
         production_dict[resource["key"]] = specific_resource_production
     
     return production_dict

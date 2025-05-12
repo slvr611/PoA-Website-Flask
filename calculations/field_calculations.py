@@ -118,14 +118,64 @@ def calculate_all_fields(target, schema, target_data_type):
         if excess_food < food_consumption / 2:
             #Nation is Starving
             overall_total_modifiers["strength"] = overall_total_modifiers.get("strength", 0) - 2
-            overall_total_modifiers["stability_loss_chance"] = overall_total_modifiers.get("stability_loss_chance", 0) + 0.25
-            overall_total_modifiers["job_resource_production"] = overall_total_modifiers.get("job_resource_production", 0) - 1
-            overall_total_modifiers["job_food_production"] = overall_total_modifiers.get("job_food_production", 0) + 1
-            overall_total_modifiers["locks_research_production"] = 1
-            calculate_job_details(target, district_details, modifier_totals, district_totals, city_totals, node_totals, law_totals, external_modifiers_total)
+            modifier_totals["stability_loss_chance"] = modifier_totals.get("stability_loss_chance", 0) + 0.25
+            modifier_totals["job_resource_production"] = modifier_totals.get("job_resource_production", 0) - 1
+            modifier_totals["minimum_job_resource_production"] = -1
+            modifier_totals["hunter_food_production"] = modifier_totals.get("hunter_food_production", 0) + 1
+            modifier_totals["farmer_food_production"] = modifier_totals.get("farmer_food_production", 0) + 1
+            modifier_totals["fisherman_food_production"] = modifier_totals.get("fisherman_food_production", 0) + 1
+            modifier_totals["locks_research_production"] = 1
+
         elif excess_food < food_consumption:
             #Nation is Underfed
-            pass
+            overall_total_modifiers["strength"] = overall_total_modifiers.get("strength", 0) - 1
+            modifier_totals["stability_loss_chance"] = modifier_totals.get("stability_loss_chance", 0) + 0.1
+            modifier_totals["job_resource_production"] = modifier_totals.get("job_resource_production", 0) - 1
+            modifier_totals["minimum_job_resource_production"] = -1
+            modifier_totals["hunter_food_production"] = modifier_totals.get("hunter_food_production", 0) + 1
+            modifier_totals["farmer_food_production"] = modifier_totals.get("farmer_food_production", 0) + 1
+            modifier_totals["fisherman_food_production"] = modifier_totals.get("fisherman_food_production", 0) + 1
+
+        if excess_food < food_consumption:
+            job_details = calculate_job_details(target, district_details, modifier_totals, district_totals, city_totals, node_totals, law_totals, external_modifiers_total)
+            job_totals = sum_job_totals(target.get("jobs", {}), job_details)
+            calculated_values["job_details"] = job_details
+
+            overall_total_modifiers = {}
+            for d in [external_modifiers_total, modifier_totals, district_totals, city_totals, node_totals, law_totals, job_totals, unit_totals, prestige_modifiers, title_modifiers]:
+                for key, value in d.items():
+                    overall_total_modifiers[key] = overall_total_modifiers.get(key, 0) + value
+            
+            calculated_values["stability_loss_chance"] = compute_field(
+                "stability_loss_chance", target, schema_properties.get("stability_loss_chance", {}).get("base_value", 0), schema_properties.get("stability_loss_chance", {}),
+                overall_total_modifiers
+            )
+            calculated_values["resource_production"] = compute_field(
+                "resource_production", target, schema_properties.get("resource_production", {}).get("base_value", 0), schema_properties.get("resource_production", {}),
+                overall_total_modifiers
+            )
+            target["resource_production"] = calculated_values["resource_production"]
+            calculated_values["resource_excess"] = compute_field(
+                "resource_excess", target, schema_properties.get("resource_excess", {}).get("base_value", 0), schema_properties.get("resource_excess", {}),
+                overall_total_modifiers
+            )
+            calculated_values["land_attack"] = compute_field(
+                "land_attack", target, schema_properties.get("land_attack", {}).get("base_value", 0), schema_properties.get("land_attack", {}),
+                overall_total_modifiers
+            )
+            calculated_values["land_defense"] = compute_field(
+                "land_defense", target, schema_properties.get("land_defense", {}).get("base_value", 0), schema_properties.get("land_defense", {}),
+                overall_total_modifiers
+            )
+            calculated_values["naval_attack"] = compute_field(
+                "naval_attack", target, schema_properties.get("naval_attack", {}).get("base_value", 0), schema_properties.get("naval_attack", {}),
+                overall_total_modifiers
+            )
+            calculated_values["naval_defense"] = compute_field(
+                "naval_defense", target, schema_properties.get("naval_defense", {}).get("base_value", 0), schema_properties.get("naval_defense", {}),
+                overall_total_modifiers
+            )
+
         else:
             #Nation is Sated
             pass
@@ -400,6 +450,9 @@ def calculate_job_details(target, district_details, modifier_totals, district_to
             all_resource_production_multiplier = 1
             all_resource_upkeep_multiplier = 1
             all_resource_minimum_production = 1
+            all_resource_minimum_production += modifier_totals.get("minimum_" + job + "_resource_production", 0) + district_totals.get("minimum_" + job + "_resource_production", 0) + city_totals.get("minimum_" + job + "_resource_production", 0) + law_totals.get("minimum_" + job + "_resource_production", 0) + node_totals.get("minimum_" + job + "_resource_production", 0) + external_modifiers_total.get("minimum_" + job + "_resource_production", 0)
+            all_resource_minimum_production += modifier_totals.get("minimum_job_resource_production", 0) + district_totals.get("minimum_job_resource_production", 0) + city_totals.get("minimum_job_resource_production", 0) + law_totals.get("minimum_job_resource_production", 0) + node_totals.get("minimum_job_resource_production", 0) + external_modifiers_total.get("minimum_job_resource_production", 0)
+            all_resource_minimum_production = max(all_resource_minimum_production, 0)
             for source in modifier_sources:
                 for modifier, value in source.items():
                     if modifier.startswith(job) or modifier.startswith("job"):

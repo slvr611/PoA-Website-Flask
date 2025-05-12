@@ -9,6 +9,7 @@ from app_core import category_data, mongo, json_data
 from helpers.auth_helpers import admin_required
 from pymongo import ASCENDING
 from forms import form_generator
+import json
 
 nation_routes = Blueprint("nation_routes", __name__)
 
@@ -67,8 +68,18 @@ def edit_nation(item_ref):
     calculated_fields = calculate_all_fields(nation, schema, "nation")
     nation.update(calculated_fields)
     
+    # Ensure concessions is properly formatted
+    if "concessions" in nation and nation["concessions"] is not None:
+        if not isinstance(nation["concessions"], dict):
+            nation["concessions"] = {}
+    else:
+        nation["concessions"] = {}
+    
     form = form_generator.get_form("nations", schema, item=nation)
     form.populate_linked_fields(schema, dropdown_options)
+    
+    # Set concessions as JSON string
+    form.concessions.data = json.dumps(nation.get("concessions", {}))
 
     return render_template(
         "nation_owner_edit.html",
@@ -97,6 +108,14 @@ def nation_edit_request(item_ref):
     form_data = form.data.copy()
     form_data.pop('csrf_token', None)
     form_data.pop('submit', None)
+    
+    # Process concessions field
+    if 'concessions' in form_data:
+        try:
+            if isinstance(form_data['concessions'], str):
+                form_data['concessions'] = json.loads(form_data['concessions'])
+        except (json.JSONDecodeError, TypeError):
+            form_data['concessions'] = {}
     
     valid, error = validate_form_with_jsonschema(form, schema)
     if not valid:
@@ -135,6 +154,14 @@ def nation_edit_approve(item_ref):
     form_data = form.data.copy()
     form_data.pop('csrf_token', None)
     form_data.pop('submit', None)
+    
+    # Process concessions field
+    if 'concessions' in form_data:
+        try:
+            if isinstance(form_data['concessions'], str):
+                form_data['concessions'] = json.loads(form_data['concessions'])
+        except (json.JSONDecodeError, TypeError):
+            form_data['concessions'] = {}
 
     valid, error = validate_form_with_jsonschema(form, schema)
     if not valid:

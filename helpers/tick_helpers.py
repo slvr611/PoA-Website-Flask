@@ -481,6 +481,18 @@ def nation_concessions_tick(old_nation, new_nation, calculated_nation, schema):
         return ""
 
     result = ""
+
+    if old_nation.get("concessions", {}) != {}:
+        new_nation["concessions"] = {}
+        compliance_index = old_nation["compliance_enum"].index(old_nation["compliance"])
+        new_nation["compliance"] = old_nation["compliance_enum"][compliance_index - 1]
+        result += f"{old_nation.get('name', 'Unknown')} has had their compliance reduced from {old_nation.get('compliance', 'Unknown')} to {new_nation.get('compliance', 'Unknown')} due to concessions not being paid.\n"
+
+    if old_nation.get("concessions_roll", 1) < old_nation.get("concessions_chance_at_tick", 0):
+        new_nation["concessions_roll"] = 1
+        new_nation["concessions_chance_at_tick"] = 0
+        return result
+
     concessions_roll = random.random()
     new_nation["concessions_roll"] = concessions_roll
     new_nation["concessions_chance_at_tick"] = calculated_nation.get("concessions_chance", 0)

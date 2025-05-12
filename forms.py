@@ -735,6 +735,7 @@ class NationForm(BaseSchemaForm):
     overlord = SelectField("Overlord", choices=[])
     vassal_type = SelectField("Vassal Type", choices=[])
     compliance = SelectField("Compliance", choices=[])
+    concessions = HiddenField("Concessions")
     
     # Lists
     districts = FieldList(FormField(DistrictDict), min_entries=0)
@@ -1040,8 +1041,22 @@ class NewCharacterForm(BaseSchemaForm):
 
         return form
 
+class ConcessionDict(Form):
+    """Form for handling nation concessions as a dictionary"""
+    resource = StringField("Resource")
+    amount = IntegerField("Amount", default=0)
+    
+    class Meta:
+        csrf = False
+
 # Global form generator instance
 form_generator = FormGenerator()
+
+
+
+
+
+
 
 
 
