@@ -290,7 +290,7 @@ def calculate_district_details(target, schema_properties, modifier_totals, law_t
     district_details = {}
     district_consumption_modifier = modifier_totals.get("district_resource_consumption", 0) + law_totals.get("district_resource_consumption", 0) + external_modifiers_total.get("district_resource_consumption", 0)
     for district_type, district_data in json_data["nation_districts"].items():
-        district_data = district_data.copy()
+        district_data = copy.deepcopy(district_data)
         district_details[district_type] = district_data
         current_district_consumption_modifier = district_consumption_modifier + modifier_totals.get(district_type + "_resource_consumption", 0) + law_totals.get(district_type + "_resource_consumption", 0) + external_modifiers_total.get(district_type + "_resource_consumption", 0)
         for modifier, value in district_data.get("modifiers", {}).items():
@@ -298,7 +298,7 @@ def calculate_district_details(target, schema_properties, modifier_totals, law_t
                 district_data["modifiers"][modifier] = max(value + current_district_consumption_modifier, 0)
         
     for district_type, district_data in json_data["nation_imperial_districts"].items():
-        district_details[district_type] = district_data.copy()
+        district_details[district_type] = copy.deepcopy(district_data)
     return district_details
 
 def collect_nation_districts(target, law_totals, district_details):
