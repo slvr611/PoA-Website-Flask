@@ -422,7 +422,7 @@ def nation_income_tick(old_nation, new_nation, calculated_nation, schema):
     new_nation["money"] = int(old_nation.get("money", 0)) + calculated_nation.get("money_income", 0)
     new_nation["resource_storage"] = {}
     for resource, amount in calculated_nation.get("resource_excess", {}).items():
-        new_nation["resource_storage"][resource] = min(old_nation.get("resource_storage", {}).get(resource, 0) + amount, old_nation.get("resource_capacity", {}).get(resource, 0))
+        new_nation["resource_storage"][resource] = min(calculated_nation.get("resource_storage", {}).get(resource, 0) + amount, old_nation.get("resource_capacity", {}).get(resource, 0))
     
     return ""
 
