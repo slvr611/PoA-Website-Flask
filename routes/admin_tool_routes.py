@@ -123,7 +123,8 @@ def pop_growth_helper():
 @admin_tool_routes.route("/pop_growth_helper/process", methods=["POST"])
 @admin_required
 def process_pop_growth():
-    message = grow_all_population_async(request.form)()
+    form_data = request.form.to_dict()
+    message = grow_all_population_async(form_data)()
     flash(message, "info")
 
     return redirect("/pop_growth_helper")

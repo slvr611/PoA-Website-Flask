@@ -41,7 +41,7 @@ def change_list_redirect():
 @change_routes.route("/changes/pending")
 @change_routes.route("/changes/pending/page/<int:page>")
 def pending_change_list(page=1):
-    items_per_page = 50
+    items_per_page = 10
     schema, db = get_data_on_category("changes")
     query_dict = {"_id": 1, "name": 1}
     collections_to_preview = {}
@@ -101,7 +101,7 @@ def pending_change_list(page=1):
 @change_routes.route("/changes/archived")
 @change_routes.route("/changes/archived/page/<int:page>")
 def archived_change_list(page=1):
-    items_per_page = 50
+    items_per_page = 10
     schema, db = get_data_on_category("changes")
     query_dict = {"_id": 1, "name": 1}
     collections_to_preview = {}
@@ -261,7 +261,7 @@ def data_type_pending_changes(data_type, page=1):
         flash(f"Unknown data type: {data_type}")
         return redirect("/changes/pending")
     
-    items_per_page = 50
+    items_per_page = 10
     schema, db = get_data_on_category("changes")
     query_dict = {"_id": 1, "name": 1}
     collections_to_preview = {}
@@ -329,7 +329,7 @@ def data_type_archived_changes(data_type, page=1):
         flash(f"Unknown data type: {data_type}")
         return redirect("/changes/archived")
     
-    items_per_page = 50
+    items_per_page = 10
     schema, db = get_data_on_category("changes")
     query_dict = {"_id": 1, "name": 1}
     collections_to_preview = {}
@@ -401,7 +401,7 @@ def item_pending_changes(data_type, item_ref, page=1):
     _, _, item = get_data_on_item(data_type, item_ref)
     item_id = item["_id"]
     
-    items_per_page = 50
+    items_per_page = 10
     schema, db = get_data_on_category("changes")
     query_dict = {"_id": 1, "name": 1}
     collections_to_preview = {}
@@ -482,7 +482,7 @@ def item_archived_changes(data_type, item_ref, page=1):
     _, _, item = get_data_on_item(data_type, item_ref)
     item_id = item["_id"]
     
-    items_per_page = 50
+    items_per_page = 10
     schema, db = get_data_on_category("changes")
     query_dict = {"_id": 1, "name": 1}
     collections_to_preview = {}
