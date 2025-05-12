@@ -345,9 +345,11 @@
 					<tr>
 						<th>{{ schema.properties.get("concessions").label }}:</th>
 						<td>
-							{% for resource, amount in nation.get("concessions", {}).items() %}
-								{{ resource }}: {{ amount }}<br>
-							{% endfor %}
+							{% if nation.get("concessions", None) is mapping %}
+								{% for resource, amount in nation.get("concessions", {}).items() %}
+									{{ resource }}: {{ amount }}<br>
+								{% endfor %}
+							{% endif %}
 						</td>
 					</tr>
 				</table>
@@ -384,9 +386,11 @@
 								<td>{{ (vassal.get("concessions_chance", 0) * 100)|int }}%</td>
 								
 								<td>
-									{% for resource, amount in vassal.get("concessions", {}).items() %}
-										{{ resource }}: {{ amount }}<br>
-									{% endfor %}
+									{% if vassal.get("concessions", None) is mapping %}
+										{% for resource, amount in vassal.get("concessions", {}).items() %}
+											{{ resource }}: {{ amount }}<br>
+										{% endfor %}
+									{% endif %}
 								</td>
 
 								<td>{{ vassal.get("temperament", "Unknown") }}</td>

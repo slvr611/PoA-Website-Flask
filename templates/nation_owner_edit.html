@@ -244,9 +244,11 @@
                         <th>{{ schema.properties.concessions.label }}:</th>
                         <td>
                             <div id="concessions">
-                                {% for resource, amount in nation.get("concessions", {}).items() %}
-                                    {{ resource }}: {{ amount }}<br>
-                                {% endfor %}
+                                {% if nation.get("concessions", None) is mapping %}
+                                    {% for resource, amount in nation.get("concessions", {}).items() %}
+                                        {{ resource }}: {{ amount }}<br>
+                                    {% endfor %}
+                                {% endif %}
                             </div>
                             {{ form.concessions(id="concessions-field") }}
                             <button type="button" class="btn btn-primary" onclick="resetConcessions()">Reset Concessions</button>
