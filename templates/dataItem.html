@@ -152,7 +152,7 @@
 										{% endif %}
 										{% set district_data = json_data[properties.get("items", {}).get("json_data")] %}
 										{% for i in range(0, length) %}
-											{% if item[field][i] and item[field][i] in district_data %}
+											{% if item.get(field, [])[i] in district_data and item.get(field, [])[i] %}
 												<li>{{ district_data[item[field][i]]["display_name"] }}</li>
 											{% else %}
 												<li>None</li>
