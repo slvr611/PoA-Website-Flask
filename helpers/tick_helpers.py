@@ -509,7 +509,7 @@ def nation_concessions_tick(old_nation, new_nation, calculated_nation, schema):
         first_resource = random.choice(resources)
         resources.remove(first_resource)
         second_resource = random.choice(resources)
-        first_amount = random.randint(1, concessions_qty)
+        first_amount = random.randint(1, concessions_qty - 1)
         second_amount = concessions_qty - first_amount
 
         new_nation["concessions"] = {
