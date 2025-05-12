@@ -421,7 +421,7 @@
 							<!-- Link to Nation detail page -->
 							<td>
 							{% if relation["linked_objects"]["nation_2"] %}
-								<a href="{{ relation['linked_objects']['nation_2']['link'] }}">{{ relation['linked_objects']['nation_2']['name'] }}</a>
+								<a href="{{ relation['linked_objects'].get('nation_2', {}).get('link', '') }}">{{ relation['linked_objects'].get('nation_2', {}).get('name', 'None') }}</a>
 							{% else %}
 								None
 							{% endif %}
@@ -433,7 +433,7 @@
 							
 							<td>
 								{% if relation.get("pact_type", "None") in ["Defensive Pact", "Military Alliance"] %}
-									{{ relation['linked_objects']['nation_2']['temperament'] }}
+									{{ relation['linked_objects'].get('nation_2', {}).get('temperament', 'None') }}
 								{% else %}
 									Unknown
 								{% endif %}
@@ -448,8 +448,8 @@
 
 							<!-- Link to Nation detail page -->
 							<td>
-							{% if relation["linked_objects"]["nation_1"] %}
-								<a href="{{ relation['linked_objects']['nation_1']['link'] }}">{{ relation['linked_objects']['nation_1']['name'] }}</a>
+							{% if relation["linked_objects"].get("nation_1", None) %}
+								<a href="{{ relation['linked_objects'].get('nation_1', {}).get('link', '') }}">{{ relation['linked_objects'].get('nation_1', {}).get('name', 'None') }}</a>
 							{% else %}
 								None
 							{% endif %}
@@ -461,7 +461,7 @@
 							
 							<td>
 								{% if relation.get("pact_type", "None") in ["Defensive Pact", "Military Alliance"] %}
-									{{ relation['linked_objects']['nation_1']['temperament'] }}
+									{{ relation['linked_objects'].get('nation_1', {}).get('temperament', 'None') }}
 								{% else %}
 									Unknown
 								{% endif %}
