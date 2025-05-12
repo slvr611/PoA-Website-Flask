@@ -4,14 +4,24 @@ from helpers.data_helpers import get_data_on_category, get_data_on_item
 from helpers.render_helpers import get_linked_objects
 from helpers.change_helpers import approve_change, deny_change
 from calculations.field_calculations import calculate_all_fields
-from app_core import category_data, mongo
+from app_core import category_data, mongo, app
 from pymongo import DESCENDING, ASCENDING
 from bson import ObjectId
+
+# Add max and min functions to Jinja environment
+app.jinja_env.globals.update(max=max, min=min)
 
 change_routes = Blueprint("change_routes", __name__)
 
 @change_routes.route("/changes")
-def change_list():
+def change_list_redirect():
+    # Redirect to pending changes by default
+    return redirect("/changes/pending")
+
+@change_routes.route("/changes/pending")
+@change_routes.route("/changes/pending/page/<int:page>")
+def pending_change_list(page=1):
+    items_per_page = 50
     schema, db = get_data_on_category("changes")
     query_dict = {"_id": 1, "name": 1}
     preview_overall_lookup_dict = {}
@@ -30,10 +40,19 @@ def change_list():
             for collection_name in collection_names:
                 collections_to_preview[preview_item] = collection_name
 
-    pending_changes = list(db.find({"status": "Pending"}, query_dict).sort([("time_requested", ASCENDING), ("time_approved", ASCENDING)]))
-    archived_changes = list(db.find({"status": {"$ne": "Pending"}}, query_dict).sort([("time_requested", DESCENDING), ("time_approved", DESCENDING)]))
+    # Count total documents for pagination
+    pending_count = db.count_documents({"status": "Pending"})
+    
+    # Calculate pagination
+    total_pages = (pending_count + items_per_page - 1) // items_per_page
+    
+    # Get paginated results
+    skip = (page - 1) * items_per_page
+    pending_changes = list(db.find({"status": "Pending"}, query_dict)
+                          .sort([("time_requested", ASCENDING), ("time_approved", ASCENDING)])
+                          .skip(skip).limit(items_per_page))
 
-    for change in pending_changes + archived_changes:
+    for change in pending_changes:
         if change["target_collection"] in category_data and change["target_collection"] not in collections_to_preview:
             collections_to_preview[change["target_collection"]] = change["target_collection"]
 
@@ -49,13 +68,76 @@ def change_list():
         preview_overall_lookup_dict[field] = preview_individual_lookup_dict
 
     return render_template(
-        "change_list.html",
-        title=category_data["changes"]["pluralName"],
-        pending_changes=pending_changes,
-        archived_changes=archived_changes,
+        "pending_changes.html",
+        title="Pending Changes",
+        changes=pending_changes,
         schema=schema,
         preview_references=preview_overall_lookup_dict,
-        target_schemas=target_schemas
+        target_schemas=target_schemas,
+        current_page=page,
+        total_pages=total_pages,
+        total_count=pending_count
+    )
+
+@change_routes.route("/changes/archived")
+@change_routes.route("/changes/archived/page/<int:page>")
+def archived_change_list(page=1):
+    items_per_page = 50
+    schema, db = get_data_on_category("changes")
+    query_dict = {"_id": 1, "name": 1}
+    preview_overall_lookup_dict = {}
+    target_schemas = {}
+
+    # Get all target collection schemas
+    for collection_name in category_data:
+        target_schemas[collection_name] = category_data[collection_name]["schema"]
+
+    collections_to_preview = {}
+
+    for preview_item in schema.get("preview", {}):
+        query_dict[preview_item] = 1
+        collection_names = schema.get("properties", {}).get(preview_item, {}).get("collections")
+        if collection_names:
+            for collection_name in collection_names:
+                collections_to_preview[preview_item] = collection_name
+
+    # Count total documents for pagination
+    archived_count = db.count_documents({"status": {"$ne": "Pending"}})
+    
+    # Calculate pagination
+    total_pages = (archived_count + items_per_page - 1) // items_per_page
+    
+    # Get paginated results
+    skip = (page - 1) * items_per_page
+    archived_changes = list(db.find({"status": {"$ne": "Pending"}}, query_dict)
+                           .sort([("time_requested", DESCENDING), ("time_approved", DESCENDING)])
+                           .skip(skip).limit(items_per_page))
+
+    for change in archived_changes:
+        if change["target_collection"] in category_data and change["target_collection"] not in collections_to_preview:
+            collections_to_preview[change["target_collection"]] = change["target_collection"]
+
+    for field, collection_name in collections_to_preview.items():
+        preview_db = category_data[collection_name]["database"]
+        preview_individual_lookup_dict = {}
+        preview_data = list(preview_db.find({}, {"_id": 1, "name": 1}))
+        for data in preview_data:
+            preview_individual_lookup_dict[str(data["_id"])] = {
+                "name": data.get("name", "None"),
+                "link": f"{collection_name}/item/{data.get('name', data.get('_id', '#'))}"
+            }
+        preview_overall_lookup_dict[field] = preview_individual_lookup_dict
+
+    return render_template(
+        "archived_changes.html",
+        title="Archived Changes",
+        changes=archived_changes,
+        schema=schema,
+        preview_references=preview_overall_lookup_dict,
+        target_schemas=target_schemas,
+        current_page=page,
+        total_pages=total_pages,
+        total_count=archived_count
     )
 
 @change_routes.route("/changes/item/<item_ref>")
@@ -152,3 +234,313 @@ def change_clone_request(item_ref):
 def change_clone_save(item_ref):
     flash("No copying changes!")
     return redirect("/changes")
+
+@change_routes.route("/<data_type>/changes/pending")
+@change_routes.route("/<data_type>/changes/pending/page/<int:page>")
+def data_type_pending_changes(data_type, page=1):
+    # Verify data_type exists
+    if data_type not in category_data:
+        flash(f"Unknown data type: {data_type}")
+        return redirect("/changes/pending")
+    
+    items_per_page = 50
+    schema, db = get_data_on_category("changes")
+    query_dict = {"_id": 1, "name": 1}
+    preview_overall_lookup_dict = {}
+    target_schemas = {}
+
+    # Get all target collection schemas
+    for collection_name in category_data:
+        target_schemas[collection_name] = category_data[collection_name]["schema"]
+
+    collections_to_preview = {}
+
+    for preview_item in schema.get("preview", {}):
+        query_dict[preview_item] = 1
+        collection_names = schema.get("properties", {}).get(preview_item, {}).get("collections")
+        if collection_names:
+            for collection_name in collection_names:
+                collections_to_preview[preview_item] = collection_name
+
+    # Count total documents for pagination - filter by data_type
+    pending_count = db.count_documents({"status": "Pending", "target_collection": data_type})
+    
+    # Calculate pagination
+    total_pages = (pending_count + items_per_page - 1) // items_per_page
+    
+    # Get paginated results - filter by data_type
+    skip = (page - 1) * items_per_page
+    pending_changes = list(db.find(
+        {"status": "Pending", "target_collection": data_type}, 
+        query_dict
+    ).sort([("time_requested", ASCENDING), ("time_approved", ASCENDING)])
+     .skip(skip).limit(items_per_page))
+
+    # Add the data_type to collections_to_preview if not already there
+    if data_type in category_data and data_type not in collections_to_preview:
+        collections_to_preview[data_type] = data_type
+
+    for field, collection_name in collections_to_preview.items():
+        preview_db = category_data[collection_name]["database"]
+        preview_individual_lookup_dict = {}
+        preview_data = list(preview_db.find({}, {"_id": 1, "name": 1}))
+        for data in preview_data:
+            preview_individual_lookup_dict[str(data["_id"])] = {
+                "name": data.get("name", "None"),
+                "link": f"{collection_name}/item/{data.get('name', data.get('_id', '#'))}"
+            }
+        preview_overall_lookup_dict[field] = preview_individual_lookup_dict
+
+    return render_template(
+        "data_type_changes.html",
+        title=f"Pending Changes for {category_data[data_type]['pluralName']}",
+        changes=pending_changes,
+        schema=schema,
+        preview_references=preview_overall_lookup_dict,
+        target_schemas=target_schemas,
+        current_page=page,
+        total_pages=total_pages,
+        total_count=pending_count,
+        data_type=data_type,
+        change_type="pending",
+        collection_name=category_data[data_type]['pluralName']
+    )
+
+@change_routes.route("/<data_type>/changes/archived")
+@change_routes.route("/<data_type>/changes/archived/page/<int:page>")
+def data_type_archived_changes(data_type, page=1):
+    # Verify data_type exists
+    if data_type not in category_data:
+        flash(f"Unknown data type: {data_type}")
+        return redirect("/changes/archived")
+    
+    items_per_page = 50
+    schema, db = get_data_on_category("changes")
+    query_dict = {"_id": 1, "name": 1}
+    preview_overall_lookup_dict = {}
+    target_schemas = {}
+
+    # Get all target collection schemas
+    for collection_name in category_data:
+        target_schemas[collection_name] = category_data[collection_name]["schema"]
+
+    collections_to_preview = {}
+
+    for preview_item in schema.get("preview", {}):
+        query_dict[preview_item] = 1
+        collection_names = schema.get("properties", {}).get(preview_item, {}).get("collections")
+        if collection_names:
+            for collection_name in collection_names:
+                collections_to_preview[preview_item] = collection_name
+
+    # Count total documents for pagination - filter by data_type
+    archived_count = db.count_documents({"status": {"$ne": "Pending"}, "target_collection": data_type})
+    
+    # Calculate pagination
+    total_pages = (archived_count + items_per_page - 1) // items_per_page
+    
+    # Get paginated results - filter by data_type
+    skip = (page - 1) * items_per_page
+    archived_changes = list(db.find(
+        {"status": {"$ne": "Pending"}, "target_collection": data_type}, 
+        query_dict
+    ).sort([("time_requested", DESCENDING), ("time_approved", DESCENDING)])
+     .skip(skip).limit(items_per_page))
+
+    # Add the data_type to collections_to_preview if not already there
+    if data_type in category_data and data_type not in collections_to_preview:
+        collections_to_preview[data_type] = data_type
+
+    for field, collection_name in collections_to_preview.items():
+        preview_db = category_data[collection_name]["database"]
+        preview_individual_lookup_dict = {}
+        preview_data = list(preview_db.find({}, {"_id": 1, "name": 1}))
+        for data in preview_data:
+            preview_individual_lookup_dict[str(data["_id"])] = {
+                "name": data.get("name", "None"),
+                "link": f"{collection_name}/item/{data.get('name', data.get('_id', '#'))}"
+            }
+        preview_overall_lookup_dict[field] = preview_individual_lookup_dict
+
+    return render_template(
+        "data_type_changes.html",
+        title=f"Archived Changes for {category_data[data_type]['pluralName']}",
+        changes=archived_changes,
+        schema=schema,
+        preview_references=preview_overall_lookup_dict,
+        target_schemas=target_schemas,
+        current_page=page,
+        total_pages=total_pages,
+        total_count=archived_count,
+        data_type=data_type,
+        change_type="archived",
+        collection_name=category_data[data_type]['pluralName']
+    )
+
+@change_routes.route("/<data_type>/item/<item_ref>/changes/pending")
+@change_routes.route("/<data_type>/item/<item_ref>/changes/pending/page/<int:page>")
+def item_pending_changes(data_type, item_ref, page=1):
+    # Verify data_type exists
+    if data_type not in category_data:
+        flash(f"Unknown data type: {data_type}")
+        return redirect("/changes/pending")
+    
+    # Get the item to find its ID
+    _, _, item = get_data_on_item(data_type, item_ref)
+    item_id = item["_id"]
+    
+    items_per_page = 50
+    schema, db = get_data_on_category("changes")
+    query_dict = {"_id": 1, "name": 1}
+    preview_overall_lookup_dict = {}
+    target_schemas = {}
+
+    # Get all target collection schemas
+    for collection_name in category_data:
+        target_schemas[collection_name] = category_data[collection_name]["schema"]
+
+    collections_to_preview = {}
+
+    for preview_item in schema.get("preview", {}):
+        query_dict[preview_item] = 1
+        collection_names = schema.get("properties", {}).get(preview_item, {}).get("collections")
+        if collection_names:
+            for collection_name in collection_names:
+                collections_to_preview[preview_item] = collection_name
+
+    # Count total documents for pagination - filter by data_type and item_id
+    pending_count = db.count_documents({
+        "status": "Pending", 
+        "target_collection": data_type,
+        "target": item_id
+    })
+    
+    # Calculate pagination
+    total_pages = (pending_count + items_per_page - 1) // items_per_page
+    
+    # Get paginated results - filter by data_type and item_id
+    skip = (page - 1) * items_per_page
+    pending_changes = list(db.find(
+        {
+            "status": "Pending", 
+            "target_collection": data_type,
+            "target": item_id
+        }, 
+        query_dict
+    ).sort([("time_requested", ASCENDING), ("time_approved", ASCENDING)])
+     .skip(skip).limit(items_per_page))
+
+    # Add the data_type to collections_to_preview if not already there
+    if data_type in category_data and data_type not in collections_to_preview:
+        collections_to_preview[data_type] = data_type
+
+    for field, collection_name in collections_to_preview.items():
+        preview_db = category_data[collection_name]["database"]
+        preview_individual_lookup_dict = {}
+        preview_data = list(preview_db.find({}, {"_id": 1, "name": 1}))
+        for data in preview_data:
+            preview_individual_lookup_dict[str(data["_id"])] = {
+                "name": data.get("name", "None"),
+                "link": f"{collection_name}/item/{data.get('name', data.get('_id', '#'))}"
+            }
+        preview_overall_lookup_dict[field] = preview_individual_lookup_dict
+
+    return render_template(
+        "item_changes.html",
+        title=f"Pending Changes for {item_ref}",
+        changes=pending_changes,
+        schema=schema,
+        preview_references=preview_overall_lookup_dict,
+        target_schemas=target_schemas,
+        current_page=page,
+        total_pages=total_pages,
+        total_count=pending_count,
+        data_type=data_type,
+        item_ref=item_ref,
+        change_type="pending",
+        collection_name=category_data[data_type]['singularName']
+    )
+
+@change_routes.route("/<data_type>/item/<item_ref>/changes/archived")
+@change_routes.route("/<data_type>/item/<item_ref>/changes/archived/page/<int:page>")
+def item_archived_changes(data_type, item_ref, page=1):
+    # Verify data_type exists
+    if data_type not in category_data:
+        flash(f"Unknown data type: {data_type}")
+        return redirect("/changes/archived")
+    
+    # Get the item to find its ID
+    _, _, item = get_data_on_item(data_type, item_ref)
+    item_id = item["_id"]
+    
+    items_per_page = 50
+    schema, db = get_data_on_category("changes")
+    query_dict = {"_id": 1, "name": 1}
+    preview_overall_lookup_dict = {}
+    target_schemas = {}
+
+    # Get all target collection schemas
+    for collection_name in category_data:
+        target_schemas[collection_name] = category_data[collection_name]["schema"]
+
+    collections_to_preview = {}
+
+    for preview_item in schema.get("preview", {}):
+        query_dict[preview_item] = 1
+        collection_names = schema.get("properties", {}).get(preview_item, {}).get("collections")
+        if collection_names:
+            for collection_name in collection_names:
+                collections_to_preview[preview_item] = collection_name
+
+    # Count total documents for pagination - filter by data_type and item_id
+    archived_count = db.count_documents({
+        "status": {"$ne": "Pending"}, 
+        "target_collection": data_type,
+        "target": item_id
+    })
+    
+    # Calculate pagination
+    total_pages = (archived_count + items_per_page - 1) // items_per_page
+    
+    # Get paginated results - filter by data_type and item_id
+    skip = (page - 1) * items_per_page
+    archived_changes = list(db.find(
+        {
+            "status": {"$ne": "Pending"}, 
+            "target_collection": data_type,
+            "target": item_id
+        }, 
+        query_dict
+    ).sort([("time_requested", DESCENDING), ("time_approved", DESCENDING)])
+     .skip(skip).limit(items_per_page))
+
+    # Add the data_type to collections_to_preview if not already there
+    if data_type in category_data and data_type not in collections_to_preview:
+        collections_to_preview[data_type] = data_type
+
+    for field, collection_name in collections_to_preview.items():
+        preview_db = category_data[collection_name]["database"]
+        preview_individual_lookup_dict = {}
+        preview_data = list(preview_db.find({}, {"_id": 1, "name": 1}))
+        for data in preview_data:
+            preview_individual_lookup_dict[str(data["_id"])] = {
+                "name": data.get("name", "None"),
+                "link": f"{collection_name}/item/{data.get('name', data.get('_id', '#'))}"
+            }
+        preview_overall_lookup_dict[field] = preview_individual_lookup_dict
+
+    return render_template(
+        "item_changes.html",
+        title=f"Archived Changes for {item_ref}",
+        changes=archived_changes,
+        schema=schema,
+        preview_references=preview_overall_lookup_dict,
+        target_schemas=target_schemas,
+        current_page=page,
+        total_pages=total_pages,
+        total_count=archived_count,
+        data_type=data_type,
+        item_ref=item_ref,
+        change_type="archived",
+        collection_name=category_data[data_type]['singularName']
+    )

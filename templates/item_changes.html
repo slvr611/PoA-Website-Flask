@@ -1,0 +1,28 @@
+{% extends "layout.html" %}
+{% from "macros/pagination.html" import render_pagination, render_changes_table %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="breadcrumbs">
+        <a href="/{{ data_type }}">Back to {{ collection_name }} List</a> &gt;
+        <a href="/{{ data_type }}/item/{{ item_ref }}">Back to {{ item_ref }}</a>
+    </div>
+    
+    <div class="nav-tabs">
+        <a href="/{{ data_type }}/item/{{ item_ref }}/changes/pending" {% if change_type == "pending" %}class="active"{% endif %}>Pending Changes</a>
+        <a href="/{{ data_type }}/item/{{ item_ref }}/changes/archived" {% if change_type == "archived" %}class="active"{% endif %}>Change History</a>
+    </div>
+    
+    <h1>{{ title }} ({{ total_count }} total)</h1>
+    <div class="table-wrapper">
+        {{ render_changes_table(changes, preview_references, target_schemas, show_actions=(change_type == "pending")) }}
+        
+        <!-- Pagination -->
+        {% if total_pages > 1 %}
+            {{ render_pagination(current_page, total_pages, "/"+data_type+"/item/"+item_ref+"/changes/"+change_type) }}
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

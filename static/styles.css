@@ -688,62 +688,92 @@ h1, h2 {
     }
 }
 
-/* Changes column styling */
+/* Changes table styling */
+.changes-column {
+    max-width: 400px;
+    min-width: 250px;
+}
+
+.reason-column {
+    max-width: 200px;
+}
+
+.wrap-content {
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
 .change-item {
-    margin-bottom: 15px;
-    padding: 8px;
+    margin-bottom: 10px;
+    padding-bottom: 10px;
     border-bottom: 1px solid #333;
-    background: #1a1a1a;
-    border-radius: 4px;
+}
+
+.change-item:last-child {
+    border-bottom: none;
 }
 
 .change-label {
     font-weight: bold;
+    margin-bottom: 5px;
     color: #4CAF50;
-    margin-bottom: 8px;
-    font-size: 1.1em;
 }
 
 .dict-change {
     margin-left: 15px;
-    margin-bottom: 4px;
-    font-family: monospace;
-    font-size: 0.9em;
-    line-height: 1.4;
+    margin-bottom: 5px;
 }
 
 .dict-key {
     color: #888;
-    margin-right: 8px;
-}
-
-.dict-value {
-    color: #e0e0e0;
+    margin-right: 5px;
 }
 
 .array-dict-item {
-    margin: 10px 0;
-    padding: 8px;
-    background: #222;
-    border-radius: 4px;
+    margin-left: 15px;
+    margin-bottom: 10px;
+    padding: 5px;
+    border-left: 2px solid #444;
 }
 
 .array-index {
-    color: #4CAF50;
     font-weight: bold;
+    color: #888;
+    margin-bottom: 5px;
+}
+
+.array-change {
+    margin-left: 15px;
+}
+
+.array-before, .array-after {
     margin-bottom: 5px;
 }
 
 .simple-data {
-    font-family: monospace;
-    padding: 2px 5px;
     margin-left: 15px;
 }
 
-/* Make the changes column wider */
-.changes-column {
-    min-width: 350px;
-    max-width: 600px;
+.action-buttons {
+    display: flex;
+    gap: 5px;
+}
+
+.btn {
+    padding: 3px 8px;
+    border-radius: 3px;
+    text-decoration: none;
+    font-size: 0.9em;
+}
+
+.btn-approve {
+    background-color: #4CAF50;
+    color: white;
+}
+
+.btn-deny {
+    background-color: #f44336;
+    color: white;
 }
 
 /* Resource table specific styling */
@@ -772,4 +802,100 @@ h1, h2 {
 
 .resource-table td.negative {
     color: #ff9f9f;
+}
+
+/* Navigation tabs for changes pages */
+.nav-tabs {
+    display: flex;
+    margin-bottom: 20px;
+    border-bottom: 1px solid #333;
+}
+
+.nav-tabs a {
+    padding: 10px 15px;
+    text-decoration: none;
+    color: #ccc;
+    border-radius: 5px 5px 0 0;
+    margin-right: 5px;
+}
+
+.nav-tabs a:hover {
+    background-color: #333;
+}
+
+.nav-tabs a.active {
+    background-color: #333;
+    color: #4CAF50;
+    border-bottom: 2px solid #4CAF50;
+}
+
+/* Pagination styles */
+.pagination {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 20px 0;
+    padding: 10px;
+    background-color: #222;
+    border-radius: 4px;
+}
+
+.pagination-controls {
+    display: flex;
+    gap: 8px;
+}
+
+.pagination-btn {
+    padding: 5px 10px;
+    background-color: #333;
+    color: #fff;
+    border-radius: 3px;
+    text-decoration: none;
+    transition: background-color 0.2s;
+}
+
+.pagination-btn:hover {
+    background-color: #444;
+}
+
+.pagination-current {
+    padding: 5px 10px;
+    background-color: #4CAF50;
+    color: #fff;
+    border-radius: 3px;
+    font-weight: bold;
+}
+
+/* Breadcrumbs and action links */
+.breadcrumbs {
+    margin-bottom: 15px;
+}
+
+.breadcrumbs a {
+    color: #4CAF50;
+    text-decoration: none;
+}
+
+.breadcrumbs a:hover {
+    text-decoration: underline;
+}
+
+.action-links {
+    margin: 15px 0;
+    display: flex;
+    gap: 15px;
+}
+
+.action-links a {
+    display: inline-block;
+    padding: 5px 10px;
+    background-color: #333;
+    color: #fff;
+    text-decoration: none;
+    border-radius: 3px;
+    transition: background-color 0.2s;
+}
+
+.action-links a:hover {
+    background-color: #444;
 }

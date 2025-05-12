@@ -704,8 +704,8 @@ class NationForm(BaseSchemaForm):
     prestige = IntegerField("Prestige", validators=[NumberRange(min=0)], default=0)
     stability = SelectField("Stability", choices=[], default="Balanced")
     infamy = IntegerField("Infamy", validators=[NumberRange(min=0)], default=0)
-    temporary_karma = IntegerField("Temporary Karma", validators=[NumberRange(min=0)], default=0)
-    money = IntegerField("Money", validators=[NumberRange(min=0)], default=0)
+    temporary_karma = IntegerField("Temporary Karma", default=0)
+    money = IntegerField("Money", default=0)
     
     # Demographics fields
     primary_race = SelectField("Primary Race", choices=[])
@@ -861,7 +861,7 @@ class NationForm(BaseSchemaForm):
             if field_schema.get("bsonType") == "linked_object":
                 self.populate_select_field(field_name, self[field_name], schema, dropdown_options)
         
-        node_choices = [("", "None")]
+        node_choices = [("", "None"), ("luxury", "Luxury")]
         general_resources = json_data.get("general_resources", [])
         for resource in general_resources:
             node_choices.append((resource.get("key", resource), resource.get("name", resource)))

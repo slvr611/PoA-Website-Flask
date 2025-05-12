@@ -435,6 +435,12 @@
 				"trade_slots_per_admin": 1,
 				"city_slots": 4
 			},
+			"Archivist State": {
+				"administration_per_research_production": 3,
+				"max_administration_per_research_production": 3,
+				"effective_territory": -2,
+				"city_slots": 1
+			},
 			"Untamed Lords": {
 				"effective_territory": 6,
 				"nomadic": 1,

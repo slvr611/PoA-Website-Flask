@@ -645,7 +645,7 @@
 		},
 		"modifiers": {
 			"bronze_consumption": 1,
-			"money_income_per_money_storage": 5,
+			"money_income_per_money_storage": 500,
 			"max_money_income_per_money_storage": 400
 		},
 		"synergy_requirement": "luxury",

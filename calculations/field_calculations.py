@@ -17,13 +17,17 @@ def calculate_all_fields(target, schema, target_data_type):
     laws = collect_laws(target, schema)
     law_totals = sum_law_totals(laws)
 
+    district_details = {}
     districts = []
     if target_data_type == "nation":
-        districts = collect_nation_districts(target, law_totals)
+        district_details = calculate_district_details(target, schema_properties, modifier_totals, law_totals, external_modifiers_total)
+        districts = collect_nation_districts(target, law_totals, district_details)
     elif target_data_type == "merchant":
-        districts = collect_merchant_districts(target)
+        district_details = json_data["merchant_districts"]
+        districts = collect_merchant_districts(target, district_details)
     elif target_data_type == "mercenary":
-        districts = collect_mercenary_districts(target)
+        district_details = json_data["mercenary_districts"]
+        districts = collect_mercenary_districts(target, district_details)
     district_totals = sum_district_totals(districts)
 
     city_totals = {}
@@ -43,7 +47,7 @@ def calculate_all_fields(target, schema, target_data_type):
         node_totals = sum_node_totals(node_modifiers)
 
         jobs_assigned = collect_jobs_assigned(target)
-        job_details = calculate_job_details(target, modifier_totals, district_totals, city_totals, node_totals, law_totals, external_modifiers_total)
+        job_details = calculate_job_details(target, district_details, modifier_totals, district_totals, city_totals, node_totals, law_totals, external_modifiers_total)
         job_totals = sum_job_totals(jobs_assigned, job_details)
 
         land_units_assigned = collect_land_units_assigned(target)
@@ -58,16 +62,16 @@ def calculate_all_fields(target, schema, target_data_type):
         if target.get("empire", False):
             prestige_modifiers = calculate_prestige_modifiers(target, schema_properties)
     elif target_data_type == "nation_jobs":
-        job_details = calculate_job_details(target, modifier_totals, district_totals, city_totals, node_totals, law_totals, external_modifiers_total)
+        job_details = calculate_job_details(target, district_details, modifier_totals, district_totals, city_totals, node_totals, law_totals, external_modifiers_total)
 
     attributes_to_precalculate = ["administration", "effective_territory", "road_capacity", "effective_pop_capacity", "pop_count"]
 
     overall_total_modifiers = {}
-    calculated_values = {"job_details": job_details, "land_unit_details": land_unit_details, "naval_unit_details": naval_unit_details}
+    calculated_values = {"district_details": district_details, "job_details": job_details, "land_unit_details": land_unit_details, "naval_unit_details": naval_unit_details}
     for d in [external_modifiers_total, modifier_totals, district_totals, city_totals, node_totals, law_totals, job_totals, unit_totals, prestige_modifiers]:
         for key, value in d.items():
             overall_total_modifiers[key] = overall_total_modifiers.get(key, 0) + value
-
+    
     for field in attributes_to_precalculate:
         base_value = schema_properties.get(field, {}).get("base_value", 0)
         calculated_values[field] = compute_field(
@@ -199,10 +203,22 @@ def collect_laws(target, schema):
             collected_laws.append(law)
     return collected_laws
 
-def collect_nation_districts(target, law_totals):
+def calculate_district_details(target, schema_properties, modifier_totals, law_totals, external_modifiers_total):
+    district_details = {}
+    district_consumption_modifier = modifier_totals.get("district_resource_consumption", 0) + law_totals.get("district_resource_consumption", 0) + external_modifiers_total.get("district_resource_consumption", 0)
+    for district_type, district_data in json_data["nation_districts"].items():
+        current_district_consumption_modifier = district_consumption_modifier + modifier_totals.get(district_type + "_resource_consumption", 0) + law_totals.get(district_type + "_resource_consumption", 0) + external_modifiers_total.get(district_type + "_resource_consumption", 0)
+        for modifier, value in district_data.get("modifiers", {}).items():
+            if modifier.endswith("_consumption"):
+                district_data["modifiers"][modifier] = max(value + current_district_consumption_modifier, 0)
+        district_details[district_type] = district_data.copy()
+    for district_type, district_data in json_data["nation_imperial_districts"].items():
+        district_details[district_type] = district_data.copy()
+    return district_details
+
+def collect_nation_districts(target, law_totals, district_details):
     nation_districts = target.get("districts", [])
     collected_modifiers = []
-    district_json_data = json_data["nation_districts"]
 
     ignore_nodes = law_totals.get("ignore_nodes", 0)
     
@@ -210,13 +226,13 @@ def collect_nation_districts(target, law_totals):
         if isinstance(district, dict):
             district_type = district.get("type", "")
             district_node = district.get("node", "")
-            district_modifiers = district_json_data.get(district_type, {}).get("modifiers", {})
+            district_modifiers = district_details.get(district_type, {}).get("modifiers", {})
             collected_modifiers.append(district_modifiers)
-            if district_node == district_json_data.get(district_type, {}).get("synergy_requirement", ""):
-                collected_modifiers.append(district_json_data.get(district_type, {}).get("synergy_modifiers", {}))
-                if district_json_data.get(district_type, {}).get("synergy_node_active", True) and ignore_nodes < 1:
+            if district_node == district_details.get(district_type, {}).get("synergy_requirement", ""):
+                collected_modifiers.append(district_details.get(district_type, {}).get("synergy_modifiers", {}))
+                if district_details.get(district_type, {}).get("synergy_node_active", True) and district_node != "luxury" and ignore_nodes < 1:
                     collected_modifiers.append({district_node + "_production": 1})
-            elif district_node != "" and ignore_nodes < 1:
+            elif district_node != "" and district_node != "luxury" and ignore_nodes < 1:
                 collected_modifiers.append({district_node + "_production": 1})
 
     imperial_district_json_data = json_data["nation_imperial_districts"]
@@ -238,24 +254,24 @@ def collect_nation_districts(target, law_totals):
 
     return collected_modifiers
 
-def collect_merchant_districts(target):
+def collect_merchant_districts(target, district_details):
     collected_modifiers = []
 
     for i in range(1, 4):
         production_district = target.get("production_district_" + str(i), "")
         if production_district:
-            collected_modifiers.append(json_data["merchant_production_districts"].get(production_district, {}).get("modifiers", {}))
+            collected_modifiers.append(district_details.get(production_district, {}).get("modifiers", {}))
     
-    collected_modifiers.append(json_data["merchant_specialty_districts"].get(target.get("specialty_district", ""), {}).get("modifiers", {}))
-    collected_modifiers.append(json_data["merchant_luxury_districts"].get(target.get("luxury_district", ""), {}).get("modifiers", {}))
+    collected_modifiers.append(district_details.get(target.get("specialty_district", ""), {}).get("modifiers", {}))
+    collected_modifiers.append(district_details.get(target.get("luxury_district", ""), {}).get("modifiers", {}))
 
     return collected_modifiers
 
-def collect_mercenary_districts(target):
+def collect_mercenary_districts(target, district_details):
     collected_modifiers = []
 
     for district in target.get("districts", []):
-        collected_modifiers.append(json_data["mercenary_districts"].get(district, {}).get("modifiers", {}))
+        collected_modifiers.append(district_details.get(district, {}).get("modifiers", {}))
     
     return collected_modifiers
 
@@ -319,9 +335,8 @@ def collect_nodes(target, modifier_totals, district_totals, city_totals, law_tot
 def collect_jobs_assigned(target):
     return target.get("jobs", {})
 
-def calculate_job_details(target, modifier_totals, district_totals, city_totals, node_totals, law_totals, external_modifiers_total):
+def calculate_job_details(target, district_details, modifier_totals, district_totals, city_totals, node_totals, law_totals, external_modifiers_total):
     job_details = json_data["jobs"]
-    district_details = json_data["nation_districts"]
     modifier_sources = [modifier_totals, district_totals, city_totals, law_totals, node_totals, external_modifiers_total]
     general_resources = json_data["general_resources"]
     general_resources = [resource["key"] for resource in general_resources]

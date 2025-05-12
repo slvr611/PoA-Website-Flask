@@ -55,6 +55,23 @@ def compute_prestige_gain(field, target, base_value, field_schema, overall_total
 
     return value
 
+def compute_administration(field, target, base_value, field_schema, overall_total_modifiers):
+    production = compute_resource_production("resource_production", target, 0, {}, overall_total_modifiers)
+    research_production = production.get("research", 0)
+
+    value = base_value + overall_total_modifiers.get(field, 0)
+
+    admin_per_research = overall_total_modifiers.get("administration_per_research_production", 0)
+    if admin_per_research > 0:
+        value += research_production // admin_per_research
+    
+    max_admin_per_research = overall_total_modifiers.get("max_administration_per_research_production", 0)
+    if max_admin_per_research > 0:
+        max_admin = base_value + (research_production // max_admin_per_research)
+        value = min(value, max_admin)
+    
+    return value
+
 def compute_field_effective_territory(field, target, base_value, field_schema, overall_total_modifiers):
     administration = target.get("administration", 0)
     
@@ -217,6 +234,8 @@ def compute_stability_loss_chance(field, target, base_value, field_schema, overa
 
 def compute_district_slots(field, target, base_value, field_schema, overall_total_modifiers):
     pop_count = target.get("pop_count", 0)
+
+    pop_count -= overall_total_modifiers.get("district_pop_requirement", 0)
     
     value = base_value + overall_total_modifiers.get(field, 0)  + math.floor(pop_count / 5)
     
@@ -238,6 +257,17 @@ def compute_unit_capacity(field, target, base_value, field_schema, overall_total
     unit_cap_from_pops = math.ceil(pop_count * (overall_total_modifiers.get("recruit_percentage", 0)))
     
     value = base_value + overall_total_modifiers.get(field, 0) + unit_cap_from_pops
+    
+    return value
+
+def compute_money_income(field, target, base_value, field_schema, overall_total_modifiers):
+    value = base_value + overall_total_modifiers.get(field, 0)
+
+    money_stockpile = target.get("money", 0)
+    money_income_per_money_storage = overall_total_modifiers.get("money_income_per_money_storage", 0)
+    max_money_income_per_stockpile = overall_total_modifiers.get("money_income_per_money_storage", 0)
+    if money_income_per_money_storage > 0:
+        value += min((money_stockpile // money_income_per_money_storage) * 100, max_money_income_per_stockpile)  #money_income_per_stockpile gives $100 per x amount in stockpile
     
     return value
     
@@ -550,6 +580,7 @@ def compute_hiring_cost(field, target, base_value, field_schema, overall_total_m
 
 CUSTOM_COMPUTE_FUNCTIONS = {
     "prestige_gain": compute_prestige_gain,
+    "administration": compute_administration,
     "effective_territory": compute_field_effective_territory,
     "road_capacity": compute_field_road_capacity,
     "karma": compute_field_karma,
@@ -567,6 +598,7 @@ CUSTOM_COMPUTE_FUNCTIONS = {
     "naval_unit_count": compute_unit_count,
     "land_unit_capacity": compute_unit_capacity,
     "naval_unit_capacity": compute_unit_capacity,
+    "money_income": compute_money_income,
     "resource_production": compute_resource_production,
     "resource_consumption": compute_resource_consumption,
     "resource_excess": compute_resource_excess,

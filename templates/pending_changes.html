@@ -1,0 +1,23 @@
+{% extends "layout.html" %}
+{% from "macros/pagination.html" import render_pagination, render_changes_table %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="nav-tabs">
+        <a href="/changes/pending" class="active">Pending Changes</a>
+        <a href="/changes/archived">Archived Changes</a>
+    </div>
+    
+    <h1>Pending Changes ({{ total_count }} total)</h1>
+    <div class="table-wrapper">
+        {{ render_changes_table(changes, preview_references, target_schemas, show_actions=true) }}
+        
+        <!-- Pagination -->
+        {% if total_pages > 1 %}
+            {{ render_pagination(current_page, total_pages, "/changes/pending") }}
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

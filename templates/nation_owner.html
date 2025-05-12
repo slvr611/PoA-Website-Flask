@@ -9,6 +9,10 @@
 		{% if g.user is not none %}
 			<a href="{{ request.path.replace('item', 'edit') }}" class="edit-button">Edit</a>
 		{% endif %}
+		<div class="action-links">
+			<a href="{{ request.path }}/changes/pending">View Pending Changes</a>
+			<a href="{{ request.path }}/changes/archived">View Change History</a>
+		</div>
 		<div class="nation-summary">
 			<span>{{ schema.properties.region.label }}:
 				{% if linked_objects["region"] %}
@@ -696,7 +700,7 @@
 			{% for i in range(0, nation.district_slots) %}
 				<div class="district-slot">
 					{% if nation.districts | length > i and nation.districts[i] and nation.districts[i]["type"] != "" %}
-						{% set district = json_data["nation_districts"].get(nation.districts[i]["type"], {}) %}
+						{% set district = nation.district_details.get(nation.districts[i]["type"], {}) %}
 						<h3>{{ district.get("display_name", "") }}</h3>
 						<p>Type: {{ district.get("type", "") }}</p>
 						<p>
@@ -731,7 +735,7 @@
 		{% if nation.get("empire", False) %}
 			{% if nation.imperial_district and nation.imperial_district["type"] != "" %}
 				<div class="district-slot">
-					{% set district = json_data["nation_imperial_districts"].get(nation.imperial_district["type"], {}) %}
+					{% set district = nation.district_details.get(nation.imperial_district["type"], {}) %}
 					<h3>{{ district.get("display_name", "") }}</h3>
 					<p>Type: {{ district.get("type", "") }}</p>
 					<p>
