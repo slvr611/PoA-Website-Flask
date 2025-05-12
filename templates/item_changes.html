@@ -16,10 +16,16 @@
     </div>
     
     <h1>{{ title }} ({{ total_count }} total)</h1>
+    
+    <!-- Top Pagination -->
+    {% if total_pages > 1 %}
+        {{ render_pagination(current_page, total_pages, "/"+data_type+"/item/"+item_ref+"/changes/"+change_type) }}
+    {% endif %}
+    
     <div class="table-wrapper">
         {{ render_changes_table(changes, preview_references, target_schemas, show_actions=(change_type == "pending")) }}
         
-        <!-- Pagination -->
+        <!-- Bottom Pagination -->
         {% if total_pages > 1 %}
             {{ render_pagination(current_page, total_pages, "/"+data_type+"/item/"+item_ref+"/changes/"+change_type) }}
         {% endif %}

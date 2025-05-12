@@ -194,8 +194,10 @@
 		"label": "Titles",
         "description": "The titles the character currently holds",
 		"static": true,
+        "max_length": 3,
         "items":{
-			"bsonType": "string"
+            "bsonType": "json_district_enum",
+            "json_data": "titles"
         }
       },
 	  "age": {

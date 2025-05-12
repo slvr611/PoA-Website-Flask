@@ -16,6 +16,11 @@
     
     <h1>{{ title }} ({{ total_count }} total)</h1>
     <div class="table-wrapper">
+        {% if total_pages > 1 %}
+            {{ render_pagination(current_page, total_pages, "/changes/archived") }}
+        {% endif %}
+
+
         {{ render_changes_table(changes, preview_references, target_schemas, show_actions=(change_type == "pending")) }}
         
         <!-- Pagination -->

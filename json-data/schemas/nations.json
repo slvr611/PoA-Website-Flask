@@ -13,7 +13,7 @@
 		"primary_religion": ["external_modifiers"],
 		"wonders": ["external_modifiers"],
 		"region": ["external_modifiers"],
-		"rulers": ["modifiers"]
+		"rulers": ["titles", "modifiers"]
 	},
     "properties": {
       "name": {
@@ -777,7 +777,7 @@
 				"karma": -4
 			},
 			"Revolutionary": {
-				"research_production": 4,
+				"research_production": 6,
 				"stability_loss_chance_per_pop": 0.05,
 				"karma": -4,
 				"ignore_nodes": 1

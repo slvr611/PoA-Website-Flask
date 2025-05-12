@@ -574,6 +574,12 @@ def compute_hiring_cost(field, target, base_value, field_schema, overall_total_m
 
     value *= 1 + overall_total_modifiers.get("hiring_cost_mult", 0)
 
+    value = value / 5
+
+    value = int(round(value, 0))
+
+    value *= 5
+
     return value
 
 ##############################################################

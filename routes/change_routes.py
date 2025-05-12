@@ -13,6 +13,26 @@ app.jinja_env.globals.update(max=max, min=min)
 
 change_routes = Blueprint("change_routes", __name__)
 
+def get_preview_references(schema, collections_to_preview):
+    """Helper function to get preview references for all collections"""
+    preview_overall_lookup_dict = {}
+    
+    for field, collection_name in collections_to_preview.items():
+        if collection_name in category_data:
+            preview_db = category_data[collection_name]["database"]
+            preview_individual_lookup_dict = {}
+            preview_data = list(preview_db.find({}, {"_id": 1, "name": 1}))
+            for data in preview_data:
+                preview_individual_lookup_dict[str(data["_id"])] = {
+                    "name": data.get("name", "None"),
+                    "link": f"/{collection_name}/item/{data.get('name', data.get('_id', '#'))}"
+                }
+            preview_overall_lookup_dict[field] = preview_individual_lookup_dict
+            # Also add by collection name for direct lookups
+            preview_overall_lookup_dict[collection_name] = preview_individual_lookup_dict
+    
+    return preview_overall_lookup_dict
+
 @change_routes.route("/changes")
 def change_list_redirect():
     # Redirect to pending changes by default
@@ -24,15 +44,14 @@ def pending_change_list(page=1):
     items_per_page = 50
     schema, db = get_data_on_category("changes")
     query_dict = {"_id": 1, "name": 1}
-    preview_overall_lookup_dict = {}
+    collections_to_preview = {}
     target_schemas = {}
 
     # Get all target collection schemas
     for collection_name in category_data:
         target_schemas[collection_name] = category_data[collection_name]["schema"]
 
-    collections_to_preview = {}
-
+    # Add standard fields to query
     for preview_item in schema.get("preview", {}):
         query_dict[preview_item] = 1
         collection_names = schema.get("properties", {}).get(preview_item, {}).get("collections")
@@ -52,20 +71,20 @@ def pending_change_list(page=1):
                           .sort([("time_requested", ASCENDING), ("time_approved", ASCENDING)])
                           .skip(skip).limit(items_per_page))
 
+    # Add all collection types that appear in changes
     for change in pending_changes:
-        if change["target_collection"] in category_data and change["target_collection"] not in collections_to_preview:
+        if change["target_collection"] in category_data:
             collections_to_preview[change["target_collection"]] = change["target_collection"]
+            
+            # Add collections for linked fields in the target schema
+            target_schema = target_schemas.get(change["target_collection"], {}).get("properties", {})
+            for field_name, field_schema in target_schema.items():
+                if field_schema.get("bsonType") == "linked_object" and field_schema.get("collections"):
+                    for linked_collection in field_schema.get("collections", []):
+                        collections_to_preview[linked_collection] = linked_collection
 
-    for field, collection_name in collections_to_preview.items():
-        preview_db = category_data[collection_name]["database"]
-        preview_individual_lookup_dict = {}
-        preview_data = list(preview_db.find({}, {"_id": 1, "name": 1}))
-        for data in preview_data:
-            preview_individual_lookup_dict[str(data["_id"])] = {
-                "name": data.get("name", "None"),
-                "link": f"{collection_name}/item/{data.get('name', data.get('_id', '#'))}"
-            }
-        preview_overall_lookup_dict[field] = preview_individual_lookup_dict
+    # Get preview references for all collections
+    preview_overall_lookup_dict = get_preview_references(schema, collections_to_preview)
 
     return render_template(
         "pending_changes.html",
@@ -85,15 +104,14 @@ def archived_change_list(page=1):
     items_per_page = 50
     schema, db = get_data_on_category("changes")
     query_dict = {"_id": 1, "name": 1}
-    preview_overall_lookup_dict = {}
+    collections_to_preview = {}
     target_schemas = {}
 
     # Get all target collection schemas
     for collection_name in category_data:
         target_schemas[collection_name] = category_data[collection_name]["schema"]
 
-    collections_to_preview = {}
-
+    # Add standard fields to query
     for preview_item in schema.get("preview", {}):
         query_dict[preview_item] = 1
         collection_names = schema.get("properties", {}).get(preview_item, {}).get("collections")
@@ -113,20 +131,20 @@ def archived_change_list(page=1):
                            .sort([("time_requested", DESCENDING), ("time_approved", DESCENDING)])
                            .skip(skip).limit(items_per_page))
 
+    # Add all collection types that appear in changes
     for change in archived_changes:
-        if change["target_collection"] in category_data and change["target_collection"] not in collections_to_preview:
+        if change["target_collection"] in category_data:
             collections_to_preview[change["target_collection"]] = change["target_collection"]
+            
+            # Add collections for linked fields in the target schema
+            target_schema = target_schemas.get(change["target_collection"], {}).get("properties", {})
+            for field_name, field_schema in target_schema.items():
+                if field_schema.get("bsonType") == "linked_object" and field_schema.get("collections"):
+                    for linked_collection in field_schema.get("collections", []):
+                        collections_to_preview[linked_collection] = linked_collection
 
-    for field, collection_name in collections_to_preview.items():
-        preview_db = category_data[collection_name]["database"]
-        preview_individual_lookup_dict = {}
-        preview_data = list(preview_db.find({}, {"_id": 1, "name": 1}))
-        for data in preview_data:
-            preview_individual_lookup_dict[str(data["_id"])] = {
-                "name": data.get("name", "None"),
-                "link": f"{collection_name}/item/{data.get('name', data.get('_id', '#'))}"
-            }
-        preview_overall_lookup_dict[field] = preview_individual_lookup_dict
+    # Get preview references for all collections
+    preview_overall_lookup_dict = get_preview_references(schema, collections_to_preview)
 
     return render_template(
         "archived_changes.html",
@@ -246,15 +264,14 @@ def data_type_pending_changes(data_type, page=1):
     items_per_page = 50
     schema, db = get_data_on_category("changes")
     query_dict = {"_id": 1, "name": 1}
-    preview_overall_lookup_dict = {}
+    collections_to_preview = {}
     target_schemas = {}
 
     # Get all target collection schemas
     for collection_name in category_data:
         target_schemas[collection_name] = category_data[collection_name]["schema"]
 
-    collections_to_preview = {}
-
+    # Add standard fields to query
     for preview_item in schema.get("preview", {}):
         query_dict[preview_item] = 1
         collection_names = schema.get("properties", {}).get(preview_item, {}).get("collections")
@@ -276,20 +293,18 @@ def data_type_pending_changes(data_type, page=1):
     ).sort([("time_requested", ASCENDING), ("time_approved", ASCENDING)])
      .skip(skip).limit(items_per_page))
 
-    # Add the data_type to collections_to_preview if not already there
-    if data_type in category_data and data_type not in collections_to_preview:
-        collections_to_preview[data_type] = data_type
+    # Add the data_type to collections_to_preview
+    collections_to_preview[data_type] = data_type
+    
+    # Add collections for linked fields in the target schema
+    target_schema = target_schemas.get(data_type, {}).get("properties", {})
+    for field_name, field_schema in target_schema.items():
+        if field_schema.get("bsonType") == "linked_object" and field_schema.get("collections"):
+            for linked_collection in field_schema.get("collections", []):
+                collections_to_preview[linked_collection] = linked_collection
 
-    for field, collection_name in collections_to_preview.items():
-        preview_db = category_data[collection_name]["database"]
-        preview_individual_lookup_dict = {}
-        preview_data = list(preview_db.find({}, {"_id": 1, "name": 1}))
-        for data in preview_data:
-            preview_individual_lookup_dict[str(data["_id"])] = {
-                "name": data.get("name", "None"),
-                "link": f"{collection_name}/item/{data.get('name', data.get('_id', '#'))}"
-            }
-        preview_overall_lookup_dict[field] = preview_individual_lookup_dict
+    # Get preview references for all collections
+    preview_overall_lookup_dict = get_preview_references(schema, collections_to_preview)
 
     return render_template(
         "data_type_changes.html",
@@ -317,15 +332,14 @@ def data_type_archived_changes(data_type, page=1):
     items_per_page = 50
     schema, db = get_data_on_category("changes")
     query_dict = {"_id": 1, "name": 1}
-    preview_overall_lookup_dict = {}
+    collections_to_preview = {}
     target_schemas = {}
 
     # Get all target collection schemas
     for collection_name in category_data:
         target_schemas[collection_name] = category_data[collection_name]["schema"]
 
-    collections_to_preview = {}
-
+    # Add standard fields to query
     for preview_item in schema.get("preview", {}):
         query_dict[preview_item] = 1
         collection_names = schema.get("properties", {}).get(preview_item, {}).get("collections")
@@ -347,20 +361,18 @@ def data_type_archived_changes(data_type, page=1):
     ).sort([("time_requested", DESCENDING), ("time_approved", DESCENDING)])
      .skip(skip).limit(items_per_page))
 
-    # Add the data_type to collections_to_preview if not already there
-    if data_type in category_data and data_type not in collections_to_preview:
-        collections_to_preview[data_type] = data_type
+    # Add the data_type to collections_to_preview
+    collections_to_preview[data_type] = data_type
+    
+    # Add collections for linked fields in the target schema
+    target_schema = target_schemas.get(data_type, {}).get("properties", {})
+    for field_name, field_schema in target_schema.items():
+        if field_schema.get("bsonType") == "linked_object" and field_schema.get("collections"):
+            for linked_collection in field_schema.get("collections", []):
+                collections_to_preview[linked_collection] = linked_collection
 
-    for field, collection_name in collections_to_preview.items():
-        preview_db = category_data[collection_name]["database"]
-        preview_individual_lookup_dict = {}
-        preview_data = list(preview_db.find({}, {"_id": 1, "name": 1}))
-        for data in preview_data:
-            preview_individual_lookup_dict[str(data["_id"])] = {
-                "name": data.get("name", "None"),
-                "link": f"{collection_name}/item/{data.get('name', data.get('_id', '#'))}"
-            }
-        preview_overall_lookup_dict[field] = preview_individual_lookup_dict
+    # Get preview references for all collections
+    preview_overall_lookup_dict = get_preview_references(schema, collections_to_preview)
 
     return render_template(
         "data_type_changes.html",
@@ -392,15 +404,14 @@ def item_pending_changes(data_type, item_ref, page=1):
     items_per_page = 50
     schema, db = get_data_on_category("changes")
     query_dict = {"_id": 1, "name": 1}
-    preview_overall_lookup_dict = {}
+    collections_to_preview = {}
     target_schemas = {}
 
     # Get all target collection schemas
     for collection_name in category_data:
         target_schemas[collection_name] = category_data[collection_name]["schema"]
 
-    collections_to_preview = {}
-
+    # Add standard fields to query
     for preview_item in schema.get("preview", {}):
         query_dict[preview_item] = 1
         collection_names = schema.get("properties", {}).get(preview_item, {}).get("collections")
@@ -430,20 +441,18 @@ def item_pending_changes(data_type, item_ref, page=1):
     ).sort([("time_requested", ASCENDING), ("time_approved", ASCENDING)])
      .skip(skip).limit(items_per_page))
 
-    # Add the data_type to collections_to_preview if not already there
-    if data_type in category_data and data_type not in collections_to_preview:
-        collections_to_preview[data_type] = data_type
+    # Add the data_type to collections_to_preview
+    collections_to_preview[data_type] = data_type
+    
+    # Add collections for linked fields in the target schema
+    target_schema = target_schemas.get(data_type, {}).get("properties", {})
+    for field_name, field_schema in target_schema.items():
+        if field_schema.get("bsonType") == "linked_object" and field_schema.get("collections"):
+            for linked_collection in field_schema.get("collections", []):
+                collections_to_preview[linked_collection] = linked_collection
 
-    for field, collection_name in collections_to_preview.items():
-        preview_db = category_data[collection_name]["database"]
-        preview_individual_lookup_dict = {}
-        preview_data = list(preview_db.find({}, {"_id": 1, "name": 1}))
-        for data in preview_data:
-            preview_individual_lookup_dict[str(data["_id"])] = {
-                "name": data.get("name", "None"),
-                "link": f"{collection_name}/item/{data.get('name', data.get('_id', '#'))}"
-            }
-        preview_overall_lookup_dict[field] = preview_individual_lookup_dict
+    # Get preview references for all collections
+    preview_overall_lookup_dict = get_preview_references(schema, collections_to_preview)
 
     return render_template(
         "item_changes.html",
@@ -476,15 +485,14 @@ def item_archived_changes(data_type, item_ref, page=1):
     items_per_page = 50
     schema, db = get_data_on_category("changes")
     query_dict = {"_id": 1, "name": 1}
-    preview_overall_lookup_dict = {}
+    collections_to_preview = {}
     target_schemas = {}
 
     # Get all target collection schemas
     for collection_name in category_data:
         target_schemas[collection_name] = category_data[collection_name]["schema"]
 
-    collections_to_preview = {}
-
+    # Add standard fields to query
     for preview_item in schema.get("preview", {}):
         query_dict[preview_item] = 1
         collection_names = schema.get("properties", {}).get(preview_item, {}).get("collections")
@@ -514,20 +522,18 @@ def item_archived_changes(data_type, item_ref, page=1):
     ).sort([("time_requested", DESCENDING), ("time_approved", DESCENDING)])
      .skip(skip).limit(items_per_page))
 
-    # Add the data_type to collections_to_preview if not already there
-    if data_type in category_data and data_type not in collections_to_preview:
-        collections_to_preview[data_type] = data_type
+    # Add the data_type to collections_to_preview
+    collections_to_preview[data_type] = data_type
+    
+    # Add collections for linked fields in the target schema
+    target_schema = target_schemas.get(data_type, {}).get("properties", {})
+    for field_name, field_schema in target_schema.items():
+        if field_schema.get("bsonType") == "linked_object" and field_schema.get("collections"):
+            for linked_collection in field_schema.get("collections", []):
+                collections_to_preview[linked_collection] = linked_collection
 
-    for field, collection_name in collections_to_preview.items():
-        preview_db = category_data[collection_name]["database"]
-        preview_individual_lookup_dict = {}
-        preview_data = list(preview_db.find({}, {"_id": 1, "name": 1}))
-        for data in preview_data:
-            preview_individual_lookup_dict[str(data["_id"])] = {
-                "name": data.get("name", "None"),
-                "link": f"{collection_name}/item/{data.get('name', data.get('_id', '#'))}"
-            }
-        preview_overall_lookup_dict[field] = preview_individual_lookup_dict
+    # Get preview references for all collections
+    preview_overall_lookup_dict = get_preview_references(schema, collections_to_preview)
 
     return render_template(
         "item_changes.html",

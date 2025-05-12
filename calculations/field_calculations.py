@@ -22,6 +22,9 @@ def calculate_all_fields(target, schema, target_data_type):
     if target_data_type == "nation":
         district_details = calculate_district_details(target, schema_properties, modifier_totals, law_totals, external_modifiers_total)
         districts = collect_nation_districts(target, law_totals, district_details)
+    elif target_data_type == "nation_jobs":
+        district_details = calculate_district_details(target, schema_properties, modifier_totals, law_totals, external_modifiers_total)
+        districts = collect_nation_districts(target, law_totals, district_details)
     elif target_data_type == "merchant":
         district_details = json_data["merchant_districts"]
         districts = collect_merchant_districts(target, district_details)
@@ -38,6 +41,7 @@ def calculate_all_fields(target, schema, target_data_type):
     naval_unit_details = {}
     unit_totals = {}
     prestige_modifiers = {}
+    title_modifiers = {}
 
     if target_data_type == "nation":
         cities = collect_cities(target)
@@ -63,12 +67,14 @@ def calculate_all_fields(target, schema, target_data_type):
             prestige_modifiers = calculate_prestige_modifiers(target, schema_properties)
     elif target_data_type == "nation_jobs":
         job_details = calculate_job_details(target, district_details, modifier_totals, district_totals, city_totals, node_totals, law_totals, external_modifiers_total)
+    elif target_data_type == "character":
+        title_modifiers = calculate_title_modifiers(target, target_data_type, schema_properties)
 
     attributes_to_precalculate = ["administration", "effective_territory", "road_capacity", "effective_pop_capacity", "pop_count"]
 
     overall_total_modifiers = {}
     calculated_values = {"district_details": district_details, "job_details": job_details, "land_unit_details": land_unit_details, "naval_unit_details": naval_unit_details}
-    for d in [external_modifiers_total, modifier_totals, district_totals, city_totals, node_totals, law_totals, job_totals, unit_totals, prestige_modifiers]:
+    for d in [external_modifiers_total, modifier_totals, district_totals, city_totals, node_totals, law_totals, job_totals, unit_totals, prestige_modifiers, title_modifiers]:
         for key, value in d.items():
             overall_total_modifiers[key] = overall_total_modifiers.get(key, 0) + value
     
@@ -99,6 +105,31 @@ def calculate_all_fields(target, schema, target_data_type):
             )
             target[field] = calculated_values[field]
     
+    if target_data_type == "nation":
+        food_consumption_per_pop = 1 + overall_total_modifiers.get("food_consumption_per_pop", 0)
+        food_consumption = calculated_values.get("pop_count", 0) * food_consumption_per_pop
+        if food_consumption_per_pop < 1:
+            food_consumption = math.ceil(food_consumption)
+        else:
+            food_consumption = math.floor(food_consumption)
+        
+        excess_food = calculated_values.get("resource_excess", {}).get("food", 0) + target.get("resource_storage", {}).get("food", 0)
+
+        if excess_food < food_consumption / 2:
+            #Nation is Starving
+            overall_total_modifiers["strength"] = overall_total_modifiers.get("strength", 0) - 2
+            overall_total_modifiers["stability_loss_chance"] = overall_total_modifiers.get("stability_loss_chance", 0) + 0.25
+            overall_total_modifiers["job_resource_production"] = overall_total_modifiers.get("job_resource_production", 0) - 1
+            overall_total_modifiers["job_food_production"] = overall_total_modifiers.get("job_food_production", 0) + 1
+            overall_total_modifiers["locks_research_production"] = 1
+            calculate_job_details(target, district_details, modifier_totals, district_totals, city_totals, node_totals, law_totals, external_modifiers_total)
+        elif excess_food < food_consumption:
+            #Nation is Underfed
+            pass
+        else:
+            #Nation is Sated
+            pass
+
     return calculated_values
 
 def compute_field(field, target, base_value, field_schema, overall_total_modifiers):
@@ -274,6 +305,17 @@ def collect_mercenary_districts(target, district_details):
         collected_modifiers.append(district_details.get(district, {}).get("modifiers", {}))
     
     return collected_modifiers
+
+def calculate_title_modifiers(target, target_data_type, schema_properties):
+    title_modifiers = {}
+    titles = target.get("titles", [])
+    for title in titles:
+        title_data = json_data["titles"].get(title, {})
+        for key, value in title_data.get("modifiers", {}).items():
+            if key.startswith(target_data_type + "_"):
+                temp_key = key.replace(target_data_type + "_", "")
+                title_modifiers[temp_key] = title_modifiers.get(temp_key, 0) + value
+    return title_modifiers
 
 def collect_cities(target):
     nation_cities = target.get("cities", [])
@@ -536,6 +578,11 @@ def collect_external_modifiers_from_object(object, required_fields, linked_objec
                     if modifier.get("field").startswith(target_data_type + "_"):
                         field = modifier["field"].replace(target_data_type + "_", "")
                         collected_modifiers.append({field: modifier["value"]})
+            
+            elif field_type == "array" and req_field == "titles":
+                calculated_title_modifiers = calculate_title_modifiers(object, target_data_type, linked_object_schema["properties"])
+                for key, value in calculated_title_modifiers.items():
+                    collected_modifiers.append({key: value})
     
     return collected_modifiers
 

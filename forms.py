@@ -456,6 +456,9 @@ class BaseSchemaForm(FlaskForm):
         if field_name == "districts":
             choices += [(district, json_data["mercenary_districts"][district]["display_name"]) for district in json_data["mercenary_districts"]]
         
+        elif field_name == "titles":
+            choices += [(title, json_data["titles"][title]["display_name"]) for title in json_data["titles"]]
+        
         elif field_name == "units":
             combined_data = {}
             json_files = land_unit_json_files + naval_unit_json_files
@@ -518,6 +521,18 @@ class BaseSchemaForm(FlaskForm):
 
                         for district in districts:
                             field.append_entry(district)
+                    
+                    elif field_name == "titles":
+                        titles = item.get("titles", [])
+                        max_titles = schema.get("properties", {}).get(field_name, {}).get("max_length", 0)
+                        if isinstance(max_titles, str):
+                            max_titles = item.get(max_titles, 0)
+                        
+                        if len(titles) < max_titles:
+                            titles.extend([""] * (max_titles - len(titles)))
+                        
+                        for title in titles:
+                            field.append_entry(title)
                         
                     elif field_name == "units":
                         units = item.get("units", [])

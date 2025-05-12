@@ -11,13 +11,20 @@
     </div>
     
     <h1>Archived Changes ({{ total_count }} total)</h1>
+    
+    <!-- Top Pagination -->
+    {% if total_pages > 1 %}
+        {{ render_pagination(current_page, total_pages, "/changes/archived") }}
+    {% endif %}
+    
     <div class="table-wrapper">
         {{ render_changes_table(changes, preview_references, target_schemas) }}
         
-        <!-- Pagination -->
+        <!-- Bottom Pagination -->
         {% if total_pages > 1 %}
             {{ render_pagination(current_page, total_pages, "/changes/archived") }}
         {% endif %}
     </div>
 </div>
 {% endblock %}
+
