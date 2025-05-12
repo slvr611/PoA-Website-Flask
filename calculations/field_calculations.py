@@ -26,7 +26,9 @@ def calculate_all_fields(target, schema, target_data_type):
         district_details = calculate_district_details(target, schema_properties, modifier_totals, law_totals, external_modifiers_total)
         districts = collect_nation_districts(target, law_totals, district_details)
     elif target_data_type == "merchant":
-        district_details = json_data["merchant_districts"]
+        district_details = json_data["merchant_production_districts"]
+        district_details.update(json_data["merchant_specialty_districts"])
+        district_details.update(json_data["merchant_luxury_districts"])
         districts = collect_merchant_districts(target, district_details)
     elif target_data_type == "mercenary":
         district_details = json_data["mercenary_districts"]
