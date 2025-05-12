@@ -117,9 +117,6 @@ def calculate_all_fields(target, schema, target_data_type):
         
         excess_food = calculated_values.get("resource_production", {}).get("food", 0) + target.get("resource_storage", {}).get("food", 0)
 
-        print("Food Consumption: " + str(food_consumption))
-        print("Excess Food: " + str(excess_food))
-
         if excess_food < food_consumption / 2:
             #Nation is Starving
             overall_total_modifiers["strength"] = overall_total_modifiers.get("strength", 0) - 2

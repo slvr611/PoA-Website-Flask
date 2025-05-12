@@ -484,8 +484,9 @@ def nation_concessions_tick(old_nation, new_nation, calculated_nation, schema):
 
     if old_nation.get("concessions", {}) != {}:
         new_nation["concessions"] = {}
-        compliance_index = old_nation["compliance_enum"].index(old_nation["compliance"])
-        new_nation["compliance"] = old_nation["compliance_enum"][compliance_index - 1]
+        compliance_enum = schema["properties"]["compliance"]["enum"]
+        compliance_index = compliance_enum.index(old_nation["compliance"])
+        new_nation["compliance"] = compliance_enum[compliance_index - 1]
         result += f"{old_nation.get('name', 'Unknown')} has had their compliance reduced from {old_nation.get('compliance', 'Unknown')} to {new_nation.get('compliance', 'Unknown')} due to concessions not being paid.\n"
 
     if old_nation.get("concessions_roll", 1) < old_nation.get("concessions_chance_at_tick", 0):
