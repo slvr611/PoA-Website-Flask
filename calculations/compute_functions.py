@@ -268,7 +268,9 @@ def compute_unit_capacity(field, target, base_value, field_schema, overall_total
     return value
 
 def compute_money_income(field, target, base_value, field_schema, overall_total_modifiers):
-    value = base_value + overall_total_modifiers.get(field, 0)
+    pop_count = target.get("pop_count", 0)
+
+    value = base_value + overall_total_modifiers.get(field, 0) + (pop_count * overall_total_modifiers.get("money_income_per_pop", 0))
 
     money_stockpile = target.get("money", 0)
     money_income_per_money_storage = overall_total_modifiers.get("money_income_per_money_storage", 0)

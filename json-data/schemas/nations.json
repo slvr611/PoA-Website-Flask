@@ -892,26 +892,26 @@
 		"laws": {
 			"None": {},
 			"Subsidized": {
-				"money_production_per_pop": -18,
+				"money_income_per_pop": -18,
 				"stability_gain_chance_per_pop": 0.01
 			},
 			"No Taxes": {
-				"money_production_per_pop": -9,
+				"money_income_per_pop": -9,
 				"stability_gain_chance_per_pop": 0.01
 			},
 			"Low": {
-				"money_production_per_pop": 6
+				"money_income_per_pop": 6
 			},
 			"Moderate": {
-				"money_production_per_pop": 12,
+				"money_income_per_pop": 12,
 				"stability_loss_chance_per_pop": 0.01
 			},
 			"High": {
-				"money_production_per_pop": 18,
+				"money_income_per_pop": 18,
 				"stability_loss_chance_per_pop": 0.02
 			},
 			"Oppressive": {
-				"money_production_per_pop": 24,
+				"money_income_per_pop": 24,
 				"stability_loss_chance_per_pop": 0.03
 			}
 		}

@@ -451,6 +451,7 @@ def nation_prestige_gain_tick(old_nation, new_nation, calculated_nation, schema)
     if old_nation_prestige == "":
         old_nation_prestige = 0
     new_nation["prestige"] = old_nation_prestige + calculated_nation.get("prestige_gain", 0)
+    new_nation["prestige"] = min(max(new_nation["prestige"], 0), 100)
     return ""
 
 def nation_stability_tick(old_nation, new_nation, calculated_nation, schema):
