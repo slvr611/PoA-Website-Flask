@@ -106,6 +106,15 @@
 					<td>{{ nation.road_usage }} / {{ nation.road_capacity }}</td>
 				</tr>
 			</table>
+			<h2>Territory Holdings</h2>
+			<table class="info-table">
+				{% for terrain, details in json_data["terrains"].items() %}
+					<tr>
+						<th>{{ details["display_name"] }}</th>
+						<td>{{ nation.get("territory_types", {}).get(terrain, 0) }}</td>
+					</tr>
+				{% endfor %}
+			</table>
 		</div>
 		<div class="table-wrapper">
 			<table class="info-table">
@@ -569,24 +578,6 @@
 				</tbody>
 			</table>
 		</section>	
-	
-		<div class="table-wrapper">
-			<h2>Nodes</h2>
-			<table class="info-table">
-				{% for resource in json_data["general_resources"] %}
-					<tr>
-						<th>{{ resource.name }}</th>
-						<td>{{ nation.get("resource_nodes", {}).get(resource["key"], 0) }}</td>
-					</tr>
-				{% endfor %}
-				{% for resource in json_data["unique_resources"] %}
-					<tr>
-						<th>{{ resource.name }}</th>
-						<td>{{ nation.get("resource_nodes", {}).get(resource["key"], 0) }}</td>
-					</tr>
-				{% endfor %}
-			</table>
-		</div>
 	</div>
 	
 	<section class="resources-section">

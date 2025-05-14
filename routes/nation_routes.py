@@ -67,7 +67,7 @@ def edit_nation(item_ref):
     linked_objects = get_linked_objects(schema, nation)
     calculated_fields = calculate_all_fields(nation, schema, "nation")
     nation.update(calculated_fields)
-    
+
     # Ensure concessions is properly formatted
     if "concessions" in nation and nation["concessions"] is not None:
         if not isinstance(nation["concessions"], dict):
@@ -77,7 +77,7 @@ def edit_nation(item_ref):
     
     form = form_generator.get_form("nations", schema, item=nation)
     form.populate_linked_fields(schema, dropdown_options)
-    
+
     # Set concessions as JSON string
     form.concessions.data = json.dumps(nation.get("concessions", {}))
 
@@ -89,8 +89,7 @@ def edit_nation(item_ref):
         nation=nation,
         dropdown_options=dropdown_options,
         linked_objects=linked_objects,
-        general_resources=json_data["general_resources"],
-        unique_resources=json_data["unique_resources"]
+        json_data=json_data
     )
 
 @nation_routes.route("/nations/edit/<item_ref>/request", methods=["POST"])

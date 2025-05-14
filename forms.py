@@ -71,23 +71,18 @@ class ResourceStorageDict(Form):
                 resource_field.data = int(item.get(resource["key"], 0))
 
 
-class NodeDict(Form):
-    """Form for handling resources nodes as a dictionary"""
+class TerritoryTerrainDict(Form):
+    """Form for handling territory terrain as a dictionary"""
     
     class Meta:
         csrf = False
     
     @classmethod
     def create_form_class(cls):
-        general_resources = json_data.get("general_resources", [])
-        for resource in general_resources:
-            field = IntegerField(resource["name"], validators=[NumberRange(min=0)], default=0)
-            setattr(cls, resource["key"], field)
-        
-        unique_resources = json_data.get("unique_resources", [])
-        for resource in unique_resources:
-            field = IntegerField(resource["name"], validators=[NumberRange(min=0)], default=0)
-            setattr(cls, resource["key"], field)
+        terrains = json_data.get("terrains", {})
+        for terrain, details in terrains.items():
+            field = IntegerField(details["display_name"], validators=[NumberRange(min=0)], default=0)
+            setattr(cls, terrain, field)
         
         return cls
 
@@ -760,8 +755,8 @@ class NationForm(BaseSchemaForm):
         ResourceStorageDict.create_form_class()
         cls.resource_storage = FormField(ResourceStorageDict)
 
-        NodeDict.create_form_class()
-        cls.resource_nodes = FormField(NodeDict)
+        TerritoryTerrainDict.create_form_class()
+        cls.territory_types = FormField(TerritoryTerrainDict)
 
         JobAssignmentDict.create_form_class(job_details)
         cls.jobs = FormField(JobAssignmentDict)

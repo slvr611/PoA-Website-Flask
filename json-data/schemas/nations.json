@@ -9,7 +9,7 @@
 	"preview": ["region"],
 	"external_calculation_requirements": {
 		"overlord": ["subject_stance"],
-		"primary_race": ["positive_trait", "negative_trait", "preferred_terrain"],
+		"primary_race": ["positive_trait", "negative_trait"],
 		"primary_religion": ["external_modifiers"],
 		"wonders": ["external_modifiers"],
 		"region": ["external_modifiers"],
@@ -80,8 +80,13 @@
         "bsonType": "number",
 		"label": "Current Territory",
         "description": "The amount of territory the nation currently holds",
-		"default": 0
+		"calculated": true
       },
+	  "territory_types": {
+		"bsonType": "object",
+		"label": "Territory Types",
+		"description": "The types of territory the nation currently holds"
+	  },
 	  "road_capacity": {
         "bsonType": "number",
 		"label": "Road Capacity",
@@ -1084,11 +1089,6 @@
 		"label": "Resource Capacity",
         "description": "The resource reserves of the nation",
 		"calculated": true
-      },
-	  "resource_nodes": {
-        "bsonType": "object",
-		"label": "Resource Nodes",
-        "description": "The resource nodes of the nation"
       },
 	  "luxury_resources": {
         "bsonType": "array",

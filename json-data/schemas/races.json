@@ -138,37 +138,7 @@
         "bsonType": "enum",
 		    "label": "Preferred Terrain",
         "description": "The preferred terrain of this race",
-		    "enum": ["None", "Plains", "Tundra", "Desert", "Forest", "River", "Dense Forest", "Marsh", "Hill", "Mountain", "Hazardous"],
-        "laws": {
-          "Plains": {
-            "nation_mounts_production": 1
-          },
-          "Tundra": {
-            "nation_mounts_production": 1
-          },
-          "Desert": {
-            "nation_mounts_production": 1
-          },
-          "Forest": {
-            "nation_food_production": 1
-          },
-          "River": {
-            "nation_food_production": 1
-          },
-          "Dense Forest": {
-            "nation_wood_production": 1
-          },
-          "Marsh": {
-            "nation_wood_production": 1
-          },
-          "Hill": {
-            "nation_stone_production": 1
-          },
-          "Mountain": {
-            "nation_stone_production": 1
-          },
-          "Hazardous": {}
-        }
+		    "enum": ["None", "Plains", "Tundra", "Desert", "Forest", "River", "Dense Forest", "Marsh", "Hill", "Mountain", "Hazardous"]
       },
 	    "pops": {
         "bsonType": "array",

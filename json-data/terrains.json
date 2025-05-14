@@ -1,0 +1,72 @@
+{
+	"plains": {
+		"display_name": "Plains",
+		"resource": "food",
+		"count_required": 4
+	},
+	"forest": {
+		"display_name": "Forest",
+		"resource": "wood",
+		"count_required": 4
+	},
+	"dense_forest": {
+		"display_name": "Dense Forest",
+		"resource": "wood",
+		"count_required": 6
+	},
+	"urban": {
+		"display_name": "Urban",
+		"resource": "none",
+		"count_required": 4
+	},
+	"hill": {
+		"display_name": "Hill",
+		"resource": "stone",
+		"count_required": 4
+	},
+	"mountain": {
+		"display_name": "Mountain",
+		"resource": "stone",
+		"count_required": 3
+	},
+	"river": {
+		"display_name": "River",
+		"resource": "food",
+		"count_required": 3
+	},
+	"desert": {
+		"display_name": "Desert",
+		"resource": "mounts",
+		"count_required": 3
+	},
+	"tundra": {
+		"display_name": "Tundra",
+		"resource": "mounts",
+		"count_required": 3
+	},
+	"marsh": {
+		"display_name": "Marsh",
+		"resource": "wood",
+		"count_required": 3
+	},
+	"hazardous_land": {
+		"display_name": "Hazardous Land",
+		"resource": "magic",
+		"count_required": 4
+	},
+	"shallow_water": {
+		"display_name": "Shallow Water",
+		"resource": "food",
+		"count_required": 4
+	},
+	"deep_water": {
+		"display_name": "Deep Water",
+		"resource": "food",
+		"count_required": 3
+	},
+	"hazardous_water": {
+		"display_name": "Hazardous Water",
+		"resource": "magic",
+		"count_required": 4
+	}
+}

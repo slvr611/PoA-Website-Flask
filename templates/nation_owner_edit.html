@@ -207,6 +207,15 @@
                         <td>{{ form.road_usage(class="form-control") }} / {{ nation.road_capacity }}</td>
                     </tr>
                 </table>
+                <h2>Territory Terrain</h2>
+                <table class="info-table">
+                    {% for terrain, details in json_data["terrains"].items() %}
+                        <tr>
+                            <td>{{ details["display_name"] }}</td>
+                            <td>{{ form.territory_types[terrain](class="form-control") }}</td>
+                        </tr>
+                    {% endfor %}
+                </table>
             </div>
             
             <div class="info-column">
@@ -446,7 +455,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {% for resource in general_resources %}
+                    {% for resource in json_data["general_resources"] %}
                         {% set resource_index = loop.index0 %}
                         <tr>
                             <td>{{ resource.name }}</td>
@@ -470,8 +479,8 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {% for resource in unique_resources %}
-                        {% set resource_index = general_resources|length + loop.index0 %}
+                    {% for resource in json_data["unique_resources"] %}
+                        {% set resource_index = json_data["general_resources"]|length + loop.index0 %}
                         <tr>
                             <td>{{ resource.name }}</td>
                             <td>{{ nation.resource_production[resource.key] if resource.key in nation.resource_production else 0 }}</td>
@@ -521,24 +530,6 @@
                 </tbody>
             </table>
         </section>
-        
-        <div class="info-column">
-            <h2>Nodes</h2>
-            <table class="info-table">
-                {% for resource in general_resources %}
-                    <tr>
-                        <td>{{ resource.name }}</td>
-                        <td>{{ form.resource_nodes[resource.key](class="form-control") }}</td>
-                    </tr>
-                {% endfor %}
-                {% for resource in unique_resources %}
-                    <tr>
-                        <td>{{ resource.name }}</td>
-                        <td>{{ form.resource_nodes[resource.key](class="form-control") }}</td>
-                    </tr>
-                {% endfor %}
-            </table>
-        </div>
         
         <!-- Districts Section -->
         <section class="districts-section">

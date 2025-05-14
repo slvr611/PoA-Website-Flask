@@ -79,6 +79,13 @@ def compute_field_effective_territory(field, target, base_value, field_schema, o
     
     return value
 
+def compute_field_current_territory(field, target, base_value, field_schema, overall_total_modifiers):
+    territory_types = target.get("territory_types", {})
+
+    value = sum(territory_types.values())
+    
+    return value
+
 def compute_field_road_capacity(field, target, base_value, field_schema, overall_total_modifiers):
     administration = target.get("administration", 0)
 
@@ -600,6 +607,7 @@ CUSTOM_COMPUTE_FUNCTIONS = {
     "prestige_gain": compute_prestige_gain,
     "administration": compute_administration,
     "effective_territory": compute_field_effective_territory,
+    "current_territory": compute_field_current_territory,
     "road_capacity": compute_field_road_capacity,
     "karma": compute_field_karma,
     "disobey_chance": compute_disobey_chance,
