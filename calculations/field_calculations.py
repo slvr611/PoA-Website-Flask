@@ -36,6 +36,7 @@ def calculate_all_fields(target, schema, target_data_type):
     district_totals = sum_district_totals(districts)
 
     city_totals = {}
+    territory_terrain_totals = {}
     job_details = {}
     job_totals = {}
     land_unit_details = {}
