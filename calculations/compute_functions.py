@@ -289,6 +289,10 @@ def compute_money_income(field, target, base_value, field_schema, overall_total_
     
 def compute_resource_production(field, target, base_value, field_schema, overall_total_modifiers):
     production_dict = {}
+
+    nodes = target.get("nodes", {})
+    resources_per_node = overall_total_modifiers.get("resources_per_node", 0)
+    production_of_available_nodes = overall_total_modifiers.get("production_of_available_nodes", 0)
     
     all_resources = json_data["general_resources"] + json_data["unique_resources"]
 
@@ -297,6 +301,11 @@ def compute_resource_production(field, target, base_value, field_schema, overall
         modifiers_to_check = [resource["key"] + "_production", "resource_production"]
         for modifier in modifiers_to_check:
             specific_resource_production += overall_total_modifiers.get(modifier, 0)
+
+        specific_resource_production += nodes.get(resource["key"], 0) * resources_per_node
+
+        if nodes.get(resource["key"], 0) > 0:
+            specific_resource_production += production_of_available_nodes
         
         if resource["key"] == "research":
             pop_database = category_data["pops"]["database"]
