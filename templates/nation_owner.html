@@ -807,11 +807,35 @@
 	{% endif %}
 
 	<div class="info-column">
+		<h2>Progress Quests</h2>
+		<table class="info-table">
+			<thead>
+				<tr>
+					<th>Quest Name</th>
+					<th>Progress Per Tick</th>
+					<th>Current Progress</th>
+					<th>Link</th>
+				</tr>
+			</thead>
+			<tbody>
+				{% for quest in nation.progress_quests %}
+					<tr>
+						<td>{{ quest.quest_name }}</td>
+						<td>{{ quest.progress_per_tick }}</td>
+						<td>{{ quest.current_progress }} / {{ quest.required_progress }}</td>
+						<td>{{ quest.link|format_discord_link|safe }}</td>
+					</tr>
+				{% endfor %}
+			</tbody>
+		</table>
+	</div>
+
+	<div class="info-column">
 		<h2>Modifiers</h2>
 		<table class="info-table">
 			<thead>
 				<tr>
-					<th>Modifier</th>
+					<th>Field</th>
 					<th>Value</th>
 					<th>Duration</th>
 					<th>Source</th>

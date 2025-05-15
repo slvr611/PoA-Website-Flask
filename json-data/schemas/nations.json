@@ -1271,6 +1271,41 @@
 			"bsonType": "linked_object"
 		}
       },
+	  "progress_quests": {
+        "bsonType": "array",
+		"label": "Progress Quests",
+        "description": "The ongoing quests the nation is currently working on",
+		"items":{
+			"bsonType": "object",
+			"properties": {
+				"quest_name": {
+					"bsonType": "string",
+					"label": "Quest Name",
+					"description": "The name of the quest"
+				},
+				"progress_per_tick": {
+					"bsonType": "number",
+					"label": "Progress Per Tick",
+					"description": "The amount of progress the nation makes on the quest each tick"
+				},
+				"current_progress": {
+					"bsonType": "number",
+					"label": "Progress",
+					"description": "The amount of progress the nation has made on the quest"
+				},
+				"required_progress": {
+					"bsonType": "number",
+					"label": "Required Progress",
+					"description": "The amount of progress required to complete the quest"
+				},
+				"link": {
+					"bsonType": "string",
+					"label": "Link",
+					"description": "The link to the quest"
+				}
+			}
+		}
+      },
 	  "modifiers": {
         "bsonType": "array",
 		"label": "Ongoing Modifiers",

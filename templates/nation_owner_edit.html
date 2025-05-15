@@ -200,7 +200,7 @@
                     </tr>
                     <tr>
                         <th>Territory:</th>
-                        <td>{{ form.current_territory(class="form-control") }} / {{ nation.effective_territory }}</td>
+                        <td>{{ nation.current_territory }} / {{ nation.effective_territory }}</td>
                     </tr>
                     <tr>
                         <th>Roads:</th>
@@ -572,6 +572,35 @@
         </section>
 
         <div class="info-column">
+            <h2>{{ form.progress_quests.label.text }}</h2>
+            <table class="jobs-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Progress Per Tick</th>
+                        <th>Current Progress</th>
+                        <th>Required Progress</th>
+                        <th>Link</th>
+                    </tr>
+                </thead>
+                <tbody id="progress_quests-tbody">
+                    {% for quest_field in form.progress_quests %}
+                        <tr>
+                            <td>{{ quest_field.quest_name(class="form-control") }}</td>
+                            <td>{{ quest_field.progress_per_tick(class="form-control") }}</td>
+                            <td>{{ quest_field.current_progress(class="form-control") }}</td>
+                            <td>{{ quest_field.required_progress(class="form-control") }}</td>
+                            <td>{{ quest_field.link(class="form-control") }}</td>
+                            <td><button type="button" class="btn btn-danger" onclick="removeFromArray(this, 'progress_quests')">Remove</button></td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <button type="button" class="btn btn-primary" onclick="addToArray('progress_quests')">Add Quest</button>
+        </div>
+
+
+        <div class="info-column">
             <h2>{{ form.modifiers.label.text }}</h2>
             <table class="jobs-table">
                 <thead>
@@ -590,56 +619,76 @@
                             <td>{{ modifier_field.value(class="form-control") }}</td>
                             <td>{{ modifier_field.duration(class="form-control") }}</td>
                             <td>{{ modifier_field.source(class="form-control") }}</td>
-                            <td><button type="button" class="btn btn-danger" onclick="removeModifier(this)">Remove</button></td>
+                            <td><button type="button" class="btn btn-danger" onclick="removeFromArray(this)">Remove</button></td>
                         </tr>
                     {% endfor %}
                 </tbody>
             </table>
-        <button type="button" class="btn btn-primary" onclick="addModifier()">Add Modifier</button>
+        <button type="button" class="btn btn-primary" onclick="addToArray()">Add Modifier</button>
         </div>
 
         <script>
-            function addModifier() {
-                const tbody = document.getElementById('modifiers-tbody');
+            function addToArray(fieldName) {
+                const tbody = document.getElementById(`${fieldName}-tbody`);
                 const currentCount = tbody.children.length;
                 
                 const newRow = document.createElement('tr');
-                newRow.innerHTML = `
-                    <td><input type="text" class="form-control" name="modifiers-${currentCount}-field" id="modifiers-${currentCount}-field" required></td>
-                    <td><input type="number" class="form-control" name="modifiers-${currentCount}-value" id="modifiers-${currentCount}-value" step="any" required></td>
-                    <td><input type="number" class="form-control" name="modifiers-${currentCount}-duration" id="modifiers-${currentCount}-duration" value="0" required></td>
-                    <td><input type="text" class="form-control" name="modifiers-${currentCount}-source" id="modifiers-${currentCount}-source" required></td>
-                    <td><button type="button" class="btn btn-danger" onclick="removeModifier(this)">Remove</button></td>
-                `;
-                
+        
+                if (fieldName === "external_modifiers") {
+                    const typeChoices = ["nation", "character"].map(choice => [choice, choice]);
+                    
+                    const typeOptions = typeChoices.map(([value, label]) => 
+                        `<option value="${value}">${label}</option>`
+                    ).join('');
+                    
+                    newRow.innerHTML = `
+                        <td>
+                            <select class="form-control" name="${fieldName}-${currentCount}-type" id="${fieldName}-${currentCount}-type">
+                                ${typeOptions}
+                            </select>
+                        </td>
+                        <td><input type="text" class="form-control" name="${fieldName}-${currentCount}-modifier" id="${fieldName}-${currentCount}-modifier" required></td>
+                        <td><input type="float" class="form-control" name="${fieldName}-${currentCount}-value" id="${fieldName}-${currentCount}-value" required></td>
+                        <td><button type="button" class="btn btn-danger" onclick="removeFromArray(this, '${fieldName}')">Remove</button></td>
+                    `;
+                } else if (fieldName === "modifiers") {
+                    newRow.innerHTML = `
+                        <td><input type="text" class="form-control" name="${fieldName}-${currentCount}-field" id="${fieldName}-${currentCount}-field" required></td>
+                        <td><input type="float" class="form-control" name="${fieldName}-${currentCount}-value" id="${fieldName}-${currentCount}-value" required></td>
+                        <td><input type="float" class="form-control" name="${fieldName}-${currentCount}-duration" id="${fieldName}-${currentCount}-duration" value="0" required></td>
+                        <td><input type="text" class="form-control" name="${fieldName}-${currentCount}-source" id="${fieldName}-${currentCount}-source" required></td>
+                        <td><button type="button" class="btn btn-danger" onclick="removeFromArray(this, '${fieldName}')">Remove</button></td>
+                    `;
+                } else if (fieldName === "progress_quests") {
+                    newRow.innerHTML = `
+                        <td><input type="text" class="form-control" name="${fieldName}-${currentCount}-quest_name" id="${fieldName}-${currentCount}-name" required></td>
+                        <td><input type="number" class="form-control" name="${fieldName}-${currentCount}-progress_per_tick" id="${fieldName}-${currentCount}-progress_per_tick" value="0" required></td>
+                        <td><input type="number" class="form-control" name="${fieldName}-${currentCount}-current_progress" id="${fieldName}-${currentCount}-current_progress" value="0" required></td>
+                        <td><input type="number" class="form-control" name="${fieldName}-${currentCount}-required_progress" id="${fieldName}-${currentCount}-required_progress" value="0" required></td>
+                        <td><input type="text" class="form-control" name="${fieldName}-${currentCount}-link" id="${fieldName}-${currentCount}-link" required></td>
+                        <td><button type="button" class="btn btn-danger" onclick="removeFromArray(this, '${fieldName}')">Remove</button></td>
+                    `;
+                }
+        
                 tbody.appendChild(newRow);
             }
-            
-            function removeModifier(button) {
+        
+            function removeFromArray(button, categoryName) {
                 const row = button.closest('tr');
                 row.remove();
                 
                 // Reindex remaining modifiers
-                const tbody = document.getElementById('modifiers-tbody');
+                const tbody = document.getElementById(`${categoryName}-tbody`);
                 Array.from(tbody.children).forEach((row, index) => {
-                    row.querySelectorAll('input').forEach(input => {
+                    row.querySelectorAll('select, input').forEach(input => {
                         const fieldName = input.name.split('-').pop();
-                        input.name = `modifiers-${index}-${fieldName}`;
-                        input.id = `modifiers-${index}-${fieldName}`;
+                        input.name = `${categoryName}-${index}-${fieldName}`;
+                        input.id = `${categoryName}-${index}-${fieldName}`;
                     });
                 });
             }
-
-            function resetConcessions() {
-                const concessionsDiv = document.getElementById('concessions');
-                concessionsDiv.textContent = '';
-                
-                // Clear the hidden input field
-                const concessionsField = document.getElementById('concessions-field');
-                concessionsField.value = JSON.stringify({});
-            }
         </script>
-
+        
         
         <!-- Reason and Submit -->
         <div class="form-actions">

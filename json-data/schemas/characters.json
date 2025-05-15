@@ -331,14 +331,14 @@
 	  "modifiers": {
         "bsonType": "array",
 		"label": "Ongoing Modifiers",
-        "description": "The ongoing modifiers currently affecting this nation",
+        "description": "The ongoing modifiers currently affecting this characterr",
 		"items":{
 			"bsonType": "object",
 			"properties": {
-				"key": {
+				"field": {
 					"bsonType": "string",
-					"label": "Modifier Key",
-					"description": "The key of the modifier"
+					"label": "Modifier Field",
+					"description": "The calculated field the modifier affects"
 				},
 				"value": {
 					"bsonType": "number",
@@ -349,6 +349,11 @@
 					"bsonType": "number",
 					"label": "Modifier Duration",
 					"description": "The duration of the modifier"
+				},
+                "source": {
+					"bsonType": "string",
+					"label": "Modifier Source",
+					"description": "The source of the modifier"
 				}
 			}
 		}

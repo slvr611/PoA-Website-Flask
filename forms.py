@@ -305,6 +305,51 @@ class ModifierForm(Form):
                     else:
                         field.data = field_value
 
+class ProgressQuestForm(Form):
+    """Form for handling progress quests as a dictionary"""
+    
+    quest_name = StringField("Quest Name", validators=[DataRequired()])
+    progress_per_tick = IntegerField("Progress Per Tick", validators=[NumberRange()], default=0)
+    current_progress = IntegerField("Current Progress", validators=[NumberRange()], default=0)
+    required_progress = IntegerField("Required Progress", validators=[NumberRange()], default=0)
+    link = StringField("Link", validators=[DataRequired()])
+
+    class Meta:
+        csrf = False
+    
+    def load_form_from_item(self, item, schema):
+        """Loads form data from a database item"""
+        for field_name, field in self._fields.items():
+                if isinstance(field, SelectField) and field.data:
+                    field.data = str(field.data)
+                    
+                # Handle nested data structures
+                if field_name in item:
+                    field_value = item[field_name]
+                    
+                    if isinstance(field_value, ObjectId):
+                        field.data = str(field_value)
+                    elif isinstance(field, FieldList):
+                        # Clear existing entries
+                        while len(field.entries) > 0:
+                            field.pop_entry()
+                            
+                        # Add new entries from the data
+                        for value in field_value:
+                            if isinstance(value, dict):
+                                # For object arrays
+                                field.append_entry(value)
+                            elif isinstance(value, ObjectId):
+                                # For linked object arrays
+                                field.append_entry(str(value))
+                            else:
+                                # For simple value arrays
+                                field.append_entry(value)
+                    elif isinstance(field, FormField):
+                        field.load_form_from_item(field_value, schema)
+                    else:
+                        field.data = field_value
+
 class DistrictDict(Form):
     """Form for handling each district as a dictionary"""
     
@@ -654,6 +699,9 @@ class DynamicSchemaForm(BaseSchemaForm):
             
             elif field_name == "modifiers":
                 return FieldList(FormField(ModifierForm), min_entries=0)
+            
+            elif field_name == "progress_quests":
+                return FieldList(FormField(ProgressQuestForm), min_entries=0)
 
             elif items_type == "string":
                 # For simple string arrays
@@ -717,7 +765,6 @@ class NationForm(BaseSchemaForm):
     primary_religion = SelectField("Primary Religion", choices=[])
     
     # Territory fields
-    current_territory = IntegerField("Current Territory", validators=[NumberRange(min=0)], default=0)
     road_usage = IntegerField("Road Usage", validators=[NumberRange(min=0)], default=0)
     
     # Vassalship fields
@@ -735,6 +782,8 @@ class NationForm(BaseSchemaForm):
     origin = SelectField("Origin", choices=[])
     modifiers = FieldList(FormField(ModifierForm), min_entries=0)
     temperament = SelectField("Temperament", choices=[], default="Neutral")
+
+    progress_quests = FieldList(FormField(ProgressQuestForm), min_entries=0)
 
     reason = TextAreaField("Reason")
 
@@ -857,6 +906,14 @@ class NationForm(BaseSchemaForm):
             form.modifiers.entries = []
             for modifier in modifiers:
                 form.modifiers.append_entry(modifier)
+
+        # Handle progress quests
+        if nation:
+            progress_quests = nation.get("progress_quests", [])
+            
+            form.progress_quests.entries = []
+            for quest in progress_quests:
+                form.progress_quests.append_entry(quest)
         
         return form
     

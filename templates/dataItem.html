@@ -133,11 +133,73 @@
 								</td>
 							{% elif properties.get("items", {}).get("bsonType", "None") == "object" %}
 								<td>
-									<ul>
-										{% for sub_item in item[field] %}
-											<li>{{ sub_item }}</li>
-										{% endfor %}
-									</ul>
+									{% if field == "progress_quests" %}
+										<table class="linked-objects-table">
+											<thead>
+												<tr>
+													<th>Quest Name</th>
+													<th>Progress Per Tick</th>
+													<th>Current Progress</th>
+													<th>Link</th>
+												</tr>
+											</thead>
+											<tbody>
+												{% for sub_item in item[field] %}
+													<tr>
+														<td>{{ sub_item["quest_name"] }}</td>
+														<td>{{ sub_item["progress_per_tick"] }}</td>
+														<td>{{ sub_item["current_progress"] }} / {{ sub_item["required_progress"] }}</td>
+														<td>{{ sub_item["link"]|format_discord_link|safe }}</td>
+													</tr>
+												{% endfor %}
+											</tbody>
+										</table>
+									{% elif properties.get("items", {}).get("properties", {}).get("name") %}
+										<table class="linked-objects-table">
+											<thead>
+												<tr>
+													<th>Name</th>
+													{% for preview_field, preview_properties in properties.get("items", {}).get("properties", {}).items() %}
+														{% if preview_field != "name" %}
+															<th>{{ preview_properties.label }}</th>
+														{% endif %}
+													{% endfor %}
+												</tr>
+											</thead>
+											<tbody>
+												{% for sub_item in item[field] %}
+													<tr>
+														<td>{{ sub_item["name"] }}</td>
+														{% for preview_field, preview_properties in properties.get("items", {}).get("properties", {}).items() %}
+															{% if preview_field != "name" %}
+																<td>{{ sub_item[preview_field] }}</td>
+															{% endif %}
+														{% endfor %}
+													</tr>
+												{% endfor %}
+											</tbody>
+										</table>
+									{% else %}
+									<table class="linked-objects-table">
+										<thead>
+											<tr>
+												{% for preview_field, preview_properties in properties.get("items", {}).get("properties", {}).items() %}
+													<th>{{ preview_properties.label }}</th>
+												{% endfor %}
+											</tr>
+										</thead>
+										<tbody>
+											{% for sub_item in item[field] %}
+												<tr>
+													{% for preview_field, preview_properties in properties.get("items", {}).get("properties", {}).items() %}
+														<td>{{ sub_item[preview_field] }}</td>
+													{% endfor %}
+												</tr>
+											{% endfor %}
+										</tbody>
+									</table>
+
+									{% endif %}
 								</td>
 							{% elif properties.get("items", {}).get("bsonType", "None") == "json_district_enum" %}
 								<td>
