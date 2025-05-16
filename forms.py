@@ -868,16 +868,9 @@ class JobForm(BaseSchemaForm):
             form = form_class(formdata=formdata)
         elif nation:
             form = form_class()
-            form.load_form_from_item(nation, schema)
+            form.load_form_from_item(nation.get("jobs", {}), schema)
         else:
             form = form_class()
-        
-        # Handle jobs
-        if nation:
-            for job_key, job_val in nation.get("jobs", {}).items():
-                job_field = getattr(form.jobs, job_key, None)
-                if job_field:
-                    job_field.data = job_val
         
         return form
 
