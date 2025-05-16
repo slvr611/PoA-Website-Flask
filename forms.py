@@ -183,36 +183,11 @@ class LandUnitAssignmentDict(Form):
     
     def load_form_from_item(self, item, schema):
         """Loads form data from a database item"""
-        for field_name, field in self._fields.items():
-                if isinstance(field, SelectField) and field.data:
-                    field.data = str(field.data)
-                    
-                # Handle nested data structures
-                if field_name in item:
-                    field_value = item[field_name]
-                    
-                    if isinstance(field_value, ObjectId):
-                        field.data = str(field_value)
-                    elif isinstance(field, FieldList):
-                        # Clear existing entries
-                        while len(field.entries) > 0:
-                            field.pop_entry()
-                            
-                        # Add new entries from the data
-                        for value in field_value:
-                            if isinstance(value, dict):
-                                # For object arrays
-                                field.append_entry(value)
-                            elif isinstance(value, ObjectId):
-                                # For linked object arrays
-                                field.append_entry(str(value))
-                            else:
-                                # For simple value arrays
-                                field.append_entry(value)
-                    elif isinstance(field, FormField):
-                        field.load_form_from_item(field_value, schema)
-                    else:
-                        field.data = field_value
+        for unit_key, unit_val in item.items():
+            unit_field = getattr(self, unit_key, None)
+            if unit_field:
+                unit_field.data = unit_val
+
 
 class NavalUnitAssignmentDict(Form):
     """Form for handling Naval Unit assignment as a dictionary"""
@@ -230,36 +205,10 @@ class NavalUnitAssignmentDict(Form):
     
     def load_form_from_item(self, item, schema):
         """Loads form data from a database item"""
-        for field_name, field in self._fields.items():
-                if isinstance(field, SelectField) and field.data:
-                    field.data = str(field.data)
-                    
-                # Handle nested data structures
-                if field_name in item:
-                    field_value = item[field_name]
-                    
-                    if isinstance(field_value, ObjectId):
-                        field.data = str(field_value)
-                    elif isinstance(field, FieldList):
-                        # Clear existing entries
-                        while len(field.entries) > 0:
-                            field.pop_entry()
-                            
-                        # Add new entries from the data
-                        for value in field_value:
-                            if isinstance(value, dict):
-                                # For object arrays
-                                field.append_entry(value)
-                            elif isinstance(value, ObjectId):
-                                # For linked object arrays
-                                field.append_entry(str(value))
-                            else:
-                                # For simple value arrays
-                                field.append_entry(value)
-                    elif isinstance(field, FormField):
-                        field.load_form_from_item(field_value, schema)
-                    else:
-                        field.data = field_value
+        for unit_key, unit_val in item.items():
+            unit_field = getattr(self, unit_key, None)
+            if unit_field:
+                unit_field.data = unit_val
 
 class ModifierForm(Form):
     """Form for handling nation/character modifiers as a dictionary"""
@@ -558,6 +507,19 @@ class BaseSchemaForm(FlaskForm):
                     for district in districts:
                         field.append_entry(district)
                 
+                elif field_name == "cities":
+                    cities = item.get("cities", [])
+                    max_cities = schema.get("properties", {}).get(field_name, {}).get("max_length", 0)
+                    if isinstance(max_cities, str):
+                        max_cities = item.get(max_cities, 0)
+                    
+                    if len(cities) < max_cities:
+                        cities.extend([""] * (max_cities - len(cities)))
+                    
+
+                    for cities in cities:
+                        field.append_entry(cities)
+                
                 elif field_name == "titles":
                     print("Titles")
                     titles = item.get("titles", [])
@@ -580,7 +542,7 @@ class BaseSchemaForm(FlaskForm):
                     
                     for unit in units:
                         field.append_entry(unit)
-                    
+                
                 else:
                     # Add new entries from the data
                     for value in field_value:
@@ -832,89 +794,6 @@ class NationForm(BaseSchemaForm):
         else:
             form = form_class()
         
-        # Set up default choices for select fields
-        form.stability.choices = [(option, option) for option in schema["properties"].get("stability", {}).get("enum", [])] or \
-                                [("Balanced", "Balanced"), ("Unstable", "Unstable"), ("Stable", "Stable")]
-        form.vassal_type.choices = [(option, option) for option in schema["properties"].get("vassal_type", {}).get("enum", [])] or \
-                                  [("None", "None"), ("Tributary", "Tributary"), ("Mercantile", "Mercantile")]
-        form.compliance.choices = [(option, option) for option in schema["properties"].get("compliance", {}).get("enum", [])] or \
-                                [("None", "None"), ("Neutral", "Neutral"), ("Loyal", "Loyal"), ("Disloyal", "Disloyal")]
-        form.temperament.choices = [(option, option) for option in schema["properties"].get("temperament", {}).get("enum", [])] or \
-                             [("Player", "Player"), ("Neutral", "Neutral")]
-        form.origin.choices = [(option, option) for option in schema["properties"].get("origin", {}).get("enum", [])] or \
-                             [("Unknown", "Unknown"), ("Settled", "Settled"), ("Conquered", "Conquered")]
-        
-        # Handle resource storage
-        if nation: #These if nation checks prevent overwriting existing data when using an existing form.  TODO: MOVE THIS TO load_form_from_item
-            general_resources = json_data.get("general_resources", [])
-            for resource in general_resources:
-                resource_field = getattr(form.resource_storage, resource["key"], None)
-            
-            # Unique resources
-            unique_resources = json_data.get("unique_resources", [])
-            for resource in unique_resources:
-                resource_field = getattr(form.resource_storage, resource["key"], None)
-        
-        # Handle jobs
-        if nation:
-            for job_key, job_val in nation.get("jobs", {}).items():
-                job_field = getattr(form.jobs, job_key, None)
-                if job_field:
-                    job_field.data = job_val
-
-        # Handle units
-        if nation:
-            for unit_key, unit_val in nation.get("land_units", {}).items():
-                unit_field = getattr(form.land_units, unit_key, None)
-                if unit_field:
-                    unit_field.data = unit_val
-            for unit_key, unit_val in nation.get("naval_units", {}).items():
-                unit_field = getattr(form.naval_units, unit_key, None)
-                if unit_field:
-                    unit_field.data = unit_val
-                
-        # Handle districts
-        if nation:
-            district_slots = nation.get("district_slots", 3)
-            districts = nation.get("districts", [])
-            if not isinstance(districts, list):
-                districts = []
-            if len(districts) < district_slots:
-                districts.extend([{"type": "", "node": ""}] * (district_slots - len(districts)))
-            
-            form.districts.entries = []
-            for district in districts:
-                form.districts.append_entry(district)
-        
-        # Handle cities
-        if nation:
-            city_slots = nation.get("city_slots", 1)
-            cities = nation.get("cities", [])
-            if not isinstance(cities, list):
-                cities = []
-            if len(cities) < city_slots:
-                cities.extend([{"type": "", "node": "", "wall": ""}] * (city_slots - len(cities)))
-            
-            form.cities.entries = []
-            for city in cities:
-                form.cities.append_entry(city)
-        
-        # Handle modifiers
-        if nation:
-            modifiers = nation.get("modifiers", [])
-            
-            form.modifiers.entries = []
-            for modifier in modifiers:
-                form.modifiers.append_entry(modifier)
-
-        # Handle progress quests
-        if nation:
-            progress_quests = nation.get("progress_quests", [])
-            
-            form.progress_quests.entries = []
-            for quest in progress_quests:
-                form.progress_quests.append_entry(quest)
-        
         return form
     
     def populate_linked_fields(self, schema, dropdown_options):
@@ -997,6 +876,13 @@ class JobForm(BaseSchemaForm):
                     job_field.data = job_val
         
         return form
+
+    def load_form_from_item(self, item, schema):
+        """Loads form data from a database item"""
+        for job_key, job_val in item.items():
+                job_field = getattr(self.jobs, job_key, None)
+                if job_field:
+                    job_field.data = job_val
     
     def populate_linked_fields(self, schema, dropdown_options):
         """Populates all linked fields with their options"""
@@ -1046,6 +932,8 @@ class NewCharacterForm(BaseSchemaForm):
         option_widget=widgets.CheckboxInput(),
         widget=widgets.ListWidget(prefix_label=False)
     )
+
+    titles = FieldList(SelectField("Titles", choices=[]), min_entries=3)
 
     positive_quirk = SelectField("Positive Quirk", choices=[])
     negative_quirk = SelectField("Negative Quirk", choices=[])

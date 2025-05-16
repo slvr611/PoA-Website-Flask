@@ -1140,6 +1140,7 @@
         "bsonType": "array",
 		"label": "Districts",
         "description": "The districts the nation owns",
+		"max_length": "district_slots",
 		"items":{
 			"bsonType": "object",
 			"properties": {
