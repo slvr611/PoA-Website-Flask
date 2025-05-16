@@ -801,6 +801,10 @@ class NationForm(BaseSchemaForm):
         for field_name, field_schema in schema.get("properties", {}).items():
             if field_schema.get("bsonType") == "linked_object":
                 self.populate_select_field(field_name, self[field_name], schema, dropdown_options)
+            elif field_schema.get("bsonType") == "enum":
+                choices = [(v, v) for v in field_schema.get("enum", [])]
+                field = getattr(self, field_name)
+                field.choices = choices
         
         node_choices = [("", "None"), ("luxury", "Luxury")]
         general_resources = json_data.get("general_resources", [])
