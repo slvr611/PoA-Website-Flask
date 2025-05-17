@@ -100,7 +100,7 @@ def karma_helper():
                            player_nations=player_nations,
                            ai_nations=ai_nations)
 
-@admin_tool_routes.route("/roll_events", methods=['POST'])
+@admin_tool_routes.route("/roll_events")
 @admin_required
 def roll_events():
     message = roll_events_async()
