@@ -92,7 +92,7 @@
 								<tbody id="{{ field.name }}-tbody">
 									{% for quest_field in field %}
 										<tr>
-											<td>{{ quest_field.form.name(class="form-control") }}</td>
+											<td>{{ quest_field.form.quest_name(class="form-control") }}</td>
 											<td>{{ quest_field.form.progress_per_tick(class="form-control") }}</td>
 											<td>{{ quest_field.form.current_progress(class="form-control") }}</td>
 											<td>{{ quest_field.form.required_progress(class="form-control") }}</td>
