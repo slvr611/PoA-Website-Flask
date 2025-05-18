@@ -119,7 +119,10 @@
 		"display_name": "Mine Shafts",
 		"type": "Industry",
 		"cost": 5,
-		"modifiers": {},
+		"modifiers": {
+			"iron_storage_capacity": 5,
+			"metallurgist_iron_production": 1
+		},
 		"prerequisites_all": [],
 		"prerequisites_one": ["mints", "pit_mining", "lumber_yards"]
 	},
