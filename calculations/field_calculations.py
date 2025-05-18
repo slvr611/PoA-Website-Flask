@@ -36,6 +36,7 @@ def calculate_all_fields(target, schema, target_data_type):
     district_totals = sum_district_totals(districts)
 
     city_totals = {}
+    tech_totals = {}
     territory_terrain_totals = {}
     job_details = {}
     job_totals = {}
@@ -78,7 +79,7 @@ def calculate_all_fields(target, schema, target_data_type):
 
     overall_total_modifiers = {}
     calculated_values = {"district_details": district_details, "job_details": job_details, "land_unit_details": land_unit_details, "naval_unit_details": naval_unit_details}
-    for d in [external_modifiers_total, modifier_totals, district_totals, territory_terrain_totals, city_totals, law_totals, job_totals, unit_totals, prestige_modifiers, title_modifiers]:
+    for d in [external_modifiers_total, modifier_totals, district_totals, tech_totals, territory_terrain_totals, city_totals, law_totals, job_totals, unit_totals, prestige_modifiers, title_modifiers]:
         for key, value in d.items():
             overall_total_modifiers[key] = overall_total_modifiers.get(key, 0) + value
     
