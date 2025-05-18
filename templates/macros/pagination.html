@@ -210,17 +210,26 @@
                                     <div class="array-item-changed">
                                         <div class="array-index">{{ key|capitalize }} {{ i+1 }}:</div>
                                         <div class="dict-changes">
-                                            {% for item_key in (before_item.keys()|list + after_item.keys()|list)|unique|list %}
-                                                {% if before_item.get(item_key) != after_item.get(item_key) %}
-                                                    <div class="dict-change-item">
-                                                        <span class="dict-key">{{ item_key }}:</span>
-                                                        <span class="dict-value">
-                                                            {% if before_item.get(item_key) is none %}None{% elif before_item.get(item_key) == "" %}""{% elif before_item.get(item_key) == 0 %}0{% else %}{{ before_item.get(item_key) }}{% endif %} → 
-                                                            {% if after_item.get(item_key) is none %}None{% elif after_item.get(item_key) == "" %}""{% elif after_item.get(item_key) == 0 %}0{% else %}{{ after_item.get(item_key) }}{% endif %}
-                                                        </span>
-                                                    </div>
-                                                {% endif %}
-                                            {% endfor %}
+                                            {% if before_item is mapping and after_item is mapping %}
+                                                {% for item_key in (before_item.keys()|list + after_item.keys()|list)|unique|list %}
+                                                    {% if before_item.get(item_key) != after_item.get(item_key) %}
+                                                        <div class="dict-change-item">
+                                                            <span class="dict-key">{{ item_key }}:</span>
+                                                            <span class="dict-value">
+                                                                {% if before_item.get(item_key) is none %}None{% elif before_item.get(item_key) == "" %}""{% elif before_item.get(item_key) == 0 %}0{% else %}{{ before_item.get(item_key) }}{% endif %} → 
+                                                                {% if after_item.get(item_key) is none %}None{% elif after_item.get(item_key) == "" %}""{% elif after_item.get(item_key) == 0 %}0{% else %}{{ after_item.get(item_key) }}{% endif %}
+                                                            </span>
+                                                        </div>
+                                                    {% endif %}
+                                                {% endfor %}
+                                            {% else %}
+                                                <div class="dict-change-item">
+                                                    <span class="dict-value">
+                                                        {% if before_item is none %}None{% elif before_item == "" %}""{% elif before_item == 0 %}0{% else %}{{ before_item }}{% endif %} → 
+                                                        {% if after_item is none %}None{% elif after_item == "" %}""{% elif after_item == 0 %}0{% else %}{{ after_item }}{% endif %}
+                                                    </span>
+                                                </div>
+                                            {% endif %}
                                         </div>
                                     </div>
                                 {% endif %}
