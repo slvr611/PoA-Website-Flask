@@ -38,8 +38,8 @@
             "nation_civilian_unit_damage": 1
           },
           "Curious": {
-            "nation_tech_cost": -1,
-            "nation_tech_cost_minimum": 2
+            "nation_technology_cost_modifier": -1,
+            "nation_technology_cost_minimum": 2
           },
           "Docile": {
             "nation_stability_loss_chance": -0.1,

@@ -425,8 +425,10 @@ class IndividualTechDict(Form):
     cost = IntegerField("Cost", default=0)
     researched = BooleanField("Researched", default=False)
 
-    def initialize_cost(self, name):
+    def initialize_cost(self, nation, name):
         self.cost.data = json_data.get("tech", {}).get(name, {}).get("cost", 0)
+        self.cost.data += nation.get("technology_cost_modifier", 0)
+        self.cost.data = max(self.cost.data, nation.get("technology_cost_minimum", 0))
 
     def load_form_from_item(self, name, item, schema):
         """Loads form data from a database item"""
@@ -447,15 +449,17 @@ class OverallTechDict(Form):
             setattr(cls, tech_id, FormField(IndividualTechDict))
         return cls
     
-    def load_form_from_item(self, techs, schema):
+    def load_form_from_item(self, nation, schema):
         """Load tech data from nation's techs"""
+        techs = nation.get("technologies", None)
+
         if not (techs and isinstance(techs, dict)):
             techs = {"political_philosophy": {"researched": True}}
 
         for tech_id, tech_data in json_data.get("tech", {}).items():
             field = getattr(self, tech_id, None)
             if field:
-                field.initialize_cost(tech_id)
+                field.initialize_cost(nation, tech_id)
 
         for tech_id, tech_data in techs.items():
             field = getattr(self, tech_id, None)
@@ -534,6 +538,8 @@ class BaseSchemaForm(FlaskForm):
                 
             # Handle nested data structures
             field_value = item.get(field_name, None)
+            if field_value is None and not field_name == "technologies":  #This is because there are important functions for research called by load_form_from_item
+                continue
             
             if isinstance(field_value, ObjectId):
                 field.data = str(field_value)
@@ -603,7 +609,10 @@ class BaseSchemaForm(FlaskForm):
                             # For simple value arrays
                             field.append_entry(value)
             elif isinstance(field, FormField):
-                field.load_form_from_item(field_value, schema)
+                if field_name == "technologies":
+                    field.load_form_from_item(item, schema)
+                else:
+                    field.load_form_from_item(field_value, schema)
             else:
                 # Type conversion based on field type
                 try:

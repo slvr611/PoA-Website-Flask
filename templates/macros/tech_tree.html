@@ -1,4 +1,4 @@
-{% macro render_tech_tree(techs, nation_techs, json_data, editable=False, form=None, form_json=None) %}
+{% macro render_tech_tree(nation_tech, tech_cost_modifier, tech_cost_minimum, json_data, editable=False, form=None, form_json=None) %}
 <section class="tech-section">
     <h2>Tech</h2>
     <div id="cy" style="width: 100%; height: 800px; background-color: #222;"></div>
@@ -19,8 +19,10 @@
 <script src="https://unpkg.com/dagre@0.8.5/dist/dagre.min.js"></script>
 <script src="https://unpkg.com/cytoscape-dagre@2.5.0/cytoscape-dagre.js"></script>
 <script>
-    const techs = {{ techs|tojson }};
-    const nation_techs = {{ nation_techs|tojson }};
+    const techs = {{ json_data["tech"]|tojson }};
+    const nation_techs = {{ nation_tech|tojson }};
+    const tech_cost_modifier = {{ tech_cost_modifier|tojson }};
+    const tech_cost_minimum = {{ tech_cost_minimum|tojson }};
     const editable = {{ editable|tojson }};
     const form = {{ form_json|tojson if form_json else 'null' }};
 
@@ -69,7 +71,7 @@
         let label = tech.display_name;
         if (status === "available" && editable) {
             // For available techs in edit mode, just add a newline to make space for the editing section
-            label += `\no`;
+            label += `\n.`;
         } else if (investing > 0) {
             label += `\n${invested} (+${investing}) / ${getCost(techId)}`;
         } else {
@@ -89,7 +91,9 @@
 
         if (!tech && !nation_tech) return 0;
         
-        let cost = nation_tech?.cost || tech?.cost || 0;
+        let cost = nation_tech?.cost || Math.max(tech?.cost + (tech_cost_modifier || 0), (tech_cost_minimum || 2));
+
+        console.log(cost)
         
         return cost;
     }

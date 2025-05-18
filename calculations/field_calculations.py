@@ -422,7 +422,7 @@ def calculate_job_details(target, district_details, modifier_totals, district_to
     district_types = []
     for district in target.get("districts", []):
         if isinstance(district, dict):
-            district_types.append(district_details.get(district["type"], {}).get("type", ""))
+            district_types.append(district_details.get(district.get("type", ""), {}).get("type", ""))
     
     new_job_details = {}
     for job, details in job_details.items():
@@ -766,6 +766,8 @@ def sum_job_totals(jobs_assigned, job_details):
             elif field in general_resources or field in unique_resources:
                 field = field + "_production"
             
+            print(field, val, count)
+
             total_value = val * count
             
             if val > original_job_production.get(field, 0):
@@ -786,6 +788,8 @@ def sum_job_totals(jobs_assigned, job_details):
             else:
                 val = -val
             
+            print(field, val, count)
+
             total_value = val * count
             
             if val > original_job_upkeep.get(field, 0):

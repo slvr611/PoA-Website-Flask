@@ -1128,6 +1128,18 @@
 			}
 		}
       },
+	  "technology_cost_modifier": {
+		"bsonType": "number",
+		"label": "Technology Cost Modifier",
+		"description": "The flat modifier to the cost of technologies",
+		"calculated": true
+	  },
+	  "technology_cost_minimum": {
+		"bsonType": "number",
+		"label": "Technology Cost Minimum",
+		"description": "The minimum cost of technologies",
+		"calculated": true
+	  },
 	  "districts": {
         "bsonType": "array",
 		"label": "Districts",

@@ -1,6 +1,7 @@
 from datetime import datetime
 from app_core import mongo, category_data
 from flask import g
+from copy import deepcopy
 
 def request_change(data_type, item_id, change_type, before_data, after_data, reason):
     requester = mongo.db.players.find_one({"id": g.user.get("id", None)})["_id"]
@@ -92,7 +93,11 @@ def approve_change(change_id):
 
         if check_no_other_changes(before_data, after_data, target):
             if change["change_type"] == "Update":
-                target_collection.update_one({"_id": change["target"]}, {"$set": after_data})
+                existing = target_collection.find_one({"_id": change["target"]})
+                print(existing)
+                merged = deep_merge(existing, after_data)
+                print(merged)
+                target_collection.update_one({"_id": change["target"]}, {"$set": merged})
             else:
                 target_collection.delete_one({"_id": change["target"]})
 
@@ -133,7 +138,11 @@ def system_approve_change(change_id):
 
         if check_no_other_changes(before_data, after_data, target):
             if change["change_type"] == "Update":
-                target_collection.update_one({"_id": change["target"]}, {"$set": after_data})
+                existing = target_collection.find_one({"_id": change["target"]})
+                print(existing)
+                merged = deep_merge(existing, after_data)
+                print(merged)
+                target_collection.update_one({"_id": change["target"]}, {"$set": merged})
             else:
                 target_collection.delete_one({"_id": change["target"]})
 
@@ -163,6 +172,38 @@ def deny_change(change_id):
     }})
     return True
 
+def deep_merge(original, updates):
+    merged = deepcopy(original)
+    for key, value in updates.items():
+        if (
+            key in merged and isinstance(merged[key], dict) and isinstance(value, dict)
+        ):
+            merged[key] = deep_merge(merged[key], value)
+        elif key in merged and isinstance(merged[key], list) and isinstance(value, list):
+            for i, item in enumerate(value):
+                if i < len(merged[key]) and isinstance(merged[key][i], dict) and isinstance(item, dict):
+                    merged[key][i] = deep_merge(merged[key][i], item)
+                else:
+                    merged[key][i] = item
+        else:
+            merged[key] = value
+    return merged
+
+def deep_compare(original, updates):
+    if isinstance(original, dict) and isinstance(updates, dict):
+        for key in updates:
+            if key not in original or not deep_compare(original[key], updates[key]):
+                return False
+    elif isinstance(original, list) and isinstance(updates, list):
+        if len(original) != len(updates):
+            return False
+        for i in range(len(original)):
+            if not deep_compare(original[i], updates[i]):
+                return False
+    elif original != updates:
+        return False
+    return True
+
 
 def keep_only_differences(before_data, after_data, change_type):
     new_before = {}
@@ -170,12 +211,54 @@ def keep_only_differences(before_data, after_data, change_type):
     if change_type == "Remove":
         for key in before_data:
             new_before[key] = before_data.get(key)
-            new_after[key] = after_data.get(key)
+            new_after[key] = None
     else:
-        for key in after_data:
-            if before_data.get(key) != after_data.get(key):
-                new_before[key] = before_data.get(key)
-                new_after[key] = after_data.get(key)
+        new_before, new_after = keep_only_differences_dict(before_data, after_data)
+    
+    return new_before, new_after
+
+def keep_only_differences_dict(before_data, after_data):
+    new_before = {}
+    new_after = {}
+    for key in after_data.keys():
+        current_before = before_data.get(key)
+        current_after = after_data.get(key)
+        if isinstance(current_before, dict) and isinstance(current_after, dict):
+            temp_before, temp_after = keep_only_differences_dict(current_before, current_after)
+            if len(temp_before) > 0 and len(temp_after) > 0:
+                new_before[key], new_after[key] = temp_before, temp_after
+        elif isinstance(current_before, list) and isinstance(current_after, list):
+            temp_before, temp_after = keep_only_differences_list(current_before, current_after)
+            if not deep_compare(temp_before, temp_after):  #If the lists are the same, don't include them in the new data. This is because the lists are already in the database and don't need to be updated. If they are different, include them in the new data. This is because the lists have been updated and need to be updated in the database.
+                new_before[key], new_after[key] = temp_before, temp_after
+        elif current_before != current_after:
+            new_before[key] = current_before
+            new_after[key] = current_after
+    
+    return new_before, new_after
+
+def keep_only_differences_list(before_data, after_data):
+    print("Before data: ", before_data)
+    print("After data: ", after_data)
+    new_before = []
+    new_after = []
+    for i in range(max(len(before_data), len(after_data))):
+        if i < len(before_data) and i < len(after_data):
+            if isinstance(before_data[i], dict) and isinstance(after_data[i], dict):
+                current_before, current_after = keep_only_differences_dict(before_data[i], after_data[i])
+                new_before.append(current_before)  #Need to include this regardless of size because otherwise it will wipe all the items of the list
+                new_after.append(current_after)
+            elif isinstance(before_data[i], list) and isinstance(after_data[i], list):
+                current_before, current_after = keep_only_differences_list(before_data[i], after_data[i])
+                new_before.append(current_before)
+                new_after.append(current_after)
+            else:
+                new_before.append(before_data[i])
+                new_after.append(after_data[i])
+        elif i < len(before_data):
+            new_before.append(before_data[i])
+        else:
+            new_after.append(after_data[i])
     return new_before, new_after
 
 def calculate_int_changes(before_data, after_data):
@@ -192,6 +275,8 @@ def check_no_other_changes(before_data, after_data, current_data):
     Check if current_data matches either before_data or after_data for each field.
     Returns False if current_data has changed in ways not reflected in the change request.
     """
+    print("Checking no other changes")
+
     # Check all keys from all three dictionaries
     all_keys = set(before_data.keys()) | set(after_data.keys()) | set(current_data.keys())
     
@@ -208,12 +293,18 @@ def check_no_other_changes(before_data, after_data, current_data):
         if isinstance(b_val, list) and isinstance(a_val, list) and isinstance(c_val, list):
             # If lengths differ, check if current matches either before or after
             if len(c_val) != len(b_val) and len(c_val) != len(a_val):
+                print("Key: ", key)
+                print("Current data: ", c_val)
+                print("Before data: ", b_val)
+                print("After data: ", a_val)
+                print("List length mismatch")
                 return False
                 
             # Check each item in the list
             for i in range(len(c_val)):
                 # Skip if index is out of range for before or after
                 if i >= len(b_val) and i >= len(a_val):
+                    print("Index out of range")
                     return False
                     
                 c_item = c_val[i]
@@ -226,11 +317,13 @@ def check_no_other_changes(before_data, after_data, current_data):
                         return False
                 # For non-dict items, check if current matches either before or after
                 elif c_item != b_item and c_item != a_item:
+                    print("List item mismatch")
                     return False
                     
         # Handle dictionaries
         elif isinstance(b_val, dict) and isinstance(a_val, dict) and isinstance(c_val, dict):
             if not check_no_other_changes(b_val, a_val, c_val):
+                print("Dict mismatch")
                 return False
                 
         # Handle primitive values
@@ -238,6 +331,9 @@ def check_no_other_changes(before_data, after_data, current_data):
             # Special case for integers (allow changes)
             if any(isinstance(v, int) for v in [b_val, a_val, c_val]):
                 continue
+            print("Primitive value mismatch")
             return False
-            
+    
+    print("No other changes")
+
     return True

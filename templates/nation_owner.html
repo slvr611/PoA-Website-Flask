@@ -807,7 +807,7 @@
 		</section>
 	{% endif %}
 
-	{{ render_tech_tree(json_data["tech"], nation.get("technologies", {"political_philosophy": {"researched": true}}), json_data) }}
+	{{ render_tech_tree(nation.get("technologies", {"political_philosophy": {"researched": true}}), nation.get("technology_cost_modifier", 0), nation.get("technology_cost_minimum", 2), json_data) }}
 
 	<div class="info-column">
 		<h2>Progress Quests</h2>
