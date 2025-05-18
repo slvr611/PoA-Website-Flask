@@ -1,4 +1,5 @@
 {% extends "layout.html" %}
+{% from "macros/tech_tree.html" import render_tech_tree %}
 
 {% block title %}Edit Nation: {{ nation.name }}{% endblock %}
 
@@ -626,6 +627,9 @@
             </table>
         <button type="button" class="btn btn-primary" onclick="addToArray('modifiers')">Add Modifier</button>
         </div>
+
+        <!-- Tech Section -->
+        {{ render_tech_tree(json_data["tech"], nation.get("technologies", {"political_philosophy": {"researched": true}}), json_data, editable=True, form=form, form_json=form_json["technologies"]) }}
 
         <script>
             function addToArray(fieldName) {

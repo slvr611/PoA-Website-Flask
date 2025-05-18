@@ -415,6 +415,57 @@ class ExternalModifierForm(Form):
     modifier = StringField("Modifier", validators=[])
     value = FloatField("Value")
 
+class IndividualTechDict(Form):
+    """Form for handling individual tech investments"""
+    
+    class Meta:
+        csrf = False
+    
+    investing = IntegerField("Investing", default=0)
+    cost = IntegerField("Cost", default=0)
+    researched = BooleanField("Researched", default=False)
+
+    def initialize_cost(self, name):
+        self.cost.data = json_data.get("tech", {}).get(name, {}).get("cost", 0)
+
+    def load_form_from_item(self, name, item, schema):
+        """Loads form data from a database item"""
+        if item:
+            self.investing.data = item.get("investing", 0)
+            self.cost.data = item.get("cost", json_data.get("tech", {}).get(name, {}).get("cost", 0))
+            self.researched.data = item.get("researched", False)
+
+class OverallTechDict(Form):
+    """Form for handling nation tech"""
+    
+    class Meta:
+        csrf = False
+    
+    @classmethod
+    def create_form_class(cls):
+        for tech_id, tech_data in json_data.get("tech", {}).items():
+            setattr(cls, tech_id, FormField(IndividualTechDict))
+        return cls
+    
+    def load_form_from_item(self, techs, schema):
+        """Load tech data from nation's techs"""
+        if not (techs and isinstance(techs, dict)):
+            techs = {"political_philosophy": {"researched": True}}
+
+        for tech_id, tech_data in json_data.get("tech", {}).items():
+            field = getattr(self, tech_id, None)
+            if field:
+                field.initialize_cost(tech_id)
+
+        for tech_id, tech_data in techs.items():
+            field = getattr(self, tech_id, None)
+            if field:
+                field.load_form_from_item(tech_id, tech_data, schema)
+    
+    def to_json(self):
+        """Convert form data to JSON-serializable format for JavaScript"""
+        return wtform_to_json(self)
+
 class BaseSchemaForm(FlaskForm):
     """Base form class with common functionality"""
     reason = TextAreaField("Reason")
@@ -482,10 +533,7 @@ class BaseSchemaForm(FlaskForm):
                 field.data = str(field.data)
                 
             # Handle nested data structures
-            field_value = item.get(field_name, [])
-
-            print(field_name)
-            print(field_value)
+            field_value = item.get(field_name, None)
             
             if isinstance(field_value, ObjectId):
                 field.data = str(field_value)
@@ -521,7 +569,6 @@ class BaseSchemaForm(FlaskForm):
                         field.append_entry(cities)
                 
                 elif field_name == "titles":
-                    print("Titles")
                     titles = item.get("titles", [])
                     max_titles = schema.get("properties", {}).get(field_name, {}).get("max_length", 0)
                     
@@ -772,6 +819,9 @@ class NationForm(BaseSchemaForm):
         JobAssignmentDict.create_form_class(job_details)
         cls.jobs = FormField(JobAssignmentDict)
 
+        OverallTechDict.create_form_class()
+        cls.technologies = FormField(OverallTechDict)
+
         LandUnitAssignmentDict.create_form_class(land_unit_details)
         cls.land_units = FormField(LandUnitAssignmentDict)
         NavalUnitAssignmentDict.create_form_class(naval_unit_details)
@@ -998,6 +1048,52 @@ form_generator = FormGenerator()
 
 
 
+
+
+
+
+
+
+
+def wtform_to_json(form):
+    """Convert a WTForm to a JSON-serializable dictionary
+    
+    Args:
+        form: A WTForm instance
+        
+    Returns:
+        dict: A JSON-serializable dictionary with field data and metadata
+    """
+    result = {}
+    
+    for field_name, field in form._fields.items():
+        # Skip CSRF token and other special fields
+        if field_name in ('csrf_token', 'submit'):
+            continue
+            
+        # Handle nested FormField
+        if hasattr(field, 'form'):
+            if isinstance(field, FormField):
+                result[field_name] = wtform_to_json(field.form)
+            elif isinstance(field, FieldList) and len(field.entries) > 0:
+                result[field_name] = [wtform_to_json(entry) for entry in field.entries]
+        else:
+            # Regular field
+            field_data = {
+                'data': field.data,
+                'id': field.id,
+                'name': field.name,
+                'type': field.type
+            }
+            
+            # Add choices for select fields
+            if hasattr(field, 'choices') and field.choices:
+                field_data['choices'] = [{'value': value, 'label': label} 
+                                        for value, label in field.choices]
+                
+            result[field_name] = field_data
+    
+    return result
 
 
 

@@ -1,4 +1,5 @@
 {% extends "layout.html" %}
+{% from "macros/tech_tree.html" import render_tech_tree %}
 
 {% block title %}{{ nation["name"] }}{% endblock %}
 
@@ -805,6 +806,8 @@
 			</div>
 		</section>
 	{% endif %}
+
+	{{ render_tech_tree(json_data["tech"], nation.get("technologies", {"political_philosophy": {"researched": true}}), json_data) }}
 
 	<div class="info-column">
 		<h2>Progress Quests</h2>

@@ -349,6 +349,10 @@ def compute_resource_consumption(field, target, base_value, field_schema, overal
             else:
                 food_consumption = math.floor(food_consumption)
             specific_resource_consumption += food_consumption
+        elif resource["key"] == "research":
+            technologies = target.get("technologies", {})
+            for tech, details in technologies.items():
+                specific_resource_consumption += details.get("investing", 0)
         
         specific_resource_consumption = max(specific_resource_consumption, 0)
         

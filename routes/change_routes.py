@@ -167,6 +167,8 @@ def change_item(item_ref):
 
     linked_objects = get_linked_objects(schema, item)
 
+    print(linked_objects)
+
     if item["target_collection"] and item["target"]:
         obj = mongo.db[item["target_collection"]].find_one({"_id": item["target"]}, {"name": 1, "_id": 1})
         if obj:

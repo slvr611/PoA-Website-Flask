@@ -8,7 +8,7 @@ from calculations.field_calculations import calculate_all_fields
 from app_core import category_data, mongo, json_data
 from helpers.auth_helpers import admin_required
 from pymongo import ASCENDING
-from forms import form_generator
+from forms import form_generator, wtform_to_json
 import json
 
 nation_routes = Blueprint("nation_routes", __name__)
@@ -84,6 +84,7 @@ def edit_nation(item_ref):
     return render_template(
         "nation_owner_edit.html",
         form=form,
+        form_json=wtform_to_json(form),
         title="Edit " + item_ref,
         schema=schema,
         nation=nation,
@@ -96,7 +97,7 @@ def edit_nation(item_ref):
 def nation_edit_request(item_ref):
     """Handle nation edit request"""
     schema, db, nation = get_data_on_item("nations", item_ref)
-    
+
     form = form_generator.get_form("nations", schema, formdata=request.form)
     form.populate_linked_fields(schema, get_dropdown_options(schema))
     

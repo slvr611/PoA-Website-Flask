@@ -38,7 +38,7 @@
         "description": "The amount of control the faction has",
 		    "enum": ["Insignificant", "Minor", "Moderate", "Strong", "Absolute"],
         "laws":{
-          "Inisignificant": {
+          "Insignificant": {
             "influence_income": 1
           },
           "Minor": {

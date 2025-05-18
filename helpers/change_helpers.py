@@ -188,10 +188,56 @@ def calculate_int_changes(before_data, after_data):
     return diff
 
 def check_no_other_changes(before_data, after_data, current_data):
-    for key in before_data:
+    """
+    Check if current_data matches either before_data or after_data for each field.
+    Returns False if current_data has changed in ways not reflected in the change request.
+    """
+    # Check all keys from all three dictionaries
+    all_keys = set(before_data.keys()) | set(after_data.keys()) | set(current_data.keys())
+    
+    for key in all_keys:
         b_val = before_data.get(key)
         a_val = after_data.get(key)
         c_val = current_data.get(key)
-        if b_val != c_val and a_val != c_val and not any(isinstance(v, int) for v in [b_val, a_val, c_val]):
+        
+        # Skip if the key doesn't exist in after_data
+        if key not in after_data:
+            continue
+            
+        # Handle lists
+        if isinstance(b_val, list) and isinstance(a_val, list) and isinstance(c_val, list):
+            # If lengths differ, check if current matches either before or after
+            if len(c_val) != len(b_val) and len(c_val) != len(a_val):
+                return False
+                
+            # Check each item in the list
+            for i in range(len(c_val)):
+                # Skip if index is out of range for before or after
+                if i >= len(b_val) and i >= len(a_val):
+                    return False
+                    
+                c_item = c_val[i]
+                b_item = b_val[i] if i < len(b_val) else None
+                a_item = a_val[i] if i < len(a_val) else None
+                
+                # Recursively check dict items
+                if isinstance(c_item, dict) and isinstance(b_item, dict) and isinstance(a_item, dict):
+                    if not check_no_other_changes(b_item, a_item, c_item):
+                        return False
+                # For non-dict items, check if current matches either before or after
+                elif c_item != b_item and c_item != a_item:
+                    return False
+                    
+        # Handle dictionaries
+        elif isinstance(b_val, dict) and isinstance(a_val, dict) and isinstance(c_val, dict):
+            if not check_no_other_changes(b_val, a_val, c_val):
+                return False
+                
+        # Handle primitive values
+        elif c_val != b_val and c_val != a_val:
+            # Special case for integers (allow changes)
+            if any(isinstance(v, int) for v in [b_val, a_val, c_val]):
+                continue
             return False
+            
     return True

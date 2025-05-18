@@ -1105,33 +1105,25 @@
 		"items":{
 			"bsonType": "object",
 			"properties": {
-				"name": {
-					"bsonType": "string",
-					"label": "Technology Name",
-					"description": "The name of the technology"
-				},
-				"base_cost": {
-					"bsonType": "number",
-					"label": "Technology Base Cost",
-					"description": "The base cost of the technology"
-				},
-				"current_cost": {
-					"bsonType": "number",
-					"label": "Technology Current Cost",
-					"description": "The current cost of the technology"
-				},
 				"invested": {
 					"bsonType": "number",
-					"label": "Research Points Invested",
+					"label": "Invested",
 					"description": "The amount of research points already invested in the technology"
 				},
-				"prerequisites": {
-					"bsonType": "array",
-					"label": "Technology Prerequisites",
-					"description": "The technologies that must be researched before this one can be researched",
-					"items":{
-						"bsonType": "string"
-					}
+				"investing": {
+					"bsonType": "number",
+					"label": "Investing",
+					"description": "The amount of research points being invested in the technology this turn"
+				},
+				"researched": {
+					"bsonType": "boolean",
+					"label": "Researched",
+					"description": "Whether the technology has been researched"
+				},
+				"cost": {
+					"bsonType": "number",
+					"label": "Cost",
+					"description": "The cost of the technology"
 				}
 			}
 		}

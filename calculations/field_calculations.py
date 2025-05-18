@@ -49,9 +49,10 @@ def calculate_all_fields(target, schema, target_data_type):
         cities = collect_cities(target)
         city_totals = sum_city_totals(cities)
 
-        territory_terrain_totals = collect_territory_terrain(target)
+        technologies = target.get("technologies", {})
+        tech_totals = sum_tech_totals(technologies)
 
-        print(territory_terrain_totals)
+        territory_terrain_totals = collect_territory_terrain(target)
 
         jobs_assigned = collect_jobs_assigned(target)
         job_details = calculate_job_details(target, district_details, modifier_totals, district_totals, city_totals, law_totals, external_modifiers_total)
@@ -80,8 +81,6 @@ def calculate_all_fields(target, schema, target_data_type):
     for d in [external_modifiers_total, modifier_totals, district_totals, territory_terrain_totals, city_totals, law_totals, job_totals, unit_totals, prestige_modifiers, title_modifiers]:
         for key, value in d.items():
             overall_total_modifiers[key] = overall_total_modifiers.get(key, 0) + value
-    
-    print(overall_total_modifiers)
     
     for field in attributes_to_precalculate:
         base_value = schema_properties.get(field, {}).get("base_value", 0)
@@ -389,6 +388,15 @@ def collect_cities(target):
         collected_modifiers.append({city_node + "_production": 2})
 
     return collected_modifiers
+
+def sum_tech_totals(technologies):
+    tech_totals = {}
+    for tech, value in technologies.items():
+        if value.get("researched", False):
+            modifiers = json_data["tech"].get(tech, {}).get("modifiers", {})
+            for key, value in modifiers.items():
+                tech_totals[key] = tech_totals.get(key, 0) + value
+    return tech_totals
 
 def collect_territory_terrain(target):
     territory_types = target.get("territory_types", {})

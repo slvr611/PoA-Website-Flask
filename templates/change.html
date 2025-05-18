@@ -1,4 +1,5 @@
 {% extends "layout.html" %}
+{% from "macros/pagination.html" import render_changes_preview, render_field_change %}
 
 {% block title %}Change {{ item["_id"] }}{% endblock %}
 
@@ -72,9 +73,7 @@
 			<tr>
 				<th><strong>{{ changes_label }}:</strong></th>
 				<td>
-					{% for key, data in before_data.items() %}
-						{{ target_schema.properties.get(key, {}).get("label", key) }}: {{ before_data[key] }} -> {{ after_data[key] }}</br>
-					{% endfor %}
+					{{ render_changes_preview(before_data, after_data, target_schema, linked_objects) }}
 				</td>
 			</tr>
 			<tr>

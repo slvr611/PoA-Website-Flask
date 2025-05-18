@@ -1,0 +1,507 @@
+{% macro render_tech_tree(techs, nation_techs, json_data, editable=False, form=None, form_json=None) %}
+<section class="tech-section">
+    <h2>Tech</h2>
+    <div id="cy" style="width: 100%; height: 800px; background-color: #222;"></div>
+    
+    <!-- Hidden form fields for tech investments -->
+    {% if editable %}
+        <div id="tech-investment-fields" style="display: none;">
+            {% for tech_id, tech in json_data["tech"].items() %}
+                {{ form.technologies[tech_id].investing() }}
+                {{ form.technologies[tech_id].cost() }}
+                {{ form.technologies[tech_id].researched() }}
+            {% endfor %}
+        </div>
+    {% endif %}
+</section>
+
+<script src="https://unpkg.com/cytoscape@3.24.0/dist/cytoscape.min.js"></script>
+<script src="https://unpkg.com/dagre@0.8.5/dist/dagre.min.js"></script>
+<script src="https://unpkg.com/cytoscape-dagre@2.5.0/cytoscape-dagre.js"></script>
+<script>
+    const techs = {{ techs|tojson }};
+    const nation_techs = {{ nation_techs|tojson }};
+    const editable = {{ editable|tojson }};
+    const form = {{ form_json|tojson if form_json else 'null' }};
+
+    // Function to determine tech status
+    function getTechStatus(id, tech) {
+        if (nation_techs[id] && typeof nation_techs[id] === 'object' && nation_techs[id].researched === true) {
+            return "researched";
+        }
+        
+        // Check if all prerequisites are met
+        let allPrereqsMet = true;
+        if (tech.prerequisites_all && tech.prerequisites_all.length > 0) {
+            for (const prereq of tech.prerequisites_all) {
+                if (!nation_techs[prereq] || typeof nation_techs[prereq] !== 'object' || nation_techs[prereq].researched !== true) {
+                    allPrereqsMet = false;
+                    break;
+                }
+            }
+        }
+        
+        // Check if at least one of the "one of" prerequisites is met
+        let onePrereqMet = true;
+        if (tech.prerequisites_one && tech.prerequisites_one.length > 0) {
+            onePrereqMet = false;
+            for (const prereq of tech.prerequisites_one) {
+                if (nation_techs[prereq] && typeof nation_techs[prereq] === 'object' && nation_techs[prereq].researched === true) {
+                    onePrereqMet = true;
+                    break;
+                }
+            }
+        }
+        
+        return (allPrereqsMet && onePrereqMet) ? "available" : "unavailable";
+    }
+    
+    // Function to format tech label
+    function getTechLabel(techId, tech) {
+        const status = getTechStatus(techId, tech);
+        if (status === "researched") {
+            return tech.display_name;
+        }
+        
+        const invested = nation_techs[techId] && typeof nation_techs[techId] === 'object' ? (nation_techs[techId].invested || 0) : 0;
+        const investing = nation_techs[techId] && typeof nation_techs[techId] === 'object' ? (nation_techs[techId].investing || 0) : 0;
+        
+        let label = tech.display_name;
+        if (status === "available" && editable) {
+            // For available techs in edit mode, just add a newline to make space for the editing section
+            label += `\no`;
+        } else if (investing > 0) {
+            label += `\n${invested} (+${investing}) / ${getCost(techId)}`;
+        } else {
+            label += `\n${invested} / ${getCost(techId)}`;
+        }
+        
+        return label;
+    }
+
+    function getCost(techId) {
+        const tech = techs[techId];
+        const nation_tech = nation_techs[techId];
+
+        if (form && form[techId] && form[techId].cost) {
+            return form[techId].cost.data;
+        }
+
+        if (!tech && !nation_tech) return 0;
+        
+        let cost = nation_tech?.cost || tech?.cost || 0;
+        
+        return cost;
+    }
+    
+    // Prepare elements for Cytoscape
+    const elements = [];
+    
+    // Add nodes and edges
+    for (const [id, tech] of Object.entries(techs)) {
+        const status = getTechStatus(id, tech);
+        
+        elements.push({
+            data: {
+                id,
+                invested: nation_techs[id] && typeof nation_techs[id] === 'object' ? (nation_techs[id].invested || 0) : 0,
+                investing: nation_techs[id] && typeof nation_techs[id] === 'object' ? (nation_techs[id].investing || 0) : 0,
+                cost: getCost(id),
+                label: getTechLabel(id, tech),
+                type: tech.type,
+                status: status,
+                editable: status === "available" && editable
+            }
+        });
+
+        (tech.prerequisites_all || []).forEach(prereq => {
+            elements.push({
+                data: {
+                    id: prereq + "->" + id,
+                    source: prereq,
+                    target: id,
+                    type: "all",
+                    met: nation_techs[prereq] && typeof nation_techs[prereq] === 'object' && nation_techs[prereq].researched === true
+                }
+            });
+        });
+
+        (tech.prerequisites_one || []).forEach(prereq => {
+            elements.push({
+                data: {
+                    id: prereq + "=>"+ id,
+                    source: prereq,
+                    target: id,
+                    type: "one",
+                    met: nation_techs[prereq] && typeof nation_techs[prereq] === 'object' && nation_techs[prereq].researched === true
+                }
+            });
+        });
+    }
+
+    // Color mappings based on tech type
+    const typeColors = {
+        Military: "#c46c68",       // Softer red
+        Infrastructure: "#dec26e", // Muted gold
+        Culture: "#1f6bd8",        // Softer blue
+        Industry: "#dda726",       // Warm orange
+        Food: "#90bc78",           // Soft green
+        Starting: "#a587b3",       // Muted purple
+        Capstone: "#a587b3"        // Same as Starting
+    };
+
+    // Initialize Cytoscape
+    const cy = cytoscape({
+        container: document.getElementById("cy"),
+        elements: elements,
+        style: [
+            {
+                selector: "node",
+                style: {
+                    "background-color": ele => typeColors[ele.data("type")] || "#121212",
+                    "label": ele => ele.data("label"),
+                    "text-wrap": "wrap",
+                    "text-max-width": "160px",
+                    "text-valign": "center",
+                    "text-halign": "center",
+                    "text-outline-width": 2,
+                    "text-outline-color": ele => typeColors[ele.data("type")] || "#90a4ae",
+                    "color": "#000",
+                    "border-width": 4,
+                    "border-color": ele => {
+                        const status = ele.data("status");
+                        return status === "researched" ? "lime" : (status === "available" ? "gold" : "black");
+                    },
+                    "border-style": ele => {
+                        const status = ele.data("status");
+                        return status === "available" ? "dashed" : "solid";
+                    },
+                    "width": 180, // Fixed width
+                    "height": 40,  // Fixed height
+                    "padding": "10px",
+                    "shape": "roundrectangle"
+                }
+            },
+            {
+                selector: "edge",
+                style: {
+                    "width": 3, // Increased width for better visibility
+                    "line-color": "#aaa",
+                    "target-arrow-color": "#aaa",
+                    "target-arrow-shape": "triangle",
+                    "curve-style": "bezier",
+                    "line-style": ele => ele.data("type") === "one" ? "dashed" : "solid",
+                    "line-dash-pattern": [8, 4], // Explicit dash pattern for "one" type edges
+                    "line-dash-offset": 0
+                }
+            },
+            {
+                selector: "edge[met]",
+                style: {
+                    "width": 3, // Increased width for better visibility
+                    "line-color": ele => ele.data("met") ? "lime" : "#aaa",
+                    "target-arrow-color": ele => ele.data("met") ? "lime" : "#aaa",
+                    "line-dash-pattern": ele => ele.data("type") === "one" ? [8, 4] : undefined // Keep dash pattern for "one" type
+                }
+            },
+            {
+                selector: 'node[editable]',
+                style: {
+                    'text-wrap': 'wrap',
+                    'text-max-width': '180px'
+                }
+            }
+        ],
+        // Disable user interaction
+        userZoomingEnabled: false,
+        userPanningEnabled: false,
+        boxSelectionEnabled: false,
+        autounselectify: true,
+        autoungrabify: true
+    });
+
+    // Define the rows and their node order
+    const rowDefinitions = [
+        // Row 1 (tier 1)
+        ["frame_saddles", "sewers", "political_philosophy", "trade_records", "chests"],
+        // Row 2 (tier 2)
+        ["aqueducts", "public_programs", "mints", "caravansaries", "metal_hooks"],
+        // Row 3 (tier 3)
+        ["dynastic_hunters", "pit_mining", "mine_shafts", "lumber_yards", "fermentation"],
+        // Row 4 (tier 4)
+        ["levers_and_pulleys", "city_defense", "ramparts", "military_wages", "cosmology", "public_zeal"],
+        // Row 5 (tier 5)
+        ["deep_hulls", "rig_and_sail", "official_courts", "war_engineers", "mote_stabilization", "novitiates"],
+        // Row 6 (tier 6)
+        ["philosophy", "national_identity", "citizenship"]
+    ];
+
+    // Apply custom layout
+    function applyCustomLayout() {
+        const nodeWidth = 180;
+        const nodeHeight = 40;
+        const horizontalSpacing = 80;
+        const verticalSpacing = 80;
+        
+        // Position each node according to its row and position within the row
+        rowDefinitions.forEach((row, rowIndex) => {
+            const rowWidth = row.length * nodeWidth + (row.length - 1) * horizontalSpacing;
+            const startX = -rowWidth / 2 + nodeWidth / 2;
+            
+            row.forEach((nodeId, colIndex) => {
+                const node = cy.getElementById(nodeId);
+                if (node.length > 0) {
+                    const x = startX + colIndex * (nodeWidth + horizontalSpacing);
+                    const y = rowIndex * (nodeHeight + verticalSpacing);
+                    node.position({ x, y });
+                    node.lock(); // Lock node position
+                }
+            });
+        });
+        
+        // Fit the graph to the viewport
+        cy.fit();
+        cy.zoom(cy.zoom() * 0.9); // Zoom out slightly to show everything
+    }
+
+    // Run the custom layout
+    applyCustomLayout();
+
+    // After the graph is rendered, add input overlays for editable nodes
+    cy.ready(function() {
+        if (editable) {
+            cy.nodes().forEach(node => {
+                if (node.data('editable')) {
+                    const techId = node.id();
+                    const tech = techs[techId];
+                    const invested = node.data('invested') || 0;
+                    let investing = 0;
+                    console.log(form)
+                    console.log(techId)
+                    console.log(form[techId])
+                    if (form && form[techId] && form[techId].investing) {
+                        investing = form[techId].investing.data;
+                    }
+                    let investingID = "UNKNOWN";
+                    if (form && form[techId] && form[techId].investing) {
+                        investingID = "node_" + form[techId].investing.id;
+                    }
+                    let costID = "UNKNOWN";
+                    if (form && form[techId] && form[techId].cost) {
+                        costID = "node_" + form[techId].cost.id;
+                    }
+                    const cost = getCost(techId);
+                    
+                    // Create an HTML overlay for this node
+                    const overlay = document.createElement('div');
+                    overlay.className = 'tech-node-overlay';
+                    overlay.id = `overlay-${techId}`;
+                    overlay.style.position = 'absolute';
+                    overlay.style.zIndex = '10';
+                    overlay.style.pointerEvents = 'auto'; // Always allow pointer events
+                    
+                    // Create the input field
+                    const inputHtml = `
+                        <div class="tech-node-input-container">
+                            <span>${invested} + </span>
+                            <input type="number" 
+                                   class="tech-node-input" 
+                                   id="${investingID}" 
+                                   value="${investing}" 
+                                   min="0">
+                            <span> / </span>
+                            <input type="number" 
+                                   class="tech-node-input" 
+                                   id="${costID}" 
+                                   value="${cost}" 
+                                   min="0">
+                        </div>
+                    `;
+                    overlay.innerHTML = inputHtml;
+                    
+                    // Add to the Cytoscape container
+                    document.getElementById('cy').appendChild(overlay);
+                    
+                    // Position the overlay on the node
+                    const updatePosition = () => {
+                        const pos = node.renderedPosition();
+                        overlay.style.left = `${pos.x - overlay.offsetWidth/2}px`;
+                        overlay.style.top = `${pos.y}px`; // Position below the node text
+                    };
+                    
+                    // Update position initially and on zoom/pan
+                    updatePosition();
+                    cy.on('zoom pan', updatePosition);
+                    
+                    // Update the hidden form field when input changes
+                    document.getElementById(investingID).addEventListener('change', function(e) {
+                        const value = parseInt(e.target.value) || 0;
+                        document.getElementById(form[techId].investing.id).value = value;
+                        
+                        // Update the node data
+                        node.data('investing', value);
+                        
+                        // Update nation_techs for the info panel
+                        if (!nation_techs[techId]) {
+                            nation_techs[techId] = { invested: 0, investing: value };
+                        } else {
+                            nation_techs[techId].investing = value;
+                        }
+                    });
+                    
+                    // Add click handler to select all text when clicked
+                    document.getElementById(investingID).addEventListener('click', function(e) {
+                        // Select all text in the input
+                        e.target.select();
+                        
+                        // Prevent the event from bubbling
+                        e.stopPropagation();
+                    });
+
+                    document.getElementById(costID).addEventListener('change', function(e) {
+                        const value = parseInt(e.target.value) || 0;
+                        document.getElementById(form[techId].cost.id).value = value;
+                        
+                        // Update the node data
+                        node.data('cost', value);
+                        
+                        // Update nation_techs for the info panel
+                        if (!nation_techs[techId]) {
+                            nation_techs[techId] = { invested: 0, investing: value };
+                        } else {
+                            nation_techs[techId].investing = value;
+                        }
+                    });
+                    
+                    // Add click handler to select all text when clicked
+                    document.getElementById(costID).addEventListener('click', function(e) {
+                        // Select all text in the input
+                        e.target.select();
+                        
+                        // Prevent the event from bubbling
+                        e.stopPropagation();
+                    });
+                }
+            });
+        }
+    });
+
+    // Add tech info panel with edit functionality
+    cy.on('tap', 'node', function(evt){
+        const node = evt.target;
+        const tech = techs[node.id()];
+        const techId = node.id();
+        
+        // Create or update tech info panel
+        let infoPanel = document.getElementById('tech-info-panel');
+        if (!infoPanel) {
+            infoPanel = document.createElement('div');
+            infoPanel.id = 'tech-info-panel';
+            document.getElementById('cy').appendChild(infoPanel);
+        }
+        
+        // Format prerequisites
+        const allPrereqs = (tech.prerequisites_all || []).map(p => techs[p]?.display_name || p).join(", ");
+        const onePrereqs = (tech.prerequisites_one || []).map(p => techs[p]?.display_name || p).join(", ");
+        
+        // Format modifiers
+        let modifiersHtml = '';
+        if (tech.modifiers) {
+            for (const [mod, value] of Object.entries(tech.modifiers)) {
+                modifiersHtml += `<li>${mod}: ${value}</li>`;
+            }
+        }
+        
+        // Get tech status
+        const status = getTechStatus(techId, tech);
+        const currentInvestment = nation_techs[techId] && typeof nation_techs[techId] === 'object' ? (nation_techs[techId].invested || 0) : 0;
+        const currentInvesting = nation_techs[techId] && typeof nation_techs[techId] === 'object' ? (nation_techs[techId].investing || 0) : 0;
+        
+        // Create panel content
+        let panelContent = `
+            <h3>${tech.display_name}</h3>
+            <p><strong>Type:</strong> ${tech.type}</p>
+            <p><strong>Invested:</strong> ${currentInvestment} / ${getCost(techId)}</p>
+            ${allPrereqs ? `<p><strong>Required Prerequisites:</strong> ${allPrereqs}</p>` : ''}
+            ${onePrereqs ? `<p><strong>One of Prerequisites:</strong> ${onePrereqs}</p>` : ''}
+            ${modifiersHtml ? `<p><strong>Modifiers:</strong></p><ul>${modifiersHtml}</ul>` : ''}
+            <p><strong>Status:</strong> ${status}</p>
+        `;
+        
+        panelContent += `<button id="close-panel">Close</button>`;
+        
+        infoPanel.innerHTML = panelContent;
+        infoPanel.style.display = 'block';
+        
+        // Add event listeners
+        document.getElementById('close-panel').addEventListener('click', function() {
+            infoPanel.style.display = 'none';
+        });
+        
+        if (editable && status === "available") {
+            document.getElementById(`save-invest-${techId}`).addEventListener('click', function() {
+                const investValue = parseInt(document.getElementById(`quick-invest-${techId}`).value) || 0;
+                
+                // Update the node input if it exists
+                const nodeInput = document.getElementById(`node_input_${techId}`);
+                if (nodeInput) {
+                    nodeInput.value = investValue;
+                }
+                
+                // Update the hidden form field
+                document.getElementById(`hidden_tech_investment_${techId}`).value = investValue;
+                
+                // Update the node data
+                node.data('investing', investValue);
+                
+                // Update nation_techs for future reference
+                if (!nation_techs[techId]) {
+                    nation_techs[techId] = { invested: 0, investing: investValue };
+                } else {
+                    nation_techs[techId].investing = investValue;
+                }
+                
+                infoPanel.style.display = 'none';
+            });
+        }
+    });
+
+    // Close panel when clicking elsewhere
+    cy.on('tap', function(evt){
+        if (evt.target === cy) {
+            const infoPanel = document.getElementById('tech-info-panel');
+            if (infoPanel) {
+                infoPanel.style.display = 'none';
+            }
+        }
+    });
+</script>
+{% endmacro %}
+
+{% macro is_tech_available(tech_id, tech, nation_techs) %}
+    {% set all_prereqs_met = true %}
+    {% for prereq in tech.prerequisites_all|default([]) %}
+        {% if not (nation_techs[prereq] and nation_techs[prereq].researched) %}
+            {% set all_prereqs_met = false %}
+        {% endif %}
+    {% endfor %}
+    
+    {% set one_prereq_met = true %}
+    {% if tech.prerequisites_one|default([]) %}
+        {% set one_prereq_met = false %}
+        {% for prereq in tech.prerequisites_one %}
+            {% if nation_techs[prereq] and nation_techs[prereq].researched %}
+                {% set one_prereq_met = true %}
+            {% endif %}
+        {% endfor %}
+    {% endif %}
+    
+    {{ all_prereqs_met and one_prereq_met }}
+{% endmacro %}
+
+
+
+
+
+
+

@@ -19,12 +19,13 @@
     
     <div class="table-wrapper">
         {{ render_changes_table(changes, preview_references, target_schemas, show_actions=true) }}
-        
-        <!-- Bottom Pagination -->
-        {% if total_pages > 1 %}
-            {{ render_pagination(current_page, total_pages, "/changes/pending") }}
-        {% endif %}
     </div>
+
+    <!-- Bottom Pagination -->
+    {% if total_pages > 1 %}
+        {{ render_pagination(current_page, total_pages, "/changes/pending") }}
+    {% endif %}
+
 </div>
 {% endblock %}
 
