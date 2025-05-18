@@ -94,9 +94,7 @@ def approve_change(change_id):
         if check_no_other_changes(before_data, after_data, target):
             if change["change_type"] == "Update":
                 existing = target_collection.find_one({"_id": change["target"]})
-                print(existing)
                 merged = deep_merge(existing, after_data)
-                print(merged)
                 target_collection.update_one({"_id": change["target"]}, {"$set": merged})
             else:
                 target_collection.delete_one({"_id": change["target"]})
@@ -139,9 +137,7 @@ def system_approve_change(change_id):
         if check_no_other_changes(before_data, after_data, target):
             if change["change_type"] == "Update":
                 existing = target_collection.find_one({"_id": change["target"]})
-                print(existing)
                 merged = deep_merge(existing, after_data)
-                print(merged)
                 target_collection.update_one({"_id": change["target"]}, {"$set": merged})
             else:
                 target_collection.delete_one({"_id": change["target"]})
@@ -183,8 +179,10 @@ def deep_merge(original, updates):
             for i, item in enumerate(value):
                 if i < len(merged[key]) and isinstance(merged[key][i], dict) and isinstance(item, dict):
                     merged[key][i] = deep_merge(merged[key][i], item)
-                else:
+                elif i < len(merged[key]):
                     merged[key][i] = item
+                else:
+                    merged[key].append(item)
         else:
             merged[key] = value
     return merged
@@ -238,8 +236,6 @@ def keep_only_differences_dict(before_data, after_data):
     return new_before, new_after
 
 def keep_only_differences_list(before_data, after_data):
-    print("Before data: ", before_data)
-    print("After data: ", after_data)
     new_before = []
     new_after = []
     for i in range(max(len(before_data), len(after_data))):
@@ -275,7 +271,6 @@ def check_no_other_changes(before_data, after_data, current_data):
     Check if current_data matches either before_data or after_data for each field.
     Returns False if current_data has changed in ways not reflected in the change request.
     """
-    print("Checking no other changes")
 
     # Check all keys from all three dictionaries
     all_keys = set(before_data.keys()) | set(after_data.keys()) | set(current_data.keys())
@@ -293,18 +288,12 @@ def check_no_other_changes(before_data, after_data, current_data):
         if isinstance(b_val, list) and isinstance(a_val, list) and isinstance(c_val, list):
             # If lengths differ, check if current matches either before or after
             if len(c_val) != len(b_val) and len(c_val) != len(a_val):
-                print("Key: ", key)
-                print("Current data: ", c_val)
-                print("Before data: ", b_val)
-                print("After data: ", a_val)
-                print("List length mismatch")
                 return False
                 
             # Check each item in the list
             for i in range(len(c_val)):
                 # Skip if index is out of range for before or after
                 if i >= len(b_val) and i >= len(a_val):
-                    print("Index out of range")
                     return False
                     
                 c_item = c_val[i]
@@ -317,13 +306,11 @@ def check_no_other_changes(before_data, after_data, current_data):
                         return False
                 # For non-dict items, check if current matches either before or after
                 elif c_item != b_item and c_item != a_item:
-                    print("List item mismatch")
                     return False
                     
         # Handle dictionaries
         elif isinstance(b_val, dict) and isinstance(a_val, dict) and isinstance(c_val, dict):
             if not check_no_other_changes(b_val, a_val, c_val):
-                print("Dict mismatch")
                 return False
                 
         # Handle primitive values
@@ -331,9 +318,6 @@ def check_no_other_changes(before_data, after_data, current_data):
             # Special case for integers (allow changes)
             if any(isinstance(v, int) for v in [b_val, a_val, c_val]):
                 continue
-            print("Primitive value mismatch")
             return False
     
-    print("No other changes")
-
     return True

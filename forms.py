@@ -570,7 +570,9 @@ class BaseSchemaForm(FlaskForm):
                     if len(cities) < max_cities:
                         cities.extend([""] * (max_cities - len(cities)))
                     
-
+                    if len(cities) > max_cities: #TODO: Add support for going over maximum cities
+                        cities = cities[:max_cities]
+                    
                     for cities in cities:
                         field.append_entry(cities)
                 

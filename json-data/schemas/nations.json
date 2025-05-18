@@ -1182,6 +1182,7 @@
         "bsonType": "array",
 		"label": "Cities",
         "description": "The cities the nation owns",
+		"max_length": "city_slots",
 		"items":{
 			"bsonType": "object",
 			"properties": {
