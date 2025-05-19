@@ -31,7 +31,7 @@
             "nation_attack": 1
           },
           "Charismatic": {
-            "nation_trade_slots_mult": 0.5
+            "nation_trade_slots": 6
           },
           "Courageous": {
             "nation_civilian_unit_hp": 1,

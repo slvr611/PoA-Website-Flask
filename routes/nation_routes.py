@@ -163,6 +163,9 @@ def nation_edit_approve(item_ref):
         except (json.JSONDecodeError, TypeError):
             form_data['concessions'] = {}
 
+    print(nation)
+    print(form_data)
+
     valid, error = validate_form_with_jsonschema(form, schema)
     if not valid:
         flash(f"Validation Error: {error}")

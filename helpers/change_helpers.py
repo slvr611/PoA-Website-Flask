@@ -169,6 +169,8 @@ def deny_change(change_id):
     return True
 
 def deep_merge(original, updates):
+    if len(updates) == 0 or updates is None:
+        return updates
     merged = deepcopy(original)
     for key, value in updates.items():
         if (
@@ -218,12 +220,15 @@ def keep_only_differences(before_data, after_data, change_type):
 def keep_only_differences_dict(before_data, after_data):
     new_before = {}
     new_after = {}
+    if len(after_data) == 0:
+        return before_data, after_data
+
     for key in after_data.keys():
         current_before = before_data.get(key)
         current_after = after_data.get(key)
         if isinstance(current_before, dict) and isinstance(current_after, dict):
             temp_before, temp_after = keep_only_differences_dict(current_before, current_after)
-            if len(temp_before) > 0 and len(temp_after) > 0:
+            if len(temp_before) > 0 or len(temp_after) > 0:
                 new_before[key], new_after[key] = temp_before, temp_after
         elif isinstance(current_before, list) and isinstance(current_after, list):
             temp_before, temp_after = keep_only_differences_list(current_before, current_after)

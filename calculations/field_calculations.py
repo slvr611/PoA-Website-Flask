@@ -379,6 +379,7 @@ def collect_cities(target):
     collected_modifiers = []
     city_json_data = json_data["cities"]
     wall_json_data = json_data["walls"]
+    ignore_nodes = target.get("ignore_nodes", 0)
     for city in nation_cities:
         city_type = city.get("type", "")
         city_node = city.get("node", "")
@@ -386,7 +387,8 @@ def collect_cities(target):
         wall_modifiers = wall_json_data.get(city.get("wall", ""), {}).get("modifiers", {})
         collected_modifiers.append(city_modifiers)
         collected_modifiers.append(wall_modifiers)
-        collected_modifiers.append({city_node + "_production": 2})
+        if ignore_nodes < 1:
+            collected_modifiers.append({city_node + "_production": 2})
 
     return collected_modifiers
 
@@ -751,6 +753,9 @@ def sum_city_totals(cities):
     return totals
 
 def sum_job_totals(jobs_assigned, job_details):
+    if not jobs_assigned:
+        return {}
+
     totals = {}
     original_job_details = json_data["jobs"]
     general_resources = json_data["general_resources"]
@@ -811,6 +816,9 @@ def sum_all_unit_totals(land_units_assigned, land_unit_details, naval_units_assi
     return totals
 
 def sum_unit_totals(units_assigned, unit_details, unit_json_files):
+    if not units_assigned:
+        return {}
+
     original_unit_details = {}
     for unit_file in unit_json_files:
         original_unit_details.update(json_data[unit_file])

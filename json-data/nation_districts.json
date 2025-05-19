@@ -77,7 +77,8 @@
 		},
 		"modifiers": {
 			"wood_consumption": 1,
-			"administration": 1
+			"administration": 1,
+			"bureaucrat_wood_upkeep": -1
 		},
 		"synergy_requirement": "wood",
 		"synergy_node_active": true,
@@ -253,7 +254,8 @@
 		},
 		"modifiers": {
 			"wood_consumption": 1,
-			"fisherman_food_production": 1
+			"fisherman_food_production": 1,
+			"food_production": 1
 		},
 		"synergy_requirement": "food",
 		"synergy_node_active": true,

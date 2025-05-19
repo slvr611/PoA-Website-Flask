@@ -181,7 +181,7 @@
                 <h2>Government & Laws</h2>
                 <table class="info-table">
                     {% for law in schema.laws %}
-                        {% if law != "stability" and law in form._fields.keys() %}
+                        {% if law != "stability" and law != "vassal_type" and law in form._fields.keys() %}
                             <tr>
                                 <th>{{ form[law].label.text }}:</th>
                                 <td>{{ form[law](class="form-control") }}</td>
@@ -691,6 +691,16 @@
                     });
                 });
             }
+
+            function resetConcessions() {
+                const concessionsDiv = document.getElementById('concessions');
+                concessionsDiv.textContent = '';
+                
+                // Clear the hidden input field
+                const concessionsField = document.getElementById('concessions-field');
+                concessionsField.value = JSON.stringify({});
+            }
+
         </script>
         
         

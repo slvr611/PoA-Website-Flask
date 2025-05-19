@@ -583,25 +583,23 @@
 		"default": "Standard",
 		"laws": {
 			"Minimal": {
-				"unit_food_upkeep": -1,
-				"strength": -2
+				"money_income": 150
 			},
 			"Substandard": {
-				"unit_food_upkeep": -0.5,
-				"strength": -1
+				"money_income": 75
 			},
 			"Standard": {},
 			"Notable": {
-				"unit_food_upkeep": 1,
-				"strength": 1
+				"money_income": -75,
+				"unit_money_upkeep": 15
 			},
 			"Substantial": {
-				"unit_food_upkeep": 2,
-				"strength": 2
+				"money_income": -150,
+				"unit_money_upkeep": 30
 			},
 			"Extreme": {
-				"unit_food_upkeep": 3,
-				"strength": 3
+				"money_income": -225,
+				"unit_money_upkeep": 45
 			}
 		}
       },
@@ -744,9 +742,13 @@
 				"defensive_pact_slots": 1
 			},
 			"Expansionist": {
-				"effective_territory": 3
+				"effective_territory": 3,
+				"nomad_effective_territory": 3
 			},
-			"Belligerent": {},
+			"Belligerent": {
+				"unit_recruitment_discount": 0.05,
+				"unit_recruitment_discount_during_offensive_war": 0.05
+			},
 			"Isolated": {
 				"defensive_pact_slots": -1
 			}
@@ -872,12 +874,15 @@
 			"Indulgence": {
 				"food_consumption_per_pop": 0.5,
 				"stability_gain_chance": 0.4,
-				"unit_morale": 1
+				"unit_morale": 1,
+				"unit_hp": 1,
+				"unit_retaliation_damage": 1
 			},
 			"Comfort": {
 				"food_consumption_per_pop": 0.3333333333333334,
 				"stability_gain_chance": 0.25,
-				"unit_morale": 1
+				"unit_morale": 1,
+				"unit_hp": 1
 			},
 			"Standard": {
 				"stability_gain_chance": 0.05

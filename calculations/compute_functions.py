@@ -170,6 +170,9 @@ def compute_concessions_qty(field, target, base_value, field_schema, overall_tot
 def compute_working_pop_count(field, target, base_value, field_schema, overall_total_modifiers):
     workers_assigned = target.get("jobs", {})
 
+    if not workers_assigned:
+        return 0
+
     value = sum(workers_assigned.values())
     if value is None:
         value = 0
@@ -212,6 +215,12 @@ def compute_stability_gain_chance(field, target, base_value, field_schema, overa
     unique_minority_count = target.get("unique_minority_count", 0)
     pop_count = target.get("pop_count", 0)
 
+    production = compute_resource_production("resource_production", target, 0, {}, overall_total_modifiers)
+
+    total_production = sum(production.values())
+
+    stability_gain_chance_from_resource_production = overall_total_modifiers.get("stability_gain_chance_per_resource_production", 0) * total_production
+
     karma_stability_gain = max(min(karma * overall_total_modifiers.get("stability_gain_chance_per_positive_karma", 0), overall_total_modifiers.get("max_stability_gain_chance_per_positive_karma", 0)), 0)
     minority_stability_gain = max(min(unique_minority_count * overall_total_modifiers.get("stability_gain_chance_per_unique_minority", 0), overall_total_modifiers.get("max_stability_gain_chance_per_unique_minority", 0)), 0)
     pop_stability_gain = pop_count * overall_total_modifiers.get("stability_gain_chance_per_pop", 0)
@@ -219,7 +228,7 @@ def compute_stability_gain_chance(field, target, base_value, field_schema, overa
     if unique_minority_count == 0:
         minority_stability_gain += overall_total_modifiers.get("homogeneous_stability_gain_chance", 0)
 
-    value = round(max(base_value + overall_total_modifiers.get(field, 0) + karma_stability_gain + minority_stability_gain + pop_stability_gain, 0), 2)
+    value = round(max(base_value + overall_total_modifiers.get(field, 0) + karma_stability_gain + minority_stability_gain + pop_stability_gain + stability_gain_chance_from_resource_production, 0), 2)
 
     return value
 
@@ -258,6 +267,9 @@ def compute_district_slots(field, target, base_value, field_schema, overall_tota
 def compute_unit_count(field, target, base_value, field_schema, overall_total_modifiers):
     unit_field = field.replace("_count", "s")
     units_assigned = target.get(unit_field, {})
+
+    if not units_assigned:
+        return 0
     
     value = sum(units_assigned.values())
     if value is None:
