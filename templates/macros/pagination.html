@@ -195,7 +195,98 @@
                 <div class="field-change">
                     <div class="field-label">{{ target_schema.properties.get(key, {}).get("label", key) }}:</div>
                     <div class="field-value">
-                        {% if key not in before_data %}
+                        {% if key == "districts" or key == "cities" %}
+                            {% if after_value|length > before_value|length %}
+                                <span>Added: {{ after_value|length - before_value|length }} new {{ key }}</span>
+                            {% endif %}
+                            
+                            {# Show modified items #}
+                            {% for i in range([before_value|length, after_value|length]|min) %}
+                                {% set before_item = before_value[i] if i < before_value|length else {} %}
+                                {% set after_item = after_value[i] if i < after_value|length else {} %}
+                                
+                                {# Direct comparison of items #}
+                                {% if before_item != after_item %}
+                                    <div class="array-item-changed">
+                                        <div class="array-index">{{ key|capitalize }} {{ i+1 }}:</div>
+                                        <div class="dict-changes">
+                                            {% if before_item is mapping and after_item is mapping %}
+                                                {% for item_key in (before_item.keys()|list + after_item.keys()|list)|unique|list %}
+                                                    {% if before_item.get(item_key) != after_item.get(item_key) %}
+                                                        <div class="dict-change-item">
+                                                            <span class="dict-key">{{ item_key }}:</span>
+                                                            <span class="dict-value">
+                                                                {% if before_item.get(item_key) is none %}None{% elif before_item.get(item_key) == "" %}""{% elif before_item.get(item_key) == 0 %}0{% else %}{{ before_item.get(item_key) }}{% endif %} → 
+                                                                {% if after_item.get(item_key) is none %}None{% elif after_item.get(item_key) == "" %}""{% elif after_item.get(item_key) == 0 %}0{% else %}{{ after_item.get(item_key) }}{% endif %}
+                                                            </span>
+                                                        </div>
+                                                    {% endif %}
+                                                {% endfor %}
+                                            {% else %}
+                                                <div class="dict-change-item">
+                                                    <span class="dict-value">
+                                                        {% if before_item is none %}None{% elif before_item == "" %}""{% elif before_item == 0 %}0{% else %}{{ before_item }}{% endif %} → 
+                                                        {% if after_item is none %}None{% elif after_item == "" %}""{% elif after_item == 0 %}0{% else %}{{ after_item }}{% endif %}
+                                                    </span>
+                                                </div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                {% endif %}
+                            {% endfor %}
+                            
+                            {# Show added items #}
+                            {% if after_value|length > before_value|length %}
+                                <div class="array-items-added">
+                                    <span class="array-action">Added:</span>
+                                    {% for i in range(before_value|length, after_value|length) %}
+                                        <div class="array-item-added">
+                                            <div class="array-index">{{ key|capitalize }} {{ i+1 }}:</div>
+                                            {% if after_value[i] is mapping %}
+                                                {% for dict_key, dict_value in after_value[i].items() %}
+                                                    <div class="dict-change-item">
+                                                        <span class="dict-key">{{ dict_key }}:</span> 
+                                                        <span class="dict-value">
+                                                            {% if dict_value is none %}None{% elif dict_value == "" %}""{% elif dict_value == 0 %}0{% else %}{{ dict_value }}{% endif %}
+                                                        </span>
+                                                    </div>
+                                                {% endfor %}
+                                            {% else %}
+                                                <span class="dict-value">
+                                                    {% if after_value[i] is none %}None{% elif after_value[i] == "" %}""{% elif after_value[i] == 0 %}0{% else %}{{ after_value[i] }}{% endif %}
+                                                </span>
+                                            {% endif %}
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                            
+                            {# Show removed items #}
+                            {% if before_value|length > after_value|length %}
+                                <div class="array-items-removed">
+                                    <span class="array-action">Removed:</span>
+                                    {% for i in range(after_value|length, before_value|length) %}
+                                        <div class="array-item-removed">
+                                            <div class="array-index">{{ key|capitalize }} {{ i+1 }}:</div>
+                                            {% if before_value[i] is mapping %}
+                                                {% for dict_key, dict_value in before_value[i].items() %}
+                                                    <div class="dict-change-item">
+                                                        <span class="dict-key">{{ dict_key }}:</span> 
+                                                        <span class="dict-value">
+                                                            {% if dict_value is none %}None{% elif dict_value == "" %}""{% elif dict_value == 0 %}0{% else %}{{ dict_value }}{% endif %}
+                                                        </span>
+                                                    </div>
+                                                {% endfor %}
+                                            {% else %}
+                                                <span class="dict-value">
+                                                    {% if before_value[i] is none %}None{% elif before_value[i] == "" %}""{% elif before_value[i] == 0 %}0{% else %}{{ before_value[i] }}{% endif %}
+                                                </span>
+                                            {% endif %}
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        {% elif key not in before_data %}
                             {# Field was added #}
                             <span class="field-added">Added: 
                                 {% if after_value is mapping %}

@@ -568,7 +568,17 @@ def compute_death_chance(field, target, base_value, field_schema, overall_total_
     elderly_age = target.get("elderly_age", 3)
 
     value = round(max((age - elderly_age) * (0.2 + overall_total_modifiers.get("death_chance_per_elderly_age", 0)), 0), 2)
+
+    cunning = compute_stat("cunning", target, 0, {}, overall_total_modifiers)
+    value += cunning * overall_total_modifiers.get("death_chance_per_cunning", 0)
+
     value += overall_total_modifiers.get(field, 0)
+
+    minimum_death_chance = overall_total_modifiers.get("minimum_death_chance", 0)
+
+    minimum_death_chance += overall_total_modifiers.get("minimum_death_chance_per_cunning", 0) * cunning
+
+    value = max(value, minimum_death_chance)
 
     return value
 

@@ -262,6 +262,13 @@ def give_tick_summary(tick_summary):
     
     return summary_path
 
+def progress_quests_tick(old_target, new_target, calculated_target, schema):
+    quests = old_target.get("progress_quests", [])
+    for quest in quests:
+        quest["current_progress"] += quest.get("progress_per_tick", 0)
+    new_target["progress_quests"] = quests
+    return ""
+
 ###########################################################
 # Character Tick Functions
 ###########################################################
@@ -426,6 +433,21 @@ def nation_income_tick(old_nation, new_nation, calculated_nation, schema):
     
     return ""
 
+def nation_tech_tick(old_nation, new_nation, calculated_nation, schema):
+    new_nation["research_production_at_tick"] = calculated_nation.get("resource_production", {}).get("research", 0)
+    new_nation["research_consumption_at_tick"] = calculated_nation.get("resource_consumption", {}).get("research", 0)
+
+    technologies = old_nation.get("technologies", {}).copy()
+    for tech, value in technologies.items():
+        if value.get("investing", 0) > 0:
+            value["invested"] += value["investing"]
+            value["investing"] = 0
+            if value["invested"] >= value["cost"]:
+                value["researched"] = True
+        technologies[tech] = value
+    new_nation["technologies"] = technologies
+    return ""
+
 def update_rolling_karma(old_nation, new_nation, calculated_nation, schema):
     event_type = old_nation.get("event_type", "Unknown")
     if event_type in ["Horrendous", "Abysmal", "Very Bad", "Bad"]:
@@ -462,16 +484,28 @@ def nation_stability_tick(old_nation, new_nation, calculated_nation, schema):
     stability_gain_roll = random.random()
     new_nation["stability_gain_roll"] = stability_gain_roll
     new_nation["stability_gain_chance_at_tick"] = calculated_nation.get("stability_gain_chance", 0)
+
     if stability_gain_roll <= calculated_nation.get("stability_gain_chance", 0):
         stability_index = min(stability_index + 1, len(stability_enum) - 1)
-        result += f"{old_nation.get('name', 'Unknown')} has gained stability.\n"
+        result += f"{old_nation.get('name', 'Unknown')} has gained a level of stability.\n"
 
+    stab_loss_chance = calculated_nation.get("stability_loss_chance", 0)
     stability_loss_roll = random.random()
     new_nation["stability_loss_roll"] = stability_loss_roll
-    new_nation["stability_loss_chance_at_tick"] = calculated_nation.get("stability_loss_chance", 0)
-    if stability_loss_roll <= calculated_nation.get("stability_loss_chance", 0):
-        stability_index = max(stability_index - 1, 0)
-        result += f"{old_nation.get('name', 'Unknown')} has lost stability.\n"
+    new_nation["stability_loss_chance_at_tick"] = stab_loss_chance
+
+    stab_loss_amount = 0
+
+    if stab_loss_chance > 1:
+        stab_loss_amount += 1
+        stab_loss_chance -= 1
+
+    if stability_loss_roll <= stab_loss_chance:
+        stab_loss_amount += 1
+    
+    if stab_loss_amount > 0:
+        stability_index = max(stability_index - stab_loss_amount, 0)
+        result += f"{old_nation.get('name', 'Unknown')} has lost {stab_loss_amount} level(s) of stability.\n"
 
     new_nation["stability"] = stability_enum[stability_index]
 
@@ -580,6 +614,7 @@ CHARACTER_TICK_FUNCTIONS = {
     "Character Mana Tick": character_mana_tick,
     "Character Age Tick": character_age_tick,
     "Character Modifier Decay Tick": character_modifier_decay_tick,
+    "Character Progress Quests Tick": progress_quests_tick,
 }
 
 ARTIFACT_TICK_FUNCTIONS = {
@@ -588,18 +623,22 @@ ARTIFACT_TICK_FUNCTIONS = {
 
 MERCHANT_TICK_FUNCTIONS = {
     "Merchant Income Tick": merchant_income_tick,
+    "Merchant Progress Quests Tick": progress_quests_tick,
 }
 
 MERCENARY_TICK_FUNCTIONS = {
     "Mercenary Upkeep Tick": mercenary_upkeep_tick,
+    "Mercenary Progress Quests Tick": progress_quests_tick,
 }
 
 FACTION_TICK_FUNCTIONS = {
     "Faction Income Tick": faction_income_tick,
+    "Faction Progress Quests Tick": progress_quests_tick,
 }
 
 NATION_TICK_FUNCTIONS = {
     "Nation Income Tick": nation_income_tick,
+    "Nation Tech Tick": nation_tech_tick,
     "Nation Update Rolling Karma Tick": update_rolling_karma,
     "Nation Infamy Decay Tick": nation_infamy_decay_tick,
     "Nation Prestige Gain Tick": nation_prestige_gain_tick,
@@ -608,6 +647,7 @@ NATION_TICK_FUNCTIONS = {
     "Nation Rebellion Tick": nation_rebellion_tick,
     "Nation Passive Expansion Tick": nation_passive_expansion_tick,
     "Nation Modifier Decay Tick": nation_modifier_decay_tick,
+    "Progress Quests Tick": progress_quests_tick,
     "Nation Job Cleanup Tick": nation_job_cleanup_tick,
     "Nation Reset Rolling Karma to Zero (Generally Don't Use)": reset_rolling_karma_to_zero,
 }
