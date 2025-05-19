@@ -263,10 +263,8 @@ def give_tick_summary(tick_summary):
     return summary_path
 
 def progress_quests_tick(old_target, new_target, calculated_target, schema):
-    quests = old_target.get("progress_quests", [])
-    for quest in quests:
+    for quest in new_target.get("progress_quests", []):
         quest["current_progress"] += quest.get("progress_per_tick", 0)
-    new_target["progress_quests"] = quests
     return ""
 
 ###########################################################
@@ -439,15 +437,14 @@ def nation_tech_tick(old_nation, new_nation, calculated_nation, schema):
     new_nation["research_consumption_at_tick"] = calculated_nation.get("resource_consumption", {}).get("research", 0)
     json_tech_data = json_data["tech"]
 
-    technologies = old_nation.get("technologies", {}).copy()
-    for tech, value in technologies.items():
+    new_nation["technologies"] = old_nation.get("technologies", {}).copy()
+    for tech, value in new_nation["technologies"]:
         if value.get("investing", 0) > 0:
             value["invested"] = value.get("invested", 0) + value.get("investing", 0)
             value["investing"] = 0
             if value["invested"] >= value.get("cost", json_tech_data.get(tech, {}).get("cost", 0) + calculated_nation.get("technology_cost_modifier", 0)):
                 value["researched"] = True
-        technologies[tech] = value
-    new_nation["technologies"] = technologies
+        new_nation["technologies"][tech] = value
     return ""
 
 def update_rolling_karma(old_nation, new_nation, calculated_nation, schema):
