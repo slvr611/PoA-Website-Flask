@@ -436,13 +436,14 @@ def nation_income_tick(old_nation, new_nation, calculated_nation, schema):
 def nation_tech_tick(old_nation, new_nation, calculated_nation, schema):
     new_nation["research_production_at_tick"] = calculated_nation.get("resource_production", {}).get("research", 0)
     new_nation["research_consumption_at_tick"] = calculated_nation.get("resource_consumption", {}).get("research", 0)
+    json_tech_data = json_data["tech"]
 
     technologies = old_nation.get("technologies", {}).copy()
     for tech, value in technologies.items():
         if value.get("investing", 0) > 0:
-            value["invested"] += value["investing"]
+            value["invested"] = value.get("invested", 0) + value.get("investing", 0)
             value["investing"] = 0
-            if value["invested"] >= value["cost"]:
+            if value["invested"] >= value.get("cost", json_tech_data.get(tech, {}).get("cost", 0) + calculated_nation.get("technology_cost_modifier", 0)):
                 value["researched"] = True
         technologies[tech] = value
     new_nation["technologies"] = technologies
