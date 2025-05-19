@@ -31,9 +31,7 @@
 	},
 	"bureaucrat": {
 		"display_name": "Bureaucrat",
-		"requirements":{
-			"district": "center"
-		},
+		"requirements":{},
 		"upkeep": {
 			"wood": 2
 		},
