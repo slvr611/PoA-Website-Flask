@@ -169,14 +169,13 @@ def deny_change(change_id):
     return True
 
 def deep_merge(original, updates):
-    if len(updates) == 0 or updates is None:
-        return updates
     merged = deepcopy(original)
     for key, value in updates.items():
-        if (
-            key in merged and isinstance(merged[key], dict) and isinstance(value, dict)
-        ):
-            merged[key] = deep_merge(merged[key], value)
+        if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
+            if len(value) == 0:
+                merged[key] = value
+            else:
+                merged[key] = deep_merge(merged[key], value)
         elif key in merged and isinstance(merged[key], list) and isinstance(value, list):
             for i, item in enumerate(value):
                 if i < len(merged[key]) and isinstance(merged[key][i], dict) and isinstance(item, dict):
