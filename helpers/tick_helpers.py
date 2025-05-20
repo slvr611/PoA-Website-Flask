@@ -5,6 +5,7 @@ from helpers.change_helpers import system_request_change, system_approve_change
 from app_core import mongo, json_data, upload_to_s3
 from flask import flash
 from app_core import backup_mongodb
+from copy import deepcopy
 import random
 import os
 import datetime
@@ -24,8 +25,8 @@ def tick(form_data):
     calculated_characters = []
     for character in old_characters:
         if character:
-            new_characters.append(character.copy())
-            calculated_characters.append(character.copy())
+            new_characters.append(deepcopy(character))
+            calculated_characters.append(deepcopy(character))
     
     for character in calculated_characters:
         calculated_fields = calculate_all_fields(character, character_schema, "character")
@@ -46,8 +47,8 @@ def tick(form_data):
     calculated_artifacts = []
     for artifact in old_artifacts:
         if artifact:
-            new_artifacts.append(artifact.copy())
-            calculated_artifacts.append(artifact.copy())
+            new_artifacts.append(deepcopy(artifact))
+            calculated_artifacts.append(deepcopy(artifact))
     
     for artifact in calculated_artifacts:
         calculated_fields = calculate_all_fields(artifact, artifact_schema, "artifact")
@@ -68,8 +69,8 @@ def tick(form_data):
     calculated_merchants = []
     for merchant in old_merchants:
         if merchant:
-            new_merchants.append(merchant.copy())
-            calculated_merchants.append(merchant.copy())
+            new_merchants.append(deepcopy(merchant))
+            calculated_merchants.append(deepcopy(merchant))
     
     for merchant in calculated_merchants:
         calculated_fields = calculate_all_fields(merchant, merchant_schema, "merchant")
@@ -90,8 +91,8 @@ def tick(form_data):
     calculated_mercenaries = []
     for mercenary in old_mercenaries:
         if mercenary:
-            new_mercenaries.append(mercenary.copy())
-            calculated_mercenaries.append(mercenary.copy())
+            new_mercenaries.append(deepcopy(mercenary))
+            calculated_mercenaries.append(deepcopy(mercenary))
     
     for mercenary in calculated_mercenaries:
         calculated_fields = calculate_all_fields(mercenary, mercenary_schema, "mercenary")
@@ -112,8 +113,8 @@ def tick(form_data):
     calculated_factions = []
     for faction in old_factions:
         if faction:
-            new_factions.append(faction.copy())
-            calculated_factions.append(faction.copy())
+            new_factions.append(deepcopy(faction))
+            calculated_factions.append(deepcopy(faction))
 
     for faction in calculated_factions:
         calculated_fields = calculate_all_fields(faction, faction_schema, "faction")
@@ -123,7 +124,7 @@ def tick(form_data):
         run_key = f"run_{tick_function_label}"
         if run_key in form_data:
             print(tick_function_label)
-            for i in range(len(old_nations)):
+            for i in range(len(old_factions)):
                 tick_summary += tick_function(old_factions[i], new_factions[i], calculated_factions[i], faction_schema)
 
 
@@ -134,8 +135,8 @@ def tick(form_data):
     calculated_nations = []
     for nation in old_nations:
         if nation:
-            new_nations.append(nation.copy())
-            calculated_nations.append(nation.copy())
+            new_nations.append(deepcopy(nation))
+            calculated_nations.append(deepcopy(nation))
     
     for nation in calculated_nations:
         calculated_fields = calculate_all_fields(nation, nation_schema, "nation")
@@ -206,7 +207,6 @@ def tick(form_data):
         system_approve_change(change_id)
 
     for i in range(len(old_nations)):
-        print(new_nations[i])
         change_id = system_request_change(
             data_type="nations",
             item_id=old_nations[i]["_id"],
@@ -263,6 +263,17 @@ def give_tick_summary(tick_summary):
     
     return summary_path
 
+def modifier_decay_tick(old_target, new_target, calculated_target, schema):
+    new_modifiers = []
+    for modifier in old_target.get("modifiers", []):
+        new_modifier = deepcopy(modifier)
+        if int(new_modifier["duration"]) > 0:
+            new_modifier["duration"] = int(new_modifier["duration"]) - 1
+        if int(new_modifier["duration"]) != 0:
+            new_modifiers.append(new_modifier)
+    new_target["modifiers"] = new_modifiers
+    return ""
+
 def progress_quests_tick(old_target, new_target, calculated_target, schema):
     for quest in new_target.get("progress_quests", []):
         quest["current_progress"] += quest.get("progress_per_tick", 0)
@@ -288,8 +299,8 @@ def character_death_tick(old_character, new_character, calculated_character, sch
             nation_schema, nation_db = get_data_on_category("nations")
             old_nation = nation_db.find_one({"_id": old_character.get("ruling_nation_org", "")})
             if old_nation:
-                new_nation = old_nation.copy()
-                calculated_nation = old_nation.copy()
+                new_nation = deepcopy(old_nation)
+                calculated_nation = deepcopy(old_nation)
                 calculated_fields = calculate_all_fields(old_nation, nation_schema, "nation")
                 calculated_nation.update(calculated_fields)
                 leader_death_stab_loss_roll = random.random()
@@ -316,8 +327,8 @@ def character_death_tick(old_character, new_character, calculated_character, sch
         artifacts = list(artifact_db.find({"owner": old_character["_id"]}))
         for old_artifact in artifacts:
             if old_artifact:
-                new_artifact = old_artifact.copy()
-                calculated_artifact = old_artifact.copy()
+                new_artifact = deepcopy(old_artifact)
+                calculated_artifact = deepcopy(old_artifact)
                 calculated_fields = calculate_all_fields(old_artifact, artifact_schema, "artifact")
                 calculated_artifact.update(calculated_fields)
 
@@ -363,17 +374,6 @@ def character_mana_tick(old_character, new_character, calculated_character, sche
 
 def character_age_tick(old_character, new_character, calculated_character, schema):
     new_character["age"] = old_character["age"] + 1
-    return ""
-
-def character_modifier_decay_tick(old_character, new_character, calculated_character, schema):
-    new_modifiers = []
-    for modifier in old_character.get("modifiers", []):
-        new_modifier = modifier.copy()
-        if int(new_modifier["duration"]) > 0:
-            new_modifier["duration"] = int(new_modifier["duration"]) - 1
-        if int(new_modifier["duration"]) != 0:
-            new_modifiers.append(new_modifier)
-    new_character["modifiers"] = new_modifiers
     return ""
 
 ###########################################################
@@ -439,8 +439,8 @@ def nation_tech_tick(old_nation, new_nation, calculated_nation, schema):
     new_nation["research_consumption_at_tick"] = calculated_nation.get("resource_consumption", {}).get("research", 0)
     json_tech_data = json_data["tech"]
 
-    new_nation["technologies"] = old_nation.get("technologies", {}).copy()
-    for tech, value in new_nation["technologies"]:
+    new_nation["technologies"] = deepcopy(old_nation.get("technologies", {}))
+    for tech, value in new_nation["technologies"].items():
         if value.get("investing", 0) > 0:
             value["invested"] = value.get("invested", 0) + value.get("investing", 0)
             value["investing"] = 0
@@ -577,17 +577,6 @@ def nation_passive_expansion_tick(old_nation, new_nation, calculated_nation, sch
         result += f"{old_nation.get('name', 'Unknown')} has expanded into adjacent territory.\n"
     return result
 
-def nation_modifier_decay_tick(old_nation, new_nation, calculated_nation, schema):
-    new_modifiers = []
-    for modifier in old_nation.get("modifiers", []):
-        new_modifier = modifier.copy()
-        if int(new_modifier["duration"]) > 0:
-            new_modifier["duration"] = int(new_modifier["duration"]) - 1
-        if int(new_modifier["duration"]) != 0:
-            new_modifiers.append(new_modifier)
-    new_nation["modifiers"] = new_modifiers
-    return ""
-
 def nation_job_cleanup_tick(old_nation, new_nation, calculated_nation, schema):
     new_jobs = {}
     for job in old_nation.get("jobs", {}).keys():
@@ -614,7 +603,7 @@ CHARACTER_TICK_FUNCTIONS = {
     "Character Heal Tick": character_heal_tick,
     "Character Mana Tick": character_mana_tick,
     "Character Age Tick": character_age_tick,
-    "Character Modifier Decay Tick": character_modifier_decay_tick,
+    "Character Modifier Decay Tick": modifier_decay_tick,
     "Character Progress Quests Tick": progress_quests_tick,
 }
 
@@ -647,7 +636,7 @@ NATION_TICK_FUNCTIONS = {
     "Nation Concessions Tick": nation_concessions_tick,
     "Nation Rebellion Tick": nation_rebellion_tick,
     "Nation Passive Expansion Tick": nation_passive_expansion_tick,
-    "Nation Modifier Decay Tick": nation_modifier_decay_tick,
+    "Nation Modifier Decay Tick": modifier_decay_tick,
     "Nation Progress Quests Tick": progress_quests_tick,
     "Nation Job Cleanup Tick": nation_job_cleanup_tick,
     "Nation Reset Rolling Karma to Zero (Generally Don't Use)": reset_rolling_karma_to_zero,
