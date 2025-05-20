@@ -31,7 +31,6 @@
 	},
 	"bureaucrat": {
 		"display_name": "Bureaucrat",
-		"requirements":{},
 		"upkeep": {
 			"wood": 2
 		},
