@@ -263,8 +263,13 @@ def give_tick_summary(tick_summary):
     return summary_path
 
 def progress_quests_tick(old_target, new_target, calculated_target, schema):
+    print(new_target.get("progress_quests", []))
+
     for quest in new_target.get("progress_quests", []):
         quest["current_progress"] += quest.get("progress_per_tick", 0)
+        print(quest)
+    
+    print(new_target.get("progress_quests", []))
     return ""
 
 ###########################################################

@@ -219,7 +219,7 @@ def keep_only_differences(before_data, after_data, change_type):
 def keep_only_differences_dict(before_data, after_data):
     new_before = {}
     new_after = {}
-    if len(after_data) == 0:
+    if len(after_data) == 0 and not deep_compare(before_data, after_data):  # If after_data is empty and before_data is not, then we want to include it in the changes to clear the data 
         return before_data, after_data
 
     for key in after_data.keys():
