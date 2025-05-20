@@ -206,6 +206,7 @@ def tick(form_data):
         system_approve_change(change_id)
 
     for i in range(len(old_nations)):
+        print(new_nations[i])
         change_id = system_request_change(
             data_type="nations",
             item_id=old_nations[i]["_id"],
@@ -263,13 +264,9 @@ def give_tick_summary(tick_summary):
     return summary_path
 
 def progress_quests_tick(old_target, new_target, calculated_target, schema):
-    print(new_target.get("progress_quests", []))
-
     for quest in new_target.get("progress_quests", []):
         quest["current_progress"] += quest.get("progress_per_tick", 0)
-        print(quest)
     
-    print(new_target.get("progress_quests", []))
     return ""
 
 ###########################################################
@@ -651,7 +648,7 @@ NATION_TICK_FUNCTIONS = {
     "Nation Rebellion Tick": nation_rebellion_tick,
     "Nation Passive Expansion Tick": nation_passive_expansion_tick,
     "Nation Modifier Decay Tick": nation_modifier_decay_tick,
-    "Progress Quests Tick": progress_quests_tick,
+    "Nation Progress Quests Tick": progress_quests_tick,
     "Nation Job Cleanup Tick": nation_job_cleanup_tick,
     "Nation Reset Rolling Karma to Zero (Generally Don't Use)": reset_rolling_karma_to_zero,
 }

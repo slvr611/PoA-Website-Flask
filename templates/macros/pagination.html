@@ -195,7 +195,7 @@
                 <div class="field-change">
                     <div class="field-label">{{ target_schema.properties.get(key, {}).get("label", key) }}:</div>
                     <div class="field-value">
-                        {% if key == "districts" or key == "cities" %}
+                        {% if (key == "districts" or key == "cities") and before_value is sequence and after_value is sequence %}
                             {% if after_value|length > before_value|length %}
                                 <span>Added: {{ after_value|length - before_value|length }} new {{ key }}</span>
                             {% endif %}
