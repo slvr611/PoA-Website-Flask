@@ -20,6 +20,19 @@
 			"artifact": ["Golem Manual"]
 		}
 	},
+	"classical_grey_wardens": {
+		"display_name": "Classical Grey Wardens",
+		"recruitment_cost": {
+			"money": 600
+		},
+		"upkeep": {
+			"iron": 2,
+			"wood": 1
+		},
+		"requirements": {
+			"mercenary": ["Grey Knights"]
+		}
+	},
 	"classical_uqnia_guardian": {
 		"display_name": "Classical Uqnia Guardian",
 		"recruitment_cost": {},
