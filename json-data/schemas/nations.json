@@ -433,7 +433,7 @@
 			},
 			"City State": {
 				"defensive_pact_slots": 1,
-				"effective_territory": -6,
+				"effective_territory": -2,
 				"city_slots": 1
 			},
 			"Trade Federation": {
@@ -579,27 +579,32 @@
         "bsonType": "enum",
 		"label": "Military Funding",
         "description": "How well funded the nation's military is",
-		"enum": ["Substandard", "Standard", "Notable", "Substantial", "Extreme"],
+		"enum": ["Minimal", "Substandard", "Standard", "Notable", "Substantial", "Extreme"],
 		"default": "Standard",
 		"laws": {
 			"Minimal": {
-				"money_income": 150
+				"money_income": 150,
+				"strength": -2
 			},
 			"Substandard": {
-				"money_income": 75
+				"money_income": 75,
+				"strength": -1
 			},
 			"Standard": {},
 			"Notable": {
 				"money_income": -75,
-				"unit_money_upkeep": 15
+				"unit_money_upkeep": 15,
+				"strength": 1
 			},
 			"Substantial": {
 				"money_income": -150,
-				"unit_money_upkeep": 30
+				"unit_money_upkeep": 30,
+				"strength": 2
 			},
 			"Extreme": {
 				"money_income": -225,
-				"unit_money_upkeep": 45
+				"unit_money_upkeep": 45,
+				"strength": 3
 			}
 		}
       },

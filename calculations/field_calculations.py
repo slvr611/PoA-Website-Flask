@@ -100,7 +100,7 @@ def calculate_all_fields(target, schema, target_data_type):
     for d in [effective_territory_modifiers, road_capacity_modifiers, effective_pop_capacity_modifiers]:
         for key, value in d.items():
             overall_total_modifiers[key] = overall_total_modifiers.get(key, 0) + value
-
+    
     for field, field_schema in schema_properties.items():
         if isinstance(field_schema, dict) and field_schema.get("calculated") and field not in calculated_values.keys():
             base_value = field_schema.get("base_value", 0)
