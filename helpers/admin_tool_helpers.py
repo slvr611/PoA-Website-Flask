@@ -63,12 +63,16 @@ def grow_population(nation, foreign_nation):
 
     pacted_allies = []
 
-    #TODO: Create a list of pacted allies
+    pacted_allies = list(mongo.db.diplo_relations.find({"nation_1": str(nation["_id"]), "pact_type": {"$in": ["Defensive Pact", "Military Alliance"]}}, {"nation_2": 1}))
+    pacted_allies += list(mongo.db.diplo_relations.find({"nation_2": str(nation["_id"]), "pact_type": {"$in": ["Defensive Pact", "Military Alliance"]}}, {"nation_1": 1}))
+
+    pacted_allies = [ally.get("nation_1", "") or ally.get("nation_2", "") for ally in pacted_allies]
 
     pops = []
     if pop_roll + roll_modifier + len(pacted_allies) >= 9 and pop_roll + roll_modifier < 9:
         pacted_ally = random.choice(pacted_allies)
-        pops = list(mongo.db.pops.find({"nation": str(pacted_ally["_id"])}, {"_id": 1, "race": 1, "culture": 1, "religion": 1}))
+        print(pacted_ally)
+        pops = list(mongo.db.pops.find({"nation": str(pacted_ally)}, {"_id": 1, "race": 1, "culture": 1, "religion": 1}))
     elif pop_roll + roll_modifier + len(pacted_allies) >= 9:
         pops = list(mongo.db.pops.find({"nation": str(foreign_nation["_id"])}, {"_id": 1, "race": 1, "culture": 1, "religion": 1}))
     else:
