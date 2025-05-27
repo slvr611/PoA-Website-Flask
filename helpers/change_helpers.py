@@ -177,13 +177,15 @@ def deep_merge(original, updates):
             else:
                 merged[key] = deep_merge(merged[key], value)
         elif key in merged and isinstance(merged[key], list) and isinstance(value, list):
+            new_list = []
             for i, item in enumerate(value):
                 if i < len(merged[key]) and isinstance(merged[key][i], dict) and isinstance(item, dict):
-                    merged[key][i] = deep_merge(merged[key][i], item)
+                    new_list.append(deep_merge(merged[key][i], item))
                 elif i < len(merged[key]):
-                    merged[key][i] = item
+                    new_list.append(item)
                 else:
-                    merged[key].append(item)
+                    new_list.append(item)
+            merged[key] = new_list
         else:
             merged[key] = value
     return merged
