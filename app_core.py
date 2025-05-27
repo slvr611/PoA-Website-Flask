@@ -17,7 +17,7 @@ from email import encoders
 import boto3
 from botocore.exceptions import ClientError
 
-load_dotenv()
+load_dotenv(override=True)
 
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "supersecretkey")
