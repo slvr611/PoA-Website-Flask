@@ -38,7 +38,7 @@
 		"requirements": {
 			"district": ["classical_workshop"],
 			"empire": true,
-			"name": ["Lumithal Conclave"]
+			"name": ["The Conclave"]
 		}
 	},
 	"imperial_vanguard": {

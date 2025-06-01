@@ -39,806 +39,959 @@
 		</div>
 	</div>
 	
-	<div class="main-columns">
-		<div class="table-wrapper">
-			<table class="info-table">
-				<tr class="resources-header-row">
-					<th colspan="2" class="resources-header">General</th>
-				</tr>
-				<tr>
-					<th>{{ schema.properties.stability.label }}:</th>
-					<td>{{ nation.stability }}</td>
-				</tr>
-				<tr>
-					<th>{{ schema.properties.stability_gain_chance.label }}:</th>
-					<td>{{ (nation.stability_gain_chance * 100)|int }}%</td>
-				</tr>
-				<tr>
-					<th>{{ schema.properties.stability_loss_chance.label }}:</th>
-					<td>{{ (nation.stability_loss_chance * 100)|int }}%</td>
-				</tr>
-				<tr>
-					<th>{{ schema.properties.stability_loss_chance_on_leader_death.label }}:</th>
-					<td>{{ (nation.stability_loss_chance_on_leader_death * 100)|int }}%</td>
-				</tr>
-				<tr>
-					<th>{{ schema.properties.infamy.label }}:</th>
-					<td>{{ nation.infamy }}</td>
-				</tr>
-				<tr>
-					<th>{{ schema.properties.karma.label }}:</th>
-					<td>{{ nation.karma }}</td>
-				</tr>
-				<tr>
-					<th>{{ schema.properties.rolling_karma.label }}:</th>
-					<td>{{ nation.rolling_karma }}</td>
-				</tr>
-				<tr>
-					<th>{{ schema.properties.temporary_karma.label }}:</th>
-					<td>{{ nation.temporary_karma }}</td>
-				</tr>
-				{% if nation.nomadic > 0 %}
-					<tr>
-						<th>{{ schema.properties.migration_distance.label }}:</th>
-						<td>{{ nation.migration_distance }}</td>
-					</tr>
-					<tr>
-						<th>{{ schema.properties.stationary_delay.label }}:</th>
-						<td>{{ nation.stationary_delay }}</td>
-					</tr>
-				{% endif %}
-			</table>
-		</div>
-		<div class="table-wrapper">
-			<table class="info-table">
-				<tr class="resources-header-row">
-					<th colspan="2" class="resources-header">Administration & Holdings</th>
-				</tr>
-				<tr>
-					<th>{{ schema.properties.administration.label }}:</th>
-					<td>{{ nation.administration }}</td>
-				</tr>
-				<tr>
-					<th>Territory:</th>
-					<td>{{ nation.current_territory }} / {{ nation.effective_territory }}</td>
-				</tr>
-				<tr>
-					<th>Roads:</th>
-					<td>{{ nation.road_usage }} / {{ nation.road_capacity }}</td>
-				</tr>
-			</table>
-			<h2>Territory Holdings</h2>
-			<table class="info-table">
-				{% for terrain, details in json_data["terrains"].items() %}
-					<tr>
-						<th>{{ details["display_name"] }}</th>
-						<td>{{ nation.get("territory_types", {}).get(terrain, 0) }}</td>
-					</tr>
-				{% endfor %}
-			</table>
-		</div>
-		<div class="table-wrapper">
-			<table class="info-table">
-				<tr class="resources-header-row">
-					<th colspan="2" class="resources-header">Income</th>
-				</tr>
-				<tr>
-					<th>{{ schema.properties.money.label }}:</th>
-					<td>{{ nation.money }} / {{ nation.money_capacity }}</td>
-				</tr>
-				<tr>
-					<th>{{ schema.properties.money_income.label }}:</th>
-					<td>{{ nation.money_income }}</td>
-				</tr>
-				<tr>
-					<th>{{ schema.properties.remaining_import_slots.label }}:</th>
-					<td>{{ nation.remaining_import_slots }}</td>
-				</tr>
-				<tr>
-					<th>{{ schema.properties.remaining_export_slots.label }}:</th>
-					<td>{{ nation.remaining_export_slots }}</td>
-				</tr>
-				<tr>
-					<th>{{ schema.properties.trade_distance.label }}:</th>
-					<td>{{ nation.trade_distance }}</td>
-				</tr>
-			</table>
-		</div>
-		<div class="table-wrapper">
-			<table class="info-table">
-				<tr class="resources-header-row">
-					<th colspan="2" class="resources-header">Demographics</th>
-				</tr>
-				<tr>
-					<th>{{ schema.properties.primary_race.label }}:</th>
-					{% if linked_objects['primary_race'] %}
-						<td><a href="{{ linked_objects['primary_race']['link'] }}">{{ linked_objects['primary_race']['name'] }}</a></td>
-					{% else %}
-						None
-					{% endif %}
-				</tr>
-				<tr>
-					<th>{{ schema.properties.primary_culture.label }}:</th>
-					{% if linked_objects['primary_culture'] %}
-						<td><a href="{{ linked_objects['primary_culture']['link'] }}">{{ linked_objects['primary_culture']['name'] }}</a></td>
-					{% else %}
-						None
-					{% endif %}
-				</tr>
-				<tr>
-					<th>{{ schema.properties.primary_religion.label }}:</th>
-					{% if linked_objects['primary_religion'] %}
-						<td><a href="{{ linked_objects['primary_religion']['link'] }}">{{ linked_objects['primary_religion']['name'] }}</a></td>
-					{% else %}
-						None
-					{% endif %}
-				</tr>
-				<tr>
-					<th>{{ schema.properties.unique_minority_count.label }}:</th>
-					<td>{{ nation.unique_minority_count }}</td>
-				</tr>
-			</table>
-			<table class="info-table">
-				<thead>
-					<tr class="resources-header-row">
-						<th colspan="4" class="resources-header">Population Details</th>
-					</tr>
-					<tr>
-						<th>#</th>
-						<th>Race</th>
-						<th>Culture</th>
-						<th>Religion</th>
-					</tr>
-				</thead>
-				<tbody>
-					{% for pop in linked_objects["pops"] %}
-						<tr>
-							<!-- If there's no separate name/ID, just show the loop index -->
-							<td><a href="{{ pop['link'] }}">{{ loop.index }}</a></td>
-
-							<!-- Link to Race detail page -->
-							<td>
-							{% if pop["linked_objects"]["race"] %}
-								<a href="{{ pop['linked_objects']['race']['link'] }}">{{ pop['linked_objects']['race']['name'] }}</a>
-							{% else %}
-								None
-							{% endif %}
-							</td>
-
-							<!-- Link to Culture detail page -->
-							<td>
-							{% if pop['linked_objects']['culture'] %}
-								<a href="{{ pop['linked_objects']['culture']['link'] }}">{{ pop['linked_objects']['culture']['name'] }}</a>
-							{% else %}
-								None
-							{% endif %}
-							</td>
-
-							<!-- Link to Religion detail page -->
-							<td>
-							{% if pop["linked_objects"]["religion"] %}
-								<a href="{{ pop['linked_objects']['religion']['link'] }}">{{ pop["linked_objects"]["religion"]["name"] }}</a>
-							{% else %}
-								None
-							{% endif %}
-							</td>
-						</tr>
-					{% endfor %}
-				</tbody>
-			</table>
-		</div>
-		<div class="table-wrapper">
-			<table class="info-table">
-				<tr class="resources-header-row">
-					<th colspan="2" class="resources-header">Government & Laws</th>
-				</tr>
-				<tr>
-					<th>{{ schema.properties.government_type.label }}:</th>
-					<td>{{ nation.government_type }}</td>
-				</tr>
-				<tr>
-					<th>{{ schema.properties.succession_type.label }}:</th>
-					<td>{{ nation.succession_type }}</td>
-				</tr>
-				{% if nation.nomadic > 0 %}
-					<tr>
-						<th>{{ schema.properties.nomad_camp_type.label }}:</th>
-						<td>{{ nation.nomad_camp_type }}</td>
-					</tr>
-				{% endif %}
-				<tr>
-					<th>{{ schema.properties.conscription_type.label }}:</th>
-					<td>{{ nation.conscription_type }}</td>
-				</tr>
-				<tr>
-					<th>{{ schema.properties.military_funding.label }}:</th>
-					<td>{{ nation.military_funding }}</td>
-				</tr>
-				<tr>
-					<th>{{ schema.properties.magic_stance.label }}:</th>
-					<td>{{ nation.magic_stance }}</td>
-				</tr>
-				<tr>
-					<th>{{ schema.properties.citizenship_stance.label }}:</th>
-					<td>{{ nation.citizenship_stance }}</td>
-				</tr>
-				<tr>
-					<th>{{ schema.properties.foreign_acceptance.label }}:</th>
-					<td>{{ nation.foreign_acceptance }}</td>
-				</tr>
-				<tr>
-					<th>{{ schema.properties.subject_stance.label }}:</th>
-					<td>{{ nation.subject_stance }}</td>
-				</tr>
-				<tr>
-					<th>{{ schema.properties.land_doctrine.label }}:</th>
-					<td>{{ nation.land_doctrine }}</td>
-				</tr>
-				<tr>
-					<th>{{ schema.properties.naval_doctrine.label }}:</th>
-					<td>{{ nation.naval_doctrine }}</td>
-				</tr>
-				<tr>
-					<th>{{ schema.properties.diplomatic_stance.label }}:</th>
-					<td>{{ nation.diplomatic_stance }}</td>
-				</tr>
-				<tr>
-					<th>{{ schema.properties.scientific_stance.label }}:</th>
-					<td>{{ nation.scientific_stance }}</td>
-				</tr>
-				<tr>
-					<th>{{ schema.properties.economy_type.label }}:</th>
-					<td>{{ nation.economy_type }}</td>
-				</tr>
-				<tr>
-					<th>{{ schema.properties.expansion_stance.label }}:</th>
-					<td>{{ nation.expansion_stance }}</td>
-				</tr>
-				<tr>
-					<th>{{ schema.properties.mercenary_law.label }}:</th>
-					<td>{{ nation.mercenary_law }}</td>
-				</tr>
-				<tr>
-					<th>{{ schema.properties.consumption_stance.label }}:</th>
-					<td>{{ nation.consumption_stance }}</td>
-				</tr>
-				<tr>
-					<th>{{ schema.properties.tax_stance.label }}:</th>
-					<td>{{ nation.tax_stance }}</td>
-				</tr>
-				<tr>
-					<th>{{ schema.properties.justice_stance.label }}:</th>
-					<td>{{ nation.justice_stance }}</td>
-				</tr>
-			</table>
-		</div>
-		{% if "overlord" in nation and nation["overlord"] is not none and nation["overlord"] != "" %}
-			<div class="table-wrapper">
-				<table class="info-table">
-					<tr class="resources-header-row">
-						<th colspan="2" class="resources-header">Vassalship</th>
-					</tr>
-					<tr>
-						<th>{{ schema.properties.overlord.label }}:</th>
-						<td>
-							{% if linked_objects["overlord"] %}
-								<a href="{{ linked_objects['overlord']['link'] }}">{{ linked_objects["overlord"]["name"] }}</a>
-							{% else %}
-								None
-							{% endif %}
-						</td>
-					</tr>
-					<tr>
-						<th>{{ schema.properties.vassal_type.label }}:</th>
-						<td>{{ nation.vassal_type }}</td>
-					</tr>
-					<tr>
-						<th>{{ schema.properties.compliance.label }}:</th>
-						<td>{{ nation.compliance }}</td>
-					</tr>
-					<tr>
-						<th>{{ schema.properties.disobey_chance.label }}:</th>
-						<td>{{ (nation.disobey_chance * 100)|int }}%</td>
-					</tr>
-					<tr>
-						<th>{{ schema.properties.rebellion_chance.label }}:</th>
-						<td>{{ (nation.rebellion_chance * 100)|int }}%</td>
-					</tr>
-					<tr>
-						<th>{{ schema.properties.concessions_chance.label }}:</th>
-						<td>{{ (nation.concessions_chance * 100)|int }}%</td>
-					</tr>
-					<tr>
-						<th>{{ schema.properties.concessions_qty.label }}:</th>
-						<td>{{ nation.concessions_qty }}</td>
-					</tr>
-					<tr>
-						<th>{{ schema.properties.get("concessions").label }}:</th>
-						<td>
-							{% if nation.get("concessions", None) is mapping %}
-								{% for resource, amount in nation.get("concessions", {}).items() %}
-									{{ resource }}: {{ amount }}<br>
-								{% endfor %}
-							{% endif %}
-						</td>
-					</tr>
-				</table>
+	<div class="expandable-sections">
+		<div class="expandable-section">
+			<div class="section-header" onclick="toggleSection(this)">
+				<h2>General Information</h2>
+				<span class="toggle-icon">▼</span>
 			</div>
-		{% endif %}
-		{% if "vassals" in linked_objects and linked_objects["vassals"] is not none %} <!-- TODO: Fix this -->
-			<div class="table-wrapper">
-				<table class="info-table">
-					<thead>
+			<div class="section-content">
+				<div class="table-wrapper">
+					<table class="info-table">
 						<tr class="resources-header-row">
-							<th colspan="7" class="resources-header">Vassals</th>
+							<th colspan="2" class="resources-header">General</th>
 						</tr>
 						<tr>
-							<th>Nation</th>
-							<th>Compliance</th>
-							<th>Chance to Disobey</th>
-							<th>Rebellion Chance</th>
-							<th>Concessions Chance</th>
-							<th>Concessions</th>
-							<th>Temperament</th>
+							<th>{{ schema.properties.stability.label }}:</th>
+							<td>{{ nation.stability }}</td>
 						</tr>
-					</thead>
-					<tbody>
-						{% for vassal in linked_objects["vassals"] %}
+						<tr>
+							<th>{{ schema.properties.stability_gain_chance.label }}:</th>
+							<td>{{ (nation.stability_gain_chance * 100)|int }}%</td>
+						</tr>
+						<tr>
+							<th>{{ schema.properties.stability_loss_chance.label }}:</th>
+							<td>{{ (nation.stability_loss_chance * 100)|int }}%</td>
+						</tr>
+						<tr>
+							<th>{{ schema.properties.stability_loss_chance_on_leader_death.label }}:</th>
+							<td>{{ (nation.stability_loss_chance_on_leader_death * 100)|int }}%</td>
+						</tr>
+						<tr>
+							<th>{{ schema.properties.infamy.label }}:</th>
+							<td>{{ nation.infamy }}</td>
+						</tr>
+						<tr>
+							<th>{{ schema.properties.karma.label }}:</th>
+							<td>{{ nation.karma }}</td>
+						</tr>
+						<tr>
+							<th>{{ schema.properties.rolling_karma.label }}:</th>
+							<td>{{ nation.rolling_karma }}</td>
+						</tr>
+						<tr>
+							<th>{{ schema.properties.temporary_karma.label }}:</th>
+							<td>{{ nation.temporary_karma }}</td>
+						</tr>
+						{% if nation.nomadic > 0 %}
 							<tr>
-								<td><a href="{{ vassal['link'] }}">{{ vassal["name"] }}</a></td>
-								
-								<td>{{ vassal["compliance"] }}</td>
-								
-								<td>{{ (vassal.get("disobey_chance", 0) * 100)|int }}%</td>
-								
-								<td>{{ (vassal.get("rebellion_chance", 0) * 100)|int }}%</td>
+								<th>{{ schema.properties.migration_distance.label }}:</th>
+								<td>{{ nation.migration_distance }}</td>
+							</tr>
+							<tr>
+								<th>{{ schema.properties.stationary_delay.label }}:</th>
+								<td>{{ nation.stationary_delay }}</td>
+							</tr>
+						{% endif %}
+					</table>
+				</div>
+				<div class="table-wrapper">
+					<table class="info-table">
+						<tr class="resources-header-row">
+							<th colspan="2" class="resources-header">Income</th>
+						</tr>
+						<tr>
+							<th>{{ schema.properties.money.label }}:</th>
+							<td>{{ nation.money }} / {{ nation.money_capacity }}</td>
+						</tr>
+						<tr>
+							<th>{{ schema.properties.money_income.label }}:</th>
+							<td>{{ nation.money_income }}</td>
+						</tr>
+						<tr>
+							<th>{{ schema.properties.remaining_import_slots.label }}:</th>
+							<td>{{ nation.remaining_import_slots }}</td>
+						</tr>
+						<tr>
+							<th>{{ schema.properties.remaining_export_slots.label }}:</th>
+							<td>{{ nation.remaining_export_slots }}</td>
+						</tr>
+						<tr>
+							<th>{{ schema.properties.trade_distance.label }}:</th>
+							<td>{{ nation.trade_distance }}</td>
+						</tr>
+					</table>
+				</div>
+				<div class="table-wrapper">
+					<table class="info-table">
+						<tr class="resources-header-row">
+							<th colspan="2" class="resources-header">Miscellaneous</th>
+						</tr>
+						<tr>
+							<th>{{ schema.properties.origin.label }}:</th>
+							<td>{{ nation.origin }}</td>
+						</tr>
+						<tr>
+							<th>{{ schema.properties.temperament.label }}:</th>
+							<td>{{ nation.temperament }}</td>
+						</tr>
+					</table>
+				</div>
+			</div>
+		</div>
 
-								<td>{{ (vassal.get("concessions_chance", 0) * 100)|int }}%</td>
-								
+		<div class="expandable-section">
+			<div class="section-header" onclick="toggleSection(this)">
+				<h2>Administration & Holdings</h2>
+				<span class="toggle-icon">▼</span>
+			</div>
+			<div class="section-content">
+				<div class="table-wrapper">
+					<table class="info-table">
+						<tr class="resources-header-row">
+							<th colspan="2" class="resources-header">Administration</th>
+						</tr>
+						<tr>
+							<th>{{ schema.properties.administration.label }}:</th>
+							<td>{{ nation.administration }}</td>
+						</tr>
+						<tr>
+							<th>Territory:</th>
+							<td>{{ nation.current_territory }} / {{ nation.effective_territory }}</td>
+						</tr>
+						<tr>
+							<th>Roads:</th>
+							<td>{{ nation.road_usage }} / {{ nation.road_capacity }}</td>
+						</tr>
+					</table>
+					<table class="info-table">
+						<tr class="resources-header-row">
+							<th colspan="2" class="resources-header">Territory Holdings</th>
+						</tr>
+						{% for terrain, details in json_data["terrains"].items() %}
+							<tr>
+								<th>{{ details["display_name"] }}</th>
+								<td>{{ nation.get("territory_types", {}).get(terrain, 0) }}</td>
+							</tr>
+						{% endfor %}
+					</table>
+				</div>
+			</div>
+		</div>
+
+		
+		<div class="expandable-section">
+			<div class="section-header" onclick="toggleSection(this)">
+				<h2>Demographics & Population</h2>
+				<span class="toggle-icon">▼</span>
+			</div>
+			<div class="section-content">
+				<div class="table-wrapper">
+					<table class="info-table">
+						<tr class="resources-header-row">
+							<th colspan="2" class="resources-header">Demographics</th>
+						</tr>
+						<tr>
+							<th>{{ schema.properties.primary_race.label }}:</th>
+							{% if linked_objects['primary_race'] %}
+								<td><a href="{{ linked_objects['primary_race']['link'] }}">{{ linked_objects['primary_race']['name'] }}</a></td>
+							{% else %}
+								None
+							{% endif %}
+						</tr>
+						<tr>
+							<th>{{ schema.properties.primary_culture.label }}:</th>
+							{% if linked_objects['primary_culture'] %}
+								<td><a href="{{ linked_objects['primary_culture']['link'] }}">{{ linked_objects['primary_culture']['name'] }}</a></td>
+							{% else %}
+								None
+							{% endif %}
+						</tr>
+						<tr>
+							<th>{{ schema.properties.primary_religion.label }}:</th>
+							{% if linked_objects['primary_religion'] %}
+								<td><a href="{{ linked_objects['primary_religion']['link'] }}">{{ linked_objects['primary_religion']['name'] }}</a></td>
+							{% else %}
+								None
+							{% endif %}
+						</tr>
+						<tr>
+							<th>{{ schema.properties.unique_minority_count.label }}:</th>
+							<td>{{ nation.unique_minority_count }}</td>
+						</tr>
+					</table>
+					<table class="info-table">
+						<thead>
+							<tr class="resources-header-row">
+								<th colspan="4" class="resources-header">Population Details</th>
+							</tr>
+							<tr>
+								<th>#</th>
+								<th>Race</th>
+								<th>Culture</th>
+								<th>Religion</th>
+							</tr>
+						</thead>
+						<tbody>
+							{% for pop in linked_objects["pops"] %}
+								<tr>
+									<!-- If there's no separate name/ID, just show the loop index -->
+									<td><a href="{{ pop['link'] }}">{{ loop.index }}</a></td>
+
+									<!-- Link to Race detail page -->
+									<td>
+									{% if pop["linked_objects"]["race"] %}
+										<a href="{{ pop['linked_objects']['race']['link'] }}">{{ pop['linked_objects']['race']['name'] }}</a>
+									{% else %}
+										None
+									{% endif %}
+									</td>
+
+									<!-- Link to Culture detail page -->
+									<td>
+									{% if pop['linked_objects']['culture'] %}
+										<a href="{{ pop['linked_objects']['culture']['link'] }}">{{ pop['linked_objects']['culture']['name'] }}</a>
+									{% else %}
+										None
+									{% endif %}
+									</td>
+
+									<!-- Link to Religion detail page -->
+									<td>
+									{% if pop["linked_objects"]["religion"] %}
+										<a href="{{ pop['linked_objects']['religion']['link'] }}">{{ pop["linked_objects"]["religion"]["name"] }}</a>
+									{% else %}
+										None
+									{% endif %}
+									</td>
+								</tr>
+							{% endfor %}
+						</tbody>
+					</table>
+				</div>
+			</div>
+		</div>
+		
+		<div class="expandable-section">
+			<div class="section-header" onclick="toggleSection(this)">
+				<h2>Government & Laws</h2>
+				<span class="toggle-icon">▼</span>
+			</div>
+			<div class="section-content">
+				<div class="table-wrapper">
+					<table class="info-table">
+						<tr class="resources-header-row">
+							<th colspan="2" class="resources-header">Government & Laws</th>
+						</tr>
+						<tr>
+							<th>{{ schema.properties.government_type.label }}:</th>
+							<td>{{ nation.government_type }}</td>
+						</tr>
+						<tr>
+							<th>{{ schema.properties.succession_type.label }}:</th>
+							<td>{{ nation.succession_type }}</td>
+						</tr>
+						{% if nation.nomadic > 0 %}
+							<tr>
+								<th>{{ schema.properties.nomad_camp_type.label }}:</th>
+								<td>{{ nation.nomad_camp_type }}</td>
+							</tr>
+						{% endif %}
+						<tr>
+							<th>{{ schema.properties.conscription_type.label }}:</th>
+							<td>{{ nation.conscription_type }}</td>
+						</tr>
+						<tr>
+							<th>{{ schema.properties.military_funding.label }}:</th>
+							<td>{{ nation.military_funding }}</td>
+						</tr>
+						<tr>
+							<th>{{ schema.properties.magic_stance.label }}:</th>
+							<td>{{ nation.magic_stance }}</td>
+						</tr>
+						<tr>
+							<th>{{ schema.properties.citizenship_stance.label }}:</th>
+							<td>{{ nation.citizenship_stance }}</td>
+						</tr>
+						<tr>
+							<th>{{ schema.properties.foreign_acceptance.label }}:</th>
+							<td>{{ nation.foreign_acceptance }}</td>
+						</tr>
+						<tr>
+							<th>{{ schema.properties.subject_stance.label }}:</th>
+							<td>{{ nation.subject_stance }}</td>
+						</tr>
+						<tr>
+							<th>{{ schema.properties.land_doctrine.label }}:</th>
+							<td>{{ nation.land_doctrine }}</td>
+						</tr>
+						<tr>
+							<th>{{ schema.properties.naval_doctrine.label }}:</th>
+							<td>{{ nation.naval_doctrine }}</td>
+						</tr>
+						<tr>
+							<th>{{ schema.properties.diplomatic_stance.label }}:</th>
+							<td>{{ nation.diplomatic_stance }}</td>
+						</tr>
+						<tr>
+							<th>{{ schema.properties.scientific_stance.label }}:</th>
+							<td>{{ nation.scientific_stance }}</td>
+						</tr>
+						<tr>
+							<th>{{ schema.properties.economy_type.label }}:</th>
+							<td>{{ nation.economy_type }}</td>
+						</tr>
+						<tr>
+							<th>{{ schema.properties.expansion_stance.label }}:</th>
+							<td>{{ nation.expansion_stance }}</td>
+						</tr>
+						<tr>
+							<th>{{ schema.properties.mercenary_law.label }}:</th>
+							<td>{{ nation.mercenary_law }}</td>
+						</tr>
+						<tr>
+							<th>{{ schema.properties.consumption_stance.label }}:</th>
+							<td>{{ nation.consumption_stance }}</td>
+						</tr>
+						<tr>
+							<th>{{ schema.properties.tax_stance.label }}:</th>
+							<td>{{ nation.tax_stance }}</td>
+						</tr>
+						<tr>
+							<th>{{ schema.properties.justice_stance.label }}:</th>
+							<td>{{ nation.justice_stance }}</td>
+						</tr>
+					</table>
+				</div>
+			</div>
+		</div>
+
+		{% if "overlord" in nation and nation["overlord"] is not none and nation["overlord"] != "" %}
+			<div class="expandable-section">
+				<div class="section-header" onclick="toggleSection(this)">
+					<h2>Vassalship</h2>
+					<span class="toggle-icon">▼</span>
+				</div>
+				<div class="section-content">
+					<div class="table-wrapper">
+						<table class="info-table">
+							<tr class="resources-header-row">
+								<th colspan="2" class="resources-header">Vassalship</th>
+							</tr>
+							<tr>
+								<th>{{ schema.properties.overlord.label }}:</th>
 								<td>
-									{% if vassal.get("concessions", None) is mapping %}
-										{% for resource, amount in vassal.get("concessions", {}).items() %}
+									{% if linked_objects["overlord"] %}
+										<a href="{{ linked_objects['overlord']['link'] }}">{{ linked_objects["overlord"]["name"] }}</a>
+									{% else %}
+										None
+									{% endif %}
+								</td>
+							</tr>
+							<tr>
+								<th>{{ schema.properties.vassal_type.label }}:</th>
+								<td>{{ nation.vassal_type }}</td>
+							</tr>
+							<tr>
+								<th>{{ schema.properties.compliance.label }}:</th>
+								<td>{{ nation.compliance }}</td>
+							</tr>
+							<tr>
+								<th>{{ schema.properties.disobey_chance.label }}:</th>
+								<td>{{ (nation.disobey_chance * 100)|int }}%</td>
+							</tr>
+							<tr>
+								<th>{{ schema.properties.rebellion_chance.label }}:</th>
+								<td>{{ (nation.rebellion_chance * 100)|int }}%</td>
+							</tr>
+							<tr>
+								<th>{{ schema.properties.concessions_chance.label }}:</th>
+								<td>{{ (nation.concessions_chance * 100)|int }}%</td>
+							</tr>
+							<tr>
+								<th>{{ schema.properties.concessions_qty.label }}:</th>
+								<td>{{ nation.concessions_qty }}</td>
+							</tr>
+							<tr>
+								<th>{{ schema.properties.get("concessions").label }}:</th>
+								<td>
+									{% if nation.get("concessions", None) is mapping %}
+										{% for resource, amount in nation.get("concessions", {}).items() %}
 											{{ resource }}: {{ amount }}<br>
 										{% endfor %}
 									{% endif %}
 								</td>
+							</tr>
+						</table>
+					</div>
+				</div>
+			</div>
+		{% endif %}
+		{% if "vassals" in linked_objects and linked_objects["vassals"] is not none %}
+			<div class="expandable-section">
+				<div class="section-header" onclick="toggleSection(this)">
+					<h2>Vassals</h2>
+					<span class="toggle-icon">▼</span>
+				</div>
+				<div class="section-content">
+					<div class="table-wrapper">
+						<table class="info-table">
+							<thead>
+								<tr class="resources-header-row">
+									<th colspan="7" class="resources-header">Vassals</th>
+								</tr>
+								<tr>
+									<th>Nation</th>
+									<th>Compliance</th>
+									<th>Chance to Disobey</th>
+									<th>Rebellion Chance</th>
+									<th>Concessions Chance</th>
+									<th>Concessions</th>
+									<th>Temperament</th>
+								</tr>
+							</thead>
+							<tbody>
+								{% for vassal in linked_objects["vassals"] %}
+									<tr>
+										<td><a href="{{ vassal['link'] }}">{{ vassal["name"] }}</a></td>
+										
+										<td>{{ vassal["compliance"] }}</td>
+										
+										<td>{{ (vassal.get("disobey_chance", 0) * 100)|int }}%</td>
+										
+										<td>{{ (vassal.get("rebellion_chance", 0) * 100)|int }}%</td>
 
-								<td>{{ vassal.get("temperament", "Unknown") }}</td>
+										<td>{{ (vassal.get("concessions_chance", 0) * 100)|int }}%</td>
+										
+										<td>
+											{% if vassal.get("concessions", None) is mapping %}
+												{% for resource, amount in vassal.get("concessions", {}).items() %}
+													{{ resource }}: {{ amount }}<br>
+												{% endfor %}
+											{% endif %}
+										</td>
+
+										<td>{{ vassal.get("temperament", "Unknown") }}</td>
+									</tr>
+								{% endfor %}
+							</tbody>
+						</table>
+					</div>
+				</div>
+			</div>
+		{% endif %}
+		
+		<div class="expandable-section">
+			<div class="section-header" onclick="toggleSection(this)">
+				<h2>Diplomatic Relations</h2>
+				<span class="toggle-icon">▼</span>
+			</div>
+			<div class="section-content">
+				<div class="table-wrapper">
+					<table class="info-table">
+						<thead>
+							<tr class="resources-header-row">
+								<th colspan="5" class="resources-header">Diplomatic Relations</th>
+							</tr>
+							<tr>
+								<th>Diplomatic Relation</th>
+								<th>Nation</th>
+								<th>Relation</th>
+								<th>Pact Type</th>
+								<th>Temperament</th>
+							</tr>
+						</thead>
+						<tbody>
+							{% set diplo_index = namespace(value=1) %}
+							{% for relation in linked_objects.get("diplomatic_relations_1", {})%}
+								<tr>
+									<!-- If there's no separate name/ID, just show the loop index -->
+									<td><a href="{{ relation['link'] }}">{{ diplo_index.value }}</a></td>
+
+									<!-- Link to Nation detail page -->
+									<td>
+									{% if relation["linked_objects"]["nation_2"] %}
+										<a href="{{ relation['linked_objects'].get('nation_2', {}).get('link', '') }}">{{ relation['linked_objects'].get('nation_2', {}).get('name', 'None') }}</a>
+									{% else %}
+										None
+									{% endif %}
+									</td>
+
+									<td>{{ relation.get("relation", "Neutral") }}</td>
+
+									<td>{{ relation.get("pact_type", "None") }}</td>
+									
+									<td>
+										{% if relation.get("pact_type", "None") in ["Defensive Pact", "Military Alliance"] %}
+											{{ relation['linked_objects'].get('nation_2', {}).get('temperament', 'None') }}
+										{% else %}
+											Unknown
+										{% endif %}
+									</td>
+								</tr>
+								{% set diplo_index.value = diplo_index.value + 1 %}
+							{% endfor %}
+							{% for relation in linked_objects.get("diplomatic_relations_2", {})%}
+								<tr>
+									<!-- If there's no separate name/ID, just show the loop index -->
+									<td><a href="{{ relation['link'] }}">{{ diplo_index.value }}</a></td>
+
+									<!-- Link to Nation detail page -->
+									<td>
+									{% if relation["linked_objects"].get("nation_1", None) %}
+										<a href="{{ relation['linked_objects'].get('nation_1', {}).get('link', '') }}">{{ relation['linked_objects'].get('nation_1', {}).get('name', 'None') }}</a>
+									{% else %}
+										None
+									{% endif %}
+									</td>
+
+									<td>{{ relation.get("relation", "Neutral") }}</td>
+
+									<td>{{ relation.get("pact_type", "None") }}</td>
+									
+									<td>
+										{% if relation.get("pact_type", "None") in ["Defensive Pact", "Military Alliance"] %}
+											{{ relation['linked_objects'].get('nation_1', {}).get('temperament', 'None') }}
+										{% else %}
+											Unknown
+										{% endif %}
+									</td>
+								</tr>
+								{% set diplo_index.value = diplo_index.value + 1 %}
+							{% endfor %}
+						</tbody>
+					</table>
+				</div>
+			</div>
+		</div>
+
+		<div class="expandable-section">
+			<div class="section-header" onclick="toggleSection(this)">
+				<h2>War</h2>
+				<span class="toggle-icon">▼</span>
+			</div>
+			<div class="section-content">
+				<div class="table-wrapper">
+					<h2>War Modifiers</h2>
+					<table class="info-table">
+						<tr>
+							<th>{{ schema.properties.land_attack.label }}:</th>
+							<td>{{ nation.land_attack }}</td>
+						</tr>
+						<tr>
+							<th>{{ schema.properties.land_defense.label }}:</th>
+							<td>{{ nation.land_defense }}</td>
+						</tr>
+						<tr>
+							<th>{{ schema.properties.naval_attack.label }}:</th>
+							<td>{{ nation.naval_attack }}</td>
+						</tr>
+						<tr>
+							<th>{{ schema.properties.naval_defense.label }}:</th>
+							<td>{{ nation.naval_defense }}</td>
+						</tr>
+						<tr>
+							<th>{{ schema.properties.mercenary_land_attack.label }}:</th>
+							<td>{{ nation.mercenary_land_attack }}</td>
+						</tr>
+						<tr>
+							<th>{{ schema.properties.mercenary_land_defense.label }}:</th>
+							<td>{{ nation.mercenary_land_defense }}</td>
+						</tr>
+						<tr>
+							<th>{{ schema.properties.mercenary_naval_attack.label }}:</th>
+							<td>{{ nation.mercenary_naval_attack }}</td>
+						</tr>
+						<tr>
+							<th>{{ schema.properties.mercenary_naval_defense.label }}:</th>
+							<td>{{ nation.mercenary_naval_defense }}</td>
+						</tr>
+					</table>
+					<h2>Land Units</h2>
+					<p>Land Units: {{  nation.land_unit_count }}/{{ nation.land_unit_capacity }}</p>
+					<table class="jobs-table">
+						<thead>
+							<tr>
+								<th>Unit</th>
+								<th>Unit Count</th>
+								<th>Upkeep</th>
+							</tr>
+						</thead>
+						<tbody>
+							{% for unit_key, unit in nation.land_unit_details.items() %}
+								<tr>
+									<td>{{ unit.display_name }}</td>
+									<td>{{ nation.get("land_units", {}).get(unit_key, 0) }}</td>
+									<td>
+										{% if "upkeep" in unit %}
+											{% for resource, cost in unit.upkeep.items() %}
+												{{ resource }}: {{ cost }}<br>
+											{% endfor %}
+										{% endif %}
+									</td>
+								</tr>
+							{% endfor %}
+						</tbody>
+					</table>
+					<h2>Naval Units</h2>
+					<p>Naval Units: {{ nation.naval_unit_count }}/{{ nation.naval_unit_capacity }}</p>
+					<table class="jobs-table">
+						<thead>
+							<tr>
+								<th>Unit</th>
+								<th>Unit Count</th>
+								<th>Upkeep</th>
+							</tr>
+						</thead>
+						<tbody>
+							{% for unit_key, unit in nation.naval_unit_details.items() %}
+								<tr>
+									<td>{{ unit.display_name }}</td>
+									<td>{{ nation.get("naval_units", {}).get(unit_key, 0) }}</td>
+									<td>
+										{% if "upkeep" in unit %}
+											{% for resource, cost in unit.upkeep.items() %}
+												{{ resource }}: {{ cost }}<br>
+											{% endfor %}
+										{% endif %}
+									</td>
+								</tr>
+							{% endfor %}
+						</tbody>
+					</table>	
+				</div>
+			</div>
+		</div>
+		
+		<div class="expandable-section">
+			<div class="section-header" onclick="toggleSection(this)">
+				<h2>Resources & Jobs</h2>
+				<span class="toggle-icon">▼</span>
+			</div>
+			<div class="section-content">
+				<h2>Resources</h2>
+				<table class="resources-table">
+					<!-- First, a header row for the “General Resources” label -->
+					<thead>
+						<tr class="resources-header-row">
+							<th colspan="6" class="resources-header">General Resources</th>
+						</tr>
+						<tr>
+							<th>Resource</th>
+							<th>Production</th>
+							<th>Consumption</th>
+							<th>Excess</th>
+							<th>Storage</th>
+						</tr>
+					</thead>
+					<tbody>
+						{% for resource in json_data["general_resources"] %}
+							<tr>
+								<td>{{ resource.name }}</td>
+								<td>{{ nation.get("resource_production", {}).get(resource["key"], 0) }}</td>
+								<td>{{ nation.get("resource_consumption", {}).get(resource["key"], 0) }}</td>
+								{% set excess_value = nation.get("resource_excess", {}).get(resource["key"], 0) %}
+								{% if excess_value < 0 %}
+									<td class="excess-negative">{{ excess_value }}</td>
+								{% elif excess_value > 0 %}
+									<td class="excess-positive">{{ excess_value }}</td>
+								{% else %}
+									<td>{{ excess_value }}</td>
+								{% endif %}
+								<td>{{ nation.get("resource_storage", {}).get(resource["key"], 0) }} / {{ nation.get("resource_capacity", {}).get(resource["key"], 0) }}</td>
+							</tr>
+						{% endfor %}
+					</tbody>
+					<!-- A second header row for the “Unique Resources” label -->
+					<thead>
+						<tr class="resources-header-row">
+							<th colspan="6" class="resources-header">Unique Resources</th>
+						</tr>
+						<tr>
+							<th>Resource</th>
+							<th>Production</th>
+							<th>Consumption</th>
+							<th>Excess</th>
+							<th>Storage</th>
+						</tr>
+					</thead>
+					<tbody>
+						{% for resource in json_data["unique_resources"] %}
+							<tr>
+								<td>{{ resource.name }}</td>
+								<td>{{ nation.get("resource_production", {}).get(resource["key"], 0) }}</td>
+								<td>{{ nation.get("resource_consumption", {}).get(resource["key"], 0) }}</td>
+								{% set excess_value = nation.get("resource_excess", {}).get(resource["key"], 0) %}
+								{% if excess_value < 0 %}
+									<td class="excess-negative">{{ excess_value }}</td>
+								{% elif excess_value > 0 %}
+									<td class="excess-positive">{{ excess_value }}</td>
+								{% else %}
+									<td>{{ excess_value }}</td>
+								{% endif %}
+								<td>{{ nation.get("resource_storage", {}).get(resource["key"], 0) }} / {{ nation.get("resource_capacity", {}).get(resource["key"], 0) }}</td>
 							</tr>
 						{% endfor %}
 					</tbody>
 				</table>
+				<h2>Jobs</h2>
+				<p>Working Pops: {{ nation.working_pop_count }}/{{ nation.pop_count }}</p>
+				<table class="jobs-table">
+					<thead>
+						<tr>
+							<th>Job</th>
+							<th>Assigned Pops</th>
+							<th>Upkeep</th>
+							<th>Production</th>
+						</tr>
+					</thead>
+					<tbody>
+						{% for job_key, job in nation.job_details.items() %}
+							<tr>
+								<td>{{ job.display_name }}</td>
+								<td>{{ nation.jobs[job_key] if job_key in nation.jobs else 0 }}</td>
+								<td>
+									{% if "upkeep" in job %}
+										{% for resource, cost in job.upkeep.items() %}
+											{{ resource }}: {{ cost }}<br>
+										{% endfor %}
+									{% endif %}
+								</td>
+								<td>
+									{% if "production" in job %}
+										{% for resource, prod in job.production.items() %}
+											{{ resource }}: {{ prod }}<br>
+										{% endfor %}
+									{% endif %}
+								</td>
+							</tr>
+						{% endfor %}
+					</tbody>
+				</table>
+				{% if user_is_owner %}
+					<a href="{{ request.path.replace('item', 'edit_jobs') }}">Edit Jobs</a>
+				{% endif %}
 			</div>
-		{% endif %}
-
-		<div class="table-wrapper">
-			<table class="info-table">
-				<thead>
-					<tr class="resources-header-row">
-						<th colspan="5" class="resources-header">Diplomatic Relations</th>
-					</tr>
-					<tr>
-						<th>Diplomatic Relation</th>
-						<th>Nation</th>
-						<th>Relation</th>
-						<th>Pact Type</th>
-						<th>Temperament</th>
-					</tr>
-				</thead>
-				<tbody>
-					{% set diplo_index = namespace(value=1) %}
-					{% for relation in linked_objects.get("diplomatic_relations_1", {})%}
-						<tr>
-							<!-- If there's no separate name/ID, just show the loop index -->
-							<td><a href="{{ relation['link'] }}">{{ diplo_index.value }}</a></td>
-
-							<!-- Link to Nation detail page -->
-							<td>
-							{% if relation["linked_objects"]["nation_2"] %}
-								<a href="{{ relation['linked_objects'].get('nation_2', {}).get('link', '') }}">{{ relation['linked_objects'].get('nation_2', {}).get('name', 'None') }}</a>
-							{% else %}
-								None
-							{% endif %}
-							</td>
-
-							<td>{{ relation.get("relation", "Neutral") }}</td>
-
-							<td>{{ relation.get("pact_type", "None") }}</td>
-							
-							<td>
-								{% if relation.get("pact_type", "None") in ["Defensive Pact", "Military Alliance"] %}
-									{{ relation['linked_objects'].get('nation_2', {}).get('temperament', 'None') }}
-								{% else %}
-									Unknown
-								{% endif %}
-							</td>
-						</tr>
-						{% set diplo_index.value = diplo_index.value + 1 %}
-					{% endfor %}
-					{% for relation in linked_objects.get("diplomatic_relations_2", {})%}
-						<tr>
-							<!-- If there's no separate name/ID, just show the loop index -->
-							<td><a href="{{ relation['link'] }}">{{ diplo_index.value }}</a></td>
-
-							<!-- Link to Nation detail page -->
-							<td>
-							{% if relation["linked_objects"].get("nation_1", None) %}
-								<a href="{{ relation['linked_objects'].get('nation_1', {}).get('link', '') }}">{{ relation['linked_objects'].get('nation_1', {}).get('name', 'None') }}</a>
-							{% else %}
-								None
-							{% endif %}
-							</td>
-
-							<td>{{ relation.get("relation", "Neutral") }}</td>
-
-							<td>{{ relation.get("pact_type", "None") }}</td>
-							
-							<td>
-								{% if relation.get("pact_type", "None") in ["Defensive Pact", "Military Alliance"] %}
-									{{ relation['linked_objects'].get('nation_1', {}).get('temperament', 'None') }}
-								{% else %}
-									Unknown
-								{% endif %}
-							</td>
-						</tr>
-						{% set diplo_index.value = diplo_index.value + 1 %}
-					{% endfor %}
-				</tbody>
-			</table>
 		</div>
-
-		<div class="table-wrapper">
-			<h2>War Stats</h2>
-			<table class="info-table">
-				<tr>
-					<th>{{ schema.properties.land_attack.label }}:</th>
-					<td>{{ nation.land_attack }}</td>
-				</tr>
-				<tr>
-					<th>{{ schema.properties.land_defense.label }}:</th>
-					<td>{{ nation.land_defense }}</td>
-				</tr>
-				<tr>
-					<th>{{ schema.properties.naval_attack.label }}:</th>
-					<td>{{ nation.naval_attack }}</td>
-				</tr>
-				<tr>
-					<th>{{ schema.properties.naval_defense.label }}:</th>
-					<td>{{ nation.naval_defense }}</td>
-				</tr>
-				<tr>
-					<th>{{ schema.properties.mercenary_land_attack.label }}:</th>
-					<td>{{ nation.mercenary_land_attack }}</td>
-				</tr>
-				<tr>
-					<th>{{ schema.properties.mercenary_land_defense.label }}:</th>
-					<td>{{ nation.mercenary_land_defense }}</td>
-				</tr>
-				<tr>
-					<th>{{ schema.properties.mercenary_naval_attack.label }}:</th>
-					<td>{{ nation.mercenary_naval_attack }}</td>
-				</tr>
-				<tr>
-					<th>{{ schema.properties.mercenary_naval_defense.label }}:</th>
-					<td>{{ nation.mercenary_naval_defense }}</td>
-				</tr>
-			</table>
-		</div>
-
-		<section class="jobs-section">
-			<h2>Land Units</h2>
-			<p>Land Units: {{  nation.land_unit_count }}/{{ nation.land_unit_capacity }}</p>
-			<table class="jobs-table">
-				<thead>
-					<tr>
-						<th>Unit</th>
-						<th>Unit Count</th>
-						<th>Upkeep</th>
-					</tr>
-				</thead>
-				<tbody>
-					{% for unit_key, unit in nation.land_unit_details.items() %}
-						<tr>
-							<td>{{ unit.display_name }}</td>
-							<td>{{ nation.get("land_units", {}).get(unit_key, 0) }}</td>
-							<td>
-								{% if "upkeep" in unit %}
-									{% for resource, cost in unit.upkeep.items() %}
+		
+		<div class="expandable-section">
+			<div class="section-header" onclick="toggleSection(this)">
+				<h2>Districts, Cities, & Wonders</h2>
+				<span class="toggle-icon">▼</span>
+			</div>
+			<div class="section-content">
+				<h2>Districts</h2>
+				<p>{{ schema.properties.district_slots.label }}: {{ nation.district_slots }}</p>
+				<div class="districts-grid">
+					{% for i in range(0, nation.district_slots) %}
+						<div class="district-slot">
+							{% if nation.districts | length > i and nation.districts[i] and nation.districts[i]["type"] != "" %}
+								{% set district = nation.district_details.get(nation.districts[i]["type"], {}) %}
+								<h3>{{ district.get("display_name", "") }}</h3>
+								<p>Type: {{ district.get("type", "") }}</p>
+								<p>
+									Cost:
+									{% for resource, cost in district.get("cost", {}).items() %}
 										{{ resource }}: {{ cost }}<br>
 									{% endfor %}
-								{% endif %}
-							</td>
-						</tr>
-					{% endfor %}
-				</tbody>
-			</table>
-			<h2>Naval Units</h2>
-			<p>Naval Units: {{ nation.naval_unit_count }}/{{ nation.naval_unit_capacity }}</p>
-			<table class="jobs-table">
-				<thead>
-					<tr>
-						<th>Unit</th>
-						<th>Unit Count</th>
-						<th>Upkeep</th>
-					</tr>
-				</thead>
-				<tbody>
-					{% for unit_key, unit in nation.naval_unit_details.items() %}
-						<tr>
-							<td>{{ unit.display_name }}</td>
-							<td>{{ nation.get("naval_units", {}).get(unit_key, 0) }}</td>
-							<td>
-								{% if "upkeep" in unit %}
-									{% for resource, cost in unit.upkeep.items() %}
-										{{ resource }}: {{ cost }}<br>
+								</p>
+								<p>
+									Modifiers:
+									{% for mod, value in district.get("modifiers", {}).items() %}
+										{{ mod }}: {{ value }}<br>
 									{% endfor %}
-								{% endif %}
-							</td>
-						</tr>
-					{% endfor %}
-				</tbody>
-			</table>
-		</section>	
-	</div>
-	
-	<section class="resources-section">
-		<h2>Resources</h2>
-		<table class="resources-table">
-			<!-- First, a header row for the “General Resources” label -->
-			<thead>
-				<tr class="resources-header-row">
-					<th colspan="6" class="resources-header">General Resources</th>
-				</tr>
-				<tr>
-					<th>Resource</th>
-					<th>Production</th>
-					<th>Consumption</th>
-					<th>Excess</th>
-					<th>Storage</th>
-				</tr>
-			</thead>
-			<tbody>
-				{% for resource in json_data["general_resources"] %}
-					<tr>
-						<td>{{ resource.name }}</td>
-						<td>{{ nation.get("resource_production", {}).get(resource["key"], 0) }}</td>
-						<td>{{ nation.get("resource_consumption", {}).get(resource["key"], 0) }}</td>
-						{% set excess_value = nation.get("resource_excess", {}).get(resource["key"], 0) %}
-						{% if excess_value < 0 %}
-							<td class="excess-negative">{{ excess_value }}</td>
-						{% elif excess_value > 0 %}
-							<td class="excess-positive">{{ excess_value }}</td>
-						{% else %}
-							<td>{{ excess_value }}</td>
-						{% endif %}
-						<td>{{ nation.get("resource_storage", {}).get(resource["key"], 0) }} / {{ nation.get("resource_capacity", {}).get(resource["key"], 0) }}</td>
-					</tr>
-				{% endfor %}
-			</tbody>
-			<!-- A second header row for the “Unique Resources” label -->
-			<thead>
-				<tr class="resources-header-row">
-					<th colspan="6" class="resources-header">Unique Resources</th>
-				</tr>
-				<tr>
-					<th>Resource</th>
-					<th>Production</th>
-					<th>Consumption</th>
-					<th>Excess</th>
-					<th>Storage</th>
-				</tr>
-			</thead>
-			<tbody>
-				{% for resource in json_data["unique_resources"] %}
-					<tr>
-						<td>{{ resource.name }}</td>
-						<td>{{ nation.get("resource_production", {}).get(resource["key"], 0) }}</td>
-						<td>{{ nation.get("resource_consumption", {}).get(resource["key"], 0) }}</td>
-						{% set excess_value = nation.get("resource_excess", {}).get(resource["key"], 0) %}
-						{% if excess_value < 0 %}
-							<td class="excess-negative">{{ excess_value }}</td>
-						{% elif excess_value > 0 %}
-							<td class="excess-positive">{{ excess_value }}</td>
-						{% else %}
-							<td>{{ excess_value }}</td>
-						{% endif %}
-						<td>{{ nation.get("resource_storage", {}).get(resource["key"], 0) }} / {{ nation.get("resource_capacity", {}).get(resource["key"], 0) }}</td>
-					</tr>
-				{% endfor %}
-			</tbody>
-		</table>
-	</section>
-	
-	<section class="jobs-section">
-		<h2>Jobs</h2>
-		<p>Working Pops: {{ nation.working_pop_count }}/{{ nation.pop_count }}</p>
-		<table class="jobs-table">
-			<thead>
-				<tr>
-					<th>Job</th>
-					<th>Assigned Pops</th>
-					<th>Upkeep</th>
-					<th>Production</th>
-				</tr>
-			</thead>
-			<tbody>
-				{% for job_key, job in nation.job_details.items() %}
-					<tr>
-						<td>{{ job.display_name }}</td>
-						<td>{{ nation.jobs[job_key] if job_key in nation.jobs else 0 }}</td>
-						<td>
-							{% if "upkeep" in job %}
-								{% for resource, cost in job.upkeep.items() %}
-									{{ resource }}: {{ cost }}<br>
-								{% endfor %}
-							{% endif %}
-						</td>
-						<td>
-							{% if "production" in job %}
-								{% for resource, prod in job.production.items() %}
-									{{ resource }}: {{ prod }}<br>
-								{% endfor %}
-							{% endif %}
-						</td>
-					</tr>
-				{% endfor %}
-			</tbody>
-		</table>
-		{% if user_is_owner %}
-			<a href="{{ request.path.replace('item', 'edit_jobs') }}">Edit Jobs</a>
-		{% endif %}
-	</section>
-	
-	<section class="districts-section">
-		<h2>Districts</h2>
-		<p>{{ schema.properties.district_slots.label }}: {{ nation.district_slots }}</p>
-		<div class="districts-grid">
-			{% for i in range(0, nation.district_slots) %}
-				<div class="district-slot">
-					{% if nation.districts | length > i and nation.districts[i] and nation.districts[i]["type"] != "" %}
-						{% set district = nation.district_details.get(nation.districts[i]["type"], {}) %}
-						<h3>{{ district.get("display_name", "") }}</h3>
-						<p>Type: {{ district.get("type", "") }}</p>
-						<p>
-							Cost:
-							{% for resource, cost in district.get("cost", {}).items() %}
-								{{ resource }}: {{ cost }}<br>
-							{% endfor %}
-						</p>
-						<p>
-							Modifiers:
-							{% for mod, value in district.get("modifiers", {}).items() %}
-								{{ mod }}: {{ value }}<br>
-							{% endfor %}
-						</p>
-						<p>
-							Node:
-							{% if nation.districts[i]["node"] != "" %}
-								{{ nation.districts[i]["node"] }}
+								</p>
+								<p>
+									Node:
+									{% if nation.districts[i]["node"] != "" %}
+										{{ nation.districts[i]["node"] }}
+									{% else %}
+										None
+									{% endif %}
+								</p>
 							{% else %}
-								None
+								<div class="empty-slot">
+									<p>Empty Slot</p>
+								</div>
 							{% endif %}
-						</p>
-					{% else %}
-						<div class="empty-slot">
-							<p>Empty Slot</p>
 						</div>
-					{% endif %}
+					{% endfor %}
 				</div>
-			{% endfor %}
-		</div>
-		</br>
-		{% if nation.get("empire", False) %}
-			{% if nation.imperial_district and nation.imperial_district["type"] != "" %}
-				<div class="district-slot">
-					{% set district = nation.district_details.get(nation.imperial_district["type"], {}) %}
-					<h3>{{ district.get("display_name", "") }}</h3>
-					<p>Type: {{ district.get("type", "") }}</p>
-					<p>
-						Cost:
-						{% for resource, cost in district.get("cost", {}).items() %}
-							{{ resource }}: {{ cost }}<br>
-						{% endfor %}
-					</p>
-					<p>
-						Modifiers:
-						{% for mod, value in district.get("modifiers", {}).items() %}
-							{{ mod }}: {{ value }}<br>
-						{% endfor %}
-					</p>
-					<p>
-						Node:
-						{% if nation.imperial_district["node"] != "" %}
-							{{ nation.imperial_district["node"] }}
-						{% else %}
-							None
-						{% endif %}
-					</p>
-				</div>
-			{% else %}
-				<div class="district-slot">
-					<div class="empty-slot">
-						<p>Empty Slot</p>
-					</div>
-				</div>
-			{% endif %}
-		{% endif %}
-	</section>
-
-	{% if nation.city_slots > 0 %}
-		<section class="districts-section">
-			<h2>Cities</h2>
-			<p>{{ schema.properties.city_slots.label }}: {{ nation.city_slots }}</p>
-			<div class="districts-grid">
-				{% for i in range(0, nation.city_slots) %}
-					<div class="district-slot">
-						{% if nation.cities | length > i and nation.cities[i] and nation.cities[i]["type"] != "" %}
-							{% set city = json_data["cities"][nation.cities[i]["type"]] %}
-							<h3>{{ city.get("display_name", "") }}</h3>
-							<p>Name: {{ nation.cities[i].get("name", "") }}</p>
+				</br>
+				{% if nation.get("empire", False) %}
+					{% if nation.imperial_district and nation.imperial_district["type"] != "" %}
+						<div class="district-slot">
+							{% set district = nation.district_details.get(nation.imperial_district["type"], {}) %}
+							<h3>{{ district.get("display_name", "") }}</h3>
+							<p>Type: {{ district.get("type", "") }}</p>
 							<p>
 								Cost:
-								{% for resource, cost in city.get("cost", {}).items() %}
+								{% for resource, cost in district.get("cost", {}).items() %}
 									{{ resource }}: {{ cost }}<br>
 								{% endfor %}
 							</p>
 							<p>
 								Modifiers:
-								{% for mod, value in city.get("modifiers", {}).items() %}
+								{% for mod, value in district.get("modifiers", {}).items() %}
 									{{ mod }}: {{ value }}<br>
 								{% endfor %}
 							</p>
 							<p>
 								Node:
-								{% if nation.cities[i]["node"] != "" %}
-									{{ nation.cities[i]["node"] }}
+								{% if nation.imperial_district["node"] != "" %}
+									{{ nation.imperial_district["node"] }}
 								{% else %}
 									None
 								{% endif %}
 							</p>
-						{% else %}
+						</div>
+					{% else %}
+						<div class="district-slot">
 							<div class="empty-slot">
 								<p>Empty Slot</p>
 							</div>
-						{% endif %}
+						</div>
+					{% endif %}
+				{% endif %}
+				{% if nation.city_slots > 0 %}
+					<h2>Cities</h2>
+					<p>{{ schema.properties.city_slots.label }}: {{ nation.city_slots }}</p>
+					<div class="districts-grid">
+						{% for i in range(0, nation.city_slots) %}
+							<div class="district-slot">
+								{% if nation.cities | length > i and nation.cities[i] and nation.cities[i]["type"] != "" %}
+									{% set city = json_data["cities"][nation.cities[i]["type"]] %}
+									<h3>{{ city.get("display_name", "") }}</h3>
+									<p>Name: {{ nation.cities[i].get("name", "") }}</p>
+									<p>
+										Cost:
+										{% for resource, cost in city.get("cost", {}).items() %}
+											{{ resource }}: {{ cost }}<br>
+										{% endfor %}
+									</p>
+									<p>
+										Modifiers:
+										{% for mod, value in city.get("modifiers", {}).items() %}
+											{{ mod }}: {{ value }}<br>
+										{% endfor %}
+									</p>
+									<p>
+										Node:
+										{% if nation.cities[i]["node"] != "" %}
+											{{ nation.cities[i]["node"] }}
+										{% else %}
+											None
+										{% endif %}
+									</p>
+								{% else %}
+									<div class="empty-slot">
+										<p>Empty Slot</p>
+									</div>
+								{% endif %}
+							</div>
+						{% endfor %}
 					</div>
-				{% endfor %}
+				{% endif %}
+				{% if "wonders" in linked_objects and linked_objects["wonders"] is not none %}
+					<h2>Wonders</h2>
+					<div class="table-wrapper">
+						<table class="info-table">
+							<thead>
+								<tr class="resources-header-row">
+									<th colspan="7" class="resources-header">Wonders</th>
+								</tr>
+								<tr>
+									<th>Name</th>
+									<th>Node</th>
+									<th>Era Created</th>
+									<th>Legacy Status</th>
+								</tr>
+							</thead>
+							<tbody>
+								{% for wonder in linked_objects["wonders"] %}
+									<tr>
+										<td><a href="{{ wonder['link'] }}">{{ wonder["name"] }}</a></td>
+										
+										<td>
+											{% if wonder["node"] is not none %}
+												{% set resource = find_dict_in_list(json_data["general_resources"], "key", wonder["node"]) %}
+												{% if not resource %}
+													{% set resource = find_dict_in_list(json_data["unique_resources"], "key", wonder["node"]) %}
+												{% endif %}
+												
+												{% if resource and resource is not none %}
+													{{ resource["name"] }}
+												{% elif resource is none %}
+													None
+												{% else %}
+													Unknown Resource ({{ wonder["node"] }})
+												{% endif %}
+											{% else %}
+												None
+											{% endif %}
+										</td>
+										
+										<td>{{ wonder["era_created"] }}</td>
+										
+										<td>{{ wonder["legacy_status"] }}</td>
+									</tr>
+								{% endfor %}
+							</tbody>
+						</table>
+					</div>
+				{% endif %}
 			</div>
-		</section>
-	{% endif %}
-
-	{{ render_tech_tree(nation.get("technologies", {"political_philosophy": {"researched": true}}), nation.get("technology_cost_modifier", 0), nation.get("technology_cost_minimum", 2), json_data) }}
-
-	<div class="info-column">
-		<h2>Progress Quests</h2>
-		<table class="info-table">
-			<thead>
-				<tr>
-					<th>Quest Name</th>
-					<th>Progress Per Tick</th>
-					<th>Current Progress</th>
-					<th>Link</th>
-				</tr>
-			</thead>
-			<tbody>
-				{% for quest in nation.progress_quests %}
+		</div>
+	
+	<div class="expandable-section" id="tech-section">
+		<div class="section-header" onclick="toggleSection(this)">
+			<h2>Technologies</h2>
+			<span class="toggle-icon">▼</span>
+		</div>
+		<div class="section-content">
+			{{ render_tech_tree(nation.get("technologies", {"political_philosophy": {"researched": true}}), nation.get("technology_cost_modifier", 0), nation.get("technology_cost_minimum", 2), json_data) }}
+		</div>
+	</div>
+	
+	<div class="expandable-section">
+		<div class="section-header" onclick="toggleSection(this)">
+			<h2>Progress Quests</h2>
+			<span class="toggle-icon">▼</span>
+		</div>
+		<div class="section-content">
+			<table class="info-table">
+				<thead>
 					<tr>
-						<td>{{ quest.quest_name }}</td>
-						<td>{{ quest.progress_per_tick }}</td>
-						<td>{{ quest.current_progress }} / {{ quest.required_progress }}</td>
-						<td>{{ quest.link|format_discord_link|safe }}</td>
+						<th>Quest Name</th>
+						<th>Progress Per Tick</th>
+						<th>Current Progress</th>
+						<th>Link</th>
 					</tr>
-				{% endfor %}
-			</tbody>
-		</table>
+				</thead>
+				<tbody>
+					{% for quest in nation.progress_quests %}
+						<tr>
+							<td>{{ quest.quest_name }}</td>
+							<td>{{ quest.progress_per_tick }}</td>
+							<td>{{ quest.current_progress }} / {{ quest.required_progress }}</td>
+							<td>{{ quest.link|format_discord_link|safe }}</td>
+						</tr>
+					{% endfor %}
+				</tbody>
+			</table>
+		</div>
 	</div>
 
-	<div class="info-column">
-		<h2>Modifiers</h2>
-		<table class="info-table">
-			<thead>
-				<tr>
-					<th>Field</th>
+	<div class="expandable-section">
+		<div class="section-header" onclick="toggleSection(this)">
+			<h2>Modifiers</h2>
+			<span class="toggle-icon">▼</span>
+		</div>
+		<div class="section-content">
+			<table class="info-table">
+				<thead>
+					<tr>
+						<th>Field</th>
 					<th>Value</th>
 					<th>Duration</th>
 					<th>Source</th>
@@ -858,3 +1011,50 @@
 	</div>
 </div>
 {% endblock %}
+
+<script>
+function toggleSection(header) {
+    const section = header.parentElement;
+    const content = section.querySelector('.section-content');
+    const icon = header.querySelector('.toggle-icon');
+    
+    if (content.style.display === 'none' || content.style.display === '') {
+        content.style.display = 'block';
+        icon.textContent = '▼';
+    } else {
+        content.style.display = 'none';
+        icon.textContent = '►';
+    }
+}
+
+// Expand the first section by default
+document.addEventListener('DOMContentLoaded', function() {
+    const firstSection = document.querySelector('.expandable-section');
+    if (firstSection) {
+        const content = firstSection.querySelector('.section-content');
+        content.style.display = 'block';
+    }
+});
+
+// Add event listener to recenter tech tree when its section is expanded
+document.addEventListener('DOMContentLoaded', function() {
+    const techSection = document.getElementById('tech-section');
+    if (techSection) {
+        // Listen for section expansion
+        techSection.addEventListener('section:expanded', function() {
+            if (typeof recenterTechTree === 'function') {
+                recenterTechTree();
+            }
+        });
+        
+        // If section is already expanded on page load, recenter after a delay
+        if (techSection.classList.contains('section-expanded')) {
+            setTimeout(function() {
+                if (typeof recenterTechTree === 'function') {
+                    recenterTechTree();
+                }
+            }, 500); // Longer delay to ensure everything is loaded
+        }
+    }
+});
+</script>

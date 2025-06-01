@@ -87,6 +87,25 @@
 									</table>
 								{% endif %}
 							</td>
+						{% elif properties.bsonType == "json_resource_enum" %}
+							<td>
+								{% if item[field] is not none %}
+									{% set resource = find_dict_in_list(json_data["general_resources"], "key", item[field]) %}
+									{% if not resource %}
+										{% set resource = find_dict_in_list(json_data["unique_resources"], "key", item[field]) %}
+									{% endif %}
+									
+									{% if resource and resource is not none %}
+										{{ resource["name"] }}
+									{% elif resource is none %}
+										None
+									{% else %}
+										Unknown Resource ({{ item[field] }})
+									{% endif %}
+								{% else %}
+									None
+								{% endif %}
+							</td>
 						{% elif properties.bsonType == "array" %}
 							{% if properties.get("items", {}).get("bsonType", "None") == "string" %}
 								<td>
@@ -240,6 +259,27 @@
 										{% for i in range(0, length) %}
 											{% if item[field][i] and item[field][i] in combined_data %}
 												<li>{{ combined_data[item[field][i]]["display_name"] }}</li>
+											{% else %}
+												<li>None</li>
+											{% endif %}
+										{% endfor %}
+									</ul>
+								</td>
+							{% elif properties.get("items", {}).get("bsonType", "None") == "json_resource_enum" %}
+								<td>
+									<ul>
+										{% set length = item[field]|length %}
+										{% set max_length = properties.get("max_length") %}
+										{% if max_length and max_length is string %}
+											{% set max_length = item.get(max_length, 0) %}
+										{% endif %}
+										{% if max_length and length < max_length %}
+											{% set length = max_length %}
+										{% endif %}
+										{% set resources = json_data.get("general_resources", []) + json_data.get("unique_resources", []) %}
+										{% for i in range(0, length) %}
+											{% if item[field][i] in resources %}
+												<li>{{ resources[item[field][i]]["name"] }}</li>
 											{% else %}
 												<li>None</li>
 											{% endif %}

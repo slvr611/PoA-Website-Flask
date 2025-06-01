@@ -104,6 +104,27 @@ def load_json(file_path):
         json_data = json.load(file)
     return json_data
 
+def find_dict_in_list(dict_list, key_field, key_value):
+    """
+    Finds a dictionary in a list by matching a key field.
+    
+    Args:
+        dict_list: List of dictionaries to search through
+        key_field: The field name to match on (e.g., 'key', 'name')
+        key_value: The value to match against
+        
+    Returns:
+        The matching dictionary or None if not found
+    """
+    if not dict_list or not isinstance(dict_list, list):
+        return None
+    
+    for item in dict_list:
+        if isinstance(item, dict) and key_field in item and item[key_field] == key_value:
+            return item
+    
+    return None
+
 for data_type in category_data:
     category_data[data_type]["schema"] = load_json("json-data/schemas/" + data_type + ".json")["$jsonSchema"]
 

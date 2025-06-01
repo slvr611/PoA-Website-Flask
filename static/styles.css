@@ -1035,3 +1035,57 @@ h1, h2 {
 .btn-primary:hover {
     background-color: #1a5cb8;
 }
+
+/* Expandable Sections Styling */
+.expandable-sections {
+    margin-bottom: 2rem;
+}
+
+.expandable-section {
+    margin-bottom: 1rem;
+    border: 1px solid #444;
+    border-radius: 8px;
+    overflow: hidden;
+    background-color: #1e1e1e;
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    background-color: #333;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.section-header:hover {
+    background-color: #444;
+}
+
+.section-header h2 {
+    margin: 0;
+    font-size: 1.25rem;
+    color: #fff;
+}
+
+.toggle-icon {
+    font-size: 1rem;
+    color: #8ab4f8;
+    transition: transform 0.3s;
+}
+
+.section-content {
+    display: none;
+    padding: 1rem;
+    border-top: 1px solid #444;
+}
+
+/* When section is expanded */
+.section-expanded .section-content {
+    display: block;
+}
+
+.section-expanded .toggle-icon {
+    transform: rotate(180deg);
+}

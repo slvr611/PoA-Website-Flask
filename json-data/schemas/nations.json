@@ -11,7 +11,7 @@
 		"overlord": ["subject_stance"],
 		"primary_race": ["positive_trait", "negative_trait"],
 		"primary_religion": ["external_modifiers"],
-		"wonders": ["external_modifiers"],
+		"wonders": ["external_modifiers", "node"],
 		"region": ["external_modifiers"],
 		"rulers": ["titles", "modifiers"]
 	},
@@ -1232,7 +1232,8 @@
 		"queryTargetAttribute": "owner_nation",
 		"items":{
 			"bsonType": "linked_object"
-		}
+		},
+		"preview": ["name", "node", "era_created", "legacy_status"]
       },
 	  "export_slots": {
         "bsonType": "number",

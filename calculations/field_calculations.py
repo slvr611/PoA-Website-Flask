@@ -184,7 +184,7 @@ def calculate_all_fields(target, schema, target_data_type):
         else:
             #Nation is Sated
             pass
-
+    
     return calculated_values
 
 def compute_field(field, target, base_value, field_schema, overall_total_modifiers):
@@ -307,8 +307,6 @@ def calculate_district_details(target, schema_properties, modifier_totals, law_t
 def collect_nation_districts(target, law_totals, district_details):
     nation_districts = target.get("districts", [])
     collected_modifiers = []
-
-    ignore_nodes = law_totals.get("ignore_nodes", 0)
     
     for district in nation_districts:
         if isinstance(district, dict):
@@ -318,10 +316,10 @@ def collect_nation_districts(target, law_totals, district_details):
             collected_modifiers.append(district_modifiers)
             if district_node == district_details.get(district_type, {}).get("synergy_requirement", ""):
                 collected_modifiers.append(district_details.get(district_type, {}).get("synergy_modifiers", {}))
-                if district_details.get(district_type, {}).get("synergy_node_active", True) and district_node != "luxury" and ignore_nodes < 1:
-                    collected_modifiers.append({district_node + "_production": 2})
-            elif district_node != "" and district_node != "luxury" and ignore_nodes < 1:
-                collected_modifiers.append({district_node + "_production": 2})
+                if district_details.get(district_type, {}).get("synergy_node_active", True):
+                    collected_modifiers.append({district_node + "_nodes": 1})
+            elif district_node != "":
+                collected_modifiers.append({district_node + "_nodes": 1})
 
     imperial_district_json_data = json_data["nation_imperial_districts"]
 
@@ -335,10 +333,10 @@ def collect_nation_districts(target, law_totals, district_details):
         collected_modifiers.append(imperial_district_modifiers)
         if imperial_district_node == imperial_district_synergy_node or (imperial_district_synergy_node == "any" and imperial_district_node != ""):
             collected_modifiers.append(imperial_district_json_data.get(imperial_district_type, {}).get("synergy_modifiers", {}))
-            if imperial_district_synergy_node_active and ignore_nodes < 1:
-                collected_modifiers.append({imperial_district_node + "_production": 2})
-        elif imperial_district_node != "" and ignore_nodes < 1:
-            collected_modifiers.append({imperial_district_node + "_production": 2})
+            if imperial_district_synergy_node_active:
+                collected_modifiers.append({district_node + "_nodes": 1})
+        elif imperial_district_node != "":
+            collected_modifiers.append({district_node + "_nodes": 1})
 
     return collected_modifiers
 
@@ -379,7 +377,6 @@ def collect_cities(target):
     collected_modifiers = []
     city_json_data = json_data["cities"]
     wall_json_data = json_data["walls"]
-    ignore_nodes = target.get("ignore_nodes", 0)
     for city in nation_cities:
         city_type = city.get("type", "")
         city_node = city.get("node", "")
@@ -387,8 +384,7 @@ def collect_cities(target):
         wall_modifiers = wall_json_data.get(city.get("wall", ""), {}).get("modifiers", {})
         collected_modifiers.append(city_modifiers)
         collected_modifiers.append(wall_modifiers)
-        if ignore_nodes < 1:
-            collected_modifiers.append({city_node + "_production": 2})
+        collected_modifiers.append({city_node + "_nodes": 1})
 
     return collected_modifiers
 
@@ -507,7 +503,10 @@ def check_unit_requirements(target, unit_details):
             if not has_district:
                 meets_requirements = False
         elif requirement == "research":
-            meets_requirements = False
+            for tech in value:
+                if not target.get("technologies", {}).get(tech, {}).get("researched", False):
+                    meets_requirements = False
+                    break
         elif requirement == "spell":
             meets_requirements = False
         elif requirement == "artifact":
@@ -515,8 +514,13 @@ def check_unit_requirements(target, unit_details):
         elif requirement == "name" and target.get("name", "") not in value:
             meets_requirements = False
         elif requirement == "empire" and target.get("empire", False):
+            meets_requirements = False,
+        elif requirement == "defensive_pact": #TODO: Implement the check for defensive pacts
             meets_requirements = False
-        # TODO: Add defensive pacts and mil alliances
+        elif requirement == "military_alliance": #TODO: Implement the check for military alliances
+            meets_requirements = False
+        elif requirement == "mercenary":
+            meets_requirements = False
     return meets_requirements
 
 def calculate_unit_details(target, unit_type, unit_json_files, modifier_totals, district_totals, tech_totals, city_totals, law_totals, external_modifiers_total):
@@ -623,6 +627,9 @@ def collect_external_modifiers_from_object(object, required_fields, linked_objec
                 calculated_title_modifiers = calculate_title_modifiers(object, target_data_type, linked_object_schema["properties"])
                 for key, value in calculated_title_modifiers.items():
                     collected_modifiers.append({key: value})
+            
+            elif field_type == "json_resource_enum" and req_field == "node":
+                collected_modifiers.append({object[req_field] + "_nodes": 1})
     
     return collected_modifiers
 

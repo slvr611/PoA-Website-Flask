@@ -268,8 +268,41 @@
         cy.zoom(cy.zoom() * 0.9); // Zoom out slightly to show everything
     }
 
+    // Add a function to recenter the graph when the section is expanded
+    function recenterTechTree() {
+        if (cy) {
+            setTimeout(() => {
+                cy.fit();
+                cy.zoom(cy.zoom() * 0.9); // Zoom out slightly to show everything
+            }, 50); // Small delay to ensure the container is fully visible
+        }
+    }
+
+    // Make recenterTechTree globally accessible
+    window.recenterTechTree = recenterTechTree;
+
     // Run the custom layout
     applyCustomLayout();
+
+    // Add event listener for when Cytoscape is fully ready
+    cy.ready(function() {
+        // If the tech section is expanded, recenter after a delay
+        const techSection = document.getElementById('tech-section');
+        if (techSection && techSection.classList.contains('section-expanded')) {
+            setTimeout(recenterTechTree, 200);
+        }
+    });
+
+    // Add event listener to recenter when section is expanded
+    document.addEventListener('DOMContentLoaded', function() {
+        const techSection = document.querySelector('.tech-section').closest('.expandable-section');
+        if (techSection) {
+            const header = techSection.querySelector('.section-header');
+            if (header) {
+                header.addEventListener('click', recenterTechTree);
+            }
+        }
+    });
 
     // After the graph is rendered, add input overlays for editable nodes
     cy.ready(function() {
@@ -502,6 +535,8 @@
     
     {{ all_prereqs_met and one_prereq_met }}
 {% endmacro %}
+
+
 
 
 

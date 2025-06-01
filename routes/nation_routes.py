@@ -5,7 +5,7 @@ from helpers.change_helpers import request_change, approve_change, system_approv
 from helpers.form_helpers import validate_form_with_jsonschema
 from helpers.auth_helpers import owner_required
 from calculations.field_calculations import calculate_all_fields
-from app_core import category_data, mongo, json_data
+from app_core import category_data, mongo, json_data, find_dict_in_list
 from helpers.auth_helpers import admin_required
 from pymongo import ASCENDING
 from forms import form_generator, wtform_to_json
@@ -44,7 +44,8 @@ def nation_item(item_ref):
         linked_objects=linked_objects,
         json_data=json_data,
         cities_config=json_data["cities"],
-        user_is_owner=user_is_owner
+        user_is_owner=user_is_owner,
+        find_dict_in_list=find_dict_in_list
     )
 
 @nation_routes.route("/nations/edit/<item_ref>", methods=["GET"])
@@ -90,7 +91,8 @@ def edit_nation(item_ref):
         nation=nation,
         dropdown_options=dropdown_options,
         linked_objects=linked_objects,
-        json_data=json_data
+        json_data=json_data,
+        find_dict_in_list=find_dict_in_list
     )
 
 @nation_routes.route("/nations/edit/<item_ref>/request", methods=["POST"])

@@ -423,6 +423,20 @@
 		},
 		"count": 1
 	},
+	"latent_pylon": {
+		"display_name": "Latent Pylon",
+		"type": "latent_pylon",
+		"era": 3,
+		"cost": {
+			"wood": 3,
+			"stone": 3,
+			"magic": 1
+		},
+		"modifiers": {
+			"magic_production": 1
+		},
+		"count": 0
+	},
 	"classical_barrow": {
 		"display_name": "Classical Barrow",
 		"type": "barrow",

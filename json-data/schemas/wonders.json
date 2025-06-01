@@ -20,6 +20,11 @@
                 "label": "Legacy Status",
                 "description": "Whether the wonder has a legacy bonus"
             },
+            "node": {
+                "bsonType": "json_resource_enum",
+                "label": "Node",
+                "description": "The node under the wonder"
+            },
             "effect_description": {
                 "bsonType": "string",
                 "label": "Effect Description",

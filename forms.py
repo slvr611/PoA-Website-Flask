@@ -529,6 +529,13 @@ class BaseSchemaForm(FlaskForm):
                 field = getattr(self, field_name)
                 for entry in field.entries:
                     self.populate_select_field(field_name, entry, schema, dropdown_options)
+            elif field_schema.get("bsonType") == "json_resource_enum":
+                resources = json_data.get("general_resources", []) + json_data.get("unique_resources", [])
+                node_choices = [("", "None"), ("luxury", "Luxury")]
+                for resource in resources:
+                    node_choices.append((resource.get("key", resource), resource.get("name", resource)))
+                field = getattr(self, field_name)
+                field.choices = node_choices
     
     def load_form_from_item(self, item, schema):
         """Loads form data from a database item with proper type conversion"""
@@ -696,6 +703,23 @@ class DynamicSchemaForm(BaseSchemaForm):
         elif field_type == "json_district_enum":
             field_args["choices"] = [("", "None")] + [(key, data.get("display_name", key))
                 for key, data in json_data[field_schema["json_data"]].items()]
+            return SelectField(**field_args)
+        
+        elif field_type == "json_unit_enum":
+            combined_data = {}
+            json_files = land_unit_json_files + naval_unit_json_files
+            for file_name in json_files:
+                combined_data.update(json_data[file_name])
+            field_args["choices"] = [("", "None")] + [(key, data.get("display_name", key))
+                for key, data in combined_data.items()]
+            return SelectField(**field_args)
+        
+        elif field_type == "json_resource_enum":
+            resources = json_data.get("general_resources", []) + json_data.get("unique_resources", [])
+            node_choices = [("", "None"), ("luxury", "Luxury")]
+            for resource in resources:
+                node_choices.append((resource.get("key", resource), resource.get("name", resource)))
+            field_args["choices"] = node_choices
             return SelectField(**field_args)
         
         elif field_type == "linked_object":
