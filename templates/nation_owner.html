@@ -670,104 +670,108 @@
 			</div>
 			<div class="section-content">
 				<h2>Resources</h2>
-				<table class="resources-table">
-					<!-- First, a header row for the “General Resources” label -->
-					<thead>
-						<tr class="resources-header-row">
-							<th colspan="6" class="resources-header">General Resources</th>
-						</tr>
-						<tr>
-							<th>Resource</th>
-							<th>Production</th>
-							<th>Consumption</th>
-							<th>Excess</th>
-							<th>Storage</th>
-						</tr>
-					</thead>
-					<tbody>
-						{% for resource in json_data["general_resources"] %}
-							<tr>
-								<td>{{ resource.name }}</td>
-								<td>{{ nation.get("resource_production", {}).get(resource["key"], 0) }}</td>
-								<td>{{ nation.get("resource_consumption", {}).get(resource["key"], 0) }}</td>
-								{% set excess_value = nation.get("resource_excess", {}).get(resource["key"], 0) %}
-								{% if excess_value < 0 %}
-									<td class="excess-negative">{{ excess_value }}</td>
-								{% elif excess_value > 0 %}
-									<td class="excess-positive">{{ excess_value }}</td>
-								{% else %}
-									<td>{{ excess_value }}</td>
-								{% endif %}
-								<td>{{ nation.get("resource_storage", {}).get(resource["key"], 0) }} / {{ nation.get("resource_capacity", {}).get(resource["key"], 0) }}</td>
+				<div class="table-wrapper">
+					<table class="resources-table">
+						<!-- First, a header row for the “General Resources” label -->
+						<thead>
+							<tr class="resources-header-row">
+								<th colspan="6" class="resources-header">General Resources</th>
 							</tr>
-						{% endfor %}
-					</tbody>
-					<!-- A second header row for the “Unique Resources” label -->
-					<thead>
-						<tr class="resources-header-row">
-							<th colspan="6" class="resources-header">Unique Resources</th>
-						</tr>
-						<tr>
-							<th>Resource</th>
-							<th>Production</th>
-							<th>Consumption</th>
-							<th>Excess</th>
-							<th>Storage</th>
-						</tr>
-					</thead>
-					<tbody>
-						{% for resource in json_data["unique_resources"] %}
 							<tr>
-								<td>{{ resource.name }}</td>
-								<td>{{ nation.get("resource_production", {}).get(resource["key"], 0) }}</td>
-								<td>{{ nation.get("resource_consumption", {}).get(resource["key"], 0) }}</td>
-								{% set excess_value = nation.get("resource_excess", {}).get(resource["key"], 0) %}
-								{% if excess_value < 0 %}
-									<td class="excess-negative">{{ excess_value }}</td>
-								{% elif excess_value > 0 %}
-									<td class="excess-positive">{{ excess_value }}</td>
-								{% else %}
-									<td>{{ excess_value }}</td>
-								{% endif %}
-								<td>{{ nation.get("resource_storage", {}).get(resource["key"], 0) }} / {{ nation.get("resource_capacity", {}).get(resource["key"], 0) }}</td>
+								<th>Resource</th>
+								<th>Production</th>
+								<th>Consumption</th>
+								<th>Excess</th>
+								<th>Storage</th>
 							</tr>
-						{% endfor %}
-					</tbody>
-				</table>
+						</thead>
+						<tbody>
+							{% for resource in json_data["general_resources"] %}
+								<tr>
+									<td>{{ resource.name }}</td>
+									<td>{{ nation.get("resource_production", {}).get(resource["key"], 0) }}</td>
+									<td>{{ nation.get("resource_consumption", {}).get(resource["key"], 0) }}</td>
+									{% set excess_value = nation.get("resource_excess", {}).get(resource["key"], 0) %}
+									{% if excess_value < 0 %}
+										<td class="excess-negative">{{ excess_value }}</td>
+									{% elif excess_value > 0 %}
+										<td class="excess-positive">{{ excess_value }}</td>
+									{% else %}
+										<td>{{ excess_value }}</td>
+									{% endif %}
+									<td>{{ nation.get("resource_storage", {}).get(resource["key"], 0) }} / {{ nation.get("resource_capacity", {}).get(resource["key"], 0) }}</td>
+								</tr>
+							{% endfor %}
+						</tbody>
+						<!-- A second header row for the “Unique Resources” label -->
+						<thead>
+							<tr class="resources-header-row">
+								<th colspan="6" class="resources-header">Unique Resources</th>
+							</tr>
+							<tr>
+								<th>Resource</th>
+								<th>Production</th>
+								<th>Consumption</th>
+								<th>Excess</th>
+								<th>Storage</th>
+							</tr>
+						</thead>
+						<tbody>
+							{% for resource in json_data["unique_resources"] %}
+								<tr>
+									<td>{{ resource.name }}</td>
+									<td>{{ nation.get("resource_production", {}).get(resource["key"], 0) }}</td>
+									<td>{{ nation.get("resource_consumption", {}).get(resource["key"], 0) }}</td>
+									{% set excess_value = nation.get("resource_excess", {}).get(resource["key"], 0) %}
+									{% if excess_value < 0 %}
+										<td class="excess-negative">{{ excess_value }}</td>
+									{% elif excess_value > 0 %}
+										<td class="excess-positive">{{ excess_value }}</td>
+									{% else %}
+										<td>{{ excess_value }}</td>
+									{% endif %}
+									<td>{{ nation.get("resource_storage", {}).get(resource["key"], 0) }} / {{ nation.get("resource_capacity", {}).get(resource["key"], 0) }}</td>
+								</tr>
+							{% endfor %}
+						</tbody>
+					</table>
+				</div>
 				<h2>Jobs</h2>
 				<p>Working Pops: {{ nation.working_pop_count }}/{{ nation.pop_count }}</p>
-				<table class="jobs-table">
-					<thead>
-						<tr>
-							<th>Job</th>
-							<th>Assigned Pops</th>
-							<th>Upkeep</th>
-							<th>Production</th>
-						</tr>
-					</thead>
-					<tbody>
-						{% for job_key, job in nation.job_details.items() %}
+				<div class="table-wrapper">
+					<table class="jobs-table">
+						<thead>
 							<tr>
-								<td>{{ job.display_name }}</td>
-								<td>{{ nation.jobs[job_key] if job_key in nation.jobs else 0 }}</td>
-								<td>
-									{% if "upkeep" in job %}
-										{% for resource, cost in job.upkeep.items() %}
-											{{ resource }}: {{ cost }}<br>
-										{% endfor %}
-									{% endif %}
-								</td>
-								<td>
-									{% if "production" in job %}
-										{% for resource, prod in job.production.items() %}
-											{{ resource }}: {{ prod }}<br>
-										{% endfor %}
-									{% endif %}
-								</td>
+								<th>Job</th>
+								<th>Assigned Pops</th>
+								<th>Upkeep</th>
+								<th>Production</th>
 							</tr>
-						{% endfor %}
-					</tbody>
-				</table>
+						</thead>
+						<tbody>
+							{% for job_key, job in nation.job_details.items() %}
+								<tr>
+									<td>{{ job.display_name }}</td>
+									<td>{{ nation.jobs[job_key] if job_key in nation.jobs else 0 }}</td>
+									<td>
+										{% if "upkeep" in job %}
+											{% for resource, cost in job.upkeep.items() %}
+												{{ resource }}: {{ cost }}<br>
+											{% endfor %}
+										{% endif %}
+									</td>
+									<td>
+										{% if "production" in job %}
+											{% for resource, prod in job.production.items() %}
+												{{ resource }}: {{ prod }}<br>
+											{% endfor %}
+										{% endif %}
+									</td>
+								</tr>
+							{% endfor %}
+						</tbody>
+					</table>
+				</div>
 				{% if user_is_owner %}
 					<a href="{{ request.path.replace('item', 'edit_jobs') }}">Edit Jobs</a>
 				{% endif %}
@@ -959,26 +963,28 @@
 			<span class="toggle-icon">▼</span>
 		</div>
 		<div class="section-content">
-			<table class="info-table">
-				<thead>
-					<tr>
-						<th>Quest Name</th>
-						<th>Progress Per Tick</th>
-						<th>Current Progress</th>
-						<th>Link</th>
-					</tr>
-				</thead>
-				<tbody>
-					{% for quest in nation.progress_quests %}
+			<div class="table-wrapper">
+				<table class="info-table">
+					<thead>
 						<tr>
-							<td>{{ quest.quest_name }}</td>
-							<td>{{ quest.progress_per_tick }}</td>
-							<td>{{ quest.current_progress }} / {{ quest.required_progress }}</td>
-							<td>{{ quest.link|format_discord_link|safe }}</td>
+							<th>Quest Name</th>
+							<th>Progress Per Tick</th>
+							<th>Current Progress</th>
+							<th>Link</th>
 						</tr>
-					{% endfor %}
-				</tbody>
-			</table>
+					</thead>
+					<tbody>
+						{% for quest in nation.progress_quests %}
+							<tr>
+								<td>{{ quest.quest_name }}</td>
+								<td>{{ quest.progress_per_tick }}</td>
+								<td>{{ quest.current_progress }} / {{ quest.required_progress }}</td>
+								<td>{{ quest.link|format_discord_link|safe }}</td>
+							</tr>
+						{% endfor %}
+					</tbody>
+				</table>
+			</div>
 		</div>
 	</div>
 
@@ -988,26 +994,28 @@
 			<span class="toggle-icon">▼</span>
 		</div>
 		<div class="section-content">
-			<table class="info-table">
-				<thead>
-					<tr>
-						<th>Field</th>
-					<th>Value</th>
-					<th>Duration</th>
-					<th>Source</th>
-				</tr>
-			</thead>
-			<tbody>
-				{% for modifier in nation.modifiers %}
-					<tr>
-						<td>{{ modifier.field }}</td>
-						<td>{{ modifier.value }}</td>
-						<td>{{ modifier.duration }}</td>
-						<td>{{ modifier.source }}</td>
+			<div class="table-wrapper">
+				<table class="info-table">
+					<thead>
+						<tr>
+							<th>Field</th>
+						<th>Value</th>
+						<th>Duration</th>
+						<th>Source</th>
 					</tr>
-				{% endfor %}
-			</tbody>
-		</table>
+				</thead>
+				<tbody>
+					{% for modifier in nation.modifiers %}
+						<tr>
+							<td>{{ modifier.field }}</td>
+							<td>{{ modifier.value }}</td>
+							<td>{{ modifier.duration }}</td>
+							<td>{{ modifier.source }}</td>
+						</tr>
+					{% endfor %}
+				</tbody>
+			</table>
+		</div>
 	</div>
 </div>
 {% endblock %}

@@ -228,7 +228,7 @@ def compute_stability_gain_chance(field, target, base_value, field_schema, overa
     if unique_minority_count == 0:
         minority_stability_gain += overall_total_modifiers.get("homogeneous_stability_gain_chance", 0)
 
-    value = round(max(base_value + overall_total_modifiers.get(field, 0) + karma_stability_gain + minority_stability_gain + pop_stability_gain + stability_gain_chance_from_resource_production, 0), 2)
+    value = round(min(max(base_value + overall_total_modifiers.get(field, 0) + karma_stability_gain + minority_stability_gain + pop_stability_gain + stability_gain_chance_from_resource_production, 0), 1), 2)
 
     return value
 
@@ -251,7 +251,7 @@ def compute_stability_loss_chance(field, target, base_value, field_schema, overa
     elif stability == "Stable":
         stab_loss_chance_from_stability = overall_total_modifiers.get("stability_loss_chance_at_stable", 0)
 
-    value = round(max(base_value + overall_total_modifiers.get(field, 0) + karma_stability_loss + minority_stability_loss + pop_stability_loss, 0), 2)
+    value = round(min(max(base_value + overall_total_modifiers.get(field, 0) + karma_stability_loss + minority_stability_loss + pop_stability_loss, 0), 2), 2)
 
     return value
 
