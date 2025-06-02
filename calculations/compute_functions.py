@@ -304,7 +304,7 @@ def compute_money_income(field, target, base_value, field_schema, overall_total_
 def compute_resource_production(field, target, base_value, field_schema, overall_total_modifiers):
     production_dict = {}
 
-    resources_per_node = 2 + overall_total_modifiers.get("resources_per_node", 0)
+    resources_per_node = 2 + overall_total_modifiers.get("production_per_node", 0)
     production_of_available_nodes = overall_total_modifiers.get("production_of_available_nodes", 0)
     ignore_nodes = target.get("ignore_nodes", 0)
 
