@@ -6,7 +6,8 @@
 		},
 		"upkeep": {
 			"magic": 1,
-			"bronze": 1
+			"bronze": 1,
+			"stone": 1
 		},
 		"requirements": {
 			"district": ["classical_dock"],

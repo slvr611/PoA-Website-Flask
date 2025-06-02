@@ -101,8 +101,6 @@ def calculate_all_fields(target, schema, target_data_type):
         for key, value in d.items():
             overall_total_modifiers[key] = overall_total_modifiers.get(key, 0) + value
     
-    print("Overall Total Modifiers: " + str(overall_total_modifiers))
-    
     for field, field_schema in schema_properties.items():
         if isinstance(field_schema, dict) and field_schema.get("calculated") and field not in calculated_values.keys():
             base_value = field_schema.get("base_value", 0)
@@ -496,6 +494,11 @@ def check_unit_requirements(target, unit_details):
     requirements = unit_details.get("requirements", {})
     meets_requirements = True
     district_types = [district.get("type", "") for district in target.get("districts", [])]
+
+    check_name = False
+    check_defensive_pact = False
+    check_military_alliance = False
+
     for requirement, value in requirements.items():
         if requirement == "district":
             has_district = False
@@ -513,16 +516,69 @@ def check_unit_requirements(target, unit_details):
             meets_requirements = False
         elif requirement == "artifact":
             meets_requirements = False # TODO: Implement the check for artifacts
-        elif requirement == "name" and target.get("name", "") not in value:
-            meets_requirements = False
+        elif requirement == "name":
+            check_name = True
         elif requirement == "empire" and target.get("empire", False):
             meets_requirements = False,
-        elif requirement == "defensive_pact": #TODO: Implement the check for defensive pacts
-            meets_requirements = False
-        elif requirement == "military_alliance": #TODO: Implement the check for military alliances
-            meets_requirements = False
+        elif requirement == "defensive_pact":
+            check_defensive_pact = True
+        elif requirement == "military_alliance":
+            check_military_alliance = True
         elif requirement == "mercenary":
             meets_requirements = False
+    
+    if check_name or check_defensive_pact or check_military_alliance:
+        related = False
+        if check_name:
+            for name in requirements.get("name", []):
+                if name in target.get("name", ""):
+                    related = True
+        
+        if check_defensive_pact:
+            defensive_pacts = []
+            defensive_pacts = list(mongo.db.diplo_relations.find({"nation_1": str(target["_id"]), "pact_type": {"$eq": "Defensive Pact"}}, {"nation_2": 1}))
+            defensive_pacts += list(mongo.db.diplo_relations.find({"nation_2": str(target["_id"]), "pact_type": {"$eq": "Defensive Pact"}}, {"nation_1": 1}))
+            
+            # Convert defensive pact IDs to nation objects with names
+            defensive_pact_nations = []
+            for pact in defensive_pacts:
+                nation_id = pact.get("nation_1") if pact.get("nation_1") != str(target["_id"]) else pact.get("nation_2")
+                if nation_id:
+                    nation = mongo.db.nations.find_one({"_id": ObjectId(nation_id)}, {"name": 1})
+                    if nation:
+                        defensive_pact_nations.append({
+                            "id": nation_id,
+                            "name": nation.get("name", "Unknown Nation")
+                        })
+            
+            for required_defensive_pact in requirements.get("defensive_pact", []):
+                if required_defensive_pact in [pact["name"] for pact in defensive_pact_nations]:
+                    related = True
+
+        if check_military_alliance:
+            military_alliances = []
+            military_alliances = list(mongo.db.diplo_relations.find({"nation_1": str(target["_id"]), "pact_type": {"$eq": "Military Alliance"}}, {"nation_2": 1}))
+            military_alliances += list(mongo.db.diplo_relations.find({"nation_2": str(target["_id"]), "pact_type": {"$eq": "Military Alliance"}}, {"nation_1": 1}))
+            
+            # Convert military alliance IDs to nation objects with names
+            military_alliance_nations = []
+            for alliance in military_alliances:
+                nation_id = alliance.get("nation_1") if alliance.get("nation_1") != str(target["_id"]) else alliance.get("nation_2")
+                if nation_id:
+                    nation = mongo.db.nations.find_one({"_id": ObjectId(nation_id)}, {"name": 1})
+                    if nation:
+                        military_alliance_nations.append({
+                            "id": nation_id,
+                            "name": nation.get("name", "Unknown Nation")
+                        })
+            
+            for required_military_alliance in requirements.get("military_alliance", []):
+                if required_military_alliance in [alliance["name"] for alliance in military_alliance_nations]:
+                    related = True
+        
+        if not related:
+            meets_requirements = False
+
     return meets_requirements
 
 def calculate_unit_details(target, unit_type, unit_json_files, modifier_totals, district_totals, tech_totals, city_totals, law_totals, external_modifiers_total):

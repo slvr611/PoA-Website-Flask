@@ -18,7 +18,7 @@
 		"recruitment_cost": {},
 		"upkeep": {},
 		"requirements": {
-			"spell": ["summon_extraplanar"]
+			"spell": ["Summon Extraplanar"]
 		}
 	},
 	"classical_extraplanar_magi": {
@@ -26,7 +26,7 @@
 		"recruitment_cost": {},
 		"upkeep": {},
 		"requirements": {
-			"spell": ["summon_extraplanar"]
+			"spell": ["Summon Extraplanar"]
 		}
 	},
 	"classical_extraplanar_scouts": {
@@ -34,7 +34,7 @@
 		"recruitment_cost": {},
 		"upkeep": {},
 		"requirements": {
-			"spell": ["summon_extraplanar"]
+			"spell": ["Summon Extraplanar"]
 		}
 	},
 	"classical_phantom": {
@@ -55,7 +55,7 @@
 		"recruitment_cost": {},
 		"upkeep": {},
 		"requirements": {
-			"spell": ["march_of_the_dead"]
+			"spell": ["March of the Dead"]
 		}
 	}
 }
