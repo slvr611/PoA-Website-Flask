@@ -854,10 +854,12 @@
                 {{ form.reason(class="form-control") }}
             </div>
             
-            {% if g.user.is_admin %}
-                <button type="submit" formaction="{{ request.path }}/save" class="btn btn-primary">Save</button>
-            {% endif %}
-            <button type="submit" formaction="{{ request.path }}/request" class="btn btn-secondary">Request</button>
+            <div class="button-group" style="text-align: left; margin-top: 10px;">
+                {% if g.user.is_admin %}
+                    <button type="submit" formaction="{{ request.path }}/save" class="btn btn-primary">Save</button>
+                {% endif %}
+                <button type="submit" formaction="{{ request.path }}/request" class="btn btn-secondary">Request</button>
+            </div>
         </div>
     </form>
 </div>

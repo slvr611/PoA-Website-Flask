@@ -1,11 +1,12 @@
 from datetime import datetime
 from app_core import mongo, category_data
-from flask import g
+from flask import g, flash
 from copy import deepcopy
 
 def request_change(data_type, item_id, change_type, before_data, after_data, reason):
     requester = mongo.db.players.find_one({"id": g.user.get("id", None)})["_id"]
     if requester is None:
+        flash("You must be logged in to request changes.")
         return None
 
     changes_collection = mongo.db.changes
@@ -67,6 +68,7 @@ def system_request_change(data_type, item_id, change_type, before_data, after_da
 def approve_change(change_id):
     approver = mongo.db.players.find_one({"id": g.user.get("id", None)})
     if approver is None or not approver.get("is_admin", False):
+        flash("You must be an admin to approve changes.")
         return None
 
     changes_collection = mongo.db.changes
@@ -107,6 +109,8 @@ def approve_change(change_id):
                 "after_implemented_data": after_data
             }})
             return True
+        else:
+            flash("Change approval failed because the target has changed since the request was made.")
     return False
 
 def system_approve_change(change_id):

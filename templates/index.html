@@ -1,7 +1,103 @@
 {% extends "layout.html" %}
 
+{% block title %}Path of Ages - Interactive Map{% endblock %}
+
 {% block content %}
 <div class="container">
-    <h1>Welcome to Path of Ages!</h1>
+    <div class="map-controls">
+        <div class="button-group">
+            <button id="map1-btn" class="map-btn active">Political Map</button>
+            <button id="map2-btn" class="map-btn">Terrain Map</button>
+        </div>
+        <div class="slider-container">
+            <label for="opacity-slider">Overlay Opacity: </label>
+            <input type="range" id="opacity-slider" min="0" max="100" value="0">
+            <span id="opacity-value">0%</span>
+        </div>
+    </div>
+    
+    <div id="map-viewer" class="map-viewer"></div>
 </div>
+
+<script src="https://cdn.jsdelivr.net/npm/openseadragon@3.1.0/build/openseadragon/openseadragon.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Initialize OpenSeadragon viewer
+        const viewer = OpenSeadragon({
+            id: "map-viewer",
+            prefixUrl: "https://cdn.jsdelivr.net/npm/openseadragon@3.1.0/build/openseadragon/images/",
+            tileSources: [
+                {
+                    type: 'image',
+                    url: "{{ url_for('static', filename='images/maps/PoA_Political_Map_Session_46.webp') }}",
+                    buildPyramid: false
+                }
+            ],
+            showNavigationControl: true,
+            navigatorPosition: "BOTTOM_RIGHT",
+            zoomInButton: "zoom-in",
+            zoomOutButton: "zoom-out",
+            homeButton: "home",
+            fullPageButton: "full-page",
+            maxZoomPixelRatio: 2,
+            minZoomImageRatio: 0.1,
+            visibilityRatio: 0.1,
+            constrainDuringPan: false
+        });
+        
+        // Add the second map as an overlay
+        const overlay = viewer.addTiledImage({
+            tileSource: {
+                type: 'image',
+                url: "{{ url_for('static', filename='images/maps/PoA_Terrain_Map.webp') }}",
+                buildPyramid: false
+            },
+            opacity: 0,
+            index: 1
+        });
+        
+        // Map switching buttons
+        const map1Btn = document.getElementById('map1-btn');
+        const map2Btn = document.getElementById('map2-btn');
+        
+        map1Btn.addEventListener('click', function() {
+            viewer.world.getItemAt(0).setOpacity(1);
+            viewer.world.getItemAt(1).setOpacity(0);
+            document.getElementById('opacity-slider').value = 0;
+            document.getElementById('opacity-value').textContent = '0%';
+            map1Btn.classList.add('active');
+            map2Btn.classList.remove('active');
+        });
+        
+        map2Btn.addEventListener('click', function() {
+            viewer.world.getItemAt(0).setOpacity(0);
+            viewer.world.getItemAt(1).setOpacity(1);
+            document.getElementById('opacity-slider').value = 100;
+            document.getElementById('opacity-value').textContent = '100%';
+            map2Btn.classList.add('active');
+            map1Btn.classList.remove('active');
+        });
+        
+        // Opacity slider
+        const opacitySlider = document.getElementById('opacity-slider');
+        const opacityValue = document.getElementById('opacity-value');
+        
+        opacitySlider.addEventListener('input', function() {
+            const value = parseInt(this.value);
+            opacityValue.textContent = value + '%';
+            
+            // Set opacity of the overlay
+            viewer.world.getItemAt(1).setOpacity(value / 100);
+            
+            // Update button active states based on slider position
+            if (value < 50) {
+                map1Btn.classList.add('active');
+                map2Btn.classList.remove('active');
+            } else {
+                map2Btn.classList.add('active');
+                map1Btn.classList.remove('active');
+            }
+        });
+    });
+</script>
 {% endblock %}

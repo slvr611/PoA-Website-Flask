@@ -101,6 +101,8 @@ def calculate_all_fields(target, schema, target_data_type):
         for key, value in d.items():
             overall_total_modifiers[key] = overall_total_modifiers.get(key, 0) + value
     
+    print("Overall Total Modifiers: " + str(overall_total_modifiers))
+    
     for field, field_schema in schema_properties.items():
         if isinstance(field_schema, dict) and field_schema.get("calculated") and field not in calculated_values.keys():
             base_value = field_schema.get("base_value", 0)
@@ -150,7 +152,7 @@ def calculate_all_fields(target, schema, target_data_type):
             for d in [external_modifiers_total, modifier_totals, district_totals, territory_terrain_totals, city_totals, law_totals, job_totals, unit_totals, prestige_modifiers, title_modifiers]:
                 for key, value in d.items():
                     overall_total_modifiers[key] = overall_total_modifiers.get(key, 0) + value
-            
+                        
             calculated_values["stability_loss_chance"] = compute_field(
                 "stability_loss_chance", target, schema_properties.get("stability_loss_chance", {}).get("base_value", 0), schema_properties.get("stability_loss_chance", {}),
                 overall_total_modifiers

@@ -293,8 +293,10 @@ def compute_money_income(field, target, base_value, field_schema, overall_total_
 
     money_stockpile = target.get("money", 0)
     money_income_per_money_storage = overall_total_modifiers.get("money_income_per_money_storage", 0)
-    max_money_income_per_stockpile = overall_total_modifiers.get("money_income_per_money_storage", 0)
+    max_money_income_per_stockpile = overall_total_modifiers.get("max_money_income_per_money_storage", 0)
     if money_income_per_money_storage > 0:
+        print(min((money_stockpile // money_income_per_money_storage) * 100, max_money_income_per_stockpile))
+
         value += min((money_stockpile // money_income_per_money_storage) * 100, max_money_income_per_stockpile)  #money_income_per_stockpile gives $100 per x amount in stockpile
     
     return value
