@@ -1,0 +1,63 @@
+{% extends "layout.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block head %}
+{{ super() }}
+<!-- Update Chart.js import to use a specific version and include the full URL -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@2.9.4/dist/Chart.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    {% if g.user is not none %}
+        <a href="{{ request.path }}/edit">Edit</a>
+    {% endif %}
+    <div class="action-links">
+        <a href="{{ request.path }}/changes/pending">View Pending Changes</a>
+        <a href="{{ request.path }}/changes/archived">View Archived Changes</a>
+    </div>
+    
+    <h1>{{ title }} Distribution</h1>
+    
+    <div class="chart-container">
+        <canvas id="demographicChart"></canvas>
+    </div>
+    
+    <h1>{{ title }} List:</h1>
+    <table class="info-table">
+        <thead>
+            <tr>
+                <th>
+                    {% if "name" in schema.properties %}
+                        Name
+                    {% else %}
+                        ID
+                    {% endif %}
+                </th>
+                {% for preview_category in schema.preview %}
+                    <th>{{ schema.properties[preview_category]["label"] }}</th>
+                {% endfor %}
+                <th>Population Count</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in items %}
+                <tr>
+                    {% if item.name %}
+                        <td><a href="{{ request.path }}/item/{{ item.name }}">{{ item.name }}</a></td>
+                    {% else %}
+                        <td><a href="{{ request.path }}/item/{{ item._id|string }}">{{ item._id }}</a></td>
+                    {% endif %}
+                    {% for preview_category in schema.preview %}
+                        <td>{{ item[preview_category] }}</td>
+                    {% endfor %}
+                    <td>{{ pop_counts.get(item.name, 0) }}</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% block chart_script %}{% endblock %}
+{% endblock %}

@@ -1,0 +1,82 @@
+{% extends "demographic_chart_base.html" %}
+
+{% block chart_script %}
+<script>
+    // Check if Chart is defined, if not, try to load it again
+    if (typeof Chart === 'undefined') {
+        console.error('Chart.js not loaded. Attempting to load from alternate source...');
+        const script = document.createElement('script');
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.9.4/Chart.min.js';
+        script.onload = initChart;
+        script.onerror = function() {
+            console.error('Failed to load Chart.js from alternate source');
+            document.getElementById('demographicChart').innerHTML = 
+                '<div style="text-align:center;padding:20px;color:#ff5555">Failed to load chart library</div>';
+        };
+        document.head.appendChild(script);
+    } else {
+        initChart();
+    }
+
+    function initChart() {
+        const ctx = document.getElementById('demographicChart').getContext('2d');
+        
+        // Generate random colors for each culture
+        const generateColors = (count) => {
+            const colors = [];
+            for (let i = 0; i < count; i++) {
+                const hue = (i * 137.5) % 360; // Use golden angle approximation for even distribution
+                colors.push(`hsl(${hue}, 70%, 60%)`);
+            }
+            return colors;
+        };
+        
+        // Get data from Flask
+        const labels = {{ culture_labels|tojson }};
+        const values = {{ culture_values|tojson }};
+        
+        // Generate colors
+        const backgroundColors = generateColors(labels.length);
+        
+        // Create the chart
+        const chart = new Chart(ctx, {
+            type: 'pie',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: values,
+                    backgroundColor: backgroundColors,
+                    borderColor: 'rgba(30, 30, 30, 0.8)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'right',
+                        labels: {
+                            color: '#e0e0e0',
+                            font: {
+                                size: 12
+                            }
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.label || '';
+                                const value = context.raw || 0;
+                                const total = context.chart.data.datasets[0].data.reduce((a, b) => a + b, 0);
+                                const percentage = Math.round((value / total) * 100);
+                                return `${label}: ${value} (${percentage}%)`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+</script>
+{% endblock %}

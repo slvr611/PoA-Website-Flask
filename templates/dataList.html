@@ -43,7 +43,7 @@
 							{% if preview_references.get(preview_category, {}).get(item_value, {}).get('link') %}
 								<td><a href="{{ preview_references.get(preview_category, {}).get(item_value, {}).get('link', '') }}">{{ preview_references.get(preview_category, {}).get(item_value, {}).get('name', '') }}</td>
 							{% else %}
-								<td>{{ item[preview_category] }}</td>
+								<td>Unknown</td>
 							{% endif %}
 						{% else %}
 							<td>{{ item[preview_category] }}</td>

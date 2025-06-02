@@ -521,3 +521,144 @@ def wonder_list():
         schema=schema,
         preview_references=preview_overall_lookup_dict
     )
+
+@data_item_routes.route("/races")
+def races_list():
+    schema = category_data["races"]["schema"]
+    db = category_data["races"]["database"]
+    
+    # Get all races
+    races = list(db.find().sort("name", ASCENDING))
+    
+    # Get all pops and count by race
+    pops = list(mongo.db.pops.find({}, {"race": 1}))
+    race_counts = {}
+    
+    # Create a lookup dictionary for race names
+    race_id_to_name = {}
+    for race in races:
+        race_id_to_name[str(race["_id"])] = race["name"]
+    
+    # Count pops by race
+    for pop in pops:
+        race_id = pop.get("race")
+        if race_id:
+            race_name = race_id_to_name.get(race_id, "Unknown")
+            race_counts[race_name] = race_counts.get(race_name, 0) + 1
+    
+    # Sort by count (descending)
+    sorted_race_data = sorted(race_counts.items(), key=lambda x: x[1], reverse=True)
+    
+    # Prepare data for chart
+    race_labels = [item[0] for item in sorted_race_data]
+    race_values = [item[1] for item in sorted_race_data]
+    
+    # Create a dictionary of pop counts by race name for the table
+    pop_counts = {}
+    for race in races:
+        race_name = race["name"]
+        pop_counts[race_name] = race_counts.get(race_name, 0)
+    
+    return render_template(
+        "race_list.html",
+        title=category_data["races"]["pluralName"],
+        items=races,
+        schema=schema,
+        race_labels=race_labels,
+        race_values=race_values,
+        pop_counts=pop_counts
+    )
+
+@data_item_routes.route("/cultures")
+def cultures_list():
+    schema = category_data["cultures"]["schema"]
+    db = category_data["cultures"]["database"]
+    
+    # Get all cultures
+    cultures = list(db.find().sort("name", ASCENDING))
+    
+    # Get all pops and count by culture
+    pops = list(mongo.db.pops.find({}, {"culture": 1}))
+    culture_counts = {}
+    
+    # Create a lookup dictionary for culture names
+    culture_id_to_name = {}
+    for culture in cultures:
+        culture_id_to_name[str(culture["_id"])] = culture["name"]
+    
+    # Count pops by culture
+    for pop in pops:
+        culture_id = pop.get("culture")
+        if culture_id:
+            culture_name = culture_id_to_name.get(culture_id, "Unknown")
+            culture_counts[culture_name] = culture_counts.get(culture_name, 0) + 1
+    
+    # Sort by count (descending)
+    sorted_culture_data = sorted(culture_counts.items(), key=lambda x: x[1], reverse=True)
+    
+    # Prepare data for chart
+    culture_labels = [item[0] for item in sorted_culture_data]
+    culture_values = [item[1] for item in sorted_culture_data]
+    
+    # Create a dictionary of pop counts by culture name for the table
+    pop_counts = {}
+    for culture in cultures:
+        culture_name = culture["name"]
+        pop_counts[culture_name] = culture_counts.get(culture_name, 0)
+    
+    return render_template(
+        "culture_list.html",
+        title=category_data["cultures"]["pluralName"],
+        items=cultures,
+        schema=schema,
+        culture_labels=culture_labels,
+        culture_values=culture_values,
+        pop_counts=pop_counts
+    )
+
+@data_item_routes.route("/religions")
+def religions_list():
+    schema = category_data["religions"]["schema"]
+    db = category_data["religions"]["database"]
+    
+    # Get all religions
+    religions = list(db.find().sort("name", ASCENDING))
+    
+    # Get all pops and count by religion
+    pops = list(mongo.db.pops.find({}, {"religion": 1}))
+    religion_counts = {}
+    
+    # Create a lookup dictionary for religion names
+    religion_id_to_name = {}
+    for religion in religions:
+        religion_id_to_name[str(religion["_id"])] = religion["name"]
+    
+    # Count pops by religion
+    for pop in pops:
+        religion_id = pop.get("religion")
+        if religion_id:
+            religion_name = religion_id_to_name.get(religion_id, "Unknown")
+            religion_counts[religion_name] = religion_counts.get(religion_name, 0) + 1
+    
+    # Sort by count (descending)
+    sorted_religion_data = sorted(religion_counts.items(), key=lambda x: x[1], reverse=True)
+    
+    # Prepare data for chart
+    religion_labels = [item[0] for item in sorted_religion_data]
+    religion_values = [item[1] for item in sorted_religion_data]
+    
+    # Create a dictionary of pop counts by religion name for the table
+    pop_counts = {}
+    for religion in religions:
+        religion_name = religion["name"]
+        pop_counts[religion_name] = religion_counts.get(religion_name, 0)
+    
+    return render_template(
+        "religion_list.html",
+        title=category_data["religions"]["pluralName"],
+        items=religions,
+        schema=schema,
+        religion_labels=religion_labels,
+        religion_values=religion_values,
+        pop_counts=pop_counts
+    )

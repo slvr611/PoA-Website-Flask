@@ -2,6 +2,7 @@
   "$jsonSchema": {
     "bsonType": "object",
     "required": ["name", "naming_scheme", "conversion_strength", "trait_one"],
+    "preview": ["trait_one", "trait_two", "trait_three", "founding_nation"],
     "properties": {
       "name": {
         "bsonType": "string",

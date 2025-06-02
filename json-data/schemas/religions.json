@@ -2,6 +2,7 @@
     "$jsonSchema": {
         "bsonType": "object",
         "required": ["name", "conversion_strength", "faith", "integrity", "empathy", "death", "pleasure", "aspiration", "funeral"],
+        "preview": ["religion_type", "conversion_strength", "founding_nation"],
         "properties": {
             "name": {
                 "bsonType": "string",
