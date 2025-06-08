@@ -545,8 +545,6 @@ class BaseSchemaForm(FlaskForm):
                 
             # Handle nested data structures
             field_value = item.get(field_name, None)
-            if field_value is None and not field_name == "technologies":  #This is because there are important functions for research called by load_form_from_item
-                continue
             
             if isinstance(field_value, ObjectId):
                 field.data = str(field_value)
@@ -586,10 +584,14 @@ class BaseSchemaForm(FlaskForm):
                 elif field_name == "titles":
                     titles = item.get("titles", [])
                     max_titles = schema.get("properties", {}).get(field_name, {}).get("max_length", 0)
+
+                    print(titles)
                     
                     if len(titles) < max_titles:
                         titles.extend([""] * (max_titles - len(titles)))
-                                            
+
+                    print(titles)
+                    
                     for title in titles:
                         field.append_entry(title)
                     
@@ -605,7 +607,7 @@ class BaseSchemaForm(FlaskForm):
                     for unit in units:
                         field.append_entry(unit)
                 
-                else:
+                elif field_value is not None:
                     # Add new entries from the data
                     for value in field_value:
                         if isinstance(value, dict):
