@@ -88,6 +88,8 @@ class TerritoryTerrainDict(Form):
 
     def load_form_from_item(self, item, schema):
         """Loads form data from a database item"""
+        if not item:
+            return
         for field_name, field in self._fields.items():
                 if isinstance(field, SelectField) and field.data:
                     field.data = str(field.data)
