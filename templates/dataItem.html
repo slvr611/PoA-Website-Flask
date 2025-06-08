@@ -125,6 +125,10 @@
 															<th>{{ preview_field|title }}</th>
 														{% endfor %}
 													{% endif %}
+													{% set preview_fields = properties.get("preview", []) %}
+													{% for preview_field in preview_fields %}
+														<th>{{ schema.properties.get(preview_field, {}).get("label", preview_field|title) }}</th>
+													{% endfor %}
 												</tr>
 											</thead>
 											<tbody>
@@ -142,6 +146,10 @@
 																</td>
 															{% endfor %}
 														{% endif %}
+														{% set preview_fields = properties.get("preview", []) %}
+														{% for preview_field in preview_fields %}
+															<td>{{ item.get(preview_field, "None") }}</td>
+														{% endfor %}
 													</tr>
 												{% endfor %}
 											</tbody>

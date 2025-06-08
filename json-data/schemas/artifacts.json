@@ -39,6 +39,11 @@
           }
         }
       },
+      "equipped": {
+        "bsonType": "boolean",
+        "label": "Equipped",
+        "description": "Whether the artifact is currently equipped"
+      },
       "effect_description": {
         "bsonType": "string",
         "label": "Effect Description",

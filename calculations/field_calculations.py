@@ -77,6 +77,8 @@ def calculate_all_fields(target, schema, target_data_type):
 
     attributes_to_precalculate = ["administration", "effective_territory", "current_territory", "road_capacity", "effective_pop_capacity", "pop_count"]
 
+    print(district_totals)
+    
     overall_total_modifiers = {}
     calculated_values = {"district_details": district_details, "job_details": job_details, "land_unit_details": land_unit_details, "naval_unit_details": naval_unit_details}
     for d in [external_modifiers_total, modifier_totals, district_totals, tech_totals, territory_terrain_totals, city_totals, law_totals, job_totals, unit_totals, prestige_modifiers, title_modifiers]:
@@ -645,7 +647,8 @@ def collect_external_requirements(target, schema, target_data_type):
                 query_target = field_schema["queryTargetAttribute"]
                 linked_objects = list(mongo.db[collection].find({query_target: str(target["_id"])}))
                 for object in linked_objects:
-                    collected_modifiers.extend(collect_external_modifiers_from_object(object, required_fields, linked_object_schema, target_data_type))
+                    if object.get("equipped", True):
+                        collected_modifiers.extend(collect_external_modifiers_from_object(object, required_fields, linked_object_schema, target_data_type))
             else:
                 object_id = target.get(field)
                 if not object_id:

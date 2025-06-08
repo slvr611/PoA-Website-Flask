@@ -185,6 +185,7 @@
         "description": "The list of artifacts that currently belong to this character",
 		"collections": ["artifacts"],
 		"queryTargetAttribute": "owner",
+        "preview": ["rarity", "equipped"],
         "items":{
 			"bsonType": "linked_object"
         }
