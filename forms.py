@@ -138,6 +138,10 @@ class JobAssignmentDict(Form):
     
     def load_form_from_item(self, item, schema):
         """Loads form data from a database item"""
+
+        if not item:
+            return
+
         for field_name, field in self._fields.items():
                 if isinstance(field, SelectField) and field.data:
                     field.data = str(field.data)
@@ -185,6 +189,10 @@ class LandUnitAssignmentDict(Form):
     
     def load_form_from_item(self, item, schema):
         """Loads form data from a database item"""
+
+        if not item:
+            return
+
         for unit_key, unit_val in item.items():
             unit_field = getattr(self, unit_key, None)
             if unit_field:
@@ -207,6 +215,10 @@ class NavalUnitAssignmentDict(Form):
     
     def load_form_from_item(self, item, schema):
         """Loads form data from a database item"""
+
+        if not item:
+            return
+
         for unit_key, unit_val in item.items():
             unit_field = getattr(self, unit_key, None)
             if unit_field:
@@ -225,6 +237,10 @@ class ModifierForm(Form):
     
     def load_form_from_item(self, item, schema):
         """Loads form data from a database item"""
+
+        if not item:
+            return
+
         for field_name, field in self._fields.items():
                 if isinstance(field, SelectField) and field.data:
                     field.data = str(field.data)
@@ -270,6 +286,10 @@ class ProgressQuestForm(Form):
     
     def load_form_from_item(self, item, schema):
         """Loads form data from a database item"""
+
+        if not item:
+            return
+
         for field_name, field in self._fields.items():
                 if isinstance(field, SelectField) and field.data:
                     field.data = str(field.data)
@@ -321,6 +341,10 @@ class DistrictDict(Form):
     
     def load_form_from_item(self, item, schema):
         """Loads form data from a database item"""
+
+        if not item:
+            return
+
         for field_name, field in self._fields.items():
                 if isinstance(field, SelectField) and field.data:
                     field.data = str(field.data)
@@ -377,6 +401,10 @@ class CityDict(Form):
 
     def load_form_from_item(self, item, schema):
         """Loads form data from a database item"""
+
+        if not item:
+            return
+
         for field_name, field in self._fields.items():
                 if isinstance(field, SelectField) and field.data:
                     field.data = str(field.data)
@@ -453,6 +481,10 @@ class OverallTechDict(Form):
     
     def load_form_from_item(self, nation, schema):
         """Load tech data from nation's techs"""
+
+        if not nation:
+            return
+
         techs = nation.get("technologies", None)
 
         if not (techs and isinstance(techs, dict)):
@@ -541,6 +573,10 @@ class BaseSchemaForm(FlaskForm):
     
     def load_form_from_item(self, item, schema):
         """Loads form data from a database item with proper type conversion"""
+
+        if not item:
+            return
+
         for field_name, field in self._fields.items():
             if isinstance(field, SelectField) and field.data:
                 field.data = str(field.data)
@@ -965,6 +1001,10 @@ class JobForm(BaseSchemaForm):
 
     def load_form_from_item(self, item, schema):
         """Loads form data from a database item"""
+
+        if not item:
+            return
+
         for job_key, job_val in item.items():
                 job_field = getattr(self.jobs, job_key, None)
                 if job_field:
