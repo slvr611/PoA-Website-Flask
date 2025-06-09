@@ -531,9 +531,13 @@ class BaseSchemaForm(FlaskForm):
         elif field_name == "titles":
             choices += [(title, json_data["titles"][title]["display_name"]) for title in json_data["titles"]]
         
-        elif field_name == "units":
+        elif field_name == "land_units" or field_name == "naval_units":
             combined_data = {}
-            json_files = land_unit_json_files + naval_unit_json_files
+            json_files = []
+            if field_name == "land_units":
+                json_files = land_unit_json_files
+            else:
+                json_files = naval_unit_json_files
             for file_name in json_files:
                 combined_data.update(json_data[file_name])
             choices += [(key, data.get("display_name", key))
@@ -600,6 +604,8 @@ class BaseSchemaForm(FlaskForm):
                     if len(districts) < max_districts:
                         districts.extend([""] * (max_districts - len(districts)))
                     
+                    if len(districts) > max_districts:
+                        districts = districts[:max_districts]
 
                     for district in districts:
                         field.append_entry(district)
@@ -608,7 +614,7 @@ class BaseSchemaForm(FlaskForm):
                     cities = item.get("cities", [])
                     max_cities = schema.get("properties", {}).get(field_name, {}).get("max_length", 0)
                     if isinstance(max_cities, str):
-                        max_cities = item.get(max_cities, 0)
+                        max_cities = int(item.get(max_cities, 0))
                     
                     if len(cities) < max_cities:
                         cities.extend([""] * (max_cities - len(cities)))
@@ -622,19 +628,20 @@ class BaseSchemaForm(FlaskForm):
                 elif field_name == "titles":
                     titles = item.get("titles", [])
                     max_titles = schema.get("properties", {}).get(field_name, {}).get("max_length", 0)
+                    if isinstance(max_titles, str):
+                        max_titles = int(item.get(max_titles, 0))
 
-                    print(titles)
-                    
                     if len(titles) < max_titles:
                         titles.extend([""] * (max_titles - len(titles)))
-
-                    print(titles)
+                    
+                    if len(titles) > max_titles:
+                        titles = titles[:max_titles]
                     
                     for title in titles:
                         field.append_entry(title)
                     
-                elif field_name == "units":
-                    units = item.get("units", [])
+                elif field_name == "land_units" or field_name == "naval_units":
+                    units = item.get(field_name, [])
                     max_units = schema.get("properties", {}).get(field_name, {}).get("max_length", 0)
                     if isinstance(max_units, str):
                         max_units = item.get(max_units, 0)

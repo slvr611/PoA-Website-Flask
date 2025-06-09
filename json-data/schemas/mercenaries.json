@@ -137,16 +137,28 @@
 		    "label": "Treasury",
         "description": "The amount of money the mercenary company has in its coffers"
       },
-      "budget": {
+      "land_budget": {
         "bsonType": "number",
-		    "label": "Budget",
-        "description": "The amount of money the mercenary company has to recruit units with",
+		    "label": "Land Budget",
+        "description": "The amount of money the mercenary company has to recruit land units with",
 		    "calculated": true
       },
-      "budget_spent": {
+      "land_budget_spent": {
         "bsonType": "number",
-		    "label": "Budget Spent",
-        "description": "The amount of money the mercenary company has spent to recruit units",
+		    "label": "Land Budget Spent",
+        "description": "The amount of money the mercenary company has spent to recruit land units",
+		    "calculated": true
+      },
+      "naval_budget": {
+        "bsonType": "number",
+		    "label": "Naval Budget",
+        "description": "The amount of money the mercenary company has to recruit naval units with",
+		    "calculated": true
+      },
+      "naval_budget_spent": {
+        "bsonType": "number",
+		    "label": "Naval Budget Spent",
+        "description": "The amount of money the mercenary company has spent to recruit naval units",
 		    "calculated": true
       },
       "hiring_cost": {
@@ -171,16 +183,25 @@
 		      "json_data": "mercenary_districts"
         }
       },
-      "units": {
+      "land_units": {
         "bsonType": "array",
-		    "label": "Units",
+		    "label": "Land Units",
         "description": "The units the mercenary company owns",
         "max_length": "max_units",
         "items":{
           "bsonType": "json_unit_enum",
           "json_data": ["ancient_magical_land_units", "ancient_mundane_land_units",
-                         "classical_magical_land_units", "classical_mundane_land_units",
-                         "ancient_mundane_naval_units", "classical_magical_naval_units",
+                         "classical_magical_land_units", "classical_mundane_land_units"]
+        }
+      },
+      "naval_units": {
+        "bsonType": "array",
+		    "label": "Naval Units",
+        "description": "The units the mercenary company owns",
+        "max_length": "max_units",
+        "items":{
+          "bsonType": "json_unit_enum",
+          "json_data": ["ancient_mundane_naval_units", "classical_magical_naval_units",
                          "classical_mundane_naval_units"]
         }
       },

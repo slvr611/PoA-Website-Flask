@@ -552,15 +552,23 @@ def compute_age_status(field, target, base_value, field_schema, overall_total_mo
 
     return value
 
+def compute_stat_cap(field, target, base_value, field_schema, overall_total_modifiers):
+    value = base_value + overall_total_modifiers.get(field, 0) + overall_total_modifiers.get("stat_cap", 0)
+
+    return value
+
 def compute_stat(field, target, base_value, field_schema, overall_total_modifiers):
     value = base_value + overall_total_modifiers.get(field, 0) + overall_total_modifiers.get("stats", 0)
     ignore_elderly = overall_total_modifiers.get("ignore_elderly", 0) > 0
+    cap = target.get(field + "_cap", 6)
 
     age_status = target.get("age_status", "Adult")
     if age_status == "Child":
         value -= 1
     elif age_status == "Elderly" and not ignore_elderly:
         value -= 1
+    
+    value = min(value, cap)
     
     return value
 
@@ -604,6 +612,11 @@ def compute_magic_point_capacity(field, target, base_value, field_schema, overal
 
     return value
 
+def compute_budget(field, target, base_value, field_schema, overall_total_modifiers):
+    value = base_value + overall_total_modifiers.get(field, 0) + overall_total_modifiers.get("budget", 0)
+
+    return value
+
 def compute_budget_spent(field, target, base_value, field_schema, overall_total_modifiers):
     value = overall_total_modifiers.get(field, 0)
 
@@ -614,7 +627,14 @@ def compute_budget_spent(field, target, base_value, field_schema, overall_total_
     for file_name in naval_unit_json_files:
         combined_json_data.update(json_data[file_name])
 
-    units = target.get("units", [])
+    units = []
+    if field == "land_budget_spent":
+        units = target.get("land_units", [])
+    elif field == "naval_budget_spent":
+        units = target.get("naval_units", [])
+    else:
+        return value
+
     for unit in units:
         value += combined_json_data.get(unit, {}).get("recruitment_cost", {}).get("money", 0)
     
@@ -625,7 +645,7 @@ def compute_hiring_cost(field, target, base_value, field_schema, overall_total_m
     
     value += target.get("upkeep", 0)
     
-    value += target.get("budget_spent", 0)
+    value += target.get("land_budget_spent", 0) + target.get("naval_budget_spent", 0)
 
     value *= 1 + overall_total_modifiers.get("hiring_cost_mult", 0)
 
@@ -678,6 +698,12 @@ CUSTOM_COMPUTE_FUNCTIONS = {
     "mercenary_naval_attack": compute_mercenary_naval_attack,
     "mercenary_naval_defense": compute_mercenary_naval_defense,
     "age_status": compute_age_status,
+    "rulership_cap": compute_stat_cap,
+    "cunning_cap": compute_stat_cap,
+    "charisma_cap": compute_stat_cap,
+    "prowess_cap": compute_stat_cap,
+    "magic_cap": compute_stat_cap,
+    "strategy_cap": compute_stat_cap,
     "rulership": compute_stat,
     "cunning": compute_stat,
     "charisma": compute_stat,
@@ -688,7 +714,10 @@ CUSTOM_COMPUTE_FUNCTIONS = {
     "heal_chance": compute_heal_chance,
     "magic_point_income": compute_magic_point_income,
     "magic_point_capacity": compute_magic_point_capacity,
-    "budget_spent": compute_budget_spent,
+    "land_budget": compute_budget,
+    "naval_budget": compute_budget,
+    "land_budget_spent": compute_budget_spent,
+    "naval_budget_spent": compute_budget_spent,
     "hiring_cost": compute_hiring_cost,
 
 }

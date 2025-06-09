@@ -190,12 +190,19 @@
 			"bsonType": "linked_object"
         }
       },
+      "title_slots": {
+        "bsonType": "number",
+		"label": "Title Slots",
+        "description": "The number of title slots the character has available",
+		"calculated": true,
+        "base_value": 3
+      },
       "titles": {
         "bsonType": "array",
 		"label": "Titles",
         "description": "The titles the character currently holds",
 		"static": true,
-        "max_length": 3,
+        "max_length": "title_slots",
         "items":{
             "bsonType": "json_district_enum",
             "json_data": "titles"
@@ -260,6 +267,48 @@
         "base_value": 0.05,
         "heal_chance_per_prowess": 0.05,
         "format": "percentage"
+      },
+      "rulership_cap": {
+        "bsonType": "number",
+		"label": "Rulership Cap",
+        "description": "The maximum Rulership stat of the character",
+		"calculated": true,
+        "base_value": 6
+      },
+      "cunning_cap": {
+        "bsonType": "number",
+		"label": "Cunning Cap",
+        "description": "The maximum Cunning stat of the character",
+		"calculated": true,
+        "base_value": 6
+      },
+      "charisma_cap": {
+        "bsonType": "number",
+		"label": "Charisma Cap",
+        "description": "The maximum Charisma stat of the character",
+		"calculated": true,
+        "base_value": 6
+      },
+      "prowess_cap": {
+        "bsonType": "number",
+		"label": "Prowess Cap",
+        "description": "The maximum Prowess stat of the character",
+		"calculated": true,
+        "base_value": 6
+      },
+      "magic_cap": {
+        "bsonType": "number",
+		"label": "Magic Cap",
+        "description": "The maximum Magic stat of the character",
+		"calculated": true,
+        "base_value": 6
+      },
+      "strategy_cap": {
+        "bsonType": "number",
+		"label": "Strategy Cap",
+        "description": "The maximum Strategy stat of the character",
+		"calculated": true,
+        "base_value": 6
       },
 	  "rulership": {
         "bsonType": "number",

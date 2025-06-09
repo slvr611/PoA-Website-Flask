@@ -92,8 +92,6 @@
         if (!tech && !nation_tech) return 0;
         
         let cost = nation_tech?.cost || Math.max(tech?.cost + (tech_cost_modifier || 0), (tech_cost_minimum || 2));
-
-        console.log(cost)
         
         return cost;
     }
@@ -274,7 +272,7 @@
             setTimeout(() => {
                 cy.fit();
                 cy.zoom(cy.zoom() * 0.9); // Zoom out slightly to show everything
-            }, 50); // Small delay to ensure the container is fully visible
+            }, 200); // Small delay to ensure the container is fully visible
         }
     }
 
@@ -289,7 +287,7 @@
         // If the tech section is expanded, recenter after a delay
         const techSection = document.getElementById('tech-section');
         if (techSection && techSection.classList.contains('section-expanded')) {
-            setTimeout(recenterTechTree, 200);
+            setTimeout(recenterTechTree, 50);
         }
     });
 
@@ -313,9 +311,6 @@
                     const tech = techs[techId];
                     const invested = node.data('invested') || 0;
                     let investing = 0;
-                    console.log(form)
-                    console.log(techId)
-                    console.log(form[techId])
                     if (form && form[techId] && form[techId].investing) {
                         investing = form[techId].investing.data;
                     }

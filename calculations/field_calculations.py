@@ -77,8 +77,6 @@ def calculate_all_fields(target, schema, target_data_type):
 
     attributes_to_precalculate = ["administration", "effective_territory", "current_territory", "road_capacity", "effective_pop_capacity", "pop_count"]
 
-    print(district_totals)
-    
     overall_total_modifiers = {}
     calculated_values = {"district_details": district_details, "job_details": job_details, "land_unit_details": land_unit_details, "naval_unit_details": naval_unit_details}
     for d in [external_modifiers_total, modifier_totals, district_totals, tech_totals, territory_terrain_totals, city_totals, law_totals, job_totals, unit_totals, prestige_modifiers, title_modifiers]:
@@ -903,8 +901,8 @@ def sum_unit_totals(units_assigned, unit_details, unit_json_files):
             if field == "money":
                 field = "money_income"
                 val = -val
-            if field == "prestige":
-                field = "prestige_income"
+            elif field == "prestige":
+                field = "prestige_gain"
                 val = -val
             elif field in general_resources or field in unique_resources:
                 field = field + "_consumption"
@@ -919,9 +917,9 @@ def sum_unit_totals(units_assigned, unit_details, unit_json_files):
                 total_value = int(math.ceil(total_value))
             else:
                 total_value = int(round(total_value))
-
+            
             totals[field] = totals.get(field, 0) + total_value
-        
+    
     return totals
 
 def sum_external_modifier_totals(external_modifiers):

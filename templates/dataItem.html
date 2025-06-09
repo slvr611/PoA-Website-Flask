@@ -265,8 +265,8 @@
 											{% set combined_data = combined_data.update(json_data[file_name]) %}
 										{% endfor %}
 										{% for i in range(0, length) %}
-											{% if item[field][i] and item[field][i] in combined_data %}
-												<li>{{ combined_data[item[field][i]]["display_name"] }}</li>
+											{% if item.get(field, [])[i] and item.get(field, [])[i] in combined_data %}
+												<li>{{ combined_data[item.get(field, [])[i]]["display_name"] }}</li>
 											{% else %}
 												<li>None</li>
 											{% endif %}

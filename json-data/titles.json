@@ -1139,5 +1139,20 @@
 		"modifiers": {
 			"unit_recruitment_discount": -0.25
 		}
+	},
+	"the_chosen_of_the_symphonist": {
+		"display_name": "the Chosen of the Symphonist",
+		"tier": 1,
+		"type": "unique",
+		"modifiers": {
+			"character_stat_cap": 2,
+			"nation_administration": 2
+		}
+	},
+	"the_sun_king": {
+		"display_name": "the Sun King",
+		"tier": 1,
+		"type": "unique",
+		"modifiers": {}
 	}
 }
