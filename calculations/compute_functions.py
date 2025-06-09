@@ -578,6 +578,9 @@ def compute_death_chance(field, target, base_value, field_schema, overall_total_
 
     value = round(max((age - elderly_age) * (0.2 + overall_total_modifiers.get("death_chance_per_elderly_age", 0)), 0), 2)
 
+    if overall_total_modifiers.get("elderly_death_start_early", 0) > 0 and age >= elderly_age:
+        value += 0.2 + overall_total_modifiers.get("death_chance_per_elderly_age", 0)
+
     cunning = compute_stat("cunning", target, 0, {}, overall_total_modifiers)
     value += cunning * overall_total_modifiers.get("death_chance_per_cunning", 0)
 
