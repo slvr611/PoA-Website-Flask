@@ -653,6 +653,8 @@ def collect_external_requirements(target, schema, target_data_type):
                     continue
                 
                 object = mongo.db[collection].find_one({"_id": ObjectId(object_id)})
+                if not object:
+                    continue
                 collected_modifiers.extend(collect_external_modifiers_from_object(object, required_fields, linked_object_schema, target_data_type))
     
     return collected_modifiers

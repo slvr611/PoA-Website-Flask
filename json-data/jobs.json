@@ -77,7 +77,7 @@
 	"merchant": {
 		"display_name": "Merchant",
 		"upkeep": {
-			"mount": 1
+			"mounts": 1
 		},
 		"production": {
 			"trade_distance": 4,
