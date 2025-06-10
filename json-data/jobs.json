@@ -2,7 +2,7 @@
 	"artificer": {
 		"display_name": "Artificer",
 		"requirements":{
-			"district": "artifactory"
+			"district": ["artifactory"]
 		},
 		"production": {
 			"artifact_rolls": 2
@@ -11,22 +11,31 @@
 	"apprentice": {
 		"display_name": "Apprentice",
 		"requirements":{
-			"district": "barrow"
+			"district": ["barrow"]
 		},
 		"production": {
 			"nation_magic_spell_rolls": 2
 		}
 	},
+	"astronomer": {
+		"display_name": "Astronomer",
+		"requirements":{
+			"region": ["Wild Reach"]
+		},
+		"production": {
+			"stability_gain_chance": 0.05
+		}
+	},
 	"brewer": {
 		"display_name": "Brewer",
 		"requirements":{
-			"district": "brewery"
+			"district": ["brewery"]
 		},
 		"upkeep": {
 			"food": 1
 		},
 		"production": {
-			"chance_to_gain_stability": 0.1
+			"stability_gain_chance": 0.1
 		}
 	},
 	"bureaucrat": {
@@ -41,7 +50,7 @@
 	"farmer": {
 		"display_name": "Farmer",
 		"requirements":{
-			"district": "farm"
+			"district": ["farm"]
 		},
 		"upkeep": {
 			"wood": 1
@@ -53,7 +62,7 @@
 	"fisherman": {
 		"display_name": "Fisherman",
 		"requirements":{
-			"district": "dock"
+			"district": ["dock"]
 		},
 		"production": {
 			"food": 3
@@ -116,6 +125,17 @@
 		},
 		"production": {
 			"research": 1
+		}
+	},
+	"vampire": {
+		"display_name": "Vampire",
+		"requirements":{
+			"region": ["Twilight Mire"]
+		},
+		"production": {
+			"stability_loss_chance": 0.1,
+			"food": 1,
+			"magic": 1
 		}
 	}
 }

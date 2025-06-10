@@ -1,7 +1,7 @@
 import math
 import copy
 from app_core import mongo, json_data, category_data, land_unit_json_files, naval_unit_json_files
-from calculations.compute_functions import CUSTOM_COMPUTE_FUNCTIONS
+from calculations.compute_functions import CUSTOM_COMPUTE_FUNCTIONS, compute_pop_count
 from bson.objectid import ObjectId
 from app_core import json_data
 
@@ -57,7 +57,7 @@ def calculate_all_fields(target, schema, target_data_type):
 
         jobs_assigned = collect_jobs_assigned(target)
         job_details = calculate_job_details(target, district_details, modifier_totals, district_totals, tech_totals, city_totals, law_totals, external_modifiers_total)
-        job_totals = sum_job_totals(jobs_assigned, job_details)
+        job_totals = sum_job_totals(target, jobs_assigned, job_details)
 
         land_units_assigned = collect_land_units_assigned(target)
         land_unit_details = calculate_unit_details(target, "land", land_unit_json_files, modifier_totals, district_totals, tech_totals, city_totals, law_totals, external_modifiers_total)
@@ -143,7 +143,7 @@ def calculate_all_fields(target, schema, target_data_type):
 
         if excess_food < food_consumption:
             job_details = calculate_job_details(target, district_details, modifier_totals, district_totals, tech_totals, city_totals, law_totals, external_modifiers_total)
-            job_totals = sum_job_totals(target.get("jobs", {}), job_details)
+            job_totals = sum_job_totals(target, target.get("jobs", {}), job_details)
             calculated_values["job_details"] = job_details
 
             overall_total_modifiers = {}
@@ -426,7 +426,8 @@ def calculate_job_details(target, district_details, modifier_totals, district_to
     new_job_details = {}
     for job, details in job_details.items():
         locked = modifier_totals.get("locks_" + job, 0) + district_totals.get("locks_" + job, 0) + city_totals.get("locks_" + job, 0) + law_totals.get("locks_" + job, 0) + external_modifiers_total.get("locks_" + job, 0)
-        if ("requirements" not in details or ("district" in details["requirements"] and details["requirements"]["district"] in district_types)) and not locked:
+        meets_job_requirements = check_job_requirements(target, details)
+        if not locked and meets_job_requirements:
             new_details = copy.deepcopy(details)
             all_resource_production = 0
             all_resource_upkeep = 0
@@ -483,6 +484,31 @@ def calculate_job_details(target, district_details, modifier_totals, district_to
             new_job_details[job] = new_details
     
     return new_job_details
+
+def check_job_requirements(target, job_details):
+    requirements = job_details.get("requirements", {})
+    meets_requirements = True
+    districts = []
+    districts = [district.get("type", "") for district in target.get("districts", [])]
+    district_types = []
+    for district in districts:
+        district_types.append(json_data["nation_districts"].get(district, {}).get("type", ""))
+    region = target.get("region", "")
+    region_name = category_data["regions"]["database"].find_one({"_id": ObjectId(region)}, {"name": 1})["name"]
+
+    for requirement, value in requirements.items():
+        if requirement == "district":
+            has_district = False
+            for district in value:
+                if district in district_types:
+                    has_district = True
+            if not has_district:
+                meets_requirements = False
+        elif requirement == "region":
+            if region_name not in value:
+                meets_requirements = False
+    
+    return meets_requirements
 
 def collect_land_units_assigned(target):
     return target.get("land_units", {})
@@ -629,6 +655,13 @@ def calculate_unit_details(target, unit_type, unit_json_files, modifier_totals, 
 def collect_external_requirements(target, schema, target_data_type):
     external_reqs = schema.get("external_calculation_requirements", {})
     collected_modifiers = []
+    
+    # Add global modifiers
+    global_modifiers = list(mongo.db["global_modifiers"].find())
+    for global_mod in global_modifiers:
+        for modifier in global_mod.get("external_modifiers", []):
+            if modifier.get("type") == target_data_type:
+                collected_modifiers.append({modifier.get("modifier", ""): modifier.get("value", 0)})
     
     for field, required_fields in external_reqs.items():
 
@@ -820,7 +853,7 @@ def sum_city_totals(cities):
             totals[key] = totals.get(key, 0) + value
     return totals
 
-def sum_job_totals(jobs_assigned, job_details):
+def sum_job_totals(target, jobs_assigned, job_details):
     if not jobs_assigned:
         return {}
 
@@ -835,19 +868,30 @@ def sum_job_totals(jobs_assigned, job_details):
         original_job_production = original_job_details.get(job, {}).get("production", {})
         original_job_upkeep = original_job_details.get(job, {}).get("upkeep", {})
         for field, val in job_details.get(job, {}).get("production", {}).items():
+            round_result = False
             if field == "money":
                 field = "money_income"
+                round_result = True
             elif field in general_resources or field in unique_resources:
                 field = field + "_production"
+                round_result = True
+
+            if job == "astronomer":
+                pop_count = compute_pop_count("pop_count", target, 0, {}, {})
+                if count == pop_count:
+                    count += 6
+                elif count > pop_count / 2:
+                    count += 3
             
             total_value = val * count
             
-            if val > original_job_production.get(field, 0):
-                total_value = int(math.floor(total_value))
-            elif val < original_job_production.get(field, 0):
-                total_value = int(math.ceil(total_value))
-            else:
-                total_value = int(round(total_value))
+            if round_result:
+                if val > original_job_production.get(field, 0):
+                    total_value = int(math.floor(total_value))
+                elif val < original_job_production.get(field, 0):
+                    total_value = int(math.ceil(total_value))
+                else:
+                    total_value = int(round(total_value))
             
             totals[field] = totals.get(field, 0) + total_value
 

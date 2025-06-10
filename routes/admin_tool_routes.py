@@ -8,6 +8,7 @@ from app_core import category_data, rarity_rankings, mongo, json_data
 from pymongo import ASCENDING
 from bson import ObjectId
 from app_core import restore_mongodb
+from forms import form_generator
 import random
 import os
 import datetime
@@ -290,3 +291,36 @@ def download_tick_summary(filename):
         return send_file(file_path, as_attachment=True)
     
     return render_template('admin/view_tick_summary.html', content=content, filename=filename)
+
+@admin_tool_routes.route('/global_modifiers/item/global_modifiers')
+@admin_required
+def global_modifiers():
+    global_modifiers = mongo.db.global_modifiers.find_one({"name": "global_modifiers"})
+    if not global_modifiers:
+        global_modifiers = {"name": "global_modifiers"}
+        mongo.db.global_modifiers.insert_one(global_modifiers)
+    
+    return render_template('dataItem.html', 
+                          item=global_modifiers, 
+                          title="Global Modifier", 
+                          category="global_modifiers",
+                          schema=category_data["global_modifiers"]["schema"])
+
+@admin_tool_routes.route('/global_modifiers/edit/global_modifiers', methods=['GET'])
+@admin_required
+def edit_global_modifiers():
+    global_modifiers = mongo.db.global_modifiers.find_one({"name": "global_modifiers"})
+    if not global_modifiers:
+        global_modifiers = {"name": "global_modifiers"}
+        mongo.db.global_modifiers.insert_one(global_modifiers)
+    
+    schema = category_data["global_modifiers"]["schema"]
+    form = form_generator.get_form("global_modifiers", schema, item=global_modifiers)
+    
+    return render_template('dataItemEdit.html', 
+                          item=global_modifiers, 
+                          title="Global Modifier", 
+                          category="global_modifiers",
+                          schema=schema,
+                          form=form)
+

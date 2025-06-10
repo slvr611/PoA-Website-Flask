@@ -1,0 +1,44 @@
+{
+  "$jsonSchema": {
+    "bsonType": "object",
+    "required": ["name"],
+    "properties": {
+      "name": {
+        "bsonType": "string",
+        "label": "Name",
+        "description": "Name of the global modifier set"
+      },
+      "session_counter": {
+        "bsonType": "number",
+        "label": "Session Counter",
+        "description": "Counter for tracking game sessions"
+      },
+      "external_modifiers": {
+        "bsonType": "array",
+        "label": "Mechanical Modifiers",
+        "description": "Global mechanical modifiers that affect entities",
+        "items": {
+          "bsonType": "object",
+          "properties": {
+            "type": {
+              "bsonType": "enum",
+              "label": "Type",
+              "description": "The type of entity the modifier affects",
+              "enum": ["nation", "character", "merchant", "mercenary", "faction"]
+            },
+            "modifier": {
+              "bsonType": "string",
+              "label": "Modifier",
+              "description": "The modifier"
+            },
+            "value": {
+              "bsonType": "number",
+              "label": "Modifier Value",
+              "description": "The value of the modifier"
+            }
+          }
+        }
+      }
+    }
+  }
+}
