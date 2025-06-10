@@ -7,7 +7,8 @@
     "external_calculation_requirements": {
 		"race": ["positive_trait", "negative_trait"],
         "religion": ["external_modifiers"],
-        "artifacts": ["external_modifiers"]
+        "artifacts": ["external_modifiers"],
+        "region": ["external_modifiers"]
 	},
     "properties": {
       "name": {
