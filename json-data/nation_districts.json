@@ -482,6 +482,21 @@
 		},
 		"count": 1
 	},
+	"classical_church": {
+		"display_name": "Classical Church",
+		"type": "church",
+		"era": 3,
+		"cost": {
+			"wood": 4,
+			"stone": 5,
+			"bronze": 1
+		},
+		"modifiers": {},
+		"synergy_requirement": "wood",
+		"synergy_node_active": true,
+		"synergy_modifiers": {},
+		"count": 1
+	},
 	"classical_dock": {
 		"display_name": "Classical Dock",
 		"type": "dock",
@@ -507,6 +522,28 @@
 		"synergy_node_active": true,
 		"synergy_modifiers": {
 			"food_production": 1
+		},
+		"count": 1
+	},
+	"classical_fishery": {
+		"display_name": "Classical Fishery",
+		"type": "fishery",
+		"era": 3,
+		"cost": {
+			"food": 6,
+			"wood": 4,
+			"stone": 3
+		},
+		"modifiers": {
+			"stone_consumption": 1,
+			"fisherman_food_production": 1,
+			"food_production": 2,
+			"food_production_per_naval_unit": 0.5
+		},
+		"synergy_requirement": "food",
+		"synergy_node_active": true,
+		"synergy_modifiers": {
+			"food_production": 2
 		},
 		"count": 1
 	},

@@ -111,6 +111,16 @@
 			"stone": 3
 		}
 	},
+	"missionary": {
+		"display_name": "Missionary",
+		"requirements": {
+			"district": ["church"],
+			"district_era": 3
+		},
+		"production": {
+			"blacklash_chance": -0.1
+		}
+	},
 	"mystic": {
 		"display_name": "Mystic",
 		"production": {

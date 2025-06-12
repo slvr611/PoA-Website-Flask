@@ -492,15 +492,16 @@ def check_job_requirements(target, job_details):
     districts = [district.get("type", "") for district in target.get("districts", [])]
     district_types = []
     for district in districts:
-        district_types.append(json_data["nation_districts"].get(district, {}).get("type", ""))
+        district_types.append(json_data["nation_districts"].get(district, {}))
     region = target.get("region", "")
     region_name = category_data["regions"]["database"].find_one({"_id": ObjectId(region)}, {"name": 1})["name"]
 
     for requirement, value in requirements.items():
         if requirement == "district":
             has_district = False
-            for district in value:
-                if district in district_types:
+            required_district_era = requirements.get("district_era", 0)
+            for district in district_types:
+                if district.get("type", "") in value and district.get("era", 0) >= required_district_era:
                     has_district = True
             if not has_district:
                 meets_requirements = False
