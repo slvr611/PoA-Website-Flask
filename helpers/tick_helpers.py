@@ -400,7 +400,7 @@ def merchant_income_tick(old_merchant, new_merchant, calculated_merchant, schema
     new_merchant["treasury"] = int(old_merchant.get("treasury", 0)) + calculated_merchant.get("income", 0)
 
     new_merchant["resource_storage"] = {}
-    for resource, amount in calculated_merchant.get("resource_income", {}).items():
+    for resource, amount in calculated_merchant.get("resource_production", {}).items():
         new_merchant["resource_storage"][resource] = old_merchant["resource_storage"][resource] + amount
     return ""
 
@@ -428,7 +428,7 @@ def faction_income_tick(old_faction, new_faction, calculated_faction, schema):
 def nation_income_tick(old_nation, new_nation, calculated_nation, schema):
     new_nation["money"] = int(old_nation.get("money", 0)) + calculated_nation.get("money_income", 0)
     new_nation["resource_storage"] = {}
-    new_nation["production_at_tick"] = calculated_nation.get("resource_production", {})
+    new_nation["production_at_tick"] = calculated_nation.get("resource_excess", {})
     for resource, amount in calculated_nation.get("resource_excess", {}).items():
         new_nation["resource_storage"][resource] = min(calculated_nation.get("resource_storage", {}).get(resource, 0) + amount, calculated_nation.get("resource_capacity", {}).get(resource, 0))
     

@@ -443,6 +443,7 @@
 			"Archivist State": {
 				"administration_per_research_production": 3,
 				"max_administration_per_research_production": 3,
+				"locks_bureaucrat": true,
 				"effective_territory": -2,
 				"city_slots": 1
 			},
