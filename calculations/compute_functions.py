@@ -305,7 +305,9 @@ def compute_resource_production(field, target, base_value, field_schema, overall
     resources_per_node = 2 + overall_total_modifiers.get("production_per_node", 0)
     production_of_available_nodes = overall_total_modifiers.get("production_of_available_nodes", 0)  #TODO:  Figure out how to calculate which nodes the nation has for this modifier
     ignore_nodes = target.get("ignore_nodes", 0)
-    naval_unit_count = compute_unit_count("naval_unit_count", target, 0, {}, overall_total_modifiers)
+    naval_unit_count = 0
+    if "naval_unit_count" in target:
+        naval_unit_count = compute_unit_count("naval_unit_count", target, 0, {}, overall_total_modifiers)
 
     all_resources = json_data["general_resources"] + json_data["unique_resources"]
 
@@ -319,8 +321,7 @@ def compute_resource_production(field, target, base_value, field_schema, overall
             resource_nodes = overall_total_modifiers.get(resource["key"] + "_nodes", 0)
             specific_resource_production += resource_nodes * resources_per_node
         
-        print(resource["key"] + "_production_per_naval_unit", overall_total_modifiers.get(resource["key"] + "_production_per_naval_unit", 0))
-        
+
         if overall_total_modifiers.get(resource["key"] + "_production_per_naval_unit", 0) > 0:
             specific_resource_production += int(math.floor(naval_unit_count * overall_total_modifiers.get(resource["key"] + "_production_per_naval_unit", 0)))
         
