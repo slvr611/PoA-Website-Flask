@@ -534,7 +534,7 @@
 			},
 			"Hearth": {
 				"food_consumption": -3,
-				"hunter_food_production": 2,
+				"hunter_food_production": 1,
 				"hunter_food_production_from_dock_or_farm": 1,
 				"resource_production": -1,
 				"food_production": 1,

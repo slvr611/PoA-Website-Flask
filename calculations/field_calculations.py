@@ -118,10 +118,11 @@ def calculate_all_fields(target, schema, target_data_type):
         else:
             food_consumption = math.floor(food_consumption)
         
-        excess_food = calculated_values.get("resource_production", {}).get("food", 0) + target.get("resource_storage", {}).get("food", 0)
+        excess_food = calculated_values.get("resource_excess", {}).get("food", 0) + target.get("resource_storage", {}).get("food", 0)
 
-        if excess_food < food_consumption / 2:
+        if excess_food < -food_consumption / 2:
             #Nation is Starving
+            print("Starving")
             overall_total_modifiers["strength"] = overall_total_modifiers.get("strength", 0) - 2
             modifier_totals["stability_loss_chance"] = modifier_totals.get("stability_loss_chance", 0) + 0.25
             modifier_totals["job_resource_production"] = modifier_totals.get("job_resource_production", 0) - 1
@@ -131,8 +132,9 @@ def calculate_all_fields(target, schema, target_data_type):
             modifier_totals["fisherman_food_production"] = modifier_totals.get("fisherman_food_production", 0) + 1
             modifier_totals["locks_research_production"] = 1
 
-        elif excess_food < food_consumption:
+        elif excess_food < 0:
             #Nation is Underfed
+            print("Underfed")
             overall_total_modifiers["strength"] = overall_total_modifiers.get("strength", 0) - 1
             modifier_totals["stability_loss_chance"] = modifier_totals.get("stability_loss_chance", 0) + 0.1
             modifier_totals["job_resource_production"] = modifier_totals.get("job_resource_production", 0) - 1
@@ -192,7 +194,7 @@ def compute_field(field, target, base_value, field_schema, overall_total_modifie
     return compute_func(field, target, base_value, field_schema, overall_total_modifiers)
 
 def compute_field_default(field, target, base_value, field_schema, overall_total_modifiers):
-    return base_value + overall_total_modifiers.get(field, 0)
+    return int(base_value + overall_total_modifiers.get(field, 0))
 
 def calculate_prestige_modifiers(target, schema_properties):
     prestige = int(target.get("prestige", 50))
@@ -453,6 +455,10 @@ def calculate_job_details(target, district_details, modifier_totals, district_to
                             all_resource_production_multiplier = all_resource_production_multiplier * value
                         elif modifier.endswith("resource_upkeep_mult"):
                             all_resource_upkeep_multiplier = all_resource_upkeep_multiplier * value
+                        
+                        if job == "hunter":
+                            if modifier == "hunter_food_production_from_dock_or_farm" and ("dock" in district_types or "farm" in district_types):
+                                new_details.setdefault("production", {})["food"] = new_details.get("production", {}).get("food", 0) + value
 
             for resource in new_details.get("production", {}):
                 if resource in general_resources or resource in unique_resources:
