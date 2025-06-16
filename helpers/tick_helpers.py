@@ -418,7 +418,7 @@ def merchant_income_tick(old_merchant, new_merchant, calculated_merchant, schema
 
     new_merchant["resource_storage"] = {}
     for resource, amount in calculated_merchant.get("resource_production", {}).items():
-        new_merchant["resource_storage"][resource] = old_merchant["resource_storage"][resource] + amount
+        new_merchant["resource_storage"][resource] = old_merchant.get("resource_storage", {}).get(resource, 0) + amount
     return ""
 
 ###########################################################
