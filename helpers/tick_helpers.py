@@ -160,6 +160,16 @@ def tick(form_data):
                 tick_summary += tick_function(old_nations[i], new_nations[i], calculated_nations[i], nation_schema)
 
 
+    if "run_Global Modifiers" in form_data:
+        change_id = system_request_change(
+            data_type="global_modifiers",
+            item_id=old_target["_id"],
+            change_type="Update",
+            before_data=old_target,
+            after_data=new_target,
+            reason="Tick Update for Global Modifiers"
+        )
+        system_approve_change(change_id)
     
     for i in range(len(old_characters)):
         change_id = system_request_change(

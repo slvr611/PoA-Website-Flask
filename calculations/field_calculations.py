@@ -122,7 +122,6 @@ def calculate_all_fields(target, schema, target_data_type):
 
         if excess_food < -food_consumption / 2:
             #Nation is Starving
-            print("Starving")
             overall_total_modifiers["strength"] = overall_total_modifiers.get("strength", 0) - 2
             modifier_totals["stability_loss_chance"] = modifier_totals.get("stability_loss_chance", 0) + 0.25
             modifier_totals["job_resource_production"] = modifier_totals.get("job_resource_production", 0) - 1
@@ -134,7 +133,6 @@ def calculate_all_fields(target, schema, target_data_type):
 
         elif excess_food < 0:
             #Nation is Underfed
-            print("Underfed")
             overall_total_modifiers["strength"] = overall_total_modifiers.get("strength", 0) - 1
             modifier_totals["stability_loss_chance"] = modifier_totals.get("stability_loss_chance", 0) + 0.1
             modifier_totals["job_resource_production"] = modifier_totals.get("job_resource_production", 0) - 1
