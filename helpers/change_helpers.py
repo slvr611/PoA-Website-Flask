@@ -196,8 +196,9 @@ def deep_merge(original, updates):
 
 def deep_compare(original, updates):
     if isinstance(original, dict) and isinstance(updates, dict):
-        for key in updates:
-            if key not in original or not deep_compare(original[key], updates[key]):
+        keys = set(original.keys()) | set(updates.keys())
+        for key in keys:
+            if key not in original or key not in updates or not deep_compare(original[key], updates[key]):
                 return False
     elif isinstance(original, list) and isinstance(updates, list):
         if len(original) != len(updates):

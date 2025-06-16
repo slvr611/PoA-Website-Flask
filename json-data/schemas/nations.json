@@ -407,6 +407,13 @@
 		"calculated": true,
 		"format": "percentage"
       },
+	  "civil_war_chance": {
+        "bsonType": "number",
+		"label": "Civil War Chance",
+        "description": "The nation's percentage chance of experiencing a civil war each tick",
+		"calculated": true,
+		"format": "percentage"
+      },
 	  "district_slots": {
         "bsonType": "number",
 		"label": "District Slots",

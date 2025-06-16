@@ -17,6 +17,16 @@ def tick(form_data):
             return message
     tick_summary = ""
 
+    global_modifiers = mongo.db["global_modifiers"].find_one({"name": "global_modifiers"})
+    old_target = global_modifiers
+    new_target = deepcopy(global_modifiers)
+    calculated_target = deepcopy(global_modifiers)
+    schema = json_data["global_modifiers_schema"]
+    if global_modifiers:
+        run_key = f"run_Tick Session Number"
+        if run_key in form_data:
+            print("Tick Session Number")
+            tick_summary += tick_function(old_target, new_target, calculated_target, schema)
 
 
     character_schema, character_db = get_data_on_category("characters")
@@ -280,6 +290,10 @@ def progress_quests_tick(old_target, new_target, calculated_target, schema):
     
     return ""
 
+def tick_session_number(old_target, new_target, calculated_target, schema):
+    new_target["tick_session_number"] = old_target.get("tick_session_number", 0) + 1
+    return ""
+
 ###########################################################
 # Character Tick Functions
 ###########################################################
@@ -293,6 +307,9 @@ def character_death_tick(old_character, new_character, calculated_character, sch
     new_character["death_chance_at_tick"] = calculated_character.get("death_chance", 0)
     if death_roll <= calculated_character.get("death_chance", 0):
         new_character["health_status"] = "Dead"
+        new_character["ruling_nation_org"] = None
+        new_character["region"] = None
+        new_character["player"] = None
         result = f"{old_character.get('name', 'Unknown')} has died.\n"
 
         if old_character.get("ruling_nation_org", "") != "":
@@ -477,6 +494,18 @@ def nation_prestige_gain_tick(old_nation, new_nation, calculated_nation, schema)
     new_nation["prestige"] = min(max(new_nation["prestige"], 0), 100)
     return ""
 
+def nation_civil_war_tick(old_nation, new_nation, calculated_nation, schema):
+    if calculated_nation.get("civil_war_chance", 0) == 0:
+        return ""
+    civil_war_roll = random.random()
+    new_nation["civil_war_roll"] = civil_war_roll
+    new_nation["civil_war_chance_at_tick"] = calculated_nation.get("civil_war_chance", 0)
+    if civil_war_roll <= calculated_nation.get("civil_war_chance", 0):
+        new_nation["stability"] = "Unsettled"
+        return f"{old_nation.get('name', 'Unknown')} has experienced a civil war.\n"
+    return ""
+
+
 def nation_stability_tick(old_nation, new_nation, calculated_nation, schema):
     result = ""
     stability_enum = schema["properties"]["stability"]["enum"]
@@ -487,7 +516,7 @@ def nation_stability_tick(old_nation, new_nation, calculated_nation, schema):
     new_nation["stability_gain_chance_at_tick"] = calculated_nation.get("stability_gain_chance", 0)
 
     if stability_gain_roll <= calculated_nation.get("stability_gain_chance", 0):
-        stability_index = min(stability_index + 1, len(stability_enum) - 1)
+        stability_index += 1
         result += f"{old_nation.get('name', 'Unknown')} has gained a level of stability.\n"
 
     stab_loss_chance = calculated_nation.get("stability_loss_chance", 0)
@@ -505,8 +534,17 @@ def nation_stability_tick(old_nation, new_nation, calculated_nation, schema):
         stab_loss_amount += 1
     
     if stab_loss_amount > 0:
-        stability_index = max(stability_index - stab_loss_amount, 0)
+        stability_index -= stab_loss_amount
         result += f"{old_nation.get('name', 'Unknown')} has lost {stab_loss_amount} level(s) of stability.\n"
+
+    if stability_index < 0:
+        civil_war_chance = 0.5
+        civil_war_roll = random.random()
+        if civil_war_roll <= civil_war_chance:
+            stability_index = 1
+            result += f"{old_nation.get('name', 'Unknown')} has experienced a civil war.\n"
+
+    stability_index = min(max(stability_index, 0), len(stability_enum) - 1)
 
     new_nation["stability"] = stability_enum[stability_index]
 
@@ -596,6 +634,7 @@ def reset_rolling_karma_to_zero(old_nation, new_nation, schema):
 GENERAL_TICK_FUNCTIONS = {
     "Backup Database": backup_database,
     "Give Tick Summary": give_tick_summary,
+    "Tick Session Number": tick_session_number,
 }
 
 CHARACTER_TICK_FUNCTIONS = {
@@ -632,6 +671,7 @@ NATION_TICK_FUNCTIONS = {
     "Nation Update Rolling Karma Tick": update_rolling_karma,
     "Nation Infamy Decay Tick": nation_infamy_decay_tick,
     "Nation Prestige Gain Tick": nation_prestige_gain_tick,
+    "Nation Civil War Tick": nation_civil_war_tick,
     "Nation Stability Tick": nation_stability_tick,
     "Nation Concessions Tick": nation_concessions_tick,
     "Nation Rebellion Tick": nation_rebellion_tick,

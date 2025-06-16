@@ -38,7 +38,7 @@ def compute_prestige_gain(field, target, base_value, field_schema, overall_total
     artifacts = []
     rulers = list(category_data["characters"]["database"].find({"ruling_nation_org": str(target["_id"])}, {"_id": 1}))
     for ruler in rulers:
-        artifacts += list(category_data["artifacts"]["database"].find({"owner": str(ruler["_id"])}, {"_id": 1, "rarity": 1}))
+        artifacts += list(category_data["artifacts"]["database"].find({"owner": str(ruler["_id"]), "equipped": True}, {"_id": 1, "rarity": 1}))
     legendary_artifact_prestige_gain = 0
     mythical_artifact_prestige_gain = 0
 

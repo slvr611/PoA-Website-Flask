@@ -124,7 +124,7 @@ def roll_events():
             event_type = "Good"
         elif event_roll >= 7:
             event_type = "Neutral"
-        elif event_roll >= 5:
+        elif event_roll >= 4:
             event_type = "Bad"
         elif event_roll >= 2:
             event_type = "Very Bad"
