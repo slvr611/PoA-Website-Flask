@@ -26,7 +26,7 @@ def tick(form_data):
         run_key = f"run_Tick Session Number"
         if run_key in form_data:
             print("Tick Session Number")
-            tick_summary += tick_function(old_target, new_target, calculated_target, schema)
+            tick_summary += tick_session_number(old_target, new_target, calculated_target, schema)
 
 
     character_schema, character_db = get_data_on_category("characters")
