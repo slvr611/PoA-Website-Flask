@@ -160,14 +160,14 @@ def tick(form_data):
                 tick_summary += tick_function(old_nations[i], new_nations[i], calculated_nations[i], nation_schema)
 
 
-    if "run_Global Modifiers" in form_data:
+    if "run_Tick Session Number" in form_data:
         change_id = system_request_change(
             data_type="global_modifiers",
             item_id=old_target["_id"],
             change_type="Update",
             before_data=old_target,
             after_data=new_target,
-            reason="Tick Update for Global Modifiers"
+            reason="Tick Update for Tick Session Number"
         )
         system_approve_change(change_id)
     
@@ -479,7 +479,7 @@ def ai_resource_desire_tick(old_nation, new_nation, calculated_nation, schema):
     for resource in common_resources:
         desire_roll = random.random()
         base_price = resource_prices[resource]
-        price_roll = random.random() / 10 #Rolls somewhere between 1 and 10
+        price_roll = random.random() / 10 #Rolls somewhere between 0 and 10
         trade_type = "None"
         price = 0
         if desire_roll <= 0.05:
@@ -495,12 +495,13 @@ def ai_resource_desire_tick(old_nation, new_nation, calculated_nation, schema):
             price = base_price * (0.75 + price_roll)
             trade_type = "Sell"
         price = int(round(price / 5)) * 5
-        new_nation["resource_desires"].append({"resource": resource, "trade_type": trade_type, "price": price})
+        if price != 0:
+            new_nation["resource_desires"].append({"resource": resource, "trade_type": trade_type, "price": price})
     
     for resource in luxury_resources:
         desire_roll = random.random()
         base_price = resource_prices[resource]
-        price_roll = random.random() / 10 #Rolls somewhere between 1 and 10
+        price_roll = random.random() / 10 #Rolls somewhere between 0 and 10
         trade_type = "None"
         price = 0
         if desire_roll <= 0.01:
@@ -510,7 +511,8 @@ def ai_resource_desire_tick(old_nation, new_nation, calculated_nation, schema):
             price = base_price * (0.75 + price_roll)
             trade_type = "Buy"
         price = int(round(price / 5)) * 5
-        new_nation["resource_desires"].append({"resource": resource, "trade_type": trade_type, "price": price})
+        if price != 0:
+            new_nation["resource_desires"].append({"resource": resource, "trade_type": trade_type, "price": price})
         
     return ""
 
