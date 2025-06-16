@@ -53,7 +53,7 @@ def compute_prestige_gain(field, target, base_value, field_schema, overall_total
 
     value += overall_total_modifiers.get(field, 0)
 
-    return value
+    return int(value)
 
 def compute_administration(field, target, base_value, field_schema, overall_total_modifiers):
     production = compute_resource_production("resource_production", target, 0, {}, overall_total_modifiers)
@@ -70,28 +70,28 @@ def compute_administration(field, target, base_value, field_schema, overall_tota
         max_admin = base_value + (research_production // max_admin_per_research)
         value = min(value, max_admin)
     
-    return value
+    return int(value)
 
 def compute_field_effective_territory(field, target, base_value, field_schema, overall_total_modifiers):
     administration = target.get("administration", 0)
     
     value = base_value + overall_total_modifiers.get(field, 0) + (field_schema.get("effective_territory_per_admin", 0) * administration)
     
-    return value
+    return int(value)
 
 def compute_field_current_territory(field, target, base_value, field_schema, overall_total_modifiers):
     territory_types = target.get("territory_types", {})
 
     value = sum(territory_types.values())
     
-    return value
+    return int(value)
 
 def compute_field_road_capacity(field, target, base_value, field_schema, overall_total_modifiers):
     administration = target.get("administration", 0)
 
     value = base_value + overall_total_modifiers.get(field, 0) + (field_schema.get("road_capacity_per_admin", 0) * administration)
     
-    return value
+    return int(value)
     
 def compute_field_karma(field, target, base_value, field_schema, overall_total_modifiers):
     rolling_karma = int(target.get("rolling_karma", 0))
@@ -99,7 +99,7 @@ def compute_field_karma(field, target, base_value, field_schema, overall_total_m
     
     value = base_value + overall_total_modifiers.get(field, 0) + rolling_karma + temporary_karma
     
-    return value
+    return int(value)
 
 def compute_disobey_chance(field, target, base_value, field_schema, overall_total_modifiers):
     compliance = target.get("compliance", "None")
@@ -165,7 +165,7 @@ def compute_concessions_qty(field, target, base_value, field_schema, overall_tot
     value = base_value + overall_total_modifiers.get(field, 0)
     value *= overall_total_modifiers.get("concessions_qty_mult", 1)
     
-    return value
+    return int(value)
 
 def compute_working_pop_count(field, target, base_value, field_schema, overall_total_modifiers):
     workers_assigned = target.get("jobs", {})
@@ -177,7 +177,7 @@ def compute_working_pop_count(field, target, base_value, field_schema, overall_t
     if value is None:
         value = 0
 
-    return value
+    return int(value)
 
 def compute_pop_count(field, target, base_value, field_schema, overall_total_modifiers):
     pop_database = category_data["pops"]["database"]
@@ -185,7 +185,7 @@ def compute_pop_count(field, target, base_value, field_schema, overall_total_mod
     
     pop_count = int(pop_database.count_documents({"nation": target_id}) + overall_total_modifiers.get(field, 0))
     
-    return pop_count
+    return int(pop_count)
 
 def compute_minority_count(field, target, base_value, field_schema, overall_total_modifiers):
     pop_database = category_data["pops"]["database"]
@@ -208,7 +208,7 @@ def compute_minority_count(field, target, base_value, field_schema, overall_tota
     
     minority_count += overall_total_modifiers.get(field, 0)
     
-    return minority_count
+    return int(minority_count)
 
 def compute_stability_gain_chance(field, target, base_value, field_schema, overall_total_modifiers):
     karma = target.get("karma", 0)
@@ -264,7 +264,7 @@ def compute_district_slots(field, target, base_value, field_schema, overall_tota
     
     value = base_value + overall_total_modifiers.get(field, 0)  + math.floor(pop_count / 5)
     
-    return value
+    return int(value)
 
 def compute_unit_count(field, target, base_value, field_schema, overall_total_modifiers):
     unit_field = field.replace("_count", "s")
@@ -277,7 +277,7 @@ def compute_unit_count(field, target, base_value, field_schema, overall_total_mo
     if value is None:
         value = 0
 
-    return value
+    return int(value)
 
 def compute_unit_capacity(field, target, base_value, field_schema, overall_total_modifiers):
     pop_count = target.get("pop_count", 0)
@@ -286,7 +286,7 @@ def compute_unit_capacity(field, target, base_value, field_schema, overall_total
     
     value = base_value + overall_total_modifiers.get(field, 0) + unit_cap_from_pops
     
-    return value
+    return int(value)
 
 def compute_money_income(field, target, base_value, field_schema, overall_total_modifiers):
     pop_count = target.get("pop_count", 0)
@@ -299,7 +299,7 @@ def compute_money_income(field, target, base_value, field_schema, overall_total_
     if money_income_per_money_storage > 0:
         value += min((money_stockpile // money_income_per_money_storage) * 100, max_money_income_per_stockpile)  #money_income_per_stockpile gives $100 per x amount in stockpile
     
-    return value
+    return int(value)
     
 def compute_resource_production(field, target, base_value, field_schema, overall_total_modifiers):
     production_dict = {}
@@ -344,7 +344,7 @@ def compute_resource_production(field, target, base_value, field_schema, overall
         if overall_total_modifiers.get("locks_" + resource["key"] + "_production", 0) > 0:
             specific_resource_production = 0
 
-        production_dict[resource["key"]] = specific_resource_production
+        production_dict[resource["key"]] = int(specific_resource_production)
     
     return production_dict
 
@@ -376,7 +376,7 @@ def compute_resource_consumption(field, target, base_value, field_schema, overal
         
         specific_resource_consumption = max(specific_resource_consumption, 0)
         
-        consumption_dict[resource["key"]] = specific_resource_consumption
+        consumption_dict[resource["key"]] = int(specific_resource_consumption)
     
     return consumption_dict
 
@@ -389,7 +389,7 @@ def compute_resource_excess(field, target, base_value, field_schema, overall_tot
     all_resources = json_data["general_resources"] + json_data["unique_resources"]
     
     for resource in all_resources:
-        excess_dict[resource["key"]] = production_dict.get(resource["key"], 0) - consumption_dict.get(resource["key"], 0)
+        excess_dict[resource["key"]] = int(production_dict.get(resource["key"], 0) - consumption_dict.get(resource["key"], 0))
     
     return excess_dict
 
@@ -403,7 +403,7 @@ def compute_resource_storage_capacity(field, target, base_value, field_schema, o
         specific_resource_storage += overall_total_modifiers.get(resource["key"] + "_storage_capacity", 0)
         if specific_resource_storage > 0:
             specific_resource_storage += overall_total_modifiers.get("resource_storage_capacity", 0)
-        storage_dict[resource["key"]] = specific_resource_storage
+        storage_dict[resource["key"]] = int(specific_resource_storage)
     
     return storage_dict
 
@@ -418,9 +418,9 @@ def compute_import_slots(field, target, base_value, field_schema, overall_total_
 
     value *= 1 + overall_total_modifiers.get("trade_slots_mult", 0)
 
-    value = int(math.ceil(value))
+    value = math.ceil(value)
     
-    return value
+    return int(value)
 
 def compute_export_slots(field, target, base_value, field_schema, overall_total_modifiers):
     administration = target.get("administration", 0)
@@ -432,23 +432,23 @@ def compute_export_slots(field, target, base_value, field_schema, overall_total_
     value += overall_total_modifiers.get("trade_slots_per_admin", 0) * administration
 
     value *= (1 + overall_total_modifiers.get("trade_slots_mult", 0))
-    value = int(math.ceil(value))
+    value = math.ceil(value)
     
-    return value
+    return int(value)
 
 def compute_remaining_import_slots(field, target, base_value, field_schema, overall_total_modifiers):
     import_slots = target.get("import_slots", 0)
 
     value = import_slots
     
-    return value
+    return int(value)
 
 def compute_remaining_export_slots(field, target, base_value, field_schema, overall_total_modifiers):
     export_slots = target.get("export_slots", 0)
 
     value = export_slots
     
-    return value
+    return int(value)
 
 def compute_land_attack(field, target, base_value, field_schema, overall_total_modifiers):
     stability = target.get("stability", "Uknown")
@@ -467,7 +467,7 @@ def compute_land_attack(field, target, base_value, field_schema, overall_total_m
     if low_stability:
         value += overall_total_modifiers.get("low_stability_strength", 0)
     
-    return value
+    return int(value)
 
 def compute_land_defense(field, target, base_value, field_schema, overall_total_modifiers):
     stability = target.get("stability", "Uknown")
@@ -486,7 +486,7 @@ def compute_land_defense(field, target, base_value, field_schema, overall_total_
     if low_stability:
         value += overall_total_modifiers.get("low_stability_strength", 0)
     
-    return value
+    return int(value)
 
 def compute_naval_attack(field, target, base_value, field_schema, overall_total_modifiers):
     stability = target.get("stability", "Uknown")
@@ -505,7 +505,7 @@ def compute_naval_attack(field, target, base_value, field_schema, overall_total_
     if low_stability:
         value += overall_total_modifiers.get("low_stability_strength", 0)
     
-    return value
+    return int(value)
 
 def compute_naval_defense(field, target, base_value, field_schema, overall_total_modifiers):
     stability = target.get("stability", "Uknown")
@@ -524,27 +524,27 @@ def compute_naval_defense(field, target, base_value, field_schema, overall_total
     if low_stability:
         value += overall_total_modifiers.get("low_stability_strength", 0)
     
-    return value
+    return int(value)
 
 
 def compute_mercenary_land_attack(field, target, base_value, field_schema, overall_total_modifiers):
     value = base_value + overall_total_modifiers.get(field, 0) + overall_total_modifiers.get("mercenary_land_strength", 0) + overall_total_modifiers.get("mercenary_attack", 0) + overall_total_modifiers.get("mercenary_strength", 0)
     
-    return value
+    return int(value)
 
 def compute_mercenary_land_defense(field, target, base_value, field_schema, overall_total_modifiers):
     value = base_value + overall_total_modifiers.get(field, 0) + overall_total_modifiers.get("mercenary_land_strength", 0) + overall_total_modifiers.get("mercenary_defense", 0) + overall_total_modifiers.get("mercenary_strength", 0)
     
-    return value
+    return int(value)
 def compute_mercenary_naval_attack(field, target, base_value, field_schema, overall_total_modifiers):
     value = base_value + overall_total_modifiers.get(field, 0) + overall_total_modifiers.get("mercenary_naval_strength", 0) + overall_total_modifiers.get("mercenary_attack", 0) + overall_total_modifiers.get("mercenary_strength", 0)
     
-    return value
+    return int(value)
 
 def compute_mercenary_naval_defense(field, target, base_value, field_schema, overall_total_modifiers):
     value = base_value + overall_total_modifiers.get(field, 0) + overall_total_modifiers.get("mercenary_naval_strength", 0) + overall_total_modifiers.get("mercenary_defense", 0) + overall_total_modifiers.get("mercenary_strength", 0)
     
-    return value
+    return int(value)
 
 ##############################################################
 
@@ -562,7 +562,7 @@ def compute_age_status(field, target, base_value, field_schema, overall_total_mo
 def compute_stat_cap(field, target, base_value, field_schema, overall_total_modifiers):
     value = base_value + overall_total_modifiers.get(field, 0) + overall_total_modifiers.get("stat_cap", 0)
 
-    return value
+    return int(value)
 
 def compute_stat(field, target, base_value, field_schema, overall_total_modifiers):
     value = base_value + overall_total_modifiers.get(field, 0) + overall_total_modifiers.get("stats", 0)
@@ -577,7 +577,7 @@ def compute_stat(field, target, base_value, field_schema, overall_total_modifier
     
     value = min(value, cap)
     
-    return value
+    return int(value)
 
 def compute_death_chance(field, target, base_value, field_schema, overall_total_modifiers):
     age = target.get("age", 1)
@@ -613,19 +613,19 @@ def compute_magic_point_income(field, target, base_value, field_schema, overall_
 
     value = max(base_value + magic + overall_total_modifiers.get(field, 0), 0)
 
-    return value
+    return int(value)
 
 def compute_magic_point_capacity(field, target, base_value, field_schema, overall_total_modifiers):
     magic = target.get("magic", 0)
 
     value = max(base_value + overall_total_modifiers.get(field, 0) + (magic * field_schema.get("magic_point_capacity_per_magic", 0)), 0)
 
-    return value
+    return int(value)
 
 def compute_budget(field, target, base_value, field_schema, overall_total_modifiers):
     value = base_value + overall_total_modifiers.get(field, 0) + overall_total_modifiers.get("budget", 0)
 
-    return value
+    return int(value)
 
 def compute_budget_spent(field, target, base_value, field_schema, overall_total_modifiers):
     value = overall_total_modifiers.get(field, 0)
@@ -648,7 +648,7 @@ def compute_budget_spent(field, target, base_value, field_schema, overall_total_
     for unit in units:
         value += combined_json_data.get(unit, {}).get("recruitment_cost", {}).get("money", 0)
     
-    return value
+    return int(value)
 
 def compute_hiring_cost(field, target, base_value, field_schema, overall_total_modifiers):
     value = overall_total_modifiers.get(field, 0)
@@ -665,7 +665,7 @@ def compute_hiring_cost(field, target, base_value, field_schema, overall_total_m
 
     value *= 5
 
-    return value
+    return int(value)
 
 ##############################################################
 

@@ -87,16 +87,27 @@ unit_json_file_titles = ["Ancient Magical Land Units", "Ancient Mundane Land Uni
                         "Ancient Mundane Naval Units", "Classical Magical Naval Units", "Classical Mundane Naval Units",
                         "Ruler Units", "Void Units"]
 json_data = {"general_resources": [
-            {"key": "food", "name": "Food", "base_storage": 20},
-            {"key": "wood", "name": "Wood", "base_storage": 15},
-            {"key": "stone", "name": "Stone", "base_storage": 15},
-            {"key": "mounts", "name": "Mounts", "base_storage": 15},
+            {"key": "food", "name": "Food", "base_storage": 20, "base_price": 50},
+            {"key": "wood", "name": "Wood", "base_storage": 15, "base_price": 75},
+            {"key": "stone", "name": "Stone", "base_storage": 15, "base_price": 75},
+            {"key": "mounts", "name": "Mounts", "base_storage": 15, "base_price": 75},
             {"key": "research", "name": "Research", "base_storage": 0},
-            {"key": "magic", "name": "Magic", "base_storage": 10}
+            {"key": "magic", "name": "Magic", "base_storage": 10, "base_price": 100}
         ],
         "unique_resources": [
-            {"key": "bronze", "name": "Bronze", "base_storage": 5},
-            {"key": "iron", "name": "Iron", "base_storage": 0},
+            {"key": "bronze", "name": "Bronze", "base_storage": 5, "base_price": 125},
+            {"key": "iron", "name": "Iron", "base_storage": 0, "base_price": 150},
+        ],
+        "luxury_resources": [
+            {"key": "narcotics", "name": "Narcotics", "base_price": 300},
+            {"key": "spices", "name": "Spices", "base_price": 300},
+            {"key": "medicinal_herbs", "name": "Medicinal Herbs", "base_price": 300},
+            {"key": "dyes", "name": "dyes", "base_price": 300},
+            {"key": "magical_crystals", "name": "Magical Crystals", "base_price": 300},
+            {"key": "gold", "name": "Gold", "base_price": 300},
+            {"key": "moonstone", "name": "Moonstone", "base_price": 300},
+            {"key": "furs", "name": "Furs", "base_price": 300},
+            {"key": "quintessence", "name": "Quintessence", "base_price": 300},
         ]
 }
 

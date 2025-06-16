@@ -192,7 +192,10 @@ def compute_field(field, target, base_value, field_schema, overall_total_modifie
     return compute_func(field, target, base_value, field_schema, overall_total_modifiers)
 
 def compute_field_default(field, target, base_value, field_schema, overall_total_modifiers):
-    return int(base_value + overall_total_modifiers.get(field, 0))
+    value = base_value + overall_total_modifiers.get(field, 0)
+    if field_schema.get("format", None) != "percentage":
+        value = int(value)
+    return value
 
 def calculate_prestige_modifiers(target, schema_properties):
     prestige = int(target.get("prestige", 50))

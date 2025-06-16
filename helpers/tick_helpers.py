@@ -301,7 +301,7 @@ def progress_quests_tick(old_target, new_target, calculated_target, schema):
     return ""
 
 def tick_session_number(old_target, new_target, calculated_target, schema):
-    new_target["tick_session_number"] = old_target.get("tick_session_number", 0) + 1
+    new_target["session_counter"] = old_target.get("session_counter", 0) + 1
     return ""
 
 ###########################################################
@@ -336,19 +336,31 @@ def character_death_tick(old_character, new_character, calculated_character, sch
                 if leader_death_stab_loss_roll <= calculated_nation.get("stability_loss_chance_on_leader_death", 0):
                     result += f"{old_nation.get('name', 'Unknown')} has lost stability due to the death of their leader.\n"
                     stability_enum = nation_schema["properties"]["stability"]["enum"]
-                    stability_index = stability_enum.find(old_nation["stability"])
-                    stability_index = max(stability_index - 1, 0)
+                    stability_index = stability_enum.index(old_nation["stability"])
+                    stability_index = stability_index - 1
+
+                    if stability_index < 0:
+                        civil_war_chance = 0.5
+                        civil_war_roll = random.random()
+                        new_nation["leader_death_negative_stab_civil_war_roll"] = civil_war_roll
+                        new_nation["leader_death_negative_stab_civil_war_chance_at_tick"] = civil_war_chance
+                        if civil_war_roll <= civil_war_chance:
+                            stability_index = 1
+                            result += f"{old_nation.get('name', 'Unknown')} has experienced a civil war due to negative stab from the death of their leader.\n"
+                        else:
+                            stability_index = 0
+
                     new_nation["stability"] = stability_enum[stability_index]
                     # TODO: Add code to account for Autocracy increased stab loss on leader death based on age
-                    change_id = system_request_change(
-                        data_type="nations",
-                        item_id=old_nation["_id"],
-                        change_type="Update",
-                        before_data=old_nation,
-                        after_data=new_nation,
-                        reason="Death of " + old_character.get('name', 'Unknown') + " has caused a stability loss for " + old_nation.get('name', 'Unknown')
-                    )
-                    system_approve_change(change_id)
+                change_id = system_request_change(
+                    data_type="nations",
+                    item_id=old_nation["_id"],
+                    change_type="Update",
+                    before_data=old_nation,
+                    after_data=new_nation,
+                    reason="Death of " + old_character.get('name', 'Unknown') + " has caused an update for " + old_nation.get('name', 'Unknown')
+                )
+                system_approve_change(change_id)
         
         artifact_schema, artifact_db = get_data_on_category("artifacts")
         artifacts = list(artifact_db.find({"owner": old_character["_id"]}))
@@ -452,6 +464,56 @@ def faction_income_tick(old_faction, new_faction, calculated_faction, schema):
 # Nation Tick Functions
 ###########################################################
 
+def ai_resource_desire_tick(old_nation, new_nation, calculated_nation, schema):
+    if old_nation.get("temperament", "None") == "Player":
+        return ""
+    general_resources = [resource["key"] for resource in json_data["general_resources"]]
+    unique_resources = [resource["key"] for resource in json_data["unique_resources"]]
+    luxury_resources = [resource["key"] for resource in json_data["luxury_resources"]]
+    common_resources = general_resources + unique_resources
+    general_resource_prices = {resource["key"]: resource.get("base_price", 0) for resource in json_data["general_resources"]}
+    unique_resource_prices = {resource["key"]: resource.get("base_price", 0) for resource in json_data["unique_resources"]}
+    luxury_resource_prices = {resource["key"]: resource.get("base_price", 0) for resource in json_data["luxury_resources"]}
+    resource_prices = {**general_resource_prices, **unique_resource_prices, **luxury_resource_prices}
+    new_nation["resource_desires"] = []
+    for resource in common_resources:
+        desire_roll = random.random()
+        base_price = resource_prices[resource]
+        price_roll = random.random() / 10 #Rolls somewhere between 1 and 10
+        trade_type = "None"
+        price = 0
+        if desire_roll <= 0.05:
+            price = base_price * (1.15 + price_roll)
+            trade_type = "Buy"
+        elif desire_roll <= 0.15:
+            price = base_price * (0.75 + price_roll)
+            trade_type = "Buy"
+        elif desire_roll >= 0.85:
+            price = base_price * (1.15 + price_roll)
+            trade_type = "Sell"
+        elif desire_roll >= 0.95:
+            price = base_price * (0.75 + price_roll)
+            trade_type = "Sell"
+        price = int(round(price / 5)) * 5
+        new_nation["resource_desires"].append({"resource": resource, "trade_type": trade_type, "price": price})
+    
+    for resource in luxury_resources:
+        desire_roll = random.random()
+        base_price = resource_prices[resource]
+        price_roll = random.random() / 10 #Rolls somewhere between 1 and 10
+        trade_type = "None"
+        price = 0
+        if desire_roll <= 0.01:
+            price = base_price * (1.15 + price_roll)
+            trade_type = "Buy"
+        elif desire_roll <= 0.05:
+            price = base_price * (0.75 + price_roll)
+            trade_type = "Buy"
+        price = int(round(price / 5)) * 5
+        new_nation["resource_desires"].append({"resource": resource, "trade_type": trade_type, "price": price})
+        
+    return ""
+
 def nation_income_tick(old_nation, new_nation, calculated_nation, schema):
     new_nation["money"] = int(old_nation.get("money", 0)) + calculated_nation.get("money_income", 0)
     new_nation["resource_storage"] = {}
@@ -508,11 +570,11 @@ def nation_civil_war_tick(old_nation, new_nation, calculated_nation, schema):
     if calculated_nation.get("civil_war_chance", 0) == 0:
         return ""
     civil_war_roll = random.random()
-    new_nation["civil_war_roll"] = civil_war_roll
-    new_nation["civil_war_chance_at_tick"] = calculated_nation.get("civil_war_chance", 0)
+    new_nation["passive_civil_war_roll"] = civil_war_roll
+    new_nation["passive_civil_war_chance_at_tick"] = calculated_nation.get("civil_war_chance", 0)
     if civil_war_roll <= calculated_nation.get("civil_war_chance", 0):
         new_nation["stability"] = "Unsettled"
-        return f"{old_nation.get('name', 'Unknown')} has experienced a civil war.\n"
+        return f"{old_nation.get('name', 'Unknown')} has experienced a civil war due to passive civil war chance.\n"
     return ""
 
 
@@ -550,9 +612,11 @@ def nation_stability_tick(old_nation, new_nation, calculated_nation, schema):
     if stability_index < 0:
         civil_war_chance = 0.5
         civil_war_roll = random.random()
+        new_nation["passive_negative_stab_civil_war_roll"] = civil_war_roll
+        new_nation["passive_negative_stab_civil_war_chance_at_tick"] = civil_war_chance
         if civil_war_roll <= civil_war_chance:
             stability_index = 1
-            result += f"{old_nation.get('name', 'Unknown')} has experienced a civil war.\n"
+            result += f"{old_nation.get('name', 'Unknown')} has experienced a civil war due to negative stab.\n"
 
     stability_index = min(max(stability_index, 0), len(stability_enum) - 1)
 
@@ -676,6 +740,7 @@ FACTION_TICK_FUNCTIONS = {
 }
 
 NATION_TICK_FUNCTIONS = {
+    "AI Resource Desire Tick": ai_resource_desire_tick,
     "Nation Income Tick": nation_income_tick,
     "Nation Tech Tick": nation_tech_tick,
     "Nation Update Rolling Karma Tick": update_rolling_karma,
