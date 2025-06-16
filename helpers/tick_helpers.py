@@ -4,7 +4,7 @@ from pymongo import ASCENDING
 from helpers.change_helpers import system_request_change, system_approve_change
 from app_core import mongo, json_data, upload_to_s3
 from flask import flash
-from app_core import backup_mongodb
+from app_core import backup_mongodb, category_data
 from copy import deepcopy
 import random
 import os
@@ -21,7 +21,7 @@ def tick(form_data):
     old_target = global_modifiers
     new_target = deepcopy(global_modifiers)
     calculated_target = deepcopy(global_modifiers)
-    schema = json_data["global_modifiers_schema"]
+    schema = category_data["global_modifiers"]["schema"]
     if global_modifiers:
         run_key = f"run_Tick Session Number"
         if run_key in form_data:
