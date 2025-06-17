@@ -1231,3 +1231,51 @@ h1, h2 {
         height: 300px;
     }
 }
+
+.resource-desires-table {
+    width: 100%;
+    margin-top: 20px;
+    border-collapse: collapse;
+}
+
+.resource-desires-table th {
+    background-color: #333;
+    padding: 8px;
+    text-align: left;
+    border: 1px solid #444;
+    color: #fff;
+}
+
+.resource-desires-table td {
+    padding: 8px;
+    border: 1px solid #444;
+    background-color: #222;
+    color: #e0e0e0;
+}
+
+.resource-desires-table tr:nth-child(even) td {
+    background-color: #1e1e1e;
+}
+
+.resource-desires-table tr:hover td {
+    background-color: #2a2a2a;
+}
+
+/* Add styling for buy/sell indicators with different urgency levels */
+.resource-desires-table .buy-indicator {
+    color: #afffbd; /* Light green for regular buy */
+}
+
+.resource-desires-table .sell-indicator {
+    color: #ff9f9f; /* Light red for regular sell */
+}
+
+.resource-desires-table .need-buy-indicator {
+    color: #00ff00; /* Bright green for urgent buy needs */
+    font-weight: bold;
+}
+
+.resource-desires-table .need-sell-indicator {
+    color: #ff3333; /* Bright red for urgent sell needs */
+    font-weight: bold;
+}

@@ -62,6 +62,7 @@ category_data = {
     "spells": {"pluralName": "Spells", "singularName": "Spell", "database": mongo.db.spells},
     "wonders": {"pluralName": "Wonders", "singularName": "Wonder", "database": mongo.db.wonders},
     "markets": {"pluralName": "Markets", "singularName": "Market", "database": mongo.db.markets},
+    "market_links": {"pluralName": "Market Links", "singularName": "Market Link", "database": mongo.db.market_links},
     "wars": {"pluralName": "Wars", "singularName": "War", "database": mongo.db.wars},
     "diplo_relations": {"pluralName": "Diplomatic Relations", "singularName": "Diplomatic Relation", "database": mongo.db.diplo_relations},
     "pops": {"pluralName": "Pops", "singularName": "Pop", "database": mongo.db.pops},

@@ -9,6 +9,8 @@ from calculations.field_calculations import calculate_all_fields
 from app_core import category_data, mongo, rarity_rankings, json_data, find_dict_in_list
 from helpers.auth_helpers import admin_required
 from pymongo import ASCENDING
+from bson import ObjectId
+from copy import deepcopy
 
 
 data_item_routes = Blueprint("data_item_routes", __name__)
@@ -662,3 +664,144 @@ def religions_list():
         religion_values=religion_values,
         pop_counts=pop_counts
     )
+
+@data_item_routes.route("/markets/item/<item_ref>")
+def market_item(item_ref):
+    schema, db, market = get_data_on_item("markets", item_ref)
+    linked_objects = get_linked_objects(schema, market)
+    calculated_fields = calculate_all_fields(market, schema, "market")
+    market.update(calculated_fields)
+    
+    # Get all nations that are members of this market
+    member_nations = []
+    market_links_db = category_data["market_links"]["database"]
+    market_links = list(market_links_db.find({"market": str(market["_id"])}, {"member": 1}))
+    market["members"] = [link["member"] for link in market_links]
+    nations_db = category_data["nations"]["database"]
+    for member_id in market["members"]:
+        nation = nations_db.find_one({"_id": ObjectId(member_id)})
+        if nation:
+            member_nations.append(nation)
+    
+    # Collect resource desires from all member nations
+    resource_desires = []
+    for nation in member_nations:
+        if "resource_desires" in nation:
+            for desire in nation.get("resource_desires", []):
+                # Only include desires with quantity > 0
+                if desire.get("quantity", 0) > 0:
+                    resource_desires.append({
+                        "nation": nation.get("name", "Unknown"),
+                        "nation_id": str(nation.get("_id", "")),
+                        "resource": desire.get("resource", "Unknown"),
+                        "trade_type": desire.get("trade_type", "Unknown"),
+                        "price": desire.get("price", 0),
+                        "quantity": desire.get("quantity", 0)
+                    })
+    
+    # Sort by resource, then by price
+    resource_desires.sort(key=lambda x: (x["resource"], x["price"]))
+
+    return render_template(
+        "marketItem.html",
+        title=market.get("name", str(market.get("_id", ""))),
+        schema=schema,
+        item=market,
+        linked_objects=linked_objects,
+        resource_desires=resource_desires,
+        json_data=json_data,
+        find_dict_in_list=find_dict_in_list
+    )
+
+@data_item_routes.route("/markets/trade/request", methods=["POST"])
+def market_trade_request():
+    nation_id = request.form.get("nation_id")
+    resource = request.form.get("resource")
+    trade_type = request.form.get("trade_type")
+    price = int(request.form.get("price", 0))
+    quantity = int(request.form.get("quantity", 0))
+    reason = request.form.get("reason", "No reason provided")
+    
+    # Get the nation
+    nations_db = category_data["nations"]["database"]
+    nation = nations_db.find_one({"_id": ObjectId(nation_id)})
+    
+    if not nation:
+        flash("Nation not found")
+        return redirect("/go_back")
+    
+    # Create a copy of the nation for before/after comparison
+    before_data = deepcopy(nation)
+    after_data = deepcopy(nation)
+    
+    # Find and update the resource desire
+    for i, desire in enumerate(after_data.get("resource_desires", [])):
+        if desire.get("resource") == resource and desire.get("trade_type") == trade_type and desire.get("price") == price:
+            # Calculate new quantity
+            current_quantity = desire.get("quantity", 0)
+            new_quantity = max(0, current_quantity - quantity)
+            
+            # Update the quantity
+            after_data["resource_desires"][i]["quantity"] = new_quantity
+            break
+    
+    # Create change request
+    change_id = request_change(
+        data_type="nations",
+        item_id=nation["_id"],
+        change_type="Update",
+        before_data=before_data,
+        after_data=after_data,
+        reason=f"Trade request: {trade_type} {quantity} {resource} at {price} gold each. {reason}"
+    )
+    
+    flash(f"Trade request #{change_id} created and awaits admin approval.")
+    return redirect(request.referrer or "/markets")
+
+@data_item_routes.route("/markets/trade/save", methods=["POST"])
+@admin_required
+def market_trade_save():
+    nation_id = request.form.get("nation_id")
+    resource = request.form.get("resource")
+    trade_type = request.form.get("trade_type")
+    price = int(request.form.get("price", 0))
+    quantity = int(request.form.get("quantity", 0))
+    reason = request.form.get("reason", "No reason provided")
+    
+    # Get the nation
+    nations_db = category_data["nations"]["database"]
+    nation = nations_db.find_one({"_id": ObjectId(nation_id)})
+    
+    if not nation:
+        flash("Nation not found")
+        return redirect("/go_back")
+    
+    # Create a copy of the nation for before/after comparison
+    before_data = deepcopy(nation)
+    after_data = deepcopy(nation)
+    
+    # Find and update the resource desire
+    for i, desire in enumerate(after_data.get("resource_desires", [])):
+        if desire.get("resource") == resource and desire.get("trade_type") == trade_type and desire.get("price") == price:
+            # Calculate new quantity
+            current_quantity = desire.get("quantity", 0)
+            new_quantity = max(0, current_quantity - quantity)
+            
+            # Update the quantity
+            after_data["resource_desires"][i]["quantity"] = new_quantity
+            break
+    
+    # Create and approve change request
+    change_id = request_change(
+        data_type="nations",
+        item_id=nation["_id"],
+        change_type="Update",
+        before_data=before_data,
+        after_data=after_data,
+        reason=f"Trade executed: {trade_type} {quantity} {resource} at {price} gold each. {reason}"
+    )
+    
+    approve_change(change_id)
+    
+    flash(f"Trade request #{change_id} created and approved.")
+    return redirect(request.referrer or "/markets")

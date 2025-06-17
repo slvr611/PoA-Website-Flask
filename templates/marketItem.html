@@ -1,0 +1,276 @@
+{% extends "layout.html" %}
+
+{% block title %}{{ item["name"] }}{% endblock %}
+
+{% block content %}
+<div class="container">
+    {% if g.user is not none %}
+        <a href="{{ request.path.replace('item', 'edit') }}">Edit</a>
+    {% endif %}
+    <div class="action-links">
+        <a href="{{ request.path }}/changes/pending">View Pending Changes</a>
+        <a href="{{ request.path }}/changes/archived">View Change History</a>
+    </div>
+    <div class="content">
+        <h1>
+            {% if item.name %}
+                {{ item.name }}
+            {% else %}
+                {{ item._id }}
+            {% endif %}
+        </h1>
+        
+        <!-- Standard market information -->
+        <table class="info-table">
+            {% for field, properties in schema.properties.items() %}
+                {% if properties and not properties.hidden
+                and not (properties.hideIfNone is defined and (item.get(properties.hideIfNone) is none or item.get(properties.hideIfNone) == "" or not item.get(properties.hideIfNone)))%}
+                    <tr>
+                        <th><strong>{{ properties.label }}:</strong></th>
+                        {% if properties.bsonType == "string" or properties.bsonType == "enum" or properties.bsonType == "date"%}
+                            <td>{{ item[field] }}</td>
+                        {% elif properties.bsonType == "number" %}
+                            <td>{{ item[field] }}</td>
+                        {% elif properties.bsonType == "linked_object" %}
+                            <td>
+                                {% if field in linked_objects and linked_objects[field] is not none %}
+                                    <a href="{{ linked_objects[field]['link'] }}">{{ linked_objects[field]['name'] }}</a>
+                                {% else %}
+                                    None
+                                {% endif %}
+                            </td>
+                        {% elif properties.bsonType == "array" %}
+                            <td>
+                                {% if field in linked_objects and linked_objects[field] %}
+                                    <table class="linked-objects-table">
+                                        <thead>
+                                            <tr>
+                                                <th>#</th>
+                                                <th>Name</th>
+                                                {% for preview_field in properties.get("preview", []) %}
+                                                    {% if schema.properties[field].items and schema.properties[field].items.properties and preview_field in schema.properties[field].items.properties %}
+                                                        <th>{{ schema.properties[field].items.properties[preview_field].label }}</th>
+                                                    {% else %}
+                                                        <th>{{ preview_field|title }}</th>
+                                                    {% endif %}
+                                                {% endfor %}
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for linked_item in linked_objects[field] %}
+                                                <tr>
+                                                    <td>
+                                                        {% if linked_item.link_id %}
+                                                            <a href="/{{ linked_item.link_collection }}/item/{{ linked_item.link_id }}">{{ loop.index }}</a>
+                                                        {% else %}
+                                                            {{ loop.index }}
+                                                        {% endif %}
+                                                    </td>
+                                                    <td><a href="{{ linked_item['link'] }}">{{ linked_item['name'] }}</a></td>
+                                                    {% for preview_field in properties.get("preview", []) %}
+                                                        <td>{{ linked_item.get(preview_field, "None") }}</td>
+                                                    {% endfor %}
+                                                </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                {% else %}
+                                    None
+                                {% endif %}
+                            </td>
+                        {% endif %}
+                    </tr>
+                {% endif %}
+            {% endfor %}
+        </table>
+        
+        <!-- Resource Desires Section -->
+        <h2>Market Resource Desires</h2>
+        {% if resource_desires %}
+            <table class="info-table resource-desires-table">
+                <thead>
+                    <tr>
+                        <th>Nation</th>
+                        <th>Resource</th>
+                        <th>Trade Type</th>
+                        <th>Price</th>
+                        <th>Quantity</th>
+                        {% if g.user is not none %}
+                            <th>Actions</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for desire in resource_desires %}
+                        <tr>
+                            <td>{{ desire.nation }}</td>
+                            <td>{{ desire.resource }}</td>
+                            <td class="{% if 'Need to Buy' in desire.trade_type %}need-buy-indicator{% elif 'Need to Sell' in desire.trade_type %}need-sell-indicator{% elif 'Buy' in desire.trade_type %}buy-indicator{% elif 'Sell' in desire.trade_type %}sell-indicator{% endif %}">
+                                {{ desire.trade_type }}
+                            </td>
+                            <td>{{ desire.price }}</td>
+                            <td>{{ desire.quantity }}</td>
+                            {% if g.user is not none %}
+                                <td>
+                                    <button type="button" class="btn btn-primary" 
+                                            onclick="openTradeModal('{{ desire.nation }}', '{{ desire.nation_id }}', '{{ desire.resource }}', '{{ desire.trade_type }}', {{ desire.price }}, {{ desire.quantity }})">
+                                        Trade
+                                    </button>
+                                </td>
+                            {% endif %}
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p>No resource desires found for nations in this market.</p>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Trade Modal -->
+<div id="tradeModal" class="modal">
+    <div class="modal-content">
+        <span class="close">&times;</span>
+        <h2>Trade with <span id="tradeNationName"></span></h2>
+        <form id="tradeForm" method="POST" action="">
+            <input type="hidden" id="nationId" name="nation_id" value="">
+            <input type="hidden" id="resource" name="resource" value="">
+            <input type="hidden" id="tradeType" name="trade_type" value="">
+            <input type="hidden" id="price" name="price" value="">
+            
+            <div class="form-group">
+                <label for="tradeQuantity">Quantity to Trade:</label>
+                <input type="number" id="tradeQuantity" name="quantity" min="1" max="100" required>
+                <small>Available: <span id="availableQuantity"></span></small>
+            </div>
+            
+            <div class="form-group">
+                <label for="tradeReason">Link:</label>
+                <input type="text" id="tradeReason" name="reason" required placeholder="Give a discord link for this trade">
+            </div>
+            
+            <div class="form-actions">
+                {% if g.user.is_admin %}
+                    <button type="submit" formaction="/markets/trade/save">Execute Trade</button>
+                {% endif %}
+                <button type="submit" formaction="/markets/trade/request">Request Trade</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+/* Modal Styles */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0,0,0,0.7);
+}
+
+.modal-content {
+    background-color: #222;
+    margin: 15% auto;
+    padding: 20px;
+    border: 1px solid #444;
+    width: 50%;
+    color: #e0e0e0;
+}
+
+.close {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.close:hover,
+.close:focus {
+    color: #fff;
+    text-decoration: none;
+}
+
+.form-group {
+    margin-bottom: 15px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 5px;
+}
+
+.form-group input {
+    width: 100%;
+    padding: 8px;
+    box-sizing: border-box;
+    background-color: #333;
+    border: 1px solid #444;
+    color: #e0e0e0;
+}
+
+.form-actions {
+    margin-top: 20px;
+    text-align: right;
+}
+
+.form-actions button {
+    padding: 8px 16px;
+    margin-left: 10px;
+    background-color: #444;
+    border: none;
+    color: white;
+    cursor: pointer;
+}
+
+.form-actions button:hover {
+    background-color: #555;
+}
+</style>
+
+<script>
+    // Modal functionality
+    const modal = document.getElementById("tradeModal");
+    const closeBtn = document.getElementsByClassName("close")[0];
+    
+    function openTradeModal(nationName, nationId, resource, tradeType, price, quantity) {
+        document.getElementById("tradeNationName").textContent = nationName;
+        document.getElementById("nationId").value = nationId;
+        document.getElementById("resource").value = resource;
+        document.getElementById("tradeType").value = tradeType;
+        
+        // Update modal title to include trade type and resource
+        const actionVerb = tradeType === "Buy" ? "Buy" : "Sell";
+        const preposition = tradeType === "Buy" ? "from" : "to";
+        document.querySelector("#tradeModal h2").textContent = `${actionVerb} ${resource} ${preposition} ${nationName}`;
+        
+        document.getElementById("price").value = price;
+        document.getElementById("availableQuantity").textContent = quantity;
+        document.getElementById("tradeQuantity").max = quantity;
+        document.getElementById("tradeQuantity").value = 1;
+        
+        modal.style.display = "block";
+    }
+    
+    closeBtn.onclick = function() {
+        modal.style.display = "none";
+    }
+    
+    window.onclick = function(event) {
+        if (event.target == modal) {
+            modal.style.display = "none";
+        }
+    }
+</script>
+{% endblock %}
+
+
+
+
+

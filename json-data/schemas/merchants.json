@@ -90,9 +90,9 @@
 		"calculated": true,
 		"base_value": 9
       },
-	  "resource_storage": {
+	    "resource_storage": {
         "bsonType": "object",
-		"label": "Resource Storage",
+		    "label": "Resource Storage",
         "description": "The resource reserves of the merchant company"
       },
 	  "resource_production": {

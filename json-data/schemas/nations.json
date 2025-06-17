@@ -13,7 +13,8 @@
 		"primary_religion": ["external_modifiers"],
 		"wonders": ["external_modifiers", "node"],
 		"region": ["external_modifiers"],
-		"rulers": ["titles", "modifiers"]
+		"rulers": ["titles", "modifiers"],
+		"markets": ["market_safety_stance"]
 	},
     "properties": {
       "name": {
@@ -163,7 +164,8 @@
 		"linkCollection": "market_links",
 		"linkQueryTarget": "member",
 		"collections": ["markets"],
-		"queryTarget": "market"
+		"queryTarget": "market",
+		"preview": ["tier"]
       },
 	  "factions": {
         "bsonType": "array",

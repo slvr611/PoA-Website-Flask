@@ -482,21 +482,22 @@ def ai_resource_desire_tick(old_nation, new_nation, calculated_nation, schema):
         price_roll = random.random() / 10 #Rolls somewhere between 0 and 10
         trade_type = "None"
         price = 0
+        quantity = random.randint(1, 5)  # Random quantity between 1-5
         if desire_roll <= 0.05:
             price = base_price * (1.15 + price_roll)
-            trade_type = "Buy"
+            trade_type = "Need to Buy"
         elif desire_roll <= 0.15:
             price = base_price * (0.75 + price_roll)
-            trade_type = "Buy"
+            trade_type = "Desire to Buy"
         elif desire_roll >= 0.85:
             price = base_price * (1.15 + price_roll)
-            trade_type = "Sell"
+            trade_type = "Desire to Sell"
         elif desire_roll >= 0.95:
             price = base_price * (0.75 + price_roll)
-            trade_type = "Sell"
+            trade_type = "Need to Sell"
         price = int(round(price / 5)) * 5
         if price != 0:
-            new_nation["resource_desires"].append({"resource": resource, "trade_type": trade_type, "price": price})
+            new_nation["resource_desires"].append({"resource": resource, "trade_type": trade_type, "price": price, "quantity": quantity})
     
     for resource in luxury_resources:
         desire_roll = random.random()
@@ -504,15 +505,16 @@ def ai_resource_desire_tick(old_nation, new_nation, calculated_nation, schema):
         price_roll = random.random() / 10 #Rolls somewhere between 0 and 10
         trade_type = "None"
         price = 0
+        quantity = 1
         if desire_roll <= 0.01:
             price = base_price * (1.15 + price_roll)
-            trade_type = "Buy"
+            trade_type = "Need to Buy"
         elif desire_roll <= 0.05:
             price = base_price * (0.75 + price_roll)
-            trade_type = "Buy"
+            trade_type = "Desire to Buy"
         price = int(round(price / 5)) * 5
         if price != 0:
-            new_nation["resource_desires"].append({"resource": resource, "trade_type": trade_type, "price": price})
+            new_nation["resource_desires"].append({"resource": resource, "trade_type": trade_type, "price": price, "quantity": quantity})
         
     return ""
 
