@@ -25,7 +25,7 @@
 		},
 		"modifiers": {
 			"prestige_gain": -1,
-			"merchant_trade_slot_production": 2,
+			"merchant_trade_slots_production": 2,
 			"trade_risk_over_land": -0.1
 		},
 		"synergy_requirement": "any",

@@ -3,11 +3,26 @@
     "bsonType": "object",
     "required": ["name", "market_head"],
     "preview": ["market_head", "primary_resource", "secondary_resource"],
+    "laws": ["market_type"],
     "properties": {
       "name": {
         "bsonType": "string",
         "label": "Name",
         "description": "The name of the market"
+      },
+      "market_type": {
+        "bsonType": "enum",
+        "label": "Market Type",
+        "description": "The type of market",
+        "enum": ["Commodity", "Illicit", "Hub", "Luxury", "Maritime", "Militant"],
+        "laws": {
+          "Commodity": {},
+          "Illicit": {},
+          "Hub": {},
+          "Luxury": {},
+          "Maritime": {},
+          "Militant": {}
+        }
       },
       "tier": {
         "bsonType": "number",
@@ -40,6 +55,13 @@
         "bsonType": "object",
         "label": "Resource Storage",
         "description": "The resource reserves of the market"
+      },
+      "trade_risk": {
+        "bsonType": "number",
+        "label": "Trade Risk",
+        "description": "The risk of trading in the market",
+        "format": "percentage",
+        "calculated": true
       },
       "members": {
         "bsonType": "array",
