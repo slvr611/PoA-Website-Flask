@@ -827,7 +827,7 @@
 				"resource_storage_capacity": 5
 			},
 			"Commerce": {
-				"stability_gain_chance_per_road_capacity_used": 0.01,
+				"stability_gain_chance_per_road_usage": 0.01,
 				"maximum_markets": 1
 			}
 		}
