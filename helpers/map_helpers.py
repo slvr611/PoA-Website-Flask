@@ -84,23 +84,23 @@ def pixel_to_hex(x: float, y: float, size: float) -> HexCoordinate:
 def hex_round(q: float, r: float) -> HexCoordinate:
     """Round fractional hex coordinates to the nearest hex."""
     s = -q - r
-    
+
     rq = round(q)
     rr = round(r)
     rs = round(s)
-    
+
     q_diff = abs(rq - q)
     r_diff = abs(rr - r)
     s_diff = abs(rs - s)
-    
+
     if q_diff > r_diff and q_diff > s_diff:
         rq = -rr - rs
     elif r_diff > s_diff:
         rr = -rq - rs
     else:
         rs = -rq - rr
-    
-    return HexCoordinate(rq, rr, rs)
+
+    return HexCoordinate(int(rq), int(rr), int(rs))
 
 
 def get_tile_by_coordinates(q: int, r: int, s: int = None) -> Dict[str, Any]:
