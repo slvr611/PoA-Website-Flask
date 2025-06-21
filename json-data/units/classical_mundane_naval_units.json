@@ -1,56 +1,7 @@
 {
-	"classical_boarding_ship": {
-		"display_name": "Classical Boarding Ship",
-		"recruitment_cost": {
-			"money": 200
-		},
-		"upkeep": {
-			"wood": 1
-		},
-		"requirements": {
-			"district": ["classical_dock"],
-			"research": ["rig_and_sail"]
-		}
-	},
-	"classical_missile_ship": {
-		"display_name": "Classical Missile Ship",
-		"recruitment_cost": {
-			"money": 225
-		},
-		"upkeep": {
-			"wood": 1,
-			"stone": 1
-		},
-		"requirements": {
-			"district": ["classical_dock"],
-			"research": ["rig_and_sail"]
-		}
-	},
-	"classical_scout_ship": {
-		"display_name": "Classical Scout Ship",
-		"recruitment_cost": {
-			"money": 125
-		},
-		"upkeep": {
-			"wood": 1
-		},
-		"requirements": {
-			"district": ["classical_dock"],
-			"research": ["rig_and_sail"]
-		}
-	},
-	"classical_transport_ship": {
-		"display_name": "Classical Transport Ship",
-		"recruitment_cost": {
-			"money": 175
-		},
-		"upkeep": {
-			"wood": 1,
-			"food": 1
-		},
-		"requirements": {
-			"district": ["classical_dock"],
-			"research": ["deep_hulls"]
-		}
-	}
+  "test_classical_mundane_naval_units": {
+    "display_name": "Test classical_mundane_naval_units",
+    "requirements": {},
+    "stats": {}
+  }
 }

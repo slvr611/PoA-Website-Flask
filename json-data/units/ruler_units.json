@@ -1,27 +1,7 @@
 {
-	"archmage": {
-		"display_name": "Archmage",
-		"recruitment_cost": {},
-		"upkeep": {}
-	},
-	"conqueror": {
-		"display_name": "Conqueror",
-		"recruitment_cost": {},
-		"upkeep": {}
-	},
-	"populist": {
-		"display_name": "Populist",
-		"recruitment_cost": {},
-		"upkeep": {}
-	},
-	"religious_leader": {
-		"display_name": "Religious Leader",
-		"recruitment_cost": {},
-		"upkeep": {}
-	},
-	"steward": {
-		"display_name": "Steward",
-		"recruitment_cost": {},
-		"upkeep": {}
-	}
+  "test_ruler_units": {
+    "display_name": "Test ruler_units",
+    "requirements": {},
+    "stats": {}
+  }
 }

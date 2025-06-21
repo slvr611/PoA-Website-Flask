@@ -1,61 +1,7 @@
 {
-	"classical_atronach": {
-		"display_name": "Classical Atronach",
-		"recruitment_cost": {
-			"money": 525
-		},
-		"upkeep": {
-			"magic": 2,
-			"stone": 1
-		},
-		"requirements": {
-			"district": ["classical_magic_site"],
-			"research": ["novitiates"]
-		}
-	},
-	"classical_extraplanar_bastion": {
-		"display_name": "Classical Extraplanar Bastion",
-		"recruitment_cost": {},
-		"upkeep": {},
-		"requirements": {
-			"spell": ["Summon Extraplanar"]
-		}
-	},
-	"classical_extraplanar_magi": {
-		"display_name": "Classical Extraplanar Magi",
-		"recruitment_cost": {},
-		"upkeep": {},
-		"requirements": {
-			"spell": ["Summon Extraplanar"]
-		}
-	},
-	"classical_extraplanar_scouts": {
-		"display_name": "Classical Extraplanar Scouts",
-		"recruitment_cost": {},
-		"upkeep": {},
-		"requirements": {
-			"spell": ["Summon Extraplanar"]
-		}
-	},
-	"classical_phantom": {
-		"display_name": "Classical Phantom",
-		"recruitment_cost": {
-			"money": 375
-		},
-		"upkeep": {
-			"magic": 2
-		},
-		"requirements": {
-			"district": ["classical_magic_site"],
-			"research": ["cosmology"]
-		}
-	},
-	"classical_undead_army": {
-		"display_name": "Classical Undead Army",
-		"recruitment_cost": {},
-		"upkeep": {},
-		"requirements": {
-			"spell": ["March of the Dead"]
-		}
-	}
+  "test_classical_magical_land_units": {
+    "display_name": "Test classical_magical_land_units",
+    "requirements": {},
+    "stats": {}
+  }
 }

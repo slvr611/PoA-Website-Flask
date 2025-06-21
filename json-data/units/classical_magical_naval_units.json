@@ -1,17 +1,7 @@
 {
-	"classical_terrapin": {
-		"display_name": "Classical Terrapin",
-		"recruitment_cost": {
-			"money": 350
-		},
-		"upkeep": {
-			"magic": 1,
-			"bronze": 1,
-			"stone": 1
-		},
-		"requirements": {
-			"district": ["classical_dock"],
-			"research": ["cosmology"]
-		}
-	}
+  "test_classical_magical_naval_units": {
+    "display_name": "Test classical_magical_naval_units",
+    "requirements": {},
+    "stats": {}
+  }
 }

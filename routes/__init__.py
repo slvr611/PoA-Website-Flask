@@ -10,6 +10,7 @@ from .auth_routes import auth_routes
 from .admin_tool_routes import admin_tool_routes
 from .misc_routes import misc_routes
 from .tick_routes import tick_routes
+from .map_routes import map_routes
 
 def register_routes(app, mongo, discord):
     app.register_blueprint(base_routes)
@@ -21,6 +22,7 @@ def register_routes(app, mongo, discord):
     app.register_blueprint(admin_tool_routes)
     app.register_blueprint(misc_routes)
     app.register_blueprint(tick_routes)
+    app.register_blueprint(map_routes)
 
 @app.context_processor
 def inject_navbar_data():

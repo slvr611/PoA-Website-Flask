@@ -1,95 +1,12 @@
 {
   "$jsonSchema": {
     "bsonType": "object",
-    "required": ["name", "market_head"],
-    "preview": ["market_head", "primary_resource", "secondary_resource"],
-    "laws": ["market_type"],
+    "required": ["name"],
     "properties": {
       "name": {
         "bsonType": "string",
         "label": "Name",
-        "description": "The name of the market"
-      },
-      "market_type": {
-        "bsonType": "enum",
-        "label": "Market Type",
-        "description": "The type of market",
-        "enum": ["Commodity", "Illicit", "Hub", "Luxury", "Maritime", "Militant"],
-        "laws": {
-          "Commodity": {},
-          "Illicit": {},
-          "Hub": {},
-          "Luxury": {},
-          "Maritime": {},
-          "Militant": {}
-        }
-      },
-      "tier": {
-        "bsonType": "number",
-        "label": "Tier",
-        "description": "The tier of the market"
-      },
-      "primary_resource": {
-        "bsonType": "resource_enum",
-        "label": "Primary Resource",
-        "description": "The primary resource of the market"
-      },
-      "secondary_resource": {
-        "bsonType": "resource_enum",
-        "label": "Secondary Resource",
-        "description": "The secondary resource of the market"
-      },
-      "market_head": {
-        "bsonType": "linked_object",
-        "label": "Market Head",
-        "description": "The nation that currently heads up the market",
-        "collections": ["nations", "merchants"]
-      },
-      "resource_production": {
-        "bsonType": "object",
-        "label": "Resource Production",
-        "description": "The amount of each resource the market makes at the start of each session",
-        "calculated": true
-      },
-      "resource_storage": {
-        "bsonType": "object",
-        "label": "Resource Storage",
-        "description": "The resource reserves of the market"
-      },
-      "trade_risk": {
-        "bsonType": "number",
-        "label": "Trade Risk",
-        "description": "The risk of trading in the market",
-        "format": "percentage",
-        "calculated": true
-      },
-      "members": {
-        "bsonType": "array",
-        "label": "Members",
-        "description": "Nations currently members of this market",
-        "linkCollection": "market_links",
-        "linkQueryTarget": "market",
-        "collections": ["nations"],
-        "queryTarget": "member",
-        "preview": ["market_safety_stance"],
-        "items": {
-          "bsonType": "object",
-          "properties": {
-            "member": {
-              "bsonType": "linked_object",
-              "label": "Member",
-              "description": "The member of the market",
-              "collections": ["nations"]
-            },
-            "market_safety_stance": {
-              "bsonType": "enum",
-              "label": "Market Safety Stance",
-              "description": "The stance the member has towards the market",
-              "enum": ["None", "Exploit", "Abuse", "Ignore", "Protect", "Preserve"],
-              "default": "Ignore"
-            }
-          }
-        }
+        "description": "Name of the markets"
       }
     }
   }

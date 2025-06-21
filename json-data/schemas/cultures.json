@@ -1,59 +1,12 @@
 {
   "$jsonSchema": {
     "bsonType": "object",
-    "required": ["name", "naming_scheme", "conversion_strength", "trait_one"],
-    "preview": ["trait_one", "trait_two", "trait_three", "founding_nation"],
+    "required": ["name"],
     "properties": {
       "name": {
         "bsonType": "string",
-		    "label": "Name",
-        "description": "The culture's name"
-      },
-	    "naming_scheme": {
-        "bsonType": "string",
-		    "label": "Naming Scheme",
-        "description": "The naming scheme of this culture"
-      },
-      "founding_nation": {
-        "bsonType": "linked_object",
-		    "label": "Founding Nation",
-        "description": "The first nation of this culture",
-		    "collections": ["nations"]
-      },
-      "conversion_strength": {
-        "bsonType": "enum",
-		    "label": "Conversion Strength",
-        "description": "The conversion strength of this culture",
-		    "enum": ["None", "Weak", "Moderate", "Strong", "Intense", "Zealous"]
-      },
-	    "trait_one": {
-        "bsonType": "enum",
-		    "label": "Trait One",
-        "description": "The first cultural trait of this culture",
-		    "enum": ["None", "Absolutist", "Communalist", "Egalitarian", "Individualist", "Isolationist", "Mercantilist", "Militarist", "Pacifist", "Progressive", "Secular", "Spiritualist", "Traditionalist"]
-      },
-	    "trait_two": {
-        "bsonType": "enum",
-		    "label": "Trait Two",
-        "description": "The second cultural trait of this culture",
-		    "enum": ["None", "Absolutist", "Communalist", "Egalitarian", "Individualist", "Isolationist", "Mercantilist", "Militarist", "Pacifist", "Progressive", "Secular", "Spiritualist", "Traditionalist"]
-      },
-	    "trait_three": {
-        "bsonType": "enum",
-		    "label": "Trait Three",
-        "description": "The third cultural trait of this culture",
-		    "enum": ["None", "Absolutist", "Communalist", "Egalitarian", "Individualist", "Isolationist", "Mercantilist", "Militarist", "Pacifist", "Progressive", "Secular", "Spiritualist", "Traditionalist"]
-      },
-	    "pops": {
-        "bsonType": "array",
-		    "label": "Pops",
-        "description": "Pops that have this race",
-        "collections": ["pops"],
-        "queryTargetAttribute": "culture",
-        "preview": ["nation", "race", "religion"],
-        "items": {
-          "bsonType": "linked_object"
-        }
+        "label": "Name",
+        "description": "Name of the cultures"
       }
     }
   }

@@ -1,0 +1,57 @@
+{
+  "$jsonSchema": {
+    "bsonType": "object",
+    "required": ["q", "r", "s", "terrain_type"],
+    "properties": {
+      "q": {
+        "bsonType": "int",
+        "label": "Q Coordinate",
+        "description": "Q coordinate in hexagonal coordinate system"
+      },
+      "r": {
+        "bsonType": "int", 
+        "label": "R Coordinate",
+        "description": "R coordinate in hexagonal coordinate system"
+      },
+      "s": {
+        "bsonType": "int",
+        "label": "S Coordinate", 
+        "description": "S coordinate in hexagonal coordinate system (q + r + s = 0)"
+      },
+      "terrain_type": {
+        "bsonType": "string",
+        "label": "Terrain Type",
+        "description": "Type of terrain for this tile",
+        "enum": ["plains", "forest", "hills", "mountains", "desert", "swamp", "coast", "ocean", "river"]
+      },
+      "nation_owner": {
+        "bsonType": ["string", "null"],
+        "label": "Nation Owner",
+        "description": "ID of the nation that owns this tile (optional)"
+      },
+      "nodes": {
+        "bsonType": "array",
+        "label": "Nodes",
+        "description": "Array of node IDs present on this tile",
+        "items": {
+          "bsonType": "string"
+        }
+      },
+      "district": {
+        "bsonType": ["string", "null"],
+        "label": "District",
+        "description": "ID of the district built on this tile (optional)"
+      },
+      "background_x": {
+        "bsonType": ["double", "null"],
+        "label": "Background X Position",
+        "description": "X position on the background image (0-1 normalized)"
+      },
+      "background_y": {
+        "bsonType": ["double", "null"],
+        "label": "Background Y Position", 
+        "description": "Y position on the background image (0-1 normalized)"
+      }
+    }
+  }
+}

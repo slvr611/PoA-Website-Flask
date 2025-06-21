@@ -1,72 +1,7 @@
 {
-	"imperial_arbalest": {
-		"display_name": "Imperial Arbalest",
-		"recruitment_cost": {
-			"money": 600
-		},
-		"upkeep": {
-			"prestige": 2
-		},
-		"requirements": {
-			"district": ["classical_workshop"],
-			"empire": true,
-			"name": ["Lyroa"]
-		}
-	},
-	"imperial_dunespike": {
-		"display_name": "Imperial Dunespike",
-		"recruitment_cost": {
-			"money": 600
-		},
-		"upkeep": {
-			"prestige": 2
-		},
-		"requirements": {
-			"district": ["classical_ranch"],
-			"empire": true,
-			"name": ["Qad'ashin"]
-		}
-	},
-	"imperial_river_runner": {
-		"display_name": "Imperial River Runner",
-		"recruitment_cost": {
-			"money": 600
-		},
-		"upkeep": {
-			"prestige": 2
-		},
-		"requirements": {
-			"district": ["classical_workshop"],
-			"empire": true,
-			"name": ["The Conclave"]
-		}
-	},
-	"imperial_vanguard": {
-		"display_name": "Imperial Vanguard",
-		"recruitment_cost": {
-			"money": 600
-		},
-		"upkeep": {
-			"prestige": 2
-		},
-		"requirements": {
-			"district": ["classical_workshop"],
-			"empire": true,
-			"name": ["Lokhim Empire"]
-		}
-	},
-	"imperial_war_dancer": {
-		"display_name": "Imperial War Dancer",
-		"recruitment_cost": {
-			"money": 600
-		},
-		"upkeep": {
-			"prestige": 2
-		},
-		"requirements": {
-			"district": ["classical_workshop"],
-			"empire": true,
-			"name": ["Celtearan Empire"]
-		}
-	}
+  "test_imperial_unique_units": {
+    "display_name": "Test imperial_unique_units",
+    "requirements": {},
+    "stats": {}
+  }
 }

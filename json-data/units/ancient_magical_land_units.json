@@ -1,65 +1,7 @@
 {
-	"ancient_beacon": {
-		"display_name": "Ancient Beacon",
-		"recruitment_cost": {
-			"money": 100
-		},
-		"upkeep": {
-			"magic": 1
-		},
-		"requirements": {
-			"district": ["ancient_magic_site", "classical_magic_site"]
-		}
-	},
-	"ancient_oakling": {
-		"display_name": "Ancient Oakling",
-		"recruitment_cost": {
-			"money": 200
-		},
-		"upkeep": {
-			"magic": 1,
-			"wood": 1
-		},
-		"requirements": {
-			"district": ["ancient_magic_site", "classical_magic_site"]
-		}
-	},
-	"ancient_ravager": {
-		"display_name": "Ancient Ravager",
-		"recruitment_cost": {
-			"money": 400
-		},
-		"upkeep": {
-			"magic": 2,
-			"bronze": 1
-		},
-		"requirements": {
-			"district": ["ancient_magic_site", "classical_magic_site"]
-		}
-	},
-	"ancient_vortex": {
-		"display_name": "Ancient Vortex",
-		"recruitment_cost": {
-			"money": 250
-		},
-		"upkeep": {
-			"magic": 2
-		},
-		"requirements": {
-			"district": ["ancient_magic_site", "classical_magic_site"]
-		}
-	},
-	"ancient_wyrm": {
-		"display_name": "Ancient Wyrm",
-		"recruitment_cost": {
-			"money": 300
-		},
-		"upkeep": {
-			"magic": 2,
-			"stone": 2
-		},
-		"requirements": {
-			"district": ["ancient_magic_site", "classical_magic_site"]
-		}
-	}
+  "test_ancient_magical_land_units": {
+    "display_name": "Test ancient_magical_land_units",
+    "requirements": {},
+    "stats": {}
+  }
 }

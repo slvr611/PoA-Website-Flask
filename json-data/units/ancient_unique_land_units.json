@@ -1,64 +1,7 @@
 {
-	"ancient_ameru_marines": {
-		"display_name": "Ancient Ameru Marines",
-		"recruitment_cost": {
-			"money": 275
-		},
-		"upkeep": {
-			"food": 2,
-			"wood": 1
-		},
-		"requirements": {
-			"district": ["ancient_workshop", "classical_workshop"],
-			"name": ["Teo'zados'koa"],
-			"defensive_pact": ["Teo'zados'koa"],
-			"military_alliance": ["Teo'zados'koa"]
-		}
-	},
-	"ancient_fire_shaman": {
-		"display_name": "Ancient Fire Shaman",
-		"recruitment_cost": {
-			"money": 200
-		},
-		"upkeep": {
-			"magic": 1
-		},
-		"requirements": {
-			"district": ["ancient_magic_site", "classical_magic_site"],
-			"name": ["Sishayo"],
-			"defensive_pact": ["Sishayo"],
-			"military_alliance": ["Sishayo"]
-		}
-	},
-	"ancient_pheuxthae_hound": {
-		"display_name": "Ancient Pheuxthae Hound",
-		"recruitment_cost": {
-			"money": 275
-		},
-		"upkeep": {
-			"mounts": 1,
-			"food": 1
-		},
-		"requirements": {
-			"district": ["ancient_ranch", "classical_ranch"],
-			"name": ["Lokhim Empire"],
-			"defensive_pact": ["Lokhim Empire"],
-			"military_alliance": ["Lokhim Empire"]
-		}
-	},
-	"ancient_reman_longbowbird": {
-		"display_name": "Ancient Reman Longbowbird",
-		"recruitment_cost": {
-			"money": 300
-		},
-		"upkeep": {
-			"wood": 2
-		},
-		"requirements": {
-			"district": ["ancient_workshop", "classical_workshop"],
-			"name": ["Firenzia"],
-			"defensive_pact": ["Firenzia"],
-			"military_alliance": ["Firenzia"]
-		}
-	}
+  "test_ancient_unique_land_units": {
+    "display_name": "Test ancient_unique_land_units",
+    "requirements": {},
+    "stats": {}
+  }
 }

@@ -6,16 +6,7 @@
       "name": {
         "bsonType": "string",
         "label": "Name",
-        "description": "The name of the war"
-      },
-      "participants": {
-        "bsonType": "array",
-		    "label": "Participants",
-        "description": "The Nations and Mercenary companies involved in the war",
-		    "linkCollection": "war_links",
-		    "linkQueryTarget": "war",
-		    "collections": ["nations", "mercenaries"],
-		    "queryTarget": "participant"
+        "description": "Name of the wars"
       }
     }
   }

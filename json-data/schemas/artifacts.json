@@ -1,116 +1,12 @@
 {
   "$jsonSchema": {
     "bsonType": "object",
-    "required": ["name", "effect_description"],
-    "preview": ["rarity", "owner"],
-    "laws": ["rarity"],
-    "sort": "rarity",
+    "required": ["name"],
     "properties": {
       "name": {
         "bsonType": "string",
         "label": "Name",
-        "description": "The name of the artifact"
-      },
-	    "rarity": {
-        "bsonType": "enum",
-        "label": "Rarity",
-        "description": "The Rarity of the artifact",
-		    "enum": ["Mundane", "Good", "Great", "Legendary", "Mythical"],
-        "laws": {
-          "Mundane": {
-            "owner_death_loss_chance": 0.5,
-            "passive_loss_chance": 0.1
-          },
-          "Good": {
-            "owner_death_loss_chance": 0.25,
-            "passive_loss_chance": 0.05
-          },
-          "Great": {
-            "owner_death_loss_chance": 0.15,
-            "passive_loss_chance": 0.02
-          },
-          "Legendary": {
-            "owner_death_loss_chance": 0.1,
-            "passive_loss_chance": 0.01
-          },
-          "Mythical": {
-            "owner_death_loss_chance": 0.05,
-            "passive_loss_chance": 0
-          }
-        }
-      },
-      "equipped": {
-        "bsonType": "boolean",
-        "label": "Equipped",
-        "description": "Whether the artifact is currently equipped"
-      },
-      "effect_description": {
-        "bsonType": "string",
-        "label": "Effect Description",
-        "description": "The description of the artifact's mechanical effects",
-        "long_text": true
-      },
-      "mechanical_effects": {
-        "bsonType": "array",
-        "label": "Mechanical Effects",
-        "description": "The artifact's mechanical effects",
-        "hidden": true
-      },
-      "owner": {
-        "bsonType": "linked_object",
-        "label": "Owner",
-        "description": "The artifact's owner",
-        "default_options": ["Unknown", "Lost"],
-		    "collections": ["characters"]
-      },
-      "creator": {
-        "bsonType": "linked_object",
-        "label": "Creator",
-        "description": "The artifact's creator",
-        "noneResult": "Unknown",
-        "collections": ["characters"],
-        "static": true
-      },
-      "owner_death_loss_chance": {
-        "bsonType": "number",
-        "label": "Owner Death Loss Chance",
-        "description": "The percentage chance of the artifact being lost when its owner dies",
-        "format": "percentage",
-        "calculated": true
-      },
-      "passive_loss_chance": {
-        "bsonType": "number",
-        "label": "Passive Loss Chance",
-        "description": "The percentage chance of the artifact being lost each session",
-        "format": "percentage",
-        "calculated": true
-      },
-      "external_modifiers": {
-        "bsonType": "array",
-        "label": "Mechanical Modifiers",
-        "description": "The mechanical modifiers that affect the owner",
-        "hidden": true,
-        "items":{
-          "bsonType": "object",
-          "properties": {
-            "type": {
-              "bsonType": "enum",
-              "label": "Type",
-              "description": "The type of entity the modifier affects",
-              "enum": ["nation", "character"]
-            },
-            "modifier": {
-              "bsonType": "string",
-              "label": "Modifier",
-              "description": "The modifier"
-            },
-            "value": {
-              "bsonType": "number",
-              "label": "Modifier Value",
-              "description": "The value of the modifier"
-            }
-          }
-        }
+        "description": "Name of the artifacts"
       }
     }
   }

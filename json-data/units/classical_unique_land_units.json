@@ -1,44 +1,7 @@
 {
-	"classical_arkhonic_gryphon": {
-		"display_name": "Classical Arkhonic Gryphon",
-		"recruitment_cost": {
-			"food": 2
-		},
-		"upkeep": {},
-		"requirements": {
-			"artifact": ["Arkhonic Gryphon"]
-		}
-	},
-	"classical_golem_warrior": {
-		"display_name": "Classical Golem Warrior",
-		"recruitment_cost": {
-			"magic": 2,
-			"stone": 2
-		},
-		"upkeep": {},
-		"requirements": {
-			"artifact": ["Golem Manual"]
-		}
-	},
-	"classical_grey_wardens": {
-		"display_name": "Classical Grey Wardens",
-		"recruitment_cost": {
-			"money": 600
-		},
-		"upkeep": {
-			"iron": 2,
-			"wood": 1
-		},
-		"requirements": {
-			"mercenary": ["Grey Knights"]
-		}
-	},
-	"classical_uqnia_guardian": {
-		"display_name": "Classical Uqnia Guardian",
-		"recruitment_cost": {},
-		"upkeep": {},
-		"requirements": {
-			"artifact": ["Uqnia Shard"]
-		}
-	}
+  "test_classical_unique_land_units": {
+    "display_name": "Test classical_unique_land_units",
+    "requirements": {},
+    "stats": {}
+  }
 }

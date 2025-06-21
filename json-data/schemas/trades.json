@@ -1,33 +1,12 @@
 {
   "$jsonSchema": {
     "bsonType": "object",
-    "required": ["nation", "race", "culture", "religion"],
+    "required": ["name"],
     "properties": {
-      "exporting_nation": {
-        "bsonType": "linked_object",
-		    "label": "Exporting Nation",
-        "description": "The nation that is exporting the goods"
-      },
-	    "importing_nation": {
-        "bsonType": "linked_object",
-		  "label": "Importing Nation",
-        "description": "The nation that is importing the goods"
-      },
-	    "resource": {
+      "name": {
         "bsonType": "string",
-		    "label": "Resource",
-        "description": "The resource that is being traded"
-      },
-	  "quantity": {
-        "bsonType": "number",
-		"label": "Quantity",
-        "description": "The amount of the resource that is being traded"
-      },
-	  "required_trade_slots": {
-        "bsonType": "number",
-		"label": "Required Trade Slots",
-        "description": "The amount of trade slots required for the exchange",
-		"calculated": true
+        "label": "Name",
+        "description": "Name of the trades"
       }
     }
   }

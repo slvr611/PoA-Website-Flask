@@ -1,49 +1,12 @@
 {
   "$jsonSchema": {
     "bsonType": "object",
-    "required": ["member", "market"],
-    "preview": ["member", "market", "market_safety_stance"],
+    "required": ["name"],
     "properties": {
-      "member": {
-        "bsonType": "linked_object",
-        "label": "Member",
-        "description": "The member of the market",
-        "collections": ["nations"]
-      },
-      "market": {
-        "bsonType": "linked_object",
-        "label": "Market",
-        "description": "The market",
-        "collections": ["markets"]
-      },
-      "market_safety_stance": {
-        "bsonType": "enum",
-        "label": "Market Safety Stance",
-        "description": "The stance the member has towards the market",
-        "enum": ["None", "Exploit", "Abuse", "Ignore", "Protect", "Preserve"],
-        "default": "Ignore",
-        "laws": {
-          "None": {},
-          "Exploit": {
-            "nation_money_income_per_market_tier": 30,
-            "market_trade_risk": 0.1
-          },
-          "Abuse": {
-            "nation_money_income_per_market_tier": 15,
-            "market_trade_risk": 0.05
-          },
-          "Ignore": {
-            "market_trade_risk": 0.01
-          },
-          "Protect": {
-            "nation_money_income_per_market_tier": -75,
-            "market_trade_risk": 0.05
-          },
-          "Preserve": {
-            "nation_money_income_per_market_tier": -150,
-            "market_trade_risk": 0.08
-          }
-        }
+      "name": {
+        "bsonType": "string",
+        "label": "Name",
+        "description": "Name of the market_links"
       }
     }
   }

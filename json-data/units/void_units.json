@@ -1,27 +1,7 @@
 {
-	"void_apostle": {
-		"display_name": "Void Apostle",
-		"recruitment_cost": {},
-		"upkeep": {}
-	},
-	"void_archon": {
-		"display_name": "Void Archon",
-		"recruitment_cost": {},
-		"upkeep": {}
-	},
-	"void_nest": {
-		"display_name": "Void Nest",
-		"recruitment_cost": {},
-		"upkeep": {}
-	},
-	"void_observer": {
-		"display_name": "Void Observer",
-		"recruitment_cost": {},
-		"upkeep": {}
-	},
-	"void_thrall": {
-		"display_name": "Void Thrall",
-		"recruitment_cost": {},
-		"upkeep": {}
-	}
+  "test_void_units": {
+    "display_name": "Test void_units",
+    "requirements": {},
+    "stats": {}
+  }
 }

@@ -1,0 +1,251 @@
+{% extends "layout.html" %}
+
+{% block title %}
+    {% if tile %}Edit Map Tile{% else %}Create Map Tile{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="header-bar">
+        <h1>{% if tile %}Edit Map Tile{% else %}Create New Map Tile{% endif %}</h1>
+        <a href="/admin/map/tiles" class="edit-button">Back to Tiles List</a>
+    </div>
+    
+    <div class="content">
+        <form method="POST" class="tile-form">
+            <div class="form-section">
+                <h3>Coordinates</h3>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="q">Q Coordinate:</label>
+                        <input type="number" id="q" name="q" 
+                               value="{% if tile %}{{ tile.q }}{% else %}0{% endif %}"
+                               {% if tile %}readonly{% endif %} required>
+                    </div>
+                    <div class="form-group">
+                        <label for="r">R Coordinate:</label>
+                        <input type="number" id="r" name="r" 
+                               value="{% if tile %}{{ tile.r }}{% else %}0{% endif %}"
+                               {% if tile %}readonly{% endif %} required>
+                    </div>
+                    <div class="form-group">
+                        <label for="s">S Coordinate:</label>
+                        <input type="number" id="s" name="s" 
+                               value="{% if tile %}{{ tile.s }}{% else %}0{% endif %}"
+                               {% if tile %}readonly{% endif %} required>
+                    </div>
+                </div>
+                <p class="form-help">Note: Q + R + S must equal 0 for valid hexagonal coordinates.</p>
+            </div>
+            
+            <div class="form-section">
+                <h3>Terrain</h3>
+                <div class="form-group">
+                    <label for="terrain_type">Terrain Type:</label>
+                    <select id="terrain_type" name="terrain_type" required>
+                        {% for terrain in terrain_types %}
+                        <option value="{{ terrain }}" 
+                                {% if tile and tile.terrain_type == terrain %}selected{% endif %}>
+                            {{ terrain|title }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            
+            <div class="form-section">
+                <h3>Ownership & Control</h3>
+                <div class="form-group">
+                    <label for="nation_owner">Nation Owner:</label>
+                    <select id="nation_owner" name="nation_owner">
+                        <option value="">No Owner</option>
+                        {% for nation in nations %}
+                        <option value="{{ nation._id }}" 
+                                {% if tile and tile.nation_owner == nation._id %}selected{% endif %}>
+                            {{ nation.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            
+            <div class="form-section">
+                <h3>Nodes</h3>
+                <div class="form-group">
+                    <label>Nodes on this tile:</label>
+                    <div class="checkbox-group">
+                        {% for node in nodes %}
+                        <div class="checkbox-item">
+                            <input type="checkbox" id="node_{{ node._id }}" name="nodes" value="{{ node._id }}"
+                                   {% if tile and tile.nodes and node._id in tile.nodes %}checked{% endif %}>
+                            <label for="node_{{ node._id }}">{{ node.name }}</label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% if not nodes %}
+                    <p class="form-help">No nodes available. Create nodes first to assign them to tiles.</p>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div class="form-section">
+                <h3>District</h3>
+                <div class="form-group">
+                    <label for="district">District:</label>
+                    <select id="district" name="district">
+                        <option value="">No District</option>
+                        <!-- District options would be populated here when district system is implemented -->
+                    </select>
+                    <p class="form-help">District system not yet implemented.</p>
+                </div>
+            </div>
+            
+            <div class="form-section">
+                <h3>Background Position</h3>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="background_x">Background X (0-1):</label>
+                        <input type="number" id="background_x" name="background_x" 
+                               step="0.001" min="0" max="1"
+                               value="{% if tile and tile.background_x %}{{ tile.background_x }}{% endif %}">
+                    </div>
+                    <div class="form-group">
+                        <label for="background_y">Background Y (0-1):</label>
+                        <input type="number" id="background_y" name="background_y" 
+                               step="0.001" min="0" max="1"
+                               value="{% if tile and tile.background_y %}{{ tile.background_y }}{% endif %}">
+                    </div>
+                </div>
+                <p class="form-help">Position on the background image (normalized coordinates 0-1).</p>
+            </div>
+            
+            <div class="form-actions">
+                <button type="submit" class="edit-button">
+                    {% if tile %}Update Tile{% else %}Create Tile{% endif %}
+                </button>
+                <a href="/admin/map/tiles" class="edit-button" style="background-color: #666;">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+.tile-form {
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.form-section {
+    background-color: #2a2a2a;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    border-radius: 8px;
+    border: 1px solid #444;
+}
+
+.form-section h3 {
+    margin: 0 0 1rem 0;
+    color: #fff;
+    border-bottom: 1px solid #444;
+    padding-bottom: 0.5rem;
+}
+
+.form-row {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.form-group {
+    flex: 1;
+    min-width: 200px;
+    margin-bottom: 1rem;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: #e0e0e0;
+    font-weight: bold;
+}
+
+.form-group input,
+.form-group select {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid #555;
+    border-radius: 4px;
+    background-color: #333;
+    color: #e0e0e0;
+    font-size: 1rem;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+    outline: none;
+    border-color: #0066cc;
+    box-shadow: 0 0 0 2px rgba(0, 102, 204, 0.2);
+}
+
+.checkbox-group {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid #555;
+    border-radius: 4px;
+    padding: 0.5rem;
+    background-color: #333;
+}
+
+.checkbox-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.25rem 0;
+}
+
+.checkbox-item input[type="checkbox"] {
+    width: auto;
+    margin: 0;
+}
+
+.checkbox-item label {
+    margin: 0;
+    font-weight: normal;
+    cursor: pointer;
+}
+
+.form-help {
+    font-size: 0.9rem;
+    color: #aaa;
+    margin-top: 0.5rem;
+    font-style: italic;
+}
+
+.form-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    margin-top: 2rem;
+}
+
+.form-actions .edit-button {
+    padding: 0.75rem 2rem;
+    font-size: 1rem;
+}
+</style>
+
+<script>
+// Auto-calculate S coordinate when Q or R changes (for new tiles only)
+{% if not tile %}
+document.getElementById('q').addEventListener('input', updateSCoordinate);
+document.getElementById('r').addEventListener('input', updateSCoordinate);
+
+function updateSCoordinate() {
+    const q = parseInt(document.getElementById('q').value) || 0;
+    const r = parseInt(document.getElementById('r').value) || 0;
+    const s = -q - r;
+    document.getElementById('s').value = s;
+}
+{% endif %}
+</script>
+{% endblock %}

@@ -1,29 +1,12 @@
 {
   "$jsonSchema": {
     "bsonType": "object",
-    "required": ["name", "type", "roll", "rp"],
+    "required": ["name"],
     "properties": {
       "name": {
         "bsonType": "string",
         "label": "Name",
-        "description": "The name of the event"
-      },
-	  "type": {
-        "bsonType": "enum",
-		"label": "Reputation",
-        "description": "The merchant company's reputation",
-		"enum": ["Horrendous", "Abysmal", "Very Bad", "Bad", "Neutral", "Good", "Very Good", "Fantastic"]
-      },
-	  "roll": {
-        "bsonType": "number",
-        "label": "Roll",
-        "description": "The roll that lead to the event's tier",
-		"hidden":true
-      },
-      "rp": {
-        "bsonType": "string",
-        "label": "RP",
-        "description": "The rp of the event"
+        "description": "Name of the events"
       }
     }
   }

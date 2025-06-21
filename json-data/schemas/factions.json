@@ -1,105 +1,12 @@
 {
   "$jsonSchema": {
     "bsonType": "object",
-    "required": ["name", "control"],
-    "preview": ["nation"],
-    "laws": ["control"],
+    "required": ["name"],
     "properties": {
       "name": {
         "bsonType": "string",
-		    "label": "Name",
-        "description": "The name of the faction"
-      },
-	    "leaders": {
-        "bsonType": "array",
-		    "label": "Leaders",
-        "description": "The list of leaders of the merchant company",
-		    "collections": ["characters"],
-		    "queryTargetAttribute": "ruling_nation_org",
-        "items":{
-          "bsonType": "linked_object"
-        }
-      },
-	    "nation": {
-        "bsonType": "linked_object",
-		    "label": "Nation",
-        "description": "The nation the faction is based in",
-		    "collections": ["nations"]
-      },
-      "faction_type": {
-        "bsonType": "enum",
-		    "label": "Faction Type",
-        "description": "The type of faction",
-		    "enum": ["Adventurer", "Criminal", "Cult", "Cultural", "Dissident", "Military", "Political"]
-      },
-      "control": {
-        "bsonType": "enum",
-		    "label": "Control",
-        "description": "The amount of control the faction has",
-		    "enum": ["Insignificant", "Minor", "Moderate", "Strong", "Absolute"],
-        "laws":{
-          "Insignificant": {
-            "influence_income": 1
-          },
-          "Minor": {
-            "influence_income": 2
-          },
-          "Moderate": {
-            "influence_income": 3
-          },
-          "Strong": {
-            "influence_income": 4
-          },
-          "Absolute": {
-            "influence_income": 5
-          }
-        }
-      },
-      "influence_income": {
-        "bsonType": "number",
-		    "label": "Influence Income",
-        "description": "The amount of influence the faction earns each session",
-		    "calculated": true
-      },
-	    "influence": {
-        "bsonType": "number",
-		    "label": "Influence",
-        "description": "The amount of influence the faction has"
-      },
-      "progress_quests": {
-        "bsonType": "array",
-		    "label": "Progress Quests",
-        "description": "The ongoing quests the faction is currently working on",
-        "items":{
-          "bsonType": "object",
-          "properties": {
-            "quest_name": {
-              "bsonType": "string",
-              "label": "Quest Name",
-              "description": "The name of the quest"
-            },
-            "progress_per_tick": {
-              "bsonType": "number",
-              "label": "Progress Per Tick",
-              "description": "The amount of progress the faction makes on the quest each tick"
-            },
-            "current_progress": {
-              "bsonType": "number",
-              "label": "Progress",
-              "description": "The amount of progress the faction has made on the quest"
-            },
-            "required_progress": {
-              "bsonType": "number",
-              "label": "Required Progress",
-              "description": "The amount of progress required to complete the quest"
-            },
-            "link": {
-              "bsonType": "string",
-              "label": "Link",
-              "description": "The link to the quest"
-            }
-          }
-        }
+        "label": "Name",
+        "description": "Name of the factions"
       }
     }
   }

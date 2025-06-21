@@ -1,0 +1,83 @@
+{% extends "layout.html" %}
+
+{% block title %}Admin - Map Tiles{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="header-bar">
+        <h1>Map Tiles Administration</h1>
+        <a href="/admin/map/tile/new" class="edit-button">Create New Tile</a>
+    </div>
+    
+    <div class="content">
+        <div class="table-wrapper">
+            <table class="info-table">
+                <thead>
+                    <tr>
+                        <th>Coordinates</th>
+                        <th>Terrain</th>
+                        <th>Nation Owner</th>
+                        <th>Nodes</th>
+                        <th>District</th>
+                        <th>Background Position</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for tile in tiles %}
+                    <tr>
+                        <td>({{ tile.q }}, {{ tile.r }}, {{ tile.s }})</td>
+                        <td>{{ tile.terrain_type|title }}</td>
+                        <td>
+                            {% if tile.nation_owner %}
+                                {% for nation in nations %}
+                                    {% if nation._id == tile.nation_owner %}
+                                        {{ nation.name }}
+                                    {% endif %}
+                                {% endfor %}
+                            {% else %}
+                                <em>Unclaimed</em>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if tile.nodes %}
+                                {{ tile.nodes|length }} node(s)
+                            {% else %}
+                                <em>None</em>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if tile.district %}
+                                {{ tile.district }}
+                            {% else %}
+                                <em>None</em>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if tile.background_x and tile.background_y %}
+                                ({{ "%.3f"|format(tile.background_x) }}, {{ "%.3f"|format(tile.background_y) }})
+                            {% else %}
+                                <em>Not set</em>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="/admin/map/tile/{{ tile._id }}/edit" class="edit-button" style="margin-right: 0.5rem;">Edit</a>
+                            <form method="POST" action="/admin/map/tile/{{ tile._id }}/delete" style="display: inline;" 
+                                  onsubmit="return confirm('Are you sure you want to delete this tile?');">
+                                <button type="submit" class="edit-button" style="background-color: #cc0000;">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        {% if not tiles %}
+        <p style="text-align: center; color: #888; margin-top: 2rem;">
+            No map tiles found. <a href="/admin/map/tile/new">Create the first tile</a>.
+        </p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

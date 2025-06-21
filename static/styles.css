@@ -1213,6 +1213,231 @@ h1, h2 {
     }
 }
 
+/* Hex Map Styles */
+.hex-map-container {
+    width: 100%;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background-color: #1e1e1e;
+}
+
+.map-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    background-color: #333;
+    border-bottom: 1px solid #444;
+}
+
+.button-group {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.map-btn {
+    padding: 0.5rem 1rem;
+    background-color: #444;
+    color: #e0e0e0;
+    border: 1px solid #555;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.map-btn:hover {
+    background-color: #555;
+}
+
+.map-btn.active {
+    background-color: #0066cc;
+    border-color: #0055aa;
+}
+
+.zoom-controls {
+    display: flex;
+    gap: 0.25rem;
+}
+
+.control-btn {
+    width: 32px;
+    height: 32px;
+    background-color: #444;
+    color: #e0e0e0;
+    border: 1px solid #555;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    transition: background-color 0.2s;
+}
+
+.control-btn:hover {
+    background-color: #555;
+}
+
+.map-main-area {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+
+.map-canvas-container {
+    flex: 1;
+    position: relative;
+    background-color: #222;
+    cursor: grab;
+}
+
+.map-canvas-container:active {
+    cursor: grabbing;
+}
+
+#hex-map-canvas, #background-canvas {
+    display: block;
+}
+
+.tile-details-panel {
+    width: 300px;
+    background-color: #2a2a2a;
+    border-left: 1px solid #444;
+    display: flex;
+    flex-direction: column;
+}
+
+.panel-header {
+    padding: 1rem;
+    background-color: #333;
+    border-bottom: 1px solid #444;
+}
+
+.panel-header h3 {
+    margin: 0;
+    color: #fff;
+}
+
+.panel-content {
+    flex: 1;
+    padding: 1rem;
+    overflow-y: auto;
+}
+
+.no-selection {
+    color: #888;
+    font-style: italic;
+    text-align: center;
+    margin-top: 2rem;
+}
+
+.tile-info h4 {
+    margin: 0 0 1rem 0;
+    color: #fff;
+    font-size: 1.1rem;
+}
+
+.tile-info p {
+    margin: 0.5rem 0;
+    color: #e0e0e0;
+}
+
+.nodes-section {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid #444;
+}
+
+.nodes-section ul {
+    margin: 0.5rem 0;
+    padding-left: 1.5rem;
+}
+
+.nodes-section li {
+    margin: 0.5rem 0;
+    color: #e0e0e0;
+}
+
+.nodes-section small {
+    color: #aaa;
+}
+
+.map-legend {
+    display: flex;
+    gap: 2rem;
+    padding: 1rem;
+    background-color: #333;
+    border-top: 1px solid #444;
+    overflow-x: auto;
+}
+
+.legend-section {
+    min-width: 200px;
+}
+
+.legend-section h4 {
+    margin: 0 0 0.5rem 0;
+    color: #fff;
+    font-size: 1rem;
+}
+
+.terrain-legend, #nations-legend-content {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: #e0e0e0;
+    font-size: 0.9rem;
+}
+
+.terrain-color, .nation-color {
+    width: 16px;
+    height: 16px;
+    border: 1px solid #666;
+    border-radius: 2px;
+}
+
+.terrain-color.plains { background-color: #90EE90; }
+.terrain-color.forest { background-color: #228B22; }
+.terrain-color.hills { background-color: #8B7355; }
+.terrain-color.mountains { background-color: #696969; }
+.terrain-color.desert { background-color: #F4A460; }
+.terrain-color.swamp { background-color: #556B2F; }
+.terrain-color.coast { background-color: #87CEEB; }
+.terrain-color.ocean { background-color: #4682B4; }
+.terrain-color.river { background-color: #4169E1; }
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .map-controls {
+        flex-direction: column;
+        gap: 1rem;
+        align-items: stretch;
+    }
+
+    .map-main-area {
+        flex-direction: column;
+    }
+
+    .tile-details-panel {
+        width: 100%;
+        max-height: 200px;
+        border-left: none;
+        border-top: 1px solid #444;
+    }
+
+    .map-legend {
+        flex-direction: column;
+        gap: 1rem;
+    }
+}
+
 /* Chart container styles */
 .chart-container {
     width: 100%;
