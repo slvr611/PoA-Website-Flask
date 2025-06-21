@@ -16,7 +16,7 @@ class HexMap {
         this.onTileSelect = null; // Callback for tile selection
         
         // View parameters
-        this.hexSize = 20;
+        this.hexSize = 11;  // Default hex size
         this.offsetX = 0;
         this.offsetY = 0;
         this.scale = 1.0;
@@ -35,6 +35,18 @@ class HexMap {
             'ocean': '#4682B4',
             'river': '#4169E1'
         };
+        
+        // Add background image properties
+        this.backgroundImage = null;
+        this.backgroundLoaded = false;
+        this.backgroundScale = 1.0;  // Control background image scale separately
+        this.useBackgroundImage = true;  // Toggle for enabling/disabling background
+        
+        // Add background alignment properties
+        this.backgroundOffsetX = -11;
+        this.backgroundOffsetY = 0;
+        this.backgroundRotation = 0; // In radians
+        this.alignmentMode = false; // For adjusting background alignment
         
         // Initialize event handlers
         this.initEventHandlers();
@@ -107,6 +119,9 @@ class HexMap {
             } else {
                 console.warn('Failed to load nations:', nationsData.error);
             }
+            
+            // Load background image
+            await this.loadBackgroundImage('/static/images/maps/PoA_Political_Map_Session_48.webp');
             
         } catch (error) {
             console.error('Error loading map data:', error);
@@ -214,6 +229,11 @@ class HexMap {
         this.backgroundCtx.translate(this.backgroundCanvas.width / 2 + this.offsetX, this.backgroundCanvas.height / 2 + this.offsetY);
         this.backgroundCtx.scale(this.scale, this.scale);
         
+        // Draw background image if loaded
+        if (this.backgroundLoaded && this.backgroundImage) {
+            this.renderBackgroundImage();
+        }
+        
         // Render tiles
         this.tiles.forEach(tile => {
             this.renderTile(tile);
@@ -305,6 +325,51 @@ class HexMap {
         const b = Math.round(b1 * (1 - ratio) + b2 * ratio);
         
         return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+    }
+    
+    loadBackgroundImage(imagePath) {
+        return new Promise((resolve, reject) => {
+            this.backgroundImage = new Image();
+            this.backgroundImage.onload = () => {
+                this.backgroundLoaded = true;
+                
+                // Automatically scale down very large images
+                const maxDimension = 2048;
+                if (this.backgroundImage.width > maxDimension || this.backgroundImage.height > maxDimension) {
+                    const ratio = Math.min(
+                        maxDimension / this.backgroundImage.width,
+                        maxDimension / this.backgroundImage.height
+                    );
+                    this.backgroundScale = ratio;
+                }
+                
+                this.render();
+                resolve();
+            };
+            this.backgroundImage.onerror = (err) => {
+                console.error('Failed to load background image:', err);
+                reject(err);
+            };
+            this.backgroundImage.src = imagePath;
+        });
+    }
+    
+    renderBackgroundImage() {
+        if (!this.useBackgroundImage) return;
+        
+        const imgWidth = this.backgroundImage.width * this.backgroundScale;
+        const imgHeight = this.backgroundImage.height * this.backgroundScale;
+        
+        // Center the image with offsets
+        const x = -imgWidth / 2 + this.backgroundOffsetX;
+        const y = -imgHeight / 2 + this.backgroundOffsetY;
+        
+        // Use drawImage with scaling to improve performance
+        this.backgroundCtx.drawImage(
+            this.backgroundImage, 
+            0, 0, this.backgroundImage.width, this.backgroundImage.height,
+            x, y, imgWidth, imgHeight
+        );
     }
     
     // Event handlers
@@ -434,6 +499,12 @@ class HexMap {
         this.offsetX = 0;
         this.offsetY = 0;
         this.scale = 1.0;
+        this.render();
+    }
+    
+    // Add method to toggle background visibility
+    toggleBackground() {
+        this.useBackgroundImage = !this.useBackgroundImage;
         this.render();
     }
 }

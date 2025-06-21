@@ -98,14 +98,9 @@ def admin_tiles_list():
     nations_db = category_data["nations"]["database"]
     nations = list(nations_db.find({}, {"name": 1}).sort("name", 1))
     
-    # Get nodes for dropdown
-    nodes_db = category_data["map_nodes"]["database"]
-    nodes = list(nodes_db.find({}, {"name": 1}).sort("name", 1))
-    
     return render_template("admin/map_tiles.html", 
                          tiles=tiles, 
-                         nations=nations, 
-                         nodes=nodes)
+                         nations=nations)
 
 
 @map_routes.route("/admin/map/tile/new", methods=["GET", "POST"])
@@ -151,11 +146,6 @@ def admin_create_tile():
             if data.get("background_y"):
                 tile_data["background_y"] = float(data["background_y"])
             
-            # Handle nodes (multiple selection)
-            nodes = request.form.getlist("nodes")
-            if nodes:
-                tile_data["nodes"] = [ObjectId(node_id) for node_id in nodes if node_id]
-            
             if data.get("district"):
                 tile_data["district"] = ObjectId(data["district"])
             
@@ -173,14 +163,10 @@ def admin_create_tile():
     nations_db = category_data["nations"]["database"]
     nations = list(nations_db.find({}, {"name": 1}).sort("name", 1))
     
-    nodes_db = category_data["map_nodes"]["database"]
-    nodes = list(nodes_db.find({}, {"name": 1}).sort("name", 1))
-    
     terrain_types = ["plains", "forest", "hills", "mountains", "desert", "swamp", "coast", "ocean", "river"]
     
     return render_template("admin/map_tile_form.html", 
                          nations=nations, 
-                         nodes=nodes, 
                          terrain_types=terrain_types,
                          tile=None)
 
@@ -216,14 +202,7 @@ def admin_edit_tile(tile_id):
             
             if data.get("background_y"):
                 update_data["background_y"] = float(data["background_y"])
-            
-            # Handle nodes (multiple selection)
-            nodes = request.form.getlist("nodes")
-            if nodes:
-                update_data["nodes"] = [ObjectId(node_id) for node_id in nodes if node_id]
-            else:
-                update_data["nodes"] = []
-            
+                        
             if data.get("district"):
                 update_data["district"] = ObjectId(data["district"])
             else:
@@ -242,15 +221,11 @@ def admin_edit_tile(tile_id):
     # GET request - show form
     nations_db = category_data["nations"]["database"]
     nations = list(nations_db.find({}, {"name": 1}).sort("name", 1))
-    
-    nodes_db = category_data["map_nodes"]["database"]
-    nodes = list(nodes_db.find({}, {"name": 1}).sort("name", 1))
-    
+        
     terrain_types = ["plains", "forest", "hills", "mountains", "desert", "swamp", "coast", "ocean", "river"]
     
     return render_template("admin/map_tile_form.html", 
                          nations=nations, 
-                         nodes=nodes, 
                          terrain_types=terrain_types,
                          tile=tile)
 
