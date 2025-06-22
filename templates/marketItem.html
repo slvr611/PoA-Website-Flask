@@ -246,8 +246,8 @@
         document.getElementById("tradeType").value = tradeType;
         
         // Update modal title to include trade type and resource
-        const actionVerb = tradeType === "Buy" ? "Buy" : "Sell";
-        const preposition = tradeType === "Buy" ? "from" : "to";
+        const actionVerb = tradeType.includes("Buy") ? "Buy" : "Sell";
+        const preposition = tradeType.includes("Buy") ? "from" : "to";
         document.querySelector("#tradeModal h2").textContent = `${actionVerb} ${resource} ${preposition} ${nationName}`;
         
         document.getElementById("price").value = price;
