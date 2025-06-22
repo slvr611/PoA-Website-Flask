@@ -113,7 +113,7 @@
                             {% if g.user is not none %}
                                 <td>
                                     <button type="button" class="btn btn-primary" 
-                                            onclick="openTradeModal('{{ desire.nation }}', '{{ desire.nation_id }}', '{{ desire.resource }}', '{{ desire.trade_type }}', {{ desire.price }}, {{ desire.quantity }})">
+                                            onclick='openTradeModal("{{ desire.nation }}", "{{ desire.nation_id }}", "{{ desire.resource }}", "{{ desire.trade_type }}", {{ desire.price }}, {{ desire.quantity }})'>
                                         Trade
                                     </button>
                                 </td>
@@ -240,7 +240,6 @@
     const closeBtn = document.getElementsByClassName("close")[0];
     
     function openTradeModal(nationName, nationId, resource, tradeType, price, quantity) {
-        document.getElementById("tradeNationName").textContent = nationName;
         document.getElementById("nationId").value = nationId;
         document.getElementById("resource").value = resource;
         document.getElementById("tradeType").value = tradeType;
