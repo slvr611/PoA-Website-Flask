@@ -226,7 +226,7 @@ def compute_stability_gain_chance(field, target, base_value, field_schema, overa
     karma_stability_gain = max(min(karma * overall_total_modifiers.get("stability_gain_chance_per_positive_karma", 0), overall_total_modifiers.get("max_stability_gain_chance_per_positive_karma", 0)), 0)
     minority_stability_gain = max(min(unique_minority_count * minority_impact * overall_total_modifiers.get("stability_gain_chance_per_unique_minority", 0), overall_total_modifiers.get("max_stability_gain_chance_per_unique_minority", 0)), 0)
     pop_stability_gain = pop_count * overall_total_modifiers.get("stability_gain_chance_per_pop", 0)
-    road_stability_gain = road_usage * overall_total_modifiers.get("stability_gain_chance_per_road_usage", 0)
+    road_stability_gain = int(road_usage) * overall_total_modifiers.get("stability_gain_chance_per_road_usage", 0)
 
     if unique_minority_count == 0:
         minority_stability_gain += overall_total_modifiers.get("homogeneous_stability_gain_chance", 0)
@@ -246,7 +246,7 @@ def compute_stability_loss_chance(field, target, base_value, field_schema, overa
     karma_stability_loss = max(min(-karma * overall_total_modifiers.get("stability_loss_chance_per_negative_karma", 0), overall_total_modifiers.get("max_stability_loss_chance_per_negative_karma", 0)), 0)
     minority_stability_loss = max(min(unique_minority_count * minority_impact * overall_total_modifiers.get("stability_loss_chance_per_unique_minority", 0), overall_total_modifiers.get("max_stability_loss_chance_per_unique_minority", 0)), 0)
     pop_stability_loss = pop_count * overall_total_modifiers.get("stability_loss_chance_per_pop", 0)
-    road_stability_loss = road_usage * overall_total_modifiers.get("stability_loss_chance_per_road_usage", 0)
+    road_stability_loss = int(road_usage) * overall_total_modifiers.get("stability_loss_chance_per_road_usage", 0)
 
     if unique_minority_count == 0:
         minority_stability_loss += overall_total_modifiers.get("homogeneous_stability_loss_chance", 0)
