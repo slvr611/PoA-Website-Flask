@@ -136,11 +136,17 @@
       },
 	  "stability_loss_chance_on_leader_death": {
         "bsonType": "number",
-		"label": "Stability Loss Chance On Leader Death",
+        "label": "Stability Loss Chance On Leader Death",
         "description": "The nation's percentage chance of losing a level of stability when their leader dies",
-		"calculated": true,
-		"hidden":true,
-		"format": "percentage"
+        "calculated": true,
+        "format": "percentage"
+      },
+      "vampirism_chance": {
+        "bsonType": "number",
+        "label": "Vampirism Chance",
+        "description": "The nation's percentage chance of a vampire rising each tick",
+        "calculated": true,
+        "format": "percentage"
       },
 	  "infamy": {
         "bsonType": "number",

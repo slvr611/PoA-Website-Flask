@@ -636,10 +636,11 @@ def nation_concessions_tick(old_nation, new_nation, calculated_nation, schema):
 
     if old_nation.get("concessions", {}) != {}:
         new_nation["concessions"] = {}
-        compliance_enum = schema["properties"]["compliance"]["enum"]
-        compliance_index = compliance_enum.index(old_nation["compliance"])
-        new_nation["compliance"] = compliance_enum[compliance_index - 1]
-        result += f"{old_nation.get('name', 'Unknown')} has had their compliance reduced from {old_nation.get('compliance', 'Unknown')} to {new_nation.get('compliance', 'Unknown')} due to concessions not being paid.\n"
+        if old_nation.get("concessions", None) is not None: #Do this to prevent newly made nations from losing compliance
+            compliance_enum = schema["properties"]["compliance"]["enum"]
+            compliance_index = compliance_enum.index(old_nation["compliance"])
+            new_nation["compliance"] = compliance_enum[compliance_index - 1]
+            result += f"{old_nation.get('name', 'Unknown')} has had their compliance reduced from {old_nation.get('compliance', 'Unknown')} to {new_nation.get('compliance', 'Unknown')} due to concessions not being paid.\n"
 
     if old_nation.get("concessions_roll", 1) < old_nation.get("concessions_chance_at_tick", 0):
         new_nation["concessions_roll"] = 1
@@ -693,10 +694,22 @@ def nation_passive_expansion_tick(old_nation, new_nation, calculated_nation, sch
         result += f"{old_nation.get('name', 'Unknown')} has expanded into adjacent territory.\n"
     return result
 
+def vampirism_tick(old_nation, new_nation, calculated_nation, schema):
+    if calculated_nation.get("vampirism_chance", 0) <= 0:
+        return ""
+    vampirism_roll = random.random()
+    new_nation["vampirism_roll"] = expansion_roll
+    new_nation["vampirism_chance_at_tick"] = calculated_nation.get("vampirism_chance", 0)
+    if vampirism_roll <= calculated_nation.get("vampirism_chance", 0):
+        new_nation["jobs"]["vampire"] = old_nation.get("jobs", {}).get("vampire", 0) + 1
+        result += f"{old_nation.get('name', 'Unknown')} has gained a vampire.\n"
+    return ""
+
 def nation_job_cleanup_tick(old_nation, new_nation, calculated_nation, schema):
     new_jobs = {}
     for job in old_nation.get("jobs", {}).keys():
-        new_jobs[job] = 0
+        if job != "vampire":
+            new_jobs[job] = 0
     new_nation["jobs"] = new_jobs
     return ""
 
@@ -757,6 +770,7 @@ NATION_TICK_FUNCTIONS = {
     "Nation Passive Expansion Tick": nation_passive_expansion_tick,
     "Nation Modifier Decay Tick": modifier_decay_tick,
     "Nation Progress Quests Tick": progress_quests_tick,
+    "Nation Vampirism Tick": vampirism_tick,
     "Nation Job Cleanup Tick": nation_job_cleanup_tick,
     "Nation Reset Rolling Karma to Zero (Generally Don't Use)": reset_rolling_karma_to_zero,
 }
