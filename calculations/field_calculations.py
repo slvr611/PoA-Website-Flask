@@ -53,7 +53,7 @@ def calculate_all_fields(target, schema, target_data_type):
         technologies = target.get("technologies", {})
         tech_totals = sum_tech_totals(technologies)
 
-        territory_terrain_totals = collect_territory_terrain(target)
+        territory_terrain_totals = collect_territory_terrain(target, modifier_totals, external_modifiers_total)
 
         jobs_assigned = collect_jobs_assigned(target)
         job_details = calculate_job_details(target, district_details, modifier_totals, district_totals, tech_totals, city_totals, law_totals, external_modifiers_total)
@@ -400,13 +400,14 @@ def sum_tech_totals(technologies):
                 tech_totals[key] = tech_totals.get(key, 0) + value
     return tech_totals
 
-def collect_territory_terrain(target):
+def collect_territory_terrain(target, modifier_totals, external_modifier_totals):
     territory_types = target.get("territory_types", {})
     total_modifiers = {}
     terrain_json_data = json_data["terrains"]
     for terrain, value in territory_types.items():
         terrain_modifier = terrain_json_data.get(terrain, {}).get("resource", "none") + "_production"
         terrain_count_required = terrain_json_data.get(terrain, {}).get("count_required", 4)
+        terrain_count_required += modifier_totals.get(terrain + "_terrain_count_required", 0) + external_modifier_totals.get(terrain + "_terrain_count_required", 0)
         total_modifiers[terrain_modifier] = total_modifiers.get(terrain_modifier, 0) + value // terrain_count_required
     return total_modifiers
 

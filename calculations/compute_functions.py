@@ -320,9 +320,9 @@ def compute_money_income(field, target, base_value, field_schema, overall_total_
 def compute_resource_production(field, target, base_value, field_schema, overall_total_modifiers):
     production_dict = {}
 
-    resources_per_node = 2 + overall_total_modifiers.get("production_per_node", 0)
     production_of_available_nodes = overall_total_modifiers.get("production_of_available_nodes", 0)  #TODO:  Figure out how to calculate which nodes the nation has for this modifier
     ignore_nodes = target.get("ignore_nodes", 0)
+    resource_node_value = overall_total_modifiers.get("resource_node_value", 0)
     naval_unit_count = 0
     if "naval_unit_count" in target:
         naval_unit_count = compute_unit_count("naval_unit_count", target, 0, {}, overall_total_modifiers)
@@ -331,13 +331,14 @@ def compute_resource_production(field, target, base_value, field_schema, overall
 
     for resource in all_resources:
         specific_resource_production = 0
+        specific_resource_node_value = resource_node_value + overall_total_modifiers.get(resource["key"] + "_node_value", 0)
         modifiers_to_check = [resource["key"] + "_production", "resource_production"]
         for modifier in modifiers_to_check:
             specific_resource_production += overall_total_modifiers.get(modifier, 0)
 
         if ignore_nodes < 1:
             resource_nodes = overall_total_modifiers.get(resource["key"] + "_nodes", 0)
-            specific_resource_production += resource_nodes * resources_per_node
+            specific_resource_production += resource_nodes * (2 + specific_resource_node_value)
         
 
         if overall_total_modifiers.get(resource["key"] + "_production_per_naval_unit", 0) > 0:
