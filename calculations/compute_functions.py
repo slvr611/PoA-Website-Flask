@@ -249,7 +249,7 @@ def compute_stability_loss_chance(field, target, base_value, field_schema, overa
     stability = target.get("stability", "Unknown")
     road_usage = target.get("road_usage", 0)
     war = False
-    
+
     karma_stability_loss = max(min(-karma * overall_total_modifiers.get("stability_loss_chance_per_negative_karma", 0), overall_total_modifiers.get("max_stability_loss_chance_per_negative_karma", 0)), 0)
     minority_stability_loss = max(min(unique_minority_count * minority_impact * overall_total_modifiers.get("stability_loss_chance_per_unique_minority", 0), overall_total_modifiers.get("max_stability_loss_chance_per_unique_minority", 0)), 0)
     pop_stability_loss = pop_count * overall_total_modifiers.get("stability_loss_chance_per_pop", 0)

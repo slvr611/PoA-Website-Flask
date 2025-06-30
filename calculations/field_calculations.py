@@ -697,41 +697,59 @@ def collect_external_requirements(target, schema, target_data_type):
                 if not object:
                     continue
                 collected_modifiers.extend(collect_external_modifiers_from_object(object, required_fields, linked_object_schema, target_data_type))
-    
+
     return collected_modifiers
 
 def collect_external_modifiers_from_object(object, required_fields, linked_object_schema, target_data_type):
     collected_modifiers = []
 
     for req_field in required_fields:
-        req_field_schema = linked_object_schema["properties"].get(req_field, {})
-        if req_field in object:
-            field_type = linked_object_schema["properties"].get(req_field, {}).get("bsonType")
+        if isinstance(req_field, dict):
+            for key, value in req_field.items():
+                req_field_schema = linked_object_schema["properties"].get(key, {})
+                collections = req_field_schema.get("collections")
+                if not collections:
+                    continue
 
-            if field_type == "array" and req_field == "external_modifiers":
-                for modifier in object[req_field]:
-                    if modifier.get("type") == target_data_type:
-                        collected_modifiers.append({modifier.get("modifier", ""): modifier.get("value", 0)})
-            
-            elif field_type == "enum" and req_field_schema.get("laws"):
-                law_modifiers = req_field_schema["laws"].get(object[req_field], {})
-                for key, value in law_modifiers.items():
-                    if key.startswith(target_data_type + "_"):
-                        collected_modifiers.append({key.replace(target_data_type + "_", ""): value})
-            
-            elif field_type == "array" and req_field == "modifiers":
-                for modifier in object[req_field]:
-                    if modifier.get("field").startswith(target_data_type + "_"):
-                        field = modifier["field"].replace(target_data_type + "_", "")
-                        collected_modifiers.append({field: modifier["value"]})
-            
-            elif field_type == "array" and req_field == "titles":
-                calculated_title_modifiers = calculate_title_modifiers(object, target_data_type, linked_object_schema["properties"])
-                for key, value in calculated_title_modifiers.items():
-                    collected_modifiers.append({key: value})
-            
-            elif field_type == "json_resource_enum" and req_field == "node":
-                collected_modifiers.append({object[req_field] + "_nodes": 1})
+                for collection in collections:
+                    linked_object_schema = category_data.get(collection, {}).get("schema", {})
+
+                    if req_field_schema.get("queryTargetAttribute"):
+                        query_target = req_field_schema["queryTargetAttribute"]
+                        linked_objects = list(mongo.db[collection].find({query_target: str(object["_id"])}))
+                        for object in linked_objects:
+                            if object.get("equipped", True):
+                                collected_modifiers.extend(collect_external_modifiers_from_object(object, value, linked_object_schema, target_data_type))
+            continue
+        else:
+            req_field_schema = linked_object_schema["properties"].get(req_field, {})
+            if req_field in object:
+                field_type = linked_object_schema["properties"].get(req_field, {}).get("bsonType")
+
+                if field_type == "array" and req_field == "external_modifiers":
+                    for modifier in object[req_field]:
+                        if modifier.get("type") == target_data_type:
+                            collected_modifiers.append({modifier.get("modifier", ""): modifier.get("value", 0)})
+                
+                elif field_type == "enum" and req_field_schema.get("laws"):
+                    law_modifiers = req_field_schema["laws"].get(object[req_field], {})
+                    for key, value in law_modifiers.items():
+                        if key.startswith(target_data_type + "_"):
+                            collected_modifiers.append({key.replace(target_data_type + "_", ""): value})
+                
+                elif field_type == "array" and req_field == "modifiers":
+                    for modifier in object[req_field]:
+                        if modifier.get("field").startswith(target_data_type + "_"):
+                            field = modifier["field"].replace(target_data_type + "_", "")
+                            collected_modifiers.append({field: modifier["value"]})
+                
+                elif field_type == "array" and req_field == "titles":
+                    calculated_title_modifiers = calculate_title_modifiers(object, target_data_type, linked_object_schema["properties"])
+                    for key, value in calculated_title_modifiers.items():
+                        collected_modifiers.append({key: value})
+                
+                elif field_type == "json_resource_enum" and req_field == "node":
+                    collected_modifiers.append({object[req_field] + "_nodes": 1})
     
     return collected_modifiers
 
