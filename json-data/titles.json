@@ -1142,7 +1142,7 @@
 	},
 	"the_chosen_of_the_symphonist": {
 		"display_name": "the Chosen of the Symphonist",
-		"tier": 1,
+		"tier": 3,
 		"type": "unique",
 		"modifiers": {
 			"character_stat_cap": 2,
@@ -1151,8 +1151,16 @@
 	},
 	"the_sun_king": {
 		"display_name": "the Sun King",
-		"tier": 1,
+		"tier": 3,
 		"type": "unique",
 		"modifiers": {}
+	},
+	"the_philosopher_king": {
+		"display_name": "the Philosopher King",
+		"tier": 3,
+		"type": "unique",
+		"modifiers": {
+			"nation_research_production_per_cunning": 0.5
+		}
 	}
 }

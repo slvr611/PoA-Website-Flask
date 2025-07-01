@@ -372,7 +372,19 @@ def calculate_title_modifiers(target, target_data_type, schema_properties):
         for key, value in title_data.get("modifiers", {}).items():
             if key.startswith(target_data_type + "_"):
                 temp_key = key.replace(target_data_type + "_", "")
-                title_modifiers[temp_key] = title_modifiers.get(temp_key, 0) + value
+                if "_per_" in temp_key:
+                    stats = ["rulership", "cunning", "charisma", "prowess", "magic", "strategy"]
+                    split_key = temp_key.split("_per_")
+                    modifier = split_key[0]
+                    stat = split_key[1]
+                    if stat in stats:
+                        temp_key = modifier
+                        calculated_target = calculate_all_fields(target, category_data["characters"]["schema"], "character")
+                        value *= calculated_target.get(stat, 0)
+                        value = max(value, 0)
+                    title_modifiers[temp_key] = title_modifiers.get(temp_key, 0) + value
+                else:
+                    title_modifiers[temp_key] = title_modifiers.get(temp_key, 0) + value
     return title_modifiers
 
 def collect_cities(target):
