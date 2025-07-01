@@ -698,7 +698,7 @@ def vampirism_tick(old_nation, new_nation, calculated_nation, schema):
     if calculated_nation.get("vampirism_chance", 0) <= 0:
         return ""
     vampirism_roll = random.random()
-    new_nation["vampirism_roll"] = expansion_roll
+    new_nation["vampirism_roll"] = vampirism_roll
     new_nation["vampirism_chance_at_tick"] = calculated_nation.get("vampirism_chance", 0)
     if vampirism_roll <= calculated_nation.get("vampirism_chance", 0):
         new_nation["jobs"]["vampire"] = old_nation.get("jobs", {}).get("vampire", 0) + 1
