@@ -1294,3 +1294,16 @@ h1, h2 {
     border-radius: 4px;
     padding: 0.3rem 0.5rem;
 }
+
+.map-viewer.loading::after {
+    content: "Loading map...";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0,0,0,0.7);
+    color: white;
+    padding: 10px 20px;
+    border-radius: 4px;
+    z-index: 1000;
+}

@@ -1,7 +1,8 @@
-from flask import Blueprint, render_template, session, redirect, url_for, g
+from flask import Blueprint, render_template, session, redirect, url_for, g, send_from_directory, after_this_request
 from pymongo import ASCENDING
 from app_core import mongo
 import datetime
+import os
 
 
 base_routes = Blueprint('base_routes', __name__)
@@ -35,3 +36,16 @@ def home():
 def go_back():
     previous_url = session.get('second_previous_url', url_for("base_routes.home"))
     return redirect(previous_url)
+
+@base_routes.route('/static/images/maps/<path:filename>')
+def optimized_map_serving(filename):
+    """Serve map files with optimized caching headers"""
+    @after_this_request
+    def add_header(response):
+        # Cache for 1 week
+        response.headers['Cache-Control'] = 'public, max-age=604800'
+        return response
+    
+    # Path to your static files
+    maps_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static', 'images', 'maps')
+    return send_from_directory(maps_dir, filename)
