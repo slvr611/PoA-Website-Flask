@@ -49,7 +49,15 @@
 							{% if properties.format == "percentage" %}
 								<td>{{ (item[field] * 100)|int }}%</td>
 							{% else %}
-								<td>{{ item[field] }}</td>
+								<td>{{ item[field] }}
+									{% if properties.get("max") %}
+										{% if properties.get("max") is string %}
+											/ {{ item.get(properties.get("max"), 0) }}
+										{% else %}
+											/ {{ properties.get("max") }}
+										{% endif %}
+									{% endif %}
+								</td>
 							{% endif %}
 						{% elif properties.bsonType == "boolean" %}
 							<td>{{ item[field] }}</td>

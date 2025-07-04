@@ -24,7 +24,12 @@ def cache_previous_url():
 
 @base_routes.route("/")
 def home():
-    return render_template("index.html")
+    global_modifiers = mongo.db.global_modifiers.find_one({"name": "global_modifiers"})
+    if not global_modifiers:
+        global_modifiers = {"name": "global_modifiers"}
+        mongo.db.global_modifiers.insert_one(global_modifiers)
+    current_session = global_modifiers.get("session_counter", 1)
+    return render_template("index.html", current_session=current_session)
 
 @base_routes.route("/go_back")
 def go_back():

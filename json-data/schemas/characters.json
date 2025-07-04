@@ -321,37 +321,43 @@
         "bsonType": "number",
 		"label": "Rulership",
         "description": "The Rulership stat of the character",
-		"calculated": true
+		"calculated": true,
+        "max": "rulership_cap"
       },
 	  "cunning": {
         "bsonType": "number",
 		"label": "Cunning",
         "description": "The Cunning stat of the character",
-		"calculated": true
+		"calculated": true,
+        "max": "cunning_cap"
       },
 	  "charisma": {
         "bsonType": "number",
 		"label": "Charisma",
         "description": "The Charisma stat of the character",
-		"calculated": true
+		"calculated": true,
+        "max": "charisma_cap"
       },
 	  "prowess": {
         "bsonType": "number",
 		"label": "Prowess",
         "description": "The Prowess stat of the character",
-		"calculated": true
+		"calculated": true,
+        "max": "prowess_cap"
       },
 	  "magic": {
         "bsonType": "number",
 		"label": "Magic",
         "description": "The Magic stat of the character",
-		"calculated": true
+		"calculated": true,
+        "max": "magic_cap"
       },
 	  "strategy": {
         "bsonType": "number",
 		"label": "Strategy",
         "description": "The Strategy stat of the character",
-		"calculated": true
+		"calculated": true,
+        "max": "strategy_cap"
       },
       "positive_quirk": {
         "bsonType": "enum",

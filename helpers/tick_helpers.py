@@ -428,7 +428,8 @@ def artifact_loss_tick(old_artifact, new_artifact, calculated_artifact, schema):
     new_artifact["loss_chance_at_tick"] = calculated_artifact.get("passive_loss_chance", 0)
     if loss_roll <= calculated_artifact.get("passive_loss_chance", 0):
         new_artifact["owner"] = "Lost"
-        result = f"{old_artifact.get('name', 'Unknown')} has been lost.\n"
+        new_artifact["equipped"] = False
+        result = f"{old_artifact.get('name', 'Unknown')} has been lost due to passive loss chance.\n"
     return result
 
 ###########################################################
@@ -483,16 +484,16 @@ def ai_resource_desire_tick(old_nation, new_nation, calculated_nation, schema):
         trade_type = "None"
         price = 0
         quantity = random.randint(1, 5)  # Random quantity between 1-5
-        if desire_roll <= 0.05:
+        if desire_roll <= 0.1:
             price = base_price * (1.15 + price_roll)
             trade_type = "Need to Buy"
-        elif desire_roll <= 0.15:
-            price = base_price * (0.75 + price_roll)
+        elif desire_roll <= 0.25:
+            price = base_price * (0.95 + price_roll)
             trade_type = "Desire to Buy"
-        elif desire_roll >= 0.85:
-            price = base_price * (1.15 + price_roll)
+        elif desire_roll >= 0.75:
+            price = base_price * (0.95 + price_roll)
             trade_type = "Desire to Sell"
-        elif desire_roll >= 0.95:
+        elif desire_roll >= 0.9:
             price = base_price * (0.75 + price_roll)
             trade_type = "Need to Sell"
         price = int(round(price / 5)) * 5
@@ -506,11 +507,11 @@ def ai_resource_desire_tick(old_nation, new_nation, calculated_nation, schema):
         trade_type = "None"
         price = 0
         quantity = 1
-        if desire_roll <= 0.01:
+        if desire_roll <= 0.05:
             price = base_price * (1.15 + price_roll)
             trade_type = "Need to Buy"
-        elif desire_roll <= 0.05:
-            price = base_price * (0.75 + price_roll)
+        elif desire_roll <= 0.1:
+            price = base_price * (0.95 + price_roll)
             trade_type = "Desire to Buy"
         price = int(round(price / 5)) * 5
         if price != 0:
@@ -694,6 +695,14 @@ def nation_passive_expansion_tick(old_nation, new_nation, calculated_nation, sch
         result += f"{old_nation.get('name', 'Unknown')} has expanded into adjacent territory.\n"
     return result
 
+def nation_job_cleanup_tick(old_nation, new_nation, calculated_nation, schema):
+    new_jobs = {}
+    for job in old_nation.get("jobs", {}).keys():
+        if job != "vampire":
+            new_jobs[job] = 0
+    new_nation["jobs"] = new_jobs
+    return ""
+
 def vampirism_tick(old_nation, new_nation, calculated_nation, schema):
     if calculated_nation.get("vampirism_chance", 0) <= 0:
         return ""
@@ -705,14 +714,6 @@ def vampirism_tick(old_nation, new_nation, calculated_nation, schema):
         new_nation["jobs"]["vampire"] = old_nation.get("jobs", {}).get("vampire", 0) + 1
         result += f"{old_nation.get('name', 'Unknown')} has gained a vampire.\n"
     return result
-
-def nation_job_cleanup_tick(old_nation, new_nation, calculated_nation, schema):
-    new_jobs = {}
-    for job in old_nation.get("jobs", {}).keys():
-        if job != "vampire":
-            new_jobs[job] = 0
-    new_nation["jobs"] = new_jobs
-    return ""
 
 def reset_rolling_karma_to_zero(old_nation, new_nation, schema):
     new_nation["rolling_karma"] = 0
@@ -771,7 +772,7 @@ NATION_TICK_FUNCTIONS = {
     "Nation Passive Expansion Tick": nation_passive_expansion_tick,
     "Nation Modifier Decay Tick": modifier_decay_tick,
     "Nation Progress Quests Tick": progress_quests_tick,
-    "Nation Vampirism Tick": vampirism_tick,
     "Nation Job Cleanup Tick": nation_job_cleanup_tick,
+    "Nation Vampirism Tick": vampirism_tick,
     "Nation Reset Rolling Karma to Zero (Generally Don't Use)": reset_rolling_karma_to_zero,
 }
