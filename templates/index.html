@@ -16,6 +16,9 @@
                     <option value="{{ session }}" {% if loop.first %}selected{% endif %}>Session {{ session }}</option>
                 {% endfor %}
             </select>
+            <div class="era-display">
+                <span id="era-age-text">Unknown | Unknown</span>
+            </div>
         </div>
         <div class="slider-container">
             <label for="opacity-slider">Overlay Opacity: </label>
@@ -32,6 +35,36 @@ document.addEventListener('DOMContentLoaded', function () {
     const sessionSelect = document.getElementById('session-select');
     const currentSession = parseInt(sessionSelect.value);
     const maxSession = parseInt(sessionSelect.options[0].value);
+    const eraAgeText = document.getElementById('era-age-text');
+    
+    // Define eras and ages based on session numbers
+    const eraData = [
+        { maxSession: 7, era: "Tribal Era", age: "Age of Stone" },
+        { maxSession: 17, era: "Tribal Era", age: "Age of Fire" },
+        { maxSession: 28, era: "Ancient Era", age: "Age of Myth" },
+        { maxSession: 42, era: "Ancient Era", age: "Age of Bronze" },
+        { maxSession: 99, era: "Classical Era", age: "Age of Wonder" },
+    ];
+    
+    function updateEraAge(sessionNum) {
+        for (const data of eraData) {
+            if (sessionNum <= data.maxSession) {
+                eraAgeText.textContent = `${data.era} | ${data.age}`;
+                break;
+            }
+        }
+    }
+    
+    // Update era/age when session changes
+    sessionSelect.addEventListener('change', () => {
+        const selectedSession = parseInt(sessionSelect.value);
+        updateEraAge(selectedSession);
+        updateMapVisibility();
+    });
+    
+    // Initialize era/age display
+    updateEraAge(currentSession);
+    
     const viewer = OpenSeadragon({
         id: "map-viewer",
         prefixUrl: "https://cdn.jsdelivr.net/npm/openseadragon@3.1.0/build/openseadragon/images/",
@@ -85,7 +118,7 @@ document.addEventListener('DOMContentLoaded', function () {
             opacity: 0,
             success: ({ item }) => {
                 loadedSessions[sessionNum].political = item;
-                if (sessionNum === currentSession) updateMapVisibility();
+                if (parseInt(sessionSelect.value) === sessionNum) updateMapVisibility();
             }
         });
 
@@ -95,7 +128,7 @@ document.addEventListener('DOMContentLoaded', function () {
             opacity: 0,
             success: ({ item }) => {
                 loadedSessions[sessionNum].terrain = item;
-                if (sessionNum === currentSession) updateMapVisibility();
+                if (parseInt(sessionSelect.value) === sessionNum) updateMapVisibility();
             }
         });
     }
@@ -114,19 +147,53 @@ document.addEventListener('DOMContentLoaded', function () {
     // Load the current session immediately
     loadSession(currentSession);
 
-    // Preload all other sessions (delayed for idle loading)
+    // Preload other sessions with a modified approach
     setTimeout(() => {
         const allSessions = Array.from(sessionSelect.options).map(opt => parseInt(opt.value));
-        allSessions.forEach((s, i) => {
-            if (s !== currentSession) {
-                setTimeout(() => loadSession(s), 500 * i); // stagger loading
+        
+        // Create a queue for loading sessions
+        let loadQueue = allSessions.filter(s => s !== currentSession);
+        let currentIndex = 0;
+        
+        // Function to load the next session in queue
+        function loadNextInQueue() {
+            if (currentIndex < loadQueue.length) {
+                const sessionToLoad = loadQueue[currentIndex];
+                
+                // Skip if already loaded (might have been prioritized)
+                if (!loadedSessions[sessionToLoad]) {
+                    loadSession(sessionToLoad);
+                }
+                
+                currentIndex++;
+                setTimeout(loadNextInQueue, 500); // Continue with next after delay
             }
-        });
+        }
+        
+        // Start the queue processing
+        loadNextInQueue();
     }, 1500);
+    
+    // Function to prioritize loading a specific session
+    function prioritizeSession(sessionNum) {
+        if (!loadedSessions[sessionNum]) {
+            loadSession(sessionNum);
+        }
+    }
 
     // Session selector logic
     sessionSelect.addEventListener('change', () => {
-        updateMapVisibility();
+        const selectedSession = parseInt(sessionSelect.value);
+        updateEraAge(selectedSession);
+        
+        // Check if the selected session is already loaded
+        if (!loadedSessions[selectedSession]) {
+            // If not loaded, load it immediately
+            loadSession(selectedSession);
+        }
+        
+        // Update visibility after a short delay to allow loading
+        setTimeout(updateMapVisibility, 100);
     });
 
     // Map swap buttons
