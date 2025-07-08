@@ -77,7 +77,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (loadedSessions[sessionNum]) return;
 
         loadedSessions[sessionNum] = {};
-        const basePath = "https://poa-static-assets.s3.us-east-1.amazonaws.com/maps/dzi/";
+        const basePath = "https://poa-website-static-assets.s3.us-east-1.amazonaws.com/maps/dzi/dzi/";
 
         viewer.addTiledImage({
             tileSource: `${basePath}PoA_Political_Map_Session_${sessionNum}.dzi`,
