@@ -24,7 +24,8 @@
 		<table class="info-table">
 			{% for field, properties in schema.properties.items() %}
 				{% if properties and not properties.hidden
-				and not (properties.hideIfNone is defined and (item.get(properties.hideIfNone) is none or item.get(properties.hideIfNone) == "" or not item.get(properties.hideIfNone)))%}
+				and not (properties.hideIfNone is defined and (item.get(properties.hideIfNone) is none or item.get(properties.hideIfNone) == "" or not item.get(properties.hideIfNone)))
+				and (view_access_level >= properties.get("view_access_level", 0)) %}
 					<tr>
 						<th><strong>{{ properties.label }}:</strong></th>
 						{% if properties.bsonType == "string" or properties.bsonType == "enum" or properties.bsonType == "date"%}

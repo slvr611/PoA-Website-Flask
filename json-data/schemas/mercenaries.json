@@ -135,7 +135,8 @@
 	    "treasury": {
         "bsonType": "number",
 		    "label": "Treasury",
-        "description": "The amount of money the mercenary company has in its coffers"
+        "description": "The amount of money the mercenary company has in its coffers",
+        "view_access_level": 5
       },
       "land_budget": {
         "bsonType": "number",
@@ -209,6 +210,7 @@
         "bsonType": "array",
 		    "label": "Progress Quests",
         "description": "The ongoing quests the mercenary company is currently working on",
+        "view_access_level": 5,
         "items":{
           "bsonType": "object",
           "properties": {

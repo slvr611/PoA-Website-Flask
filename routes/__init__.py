@@ -1,3 +1,4 @@
+from flask import g
 from app_core import app, mongo, discord
 from helpers.data_helpers import get_user_entities
 
@@ -26,4 +27,12 @@ def register_routes(app, mongo, discord):
 def inject_navbar_data():
     return {
         'user_entities': get_user_entities()
+    }
+
+@app.context_processor
+def inject_permission_data():
+    """Make permission data available to all templates"""
+    return {
+        'view_access_level': getattr(g, 'view_access_level', 0),
+        'edit_access_level': getattr(g, 'edit_access_level', 0)
     }

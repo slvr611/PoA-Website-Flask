@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, session, redirect, url_for, g, send_from_directory, after_this_request
+from flask import Blueprint, render_template, session, redirect, url_for, g, send_from_directory, after_this_request, request
 from pymongo import ASCENDING
 from app_core import mongo
 import datetime
@@ -16,8 +16,31 @@ def load_user():
     g.user = session.get("user", None)
 
 @base_routes.before_app_request
+def calculate_user_permissions():
+    # Default permission levels
+    g.view_access_level = 0  # Public access
+    g.edit_access_level = 0  # No edit access
+    
+    if g.user:
+        # Get user from database to check permissions
+        user = mongo.db.players.find_one({"id": g.user.get("id")})
+        
+        if user:
+            # Base view access for authenticated users
+            g.view_access_level = 5
+            
+            # Check if user is admin
+            if user.get("is_admin", False):
+                g.view_access_level = 10  # Admin view access
+                g.edit_access_level = 10  # Admin edit access
+                return
+            
+            # Check if user owns any nations/organizations
+            user_id = str(user.get("_id"))
+            user_characters = list(mongo.db.characters.find({"player": user_id}))
+
+@base_routes.before_app_request
 def cache_previous_url():
-    from flask import request
     if request.endpoint != 'static':
         session['second_previous_url'] = session.get('previous_url', None)
         session['previous_url'] = session.get('current_url', None)

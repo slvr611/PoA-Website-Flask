@@ -77,7 +77,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (loadedSessions[sessionNum]) return;
 
         loadedSessions[sessionNum] = {};
-        const basePath = "{{ url_for('static', filename='images/maps/dzi/') }}";
+        const basePath = "https://poa-static-assets.s3.us-east-1.amazonaws.com/maps/dzi/";
 
         viewer.addTiledImage({
             tileSource: `${basePath}PoA_Political_Map_Session_${sessionNum}.dzi`,
@@ -90,7 +90,7 @@ document.addEventListener('DOMContentLoaded', function () {
         });
 
         viewer.addTiledImage({
-            tileSource: getTerrainMapPath(sessionNum),
+            tileSource: getTerrainMapPath(sessionNum, basePath),
             buildPyramid: false,
             opacity: 0,
             success: ({ item }) => {
@@ -100,13 +100,13 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    function getTerrainMapPath(sessionNum) {
+    function getTerrainMapPath(sessionNum, basePath) {
         if (sessionNum <= 17) {
-            return "/static/images/maps/dzi/PoA_Geographical_Map_Tribal.dzi";
+            return basePath + "PoA_Geographical_Map_Tribal.dzi";
         } else if (sessionNum <= 42) {
-            return "/static/images/maps/dzi/PoA_Terrain_Map_Ancient.dzi";
+            return basePath + "PoA_Terrain_Map_Ancient.dzi";
         } else {
-            return "/static/images/maps/dzi/PoA_Terrain_Map_Classical.dzi";
+            return basePath + "PoA_Terrain_Map_Classical.dzi";
         }
     }
 
