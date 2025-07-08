@@ -818,10 +818,11 @@ class DynamicSchemaForm(BaseSchemaForm):
                 
             elif items_type == "linked_object":
                 # For arrays of linked objects
-                subfield = SelectField("Value")
-                subfield.none_result = items_schema.get("noneResult", "None")
-                subfield.default_options = items_schema.get("default_options", [])
-                return FieldList(subfield, min_entries=0)
+                # subfield = SelectField("Value")
+                # subfield.none_result = items_schema.get("noneResult", "None")
+                # subfield.default_options = items_schema.get("default_options", [])
+                # return FieldList(subfield, min_entries=0)
+                pass
                 
             elif items_type == "object":
                 # For arrays of objects, create a nested form

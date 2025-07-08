@@ -4,7 +4,6 @@ from helpers.render_helpers import get_linked_objects
 from helpers.change_helpers import request_change, approve_change, system_approve_change
 from helpers.form_helpers import validate_form_with_jsonschema
 from helpers.auth_helpers import owner_required
-from calculations.field_calculations import calculate_all_fields
 from app_core import category_data, mongo, json_data, find_dict_in_list
 from helpers.auth_helpers import admin_required
 from pymongo import ASCENDING
@@ -20,8 +19,6 @@ def nation_item(item_ref):
     """Display a nation's details"""
     schema, db, nation = get_data_on_item("nations", item_ref)
     linked_objects = get_linked_objects(schema, nation)
-    calculated_fields = calculate_all_fields(nation, schema, "nation")
-    nation.update(calculated_fields)
 
     user_is_owner = False
     if g.user:
@@ -66,8 +63,6 @@ def edit_nation(item_ref):
                 )
     
     linked_objects = get_linked_objects(schema, nation)
-    calculated_fields = calculate_all_fields(nation, schema, "nation")
-    nation.update(calculated_fields)
 
     # Ensure concessions is properly formatted
     if "concessions" in nation and nation["concessions"] is not None:
@@ -193,9 +188,6 @@ def edit_nation_jobs(item_ref):
     """Display nation job edit form"""
     schema, db, nation = get_data_on_item("nations", item_ref)
         
-    calculated_fields = calculate_all_fields(nation, schema, "nation_jobs")
-    nation.update(calculated_fields)
-    
     form = form_generator.get_form("jobs", schema, item=nation)
 
     return render_template(

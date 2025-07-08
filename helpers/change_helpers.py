@@ -1,6 +1,7 @@
 from datetime import datetime
 from app_core import mongo, category_data
 from flask import g, flash
+from calculations.field_calculations import calculate_all_fields
 from copy import deepcopy
 
 def request_change(data_type, item_id, change_type, before_data, after_data, reason):
@@ -78,6 +79,8 @@ def approve_change(change_id):
 
     if change["change_type"] == "Add":
         after_data = change["after_requested_data"]
+        calculated_fields = calculate_all_fields(after_data, category_data[change["target_collection"]]["schema"], category_data[change["target_collection"]]["singularName"].lower())
+        after_data.update(calculated_fields)
         inserted_item_id = target_collection.insert_one(after_data).inserted_id
         changes_collection.update_one({"_id": change_id}, {"$set": {
             "target": inserted_item_id,
@@ -97,6 +100,8 @@ def approve_change(change_id):
             if change["change_type"] == "Update":
                 existing = target_collection.find_one({"_id": change["target"]})
                 merged = deep_merge(existing, after_data)
+                calculated_fields = calculate_all_fields(merged, category_data[change["target_collection"]]["schema"], category_data[change["target_collection"]]["singularName"].lower())
+                merged.update(calculated_fields)
                 target_collection.update_one({"_id": change["target"]}, {"$set": merged})
             else:
                 target_collection.delete_one({"_id": change["target"]})
@@ -123,6 +128,9 @@ def system_approve_change(change_id):
 
     if change["change_type"] == "Add":
         after_data = change["after_requested_data"]
+        calculated_fields = calculate_all_fields(after_data, category_data[change["target_collection"]]["schema"], category_data[change["target_collection"]]["singularName"].lower())
+        after_data.update(calculated_fields)
+
         inserted_item_id = target_collection.insert_one(after_data).inserted_id
         changes_collection.update_one({"_id": change_id}, {"$set": {
             "target": inserted_item_id,
@@ -142,6 +150,8 @@ def system_approve_change(change_id):
             if change["change_type"] == "Update":
                 existing = target_collection.find_one({"_id": change["target"]})
                 merged = deep_merge(existing, after_data)
+                calculated_fields = calculate_all_fields(merged, category_data[change["target_collection"]]["schema"], category_data[change["target_collection"]]["singularName"].lower())
+                merged.update(calculated_fields)
                 target_collection.update_one({"_id": change["target"]}, {"$set": merged})
             else:
                 target_collection.delete_one({"_id": change["target"]})

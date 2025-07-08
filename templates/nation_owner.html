@@ -157,7 +157,7 @@
 						</tr>
 						<tr>
 							<th>{{ schema.properties.passive_expansion_chance.label }}:</th>
-							<td>{{ (nation.passive_expansion_chance * 100)|int }}%</td>
+							<td>{{ (nation.get("passive_expansion_chance", 0) * 100)|int }}%</td>
 						</tr>
 						<tr>
 							<th>Territory:</th>

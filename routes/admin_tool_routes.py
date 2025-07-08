@@ -3,7 +3,6 @@ from helpers.auth_helpers import admin_required
 from helpers.data_helpers import get_data_on_category, generate_id_to_name_dict, compute_demographics
 from helpers.admin_tool_helpers import grow_all_population_async, roll_events_async
 from helpers.change_helpers import request_change, approve_change
-from calculations.field_calculations import calculate_all_fields
 from app_core import category_data, rarity_rankings, mongo, json_data
 from pymongo import ASCENDING
 from bson import ObjectId
@@ -92,10 +91,6 @@ def karma_helper():
 
     player_nations = list(db.find({"temperament": "Player"}).sort("name", ASCENDING))
     ai_nations = list(db.find({"temperament": {"$ne": "Player"}}).sort("name", ASCENDING))
-
-    for nation in player_nations + ai_nations:
-        calculated_fields = calculate_all_fields(nation, schema,  "nation")
-        nation.update(calculated_fields)
 
     return render_template("karma_helper.html",
                            player_nations=player_nations,

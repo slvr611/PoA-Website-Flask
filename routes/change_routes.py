@@ -3,7 +3,6 @@ from helpers.auth_helpers import admin_required
 from helpers.data_helpers import get_data_on_category, get_data_on_item
 from helpers.render_helpers import get_linked_objects
 from helpers.change_helpers import approve_change, deny_change
-from calculations.field_calculations import calculate_all_fields
 from app_core import category_data, mongo, app
 from pymongo import DESCENDING, ASCENDING
 from bson import ObjectId

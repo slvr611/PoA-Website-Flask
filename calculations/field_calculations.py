@@ -697,7 +697,11 @@ def collect_external_requirements(target, schema, target_data_type):
 
             if field_schema.get("queryTargetAttribute"):
                 query_target = field_schema["queryTargetAttribute"]
-                linked_objects = list(mongo.db[collection].find({query_target: str(target["_id"])}))
+                linked_objects = []
+
+                if "_id" in target:
+                    linked_objects = list(mongo.db[collection].find({query_target: str(target["_id"])}))
+                
                 for object in linked_objects:
                     if object.get("equipped", True):
                         collected_modifiers.extend(collect_external_modifiers_from_object(object, required_fields, linked_object_schema, target_data_type))

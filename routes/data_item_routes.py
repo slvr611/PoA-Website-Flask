@@ -5,7 +5,6 @@ from helpers.change_helpers import request_change, approve_change
 from helpers.render_helpers import get_linked_objects
 from helpers.form_helpers import validate_form_with_jsonschema
 from routes.nation_routes import edit_nation, nation_edit_request, nation_edit_approve
-from calculations.field_calculations import calculate_all_fields
 from app_core import category_data, mongo, rarity_rankings, json_data, find_dict_in_list
 from helpers.auth_helpers import admin_required
 from pymongo import ASCENDING
@@ -57,8 +56,6 @@ def data_list(data_type):
 def data_item(data_type, item_ref):
     schema, db, item = get_data_on_item(data_type, item_ref)
     linked_objects = get_linked_objects(schema, item)
-    calculated_fields = calculate_all_fields(item, schema, category_data[data_type]["singularName"].lower())
-    item.update(calculated_fields)
 
     return render_template(
         "dataItem.html",
@@ -249,9 +246,6 @@ def data_item_edit(data_type, item_ref):
                         {}, {"name": 1, "_id": 1}
                     ).sort("name", ASCENDING)
                 )
-
-    calculated_fields = calculate_all_fields(item, schema, category_data[data_type]["singularName"].lower())
-    item.update(calculated_fields)
 
     form = form_generator.get_form(data_type, schema, item=item)
     form.populate_linked_fields(schema, dropdown_options)
@@ -669,8 +663,6 @@ def religions_list():
 def market_item(item_ref):
     schema, db, market = get_data_on_item("markets", item_ref)
     linked_objects = get_linked_objects(schema, market)
-    calculated_fields = calculate_all_fields(market, schema, "market")
-    market.update(calculated_fields)
     
     # Get all nations that are members of this market
     member_nations = []
