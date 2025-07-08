@@ -131,10 +131,12 @@
 							<th>{{ schema.properties.origin.label }}:</th>
 							<td>{{ nation.origin }}</td>
 						</tr>
-						<tr>
-							<th>{{ schema.properties.temperament.label }}:</th>
-							<td>{{ nation.temperament }}</td>
-						</tr>
+						{% if view_access_level >= schema.properties.temperament.view_access_level %}
+							<tr>
+								<th>{{ schema.properties.temperament.label }}:</th>
+								<td>{{ nation.temperament }}</td>
+							</tr>
+						{% endif %}
 					</table>
 				</div>
 			</div>
@@ -474,8 +476,11 @@
 												{% endfor %}
 											{% endif %}
 										</td>
-
-										<td>{{ vassal.get("temperament", "Unknown") }}</td>
+										{% if user_is_owner or view_access_level >= schema.properties.temperament.view_access_level %}
+											<td>{{ vassal.get("temperament", "Unknown") }}</td>
+										{% else %}
+											<td>Hidden</td>
+										{% endif %}
 									</tr>
 								{% endfor %}
 							</tbody>
@@ -527,7 +532,11 @@
 									
 									<td>
 										{% if relation.get("pact_type", "None") in ["Defensive Pact", "Military Alliance"] %}
-											{{ relation['linked_objects'].get('nation_2', {}).get('temperament', 'None') }}
+											{% if user_is_owner or view_access_level >= schema.properties.temperament.view_access_level %}
+												{{ relation['linked_objects'].get('nation_2', {}).get('temperament', 'None') }}
+											{% else %}
+												Hidden
+											{% endif %}
 										{% else %}
 											Unknown
 										{% endif %}
@@ -555,7 +564,11 @@
 									
 									<td>
 										{% if relation.get("pact_type", "None") in ["Defensive Pact", "Military Alliance"] %}
-											{{ relation['linked_objects'].get('nation_1', {}).get('temperament', 'None') }}
+											{% if user_is_owner or view_access_level >= schema.properties.temperament.view_access_level %}
+												{{ relation['linked_objects'].get('nation_1', {}).get('temperament', 'None') }}
+											{% else %}
+												Hidden
+											{% endif %}
 										{% else %}
 											Unknown
 										{% endif %}

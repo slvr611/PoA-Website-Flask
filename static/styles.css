@@ -1327,3 +1327,23 @@ h1, h2 {
     border-radius: 4px;
     z-index: 1000;
 }
+
+.restricted-field {
+    color: #888;
+    font-style: italic;
+    background-color: #f0f0f0;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 0.9em;
+}
+
+.field-change {
+    margin-bottom: 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #eee;
+}
+
+.field-label {
+    font-weight: bold;
+    margin-bottom: 4px;
+}

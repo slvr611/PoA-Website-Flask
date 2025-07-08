@@ -2,7 +2,6 @@ from bson import ObjectId
 from app_core import mongo
 from helpers.change_helpers import system_request_change, system_approve_change
 from helpers.data_helpers import get_data_on_category
-from calculations.field_calculations import calculate_all_fields
 from pymongo import ASCENDING
 from threading import Thread
 import random
@@ -107,8 +106,6 @@ def roll_events():
     nations = list(db.find().sort("name", ASCENDING))
 
     for nation in nations:
-        calculated_fields = calculate_all_fields(nation, schema, "nation")
-        nation.update(calculated_fields)
         raw_roll = random.randint(1, 20)
         event_roll = raw_roll + nation.get("karma", 0)
         event_type = "Unknown"

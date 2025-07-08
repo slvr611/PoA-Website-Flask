@@ -48,14 +48,13 @@
         "queryTargetAttribute": "ruling_nation_org"
       },
       "temperament": {
-          "bsonType": "enum",
-      "label": "Temperament",
-          "description": "The nation's level of stability",
-      "default": "Neutral",
-      "enum": ["Player", "Neutral", "Friendly", "Hostile", "Withdrawn", "Curious", "Supremacist", "Zealous"],
-      "static": true,
-      "mod_info": true
-        },
+        "bsonType": "enum",
+        "label": "Temperament",
+        "description": "The nation's level of stability",
+        "default": "Neutral",
+        "enum": ["Player", "Neutral", "Friendly", "Hostile", "Withdrawn", "Curious", "Supremacist", "Zealous"],
+        "view_access_level": 10
+      },
         "region": {
           "bsonType": "linked_object",
       "label": "Region",
@@ -208,23 +207,44 @@
       "base_value": 150
         },
       "karma": {
-          "bsonType": "number",
-      "label": "Total Karma",
-          "description": "The total amount of Karma the nation has",
-      "calculated": true
-        },
+        "bsonType": "number",
+        "label": "Total Karma",
+        "description": "The total amount of Karma the nation has",
+        "calculated": true
+      },
       "rolling_karma": {
-          "bsonType": "number",
-      "label": "Rolling Karma",
-          "description": "The amount of rolling karma the nation has.  Rolling karma is increased after getting a bad event, reduced after getting a good event, and reset at the start of each era",
-      "default": 0
-        },
+        "bsonType": "number",
+        "label": "Rolling Karma",
+        "description": "The amount of rolling karma the nation has.  Rolling karma is increased after getting a bad event, reduced after getting a good event, and reset at the start of each era",
+        "default": 0
+      },
       "temporary_karma": {
-          "bsonType": "number",
-      "label": "Temporary Karma",
-          "description": "The amount of temporary karma the nation has.  Temporary karma is removed after each tick",
-      "default": 0
-        },
+        "bsonType": "number",
+        "label": "Temporary Karma",
+        "description": "The amount of temporary karma the nation has.  Temporary karma is removed after each tick",
+        "default": 0
+      },
+      "raw_roll": {
+        "bsonType": "number",
+        "label": "Raw Roll",
+        "description": "The raw karma roll before modifiers",
+        "hidden":true,
+        "view_access_level": 10
+      },
+      "event_roll": {
+        "bsonType": "number",
+        "label": "Event Roll",
+        "description": "The roll that lead to the event's tier",
+        "hidden":true,
+        "view_access_level": 10
+      },
+      "event_type": {
+        "bsonType": "string",
+        "label": "Event Type",
+        "description": "The type of event that occurred",
+        "hidden":true,
+        "view_access_level": 10
+      },
       "migration_distance": {
           "bsonType": "number",
       "label": "Migration Distance",

@@ -107,10 +107,12 @@
                                     <th>{{ schema.properties.origin.label }}:</th>
                                     <td>{{ form.origin(class="form-control") }}</td>
                                 </tr>
-                                <tr>
-                                    <th>{{ schema.properties.temperament.label }}:</th>
-                                    <td>{{ form.temperament(class="form-control") }}</td>
-                                </tr>
+                                {% if view_access_level >= schema.properties.temperament.view_access_level %}
+                                    <tr>
+                                        <th>{{ schema.properties.temperament.label }}:</th>
+                                        <td>{{ form.temperament(class="form-control") }}</td>
+                                    </tr>
+                                {% endif %}
                             </table>
                         </div>
                     </div>
@@ -363,7 +365,11 @@
                                         </td>
                                         <td>{{ relation["relation"] }}</td>
                                         <td>{{ relation["pact_type"] }}</td>
-                                        <td>{{ relation["temperament"] }}</td>
+                                        {% if user_is_owner or view_access_level >= schema.properties.temperament.view_access_level %}
+                                            <td>{{ relation["temperament"] }}</td>
+                                        {% else %}
+                                            <td>Hidden</td>
+                                        {% endif %}
                                     </tr>
                                 {% endfor %}
                             </tbody>

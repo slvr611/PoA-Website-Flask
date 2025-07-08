@@ -25,8 +25,10 @@
 </div>
 {% endmacro %}
 
-{% macro render_field_change(before_value, after_value, field_schema=None, collection_name=None, preview_references=None) %}
-    {% if before_value is mapping and after_value is mapping %}
+{% macro render_field_change(before_value, after_value, view_access_level, field_schema=None, collection_name=None, preview_references=None) %}
+    {% if field_schema and field_schema.get("view_access_level", 0) > view_access_level %}
+        <span class="restricted-field">Restricted content</span>
+    {% elif before_value is mapping and after_value is mapping %}
         {# Handle dictionaries - only show changed keys #}
         {% set changed_keys = [] %}
         {% set all_keys = (before_value.keys()|list + after_value.keys()|list)|unique|list %}
@@ -41,14 +43,13 @@
                 {% for dict_key in changed_keys %}
                     <div class="dict-change-item">
                         <span class="dict-key">{{ dict_key }}:</span> 
-                        {{ render_field_change(before_value.get(dict_key), after_value.get(dict_key), field_schema, collection_name, preview_references) }}
+                        {{ render_field_change(before_value.get(dict_key), after_value.get(dict_key), view_access_level, field_schema, collection_name, preview_references) }}
                     </div>
                 {% endfor %}
             </div>
         {% else %}
             <span class="no-changes">No changes</span>
         {% endif %}
-        
     {% elif before_value is sequence and before_value is not string and after_value is sequence and after_value is not string %}
         <div class="array-changes">
             {% if (before_value and before_value[0] is mapping) or (after_value and after_value[0] is mapping) %}
@@ -68,7 +69,7 @@
                         {% if item_changed %}
                             <div class="array-item-changed">
                                 <div class="array-index">Item {{ i+1 }}:</div>
-                                {{ render_field_change(before_item, after_item, field_schema, collection_name, preview_references) }}
+                                {{ render_field_change(before_item, after_item, view_access_level, field_schema, collection_name, preview_references) }}
                             </div>
                         {% endif %}
                     {% elif before_item != after_item %}
@@ -184,19 +185,23 @@
     {% endif %}
 {% endmacro %}
 
-{% macro render_changes_preview(before_data, after_data, target_schema, preview_references) %}
+{% macro render_changes_preview(before_data, after_data, target_schema, preview_references, view_access_level) %}
     <div class="changes-preview">
         {% if before_data is mapping and after_data is mapping %}
             {% set all_keys = (before_data.keys()|list + after_data.keys()|list)|unique|list %}
             {% for key in all_keys %}
                 {% set before_value = before_data.get(key) %}
                 {% set after_value = after_data.get(key) %}
+                {% set field_schema = target_schema.properties.get(key, {}) %}
+                {% set required_view_level = field_schema.get("view_access_level", 0) %}
                 
                 {% if before_value != after_value or (key in before_data) != (key in after_data) %}
                     <div class="field-change">
-                        <div class="field-label">{{ target_schema.properties.get(key, {}).get("label", key) }}:</div>
+                        <div class="field-label">{{ field_schema.get("label", key) }}:</div>
                         <div class="field-value">
-                            {% if (key == "districts" or key == "cities") and before_value is sequence and after_value is sequence %}
+                            {% if required_view_level > view_access_level %}
+                                <span class="restricted-field">Restricted content</span>
+                            {% elif (key == "districts" or key == "cities") and before_value is sequence and after_value is sequence %}
                                 {% if after_value|length > before_value|length %}
                                     <span>Added: {{ after_value|length - before_value|length }} new {{ key }}</span>
                                 {% endif %}
@@ -366,7 +371,7 @@
                             {% else %}
                                 {% set field_schema = target_schema.properties.get(key, {}) %}
                                 {% set collection_name = field_schema.collections[0] if field_schema.get('bsonType') == "linked_object" and field_schema.get('collections') else None %}
-                                {{ render_field_change(before_value, after_value, field_schema, collection_name, preview_references) }}
+                                {{ render_field_change(before_value, after_value, view_access_level, field_schema, collection_name, preview_references) }}
                             {% endif %}
                         </div>
                     </div>
@@ -378,7 +383,7 @@
     </div>
 {% endmacro %}
 
-{% macro render_changes_table(changes, preview_references, target_schemas, show_actions=false) %}
+{% macro render_changes_table(changes, preview_references, target_schemas, view_access_level, show_actions=false) %}
 <table class="info-table">
     <thead>
         <tr>
@@ -391,7 +396,7 @@
             <th class="reason-column">Reason</th>
             <th>Time</th>
             <th>User</th>
-            {% if show_actions %}
+            {% if show_actions and g.user.is_admin %}
             <th>Actions</th>
             {% endif %}
         </tr>
@@ -413,7 +418,7 @@
                 <td>{{ change.change_type }}</td>
                 <td>{{ change.status }}</td>
                 <td class="changes-column wrap-content">
-                    {{ render_changes_preview(change.before_requested_data, change.after_requested_data, target_schemas[change.target_collection], preview_references) }}
+                    {{ render_changes_preview(change.before_requested_data, change.after_requested_data, target_schemas[change.target_collection], preview_references, view_access_level) }}
                 </td>
                 <td class="reason-column wrap-content">
                     {{ change.request_reason|format_discord_link|safe }}
@@ -430,12 +435,10 @@
                         </a>
                     {% endif %}
                 </td>
-                {% if show_actions %}
+                {% if show_actions and g.user.is_admin %}
                 <td class="action-buttons">
-                    {% if g.user and g.user.is_admin %}
-                        <a href="/changes/item/{{ change._id }}/approve" class="btn btn-approve">Approve</a>
-                        <a href="/changes/item/{{ change._id }}/deny" class="btn btn-deny">Deny</a>
-                    {% endif %}
+                    <a href="/changes/item/{{ change._id }}/approve" class="btn btn-approve">Approve</a>
+                    <a href="/changes/item/{{ change._id }}/deny" class="btn btn-deny">Deny</a>
                 </td>
                 {% endif %}
             </tr>
@@ -443,6 +446,10 @@
     </tbody>
 </table>
 {% endmacro %}
+
+
+
+
 
 
 

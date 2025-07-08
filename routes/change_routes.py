@@ -191,8 +191,9 @@ def approve_change_route(item_ref):
     try:
         change_id = ObjectId(item_ref)
         approve_change(change_id)
+        flash(f"Change #{item_ref} has been approved.")
     except Exception as e:
-        print(f"Error converting to ObjectId: {e}")
+        flash(f"Error approving change: {e}")
 
     return redirect("/changes")
 
@@ -202,8 +203,9 @@ def deny_change_route(item_ref):
     try:
         change_id = ObjectId(item_ref)
         deny_change(change_id)
+        flash(f"Change #{item_ref} has been denied.")
     except Exception as e:
-        print(f"Error converting to ObjectId: {e}")
+        flash(f"Error denying change: {e}")
 
     return redirect("/changes")
 
