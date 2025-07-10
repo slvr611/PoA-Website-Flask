@@ -81,6 +81,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
     const loadedSessions = {}; // { sessionNum: { political: TiledImage, terrain: TiledImage } }
     let currentMapType = 'political';
+    let loadingInProgress = false;
+    let loadQueue = [];
 
     // Track opacity slider
     const opacitySlider = document.getElementById('opacity-slider');
@@ -103,34 +105,10 @@ document.addEventListener('DOMContentLoaded', function () {
             const terrainOpacity = sliderVal / 100;
             if (sessionMaps.political) sessionMaps.political.setOpacity(politicalOpacity);
             if (sessionMaps.terrain) sessionMaps.terrain.setOpacity(terrainOpacity);
+        } else {
+            // If maps aren't loaded yet, load them
+            loadSession(selectedSession, true);
         }
-    }
-
-    function loadSession(sessionNum) {
-        if (loadedSessions[sessionNum]) return;
-
-        loadedSessions[sessionNum] = {};
-        const basePath = "https://poa-website-static-assets.s3.us-east-1.amazonaws.com/maps/dzi/dzi/";
-
-        viewer.addTiledImage({
-            tileSource: `${basePath}PoA_Political_Map_Session_${sessionNum}.dzi`,
-            buildPyramid: false,
-            opacity: 0,
-            success: ({ item }) => {
-                loadedSessions[sessionNum].political = item;
-                if (parseInt(sessionSelect.value) === sessionNum) updateMapVisibility();
-            }
-        });
-
-        viewer.addTiledImage({
-            tileSource: getTerrainMapPath(sessionNum, basePath),
-            buildPyramid: false,
-            opacity: 0,
-            success: ({ item }) => {
-                loadedSessions[sessionNum].terrain = item;
-                if (parseInt(sessionSelect.value) === sessionNum) updateMapVisibility();
-            }
-        });
     }
 
     function getTerrainMapPath(sessionNum, basePath) {
@@ -143,57 +121,98 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
-
-    // Load the current session immediately
-    loadSession(currentSession);
-
-    // Preload other sessions with a modified approach
-    setTimeout(() => {
-        const allSessions = Array.from(sessionSelect.options).map(opt => parseInt(opt.value));
+    function loadSession(sessionNum, isPriority = false) {
+        // Don't load if already loaded or in queue
+        if (loadedSessions[sessionNum] || loadQueue.includes(sessionNum)) return;
         
-        // Create a queue for loading sessions
-        let loadQueue = allSessions.filter(s => s !== currentSession);
-        let currentIndex = 0;
-        
-        // Function to load the next session in queue
-        function loadNextInQueue() {
-            if (currentIndex < loadQueue.length) {
-                const sessionToLoad = loadQueue[currentIndex];
-                
-                // Skip if already loaded (might have been prioritized)
-                if (!loadedSessions[sessionToLoad]) {
-                    loadSession(sessionToLoad);
-                }
-                
-                currentIndex++;
-                setTimeout(loadNextInQueue, 500); // Continue with next after delay
-            }
+        // Add to queue
+        if (isPriority) {
+            loadQueue.unshift(sessionNum); // Add to front of queue
+        } else {
+            loadQueue.push(sessionNum); // Add to end of queue
         }
         
-        // Start the queue processing
-        loadNextInQueue();
-    }, 1500);
-    
-    // Function to prioritize loading a specific session
-    function prioritizeSession(sessionNum) {
-        if (!loadedSessions[sessionNum]) {
-            loadSession(sessionNum);
+        // Start processing queue if not already in progress
+        if (!loadingInProgress) {
+            processLoadQueue();
         }
     }
+    
+    function processLoadQueue() {
+        if (loadQueue.length === 0) {
+            loadingInProgress = false;
+            return;
+        }
+        
+        loadingInProgress = true;
+        const sessionNum = loadQueue.shift();
+        
+        // Skip if already loaded (might have been loaded by another request)
+        if (loadedSessions[sessionNum]) {
+            processLoadQueue();
+            return;
+        }
+        
+        loadedSessions[sessionNum] = {};
+        const basePath = "https://poa-website-static-assets.s3.us-east-1.amazonaws.com/maps/";
+        let loadedCount = 0;
+        
+        // Function to check if both maps are loaded
+        const checkBothLoaded = () => {
+            loadedCount++;
+            if (loadedCount === 2) {
+                // Both maps loaded, continue with next in queue
+                setTimeout(processLoadQueue, 100);
+                
+                // If this was the current session, update visibility
+                if (parseInt(sessionSelect.value) === sessionNum) {
+                    updateMapVisibility();
+                }
+            }
+        };
+
+        viewer.addTiledImage({
+            tileSource: `${basePath}PoA_Political_Map_Session_${sessionNum}.dzi`,
+            buildPyramid: false,
+            opacity: 0,
+            success: ({ item }) => {
+                loadedSessions[sessionNum].political = item;
+                checkBothLoaded();
+            },
+            error: () => {
+                console.error(`Failed to load political map for session ${sessionNum}`);
+                checkBothLoaded();
+            }
+        });
+
+        viewer.addTiledImage({
+            tileSource: getTerrainMapPath(sessionNum, basePath),
+            buildPyramid: false,
+            opacity: 0,
+            success: ({ item }) => {
+                loadedSessions[sessionNum].terrain = item;
+                checkBothLoaded();
+            },
+            error: () => {
+                console.error(`Failed to load terrain map for session ${sessionNum}`);
+                checkBothLoaded();
+            }
+        });
+    }
+
+    // Load only the current session immediately
+    loadSession(currentSession, true);
 
     // Session selector logic
     sessionSelect.addEventListener('change', () => {
         const selectedSession = parseInt(sessionSelect.value);
         updateEraAge(selectedSession);
         
-        // Check if the selected session is already loaded
-        if (!loadedSessions[selectedSession]) {
-            // If not loaded, load it immediately
-            loadSession(selectedSession);
-        }
+        // Load the selected session if not already loaded
+        loadSession(selectedSession, true);
         
-        // Update visibility after a short delay to allow loading
-        setTimeout(updateMapVisibility, 100);
+        // Update visibility
+        updateMapVisibility();
     });
 
     // Map swap buttons
@@ -227,6 +246,23 @@ document.addEventListener('DOMContentLoaded', function () {
         map2Btn.classList.toggle('active', val >= 50);
         updateMapVisibility();
     });
+
+    // Add preload functionality for adjacent sessions
+    function preloadAdjacentSessions() {
+        const currentSessionNum = parseInt(sessionSelect.value);
+        
+        // Preload one session before and one after the current session
+        if (currentSessionNum > 1) {
+            loadSession(currentSessionNum - 1);
+        }
+        
+        if (currentSessionNum < maxSession) {
+            loadSession(currentSessionNum + 1);
+        }
+    }
+    
+    // Preload adjacent sessions after a delay
+    setTimeout(preloadAdjacentSessions, 3000);
 
     // Initial render update
     setTimeout(updateMapVisibility, 500);

@@ -55,6 +55,14 @@
         "enum": ["Player", "Neutral", "Friendly", "Hostile", "Withdrawn", "Curious", "Supremacist", "Zealous"],
         "view_access_level": 10
       },
+      "sessions_since_temperament_change": {
+        "bsonType": "number",
+        "label": "Sessions Since Temperament Change",
+        "description": "The number of sessions since the nation's temperament was last changed",
+        "default": 1,
+        "hidden":true,
+        "view_access_level": 10
+      },
         "region": {
           "bsonType": "linked_object",
       "label": "Region",
