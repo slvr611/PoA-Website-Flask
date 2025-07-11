@@ -346,7 +346,7 @@ def compute_resource_production(field, target, base_value, field_schema, overall
         
         if resource["key"] == "research":
             pop_database = category_data["pops"]["database"]
-            pops = pop_database.find({"nation": str(target["_id"])})
+            pops = pop_database.find({"nation": str(target.get("_id", ""))})
             religiously_homogeneous = True
             for pop in pops:
                 if pop.get("religion", "") != target.get("primary_religion", ""):
