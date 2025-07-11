@@ -10,8 +10,8 @@ def compute_prestige_gain(field, target, base_value, field_schema, overall_total
     
     diplomatic_pacts = []
     
-    diplomatic_pacts += list(category_data["diplo_relations"]["database"].find({"nation_1": str(target["_id"])}))
-    diplomatic_pacts += list(category_data["diplo_relations"]["database"].find({"nation_2": str(target["_id"])}))
+    diplomatic_pacts += list(category_data["diplo_relations"]["database"].find({"nation_1": str(target.get("_id", ""))}))
+    diplomatic_pacts += list(category_data["diplo_relations"]["database"].find({"nation_2": str(target.get("_id", ""))}))
 
     pact_prestige_loss = 0
     for pact in diplomatic_pacts:
@@ -22,7 +22,7 @@ def compute_prestige_gain(field, target, base_value, field_schema, overall_total
     
     value -= min(pact_prestige_loss, 8)
 
-    vassals = list(category_data["nations"]["database"].find({"overlord": str(target["_id"])}, {"_id": 1, "vassal_type": 1}))
+    vassals = list(category_data["nations"]["database"].find({"overlord": str(target.get("_id", ""))}, {"_id": 1, "vassal_type": 1}))
     non_provincial_vassal_prestige_gain = 0
     provincial_vassal_prestige_gain = 0
 
@@ -36,7 +36,7 @@ def compute_prestige_gain(field, target, base_value, field_schema, overall_total
     value += min(provincial_vassal_prestige_gain, 2)
 
     artifacts = []
-    rulers = list(category_data["characters"]["database"].find({"ruling_nation_org": str(target["_id"])}, {"_id": 1}))
+    rulers = list(category_data["characters"]["database"].find({"ruling_nation_org": str(target.get("_id", ""))}, {"_id": 1}))
     for ruler in rulers:
         artifacts += list(category_data["artifacts"]["database"].find({"owner": str(ruler["_id"]), "equipped": True}, {"_id": 1, "rarity": 1}))
     legendary_artifact_prestige_gain = 0
@@ -181,7 +181,7 @@ def compute_working_pop_count(field, target, base_value, field_schema, overall_t
 
 def compute_pop_count(field, target, base_value, field_schema, overall_total_modifiers):
     pop_database = category_data["pops"]["database"]
-    target_id = str(target["_id"])
+    target_id = str(target.get("_id", ""))
     
     pop_count = int(pop_database.count_documents({"nation": target_id}) + overall_total_modifiers.get(field, 0))
     
@@ -189,7 +189,7 @@ def compute_pop_count(field, target, base_value, field_schema, overall_total_mod
 
 def compute_minority_count(field, target, base_value, field_schema, overall_total_modifiers):
     pop_database = category_data["pops"]["database"]
-    target_id = str(target["_id"])
+    target_id = str(target.get("_id", ""))
     
     minority_count = 0
     
