@@ -391,7 +391,7 @@ def character_death_tick(old_character, new_character, schema):
         
         artifact_schema, artifact_db = get_data_on_category("artifacts")
         try:
-            artifacts = list(artifact_db.find({"owner": ObjectId(old_character.get("_id", ""))}))
+            artifacts = list(artifact_db.find({"owner": ObjectId(old_character.get("_id", ""))})) #Maybe this needs to be a string?  Dunno
         except:
             artifacts = []
         for old_artifact in artifacts:
@@ -823,9 +823,6 @@ def reset_all_temperaments(old_nation, new_nation, schema):
         trait_1 = culture.get("trait_one", "None")
         trait_2 = culture.get("trait_two", "None")
         trait_3 = culture.get("trait_three", "None")
-        print(culture.get("name", "Unknown"))
-        print(trait_1, trait_2, trait_3)
-
 
         trait_1_modifier = cultural_trait_temperament_modifiers.get(trait_1, {})
         trait_2_modifier = cultural_trait_temperament_modifiers.get(trait_2, {})

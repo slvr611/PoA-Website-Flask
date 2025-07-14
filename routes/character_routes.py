@@ -4,7 +4,7 @@ from helpers.render_helpers import get_linked_objects
 from helpers.change_helpers import request_change, approve_change
 from helpers.form_helpers import validate_form_with_jsonschema
 from calculations.field_calculations import calculate_all_fields
-from app_core import category_data, mongo, json_data
+from app_core import category_data, mongo, json_data, character_stats
 from helpers.auth_helpers import admin_required
 from pymongo import ASCENDING
 from forms import form_generator
@@ -82,6 +82,23 @@ def new_character_request():
     calculated_character = form_data.copy()
     calculated_character.update(calculated_fields)
 
+    for stat in character_stats:
+        if calculated_character[stat] > 4:
+            for modifier in form_data["modifiers"]:
+                if modifier["field"] == stat:
+                    modifier["value"] -= calculated_character[stat] - 4
+                    break
+    
+    random_stats = {}
+
+    while sum(random_stats.values()) < form_data["random_stats"]:
+        random_stat = random.choice(character_stats)
+        if calculated_character[random_stat] + random_stats.get(random_stat, 0) < 4:
+            random_stats[random_stat] = random_stats.get(random_stat, 0) + 1
+    
+    for stat, value in random_stats.items():
+        form_data["modifiers"].append({"field": stat, "value": value, "duration": -1, "source": "Random stats at character creation"})
+
     form_data["magic_points"] = min(form_data["magic_point_capacity"], form_data["magic_point_income"])
 
     change_id = request_change(
@@ -136,6 +153,23 @@ def new_character_approve():
 
     calculated_character = form_data.copy()
     calculated_character.update(calculated_fields)
+
+    for stat in character_stats:
+        if calculated_character[stat] > 4:
+            for modifier in form_data["modifiers"]:
+                if modifier["field"] == stat:
+                    modifier["value"] -= calculated_character[stat] - 4
+                    break
+    
+    random_stats = {}
+
+    while sum(random_stats.values()) < form_data["random_stats"]:
+        random_stat = random.choice(character_stats)
+        if calculated_character[random_stat] + random_stats.get(random_stat, 0) < 4:
+            random_stats[random_stat] = random_stats.get(random_stat, 0) + 1
+    
+    for stat, value in random_stats.items():
+        form_data["modifiers"].append({"field": stat, "value": value, "duration": -1, "source": "Random stats at character creation"})
 
     form_data["magic_points"] = min(form_data["magic_point_capacity"], form_data["magic_point_income"])
 

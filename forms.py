@@ -1067,6 +1067,8 @@ class NewCharacterForm(BaseSchemaForm):
         widget=widgets.ListWidget(prefix_label=False)
     )
 
+    random_stats = IntegerField("Random Stats", validators=[NumberRange(min=0)], default=0)
+
     titles = FieldList(SelectField("Titles", choices=[]), min_entries=3)
 
     positive_quirk = SelectField("Positive Quirk", choices=[])

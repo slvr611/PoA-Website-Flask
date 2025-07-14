@@ -139,6 +139,8 @@ cultural_trait_temperament_modifiers = {
     "Traditionalist": {"Player": 0, "Neutral": 0, "Friendly": 0, "Hostile": 0, "Withdrawn": 0, "Curious": -0.09, "Supremacist": 0.05, "Zealous": 0.04}
 }
 
+character_stats = ["rulership", "cunning", "charisma", "prowess", "magic", "strategy"]
+
 def load_json(file_path):
     with open(file_path, "r") as file:
         json_data = json.load(file)
