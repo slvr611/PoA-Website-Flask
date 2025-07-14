@@ -112,6 +112,8 @@
                                         <th>{{ schema.properties.temperament.label }}:</th>
                                         <td>{{ form.temperament(class="form-control") }}</td>
                                     </tr>
+                                {% else %}
+                                    <input type="hidden" name="temperament" value="{{ nation.temperament }}">
                                 {% endif %}
                             </table>
                         </div>
