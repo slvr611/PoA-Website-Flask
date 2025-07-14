@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, redirect, request, flash, url_for
 from helpers.auth_helpers import admin_required
-from helpers.tick_helpers import run_tick_async, GENERAL_TICK_FUNCTIONS, CHARACTER_TICK_FUNCTIONS, MERCHANT_TICK_FUNCTIONS, MERCENARY_TICK_FUNCTIONS, FACTION_TICK_FUNCTIONS, NATION_TICK_FUNCTIONS
+from helpers.tick_helpers import run_tick_async, GENERAL_TICK_FUNCTIONS, CHARACTER_TICK_FUNCTIONS, ARTIFACT_TICK_FUNCTIONS, MERCHANT_TICK_FUNCTIONS, MERCENARY_TICK_FUNCTIONS, FACTION_TICK_FUNCTIONS, NATION_TICK_FUNCTIONS
 
 tick_routes = Blueprint('tick_routes', __name__)
 
@@ -9,6 +9,7 @@ tick_routes = Blueprint('tick_routes', __name__)
 def tick_helper():
     TICK_FUNCTIONS = GENERAL_TICK_FUNCTIONS.copy()
     TICK_FUNCTIONS.update(CHARACTER_TICK_FUNCTIONS)
+    TICK_FUNCTIONS.update(ARTIFACT_TICK_FUNCTIONS)
     TICK_FUNCTIONS.update(MERCHANT_TICK_FUNCTIONS)
     TICK_FUNCTIONS.update(MERCENARY_TICK_FUNCTIONS)
     TICK_FUNCTIONS.update(FACTION_TICK_FUNCTIONS)

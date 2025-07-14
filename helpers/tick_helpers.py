@@ -1,3 +1,4 @@
+from bson import ObjectId
 from helpers.data_helpers import get_data_on_category
 from calculations.field_calculations import calculate_all_fields
 from pymongo import ASCENDING
@@ -349,7 +350,10 @@ def character_death_tick(old_character, new_character, schema):
         if old_character.get("ruling_nation_org", "") != "":
             print(f"{old_character.get('name', 'Unknown')} died while leading {old_character.get('ruling_nation_org', 'Unknown')}")
             nation_schema, nation_db = get_data_on_category("nations")
-            old_nation = nation_db.find_one({"_id": old_character.get("ruling_nation_org", "")})
+            try:
+                old_nation = nation_db.find_one({"_id": ObjectId(old_character.get("ruling_nation_org", ""))})
+            except:
+                old_nation = None
             if old_nation:
                 old_nation.update(calculate_all_fields(old_nation, nation_schema, "nation"))
                 new_nation = deepcopy(old_nation)
@@ -386,7 +390,10 @@ def character_death_tick(old_character, new_character, schema):
                 system_approve_change(change_id)
         
         artifact_schema, artifact_db = get_data_on_category("artifacts")
-        artifacts = list(artifact_db.find({"owner": old_character["_id"]}))
+        try:
+            artifacts = list(artifact_db.find({"owner": ObjectId(old_character.get("_id", ""))}))
+        except:
+            artifacts = []
         for old_artifact in artifacts:
             if old_artifact:
                 old_artifact.update(calculate_all_fields(old_artifact, artifact_schema, "artifact"))
@@ -735,6 +742,17 @@ def vampirism_tick(old_nation, new_nation, schema):
         result += f"{old_nation.get('name', 'Unknown')} has gained a vampire.\n"
     return result
 
+def pop_loss_tick(old_nation, new_nation, schema):
+    result = ""
+    if old_nation.get("pop_loss_chance", 0) <= 0:
+        return ""
+    pop_loss_roll = random.random()
+    new_nation["pop_loss_roll"] = pop_loss_roll
+    new_nation["pop_loss_chance_at_tick"] = old_nation.get("pop_loss_chance", 0)
+    if pop_loss_roll <= old_nation.get("pop_loss_chance", 0):
+        result += f"{old_nation.get('name', 'Unknown')} has lost a pop.\n"
+    return result
+
 def temperament_tick(old_nation, new_nation, schema):
     if old_nation.get("temperament", "None") == "Player":
         return ""
@@ -745,7 +763,10 @@ def temperament_tick(old_nation, new_nation, schema):
     new_nation["temperament_change_roll"] = temperament_change_roll
     new_nation["temperament_change_chance_at_tick"] = chance_of_temperament_change
     if temperament_change_roll <= chance_of_temperament_change:
-        culture = mongo.db.cultures.find_one({"_id": old_nation.get("primary_culture", "Unknown")})
+        try:
+            culture = mongo.db.cultures.find_one({"_id": ObjectId(old_nation.get("primary_culture", ""))})
+        except:
+            culture = None
         trait_1_modifier = {}
         trait_2_modifier = {}
         trait_3_modifier = {}
@@ -791,7 +812,10 @@ def reset_all_temperaments(old_nation, new_nation, schema):
     if old_nation.get("temperament", "None") == "Player":
         return ""
     result = ""
-    culture = mongo.db.cultures.find_one({"_id": old_nation.get("primary_culture", "Unknown")})
+    try :
+        culture = mongo.db.cultures.find_one({"_id": ObjectId(old_nation.get("primary_culture", ""))})
+    except:
+        culture = None
     trait_1_modifier = {}
     trait_2_modifier = {}
     trait_3_modifier = {}
@@ -799,6 +823,9 @@ def reset_all_temperaments(old_nation, new_nation, schema):
         trait_1 = culture.get("trait_one", "None")
         trait_2 = culture.get("trait_two", "None")
         trait_3 = culture.get("trait_three", "None")
+        print(culture.get("name", "Unknown"))
+        print(trait_1, trait_2, trait_3)
+
 
         trait_1_modifier = cultural_trait_temperament_modifiers.get(trait_1, {})
         trait_2_modifier = cultural_trait_temperament_modifiers.get(trait_2, {})
@@ -878,6 +905,7 @@ NATION_TICK_FUNCTIONS = {
     "Nation Progress Quests Tick": progress_quests_tick,
     "Nation Job Cleanup Tick": nation_job_cleanup_tick,
     "Nation Vampirism Tick": vampirism_tick,
+    "Nation Pop Loss Tick": pop_loss_tick,
     "Nation Temperament Tick": temperament_tick,
     "Nation Reset Rolling Karma to Zero (Generally Don't Use)": reset_rolling_karma_to_zero,
     "Nation Reset All Temperaments (Generally Don't Use)": reset_all_temperaments,

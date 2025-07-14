@@ -28,7 +28,10 @@ def grow_all_population(form_data):
             
             # Only process if a foreign nation was selected
             if foreign_nation_id:
-                foreign_nation = db.find_one({"_id": ObjectId(foreign_nation_id)})
+                try:
+                    foreign_nation = db.find_one({"_id": ObjectId(foreign_nation_id)})
+                except:
+                    foreign_nation = None
                 if foreign_nation:
                     change_id = grow_population(nation, foreign_nation)
                     changes.append({
@@ -47,8 +50,10 @@ def grow_population(nation, foreign_nation):
         roll_modifier -= 1
     elif foreign_acceptance == "Harmony":
         roll_modifier += 1
-    
-    culture = mongo.db.cultures.find_one({"_id": nation.get("primary_culture", "Unknown")})
+    try:
+        culture = mongo.db.cultures.find_one({"_id": ObjectId(nation.get("primary_culture", ""))})
+    except:
+        culture = None
 
     if culture:
         trait_1 = culture.get("trait_one", "None")
@@ -62,8 +67,11 @@ def grow_population(nation, foreign_nation):
 
     pacted_allies = []
 
-    pacted_allies = list(mongo.db.diplo_relations.find({"nation_1": str(nation["_id"]), "pact_type": {"$in": ["Defensive Pact", "Military Alliance"]}}, {"nation_2": 1}))
-    pacted_allies += list(mongo.db.diplo_relations.find({"nation_2": str(nation["_id"]), "pact_type": {"$in": ["Defensive Pact", "Military Alliance"]}}, {"nation_1": 1}))
+    try:
+        pacted_allies = list(mongo.db.diplo_relations.find({"nation_1": ObjectId(nation["_id"]), "pact_type": {"$in": ["Defensive Pact", "Military Alliance"]}}, {"nation_2": 1}))
+        pacted_allies += list(mongo.db.diplo_relations.find({"nation_2": ObjectId(nation["_id"]), "pact_type": {"$in": ["Defensive Pact", "Military Alliance"]}}, {"nation_1": 1}))
+    except:
+        pass
 
     pacted_allies = [ally.get("nation_1", "") or ally.get("nation_2", "") for ally in pacted_allies]
 
@@ -71,11 +79,20 @@ def grow_population(nation, foreign_nation):
     if pop_roll + roll_modifier + len(pacted_allies) >= 9 and pop_roll + roll_modifier < 9:
         pacted_ally = random.choice(pacted_allies)
         print(pacted_ally)
-        pops = list(mongo.db.pops.find({"nation": str(pacted_ally)}, {"_id": 1, "race": 1, "culture": 1, "religion": 1}))
+        try:
+            pops = list(mongo.db.pops.find({"nation": ObjectId(pacted_ally)}, {"_id": 1, "race": 1, "culture": 1, "religion": 1}))
+        except:
+            pass
     elif pop_roll + roll_modifier + len(pacted_allies) >= 9:
-        pops = list(mongo.db.pops.find({"nation": str(foreign_nation["_id"])}, {"_id": 1, "race": 1, "culture": 1, "religion": 1}))
+        try:
+            pops = list(mongo.db.pops.find({"nation": ObjectId(foreign_nation["_id"])}, {"_id": 1, "race": 1, "culture": 1, "religion": 1}))
+        except:
+            pass
     else:
-        pops = list(mongo.db.pops.find({"nation": str(nation["_id"])}, {"_id": 1, "race": 1, "culture": 1, "religion": 1}))
+        try:
+            pops = list(mongo.db.pops.find({"nation": ObjectId(nation["_id"])}, {"_id": 1, "race": 1, "culture": 1, "religion": 1}))
+        except:
+            pass
     
     new_pop = random.choice(pops).copy()
     new_pop["nation"] = str(nation["_id"])
