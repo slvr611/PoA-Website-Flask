@@ -787,6 +787,40 @@ def reset_rolling_karma_to_zero(old_nation, new_nation, schema):
 
     return ""
 
+def reset_all_temperaments(old_nation, new_nation, schema):
+    culture = mongo.db.cultures.find_one({"_id": old_nation.get("primary_culture", "Unknown")})
+    trait_1_modifier = {}
+    trait_2_modifier = {}
+    trait_3_modifier = {}
+    if culture:
+        trait_1 = culture.get("trait_one", "None")
+        trait_2 = culture.get("trait_two", "None")
+        trait_3 = culture.get("trait_three", "None")
+
+        trait_1_modifier = cultural_trait_temperament_modifiers.get(trait_1, {})
+        trait_2_modifier = cultural_trait_temperament_modifiers.get(trait_2, {})
+        trait_3_modifier = cultural_trait_temperament_modifiers.get(trait_3, {})
+
+    temperament_odds = base_temperament_odds.copy()
+    for temperament in temperament_enum:
+        temperament_odds[temperament] += trait_1_modifier.get(temperament, 0)
+        temperament_odds[temperament] += trait_2_modifier.get(temperament, 0)
+        temperament_odds[temperament] += trait_3_modifier.get(temperament, 0)
+    
+    temperament_roll = random.random()
+    new_nation["temperament_roll"] = temperament_roll
+    new_nation["temperament_odds"] = temperament_odds
+    cumulative_odds = 0
+    for temperament in temperament_enum:
+        cumulative_odds += temperament_odds[temperament]
+        if temperament_roll <= cumulative_odds:
+            new_nation["temperament"] = temperament
+            result += f"{old_nation.get('name', 'Unknown')} has changed their temperament to {temperament}.\n"
+            break
+
+    new_nation["sessions_since_temperament_change"] = 1
+    return ""
+
 ###########################################################
 # Tick Function Constants
 ###########################################################
@@ -843,4 +877,5 @@ NATION_TICK_FUNCTIONS = {
     "Nation Vampirism Tick": vampirism_tick,
     "Nation Temperament Tick": temperament_tick,
     "Nation Reset Rolling Karma to Zero (Generally Don't Use)": reset_rolling_karma_to_zero,
+    "Nation Reset All Temperaments (Generally Don't Use)": reset_all_temperaments,
 }

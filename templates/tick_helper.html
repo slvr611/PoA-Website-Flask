@@ -6,6 +6,9 @@
 <div class="container">
     <h1>Tick Helper</h1>
     <form method="post" action="/run_tick">
+        <div class="select-all-container">
+            <button type="button" id="select-all-btn" class="select-all-button">Select All</button>
+        </div>
         <table class="info-table">
             <thead>
                 <tr>
@@ -31,4 +34,20 @@
         </div>
     </form>
 </div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const selectAllBtn = document.getElementById('select-all-btn');
+        const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+        let allSelected = false;
+        
+        selectAllBtn.addEventListener('click', function() {
+            allSelected = !allSelected;
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = allSelected;
+            });
+            selectAllBtn.textContent = allSelected ? 'Deselect All' : 'Select All';
+        });
+    });
+</script>
 {% endblock %}
