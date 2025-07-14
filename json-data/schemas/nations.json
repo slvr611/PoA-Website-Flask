@@ -63,6 +63,34 @@
         "hidden":true,
         "view_access_level": 10
       },
+      "temperament_change_roll": {
+        "bsonType": "number",
+        "label": "Temperament Change Roll",
+        "description": "The roll that determined if the nation's temperament changed",
+        "hidden":true,
+        "view_access_level": 10
+      },
+      "temperament_change_chance_at_tick": {
+        "bsonType": "number",
+        "label": "Temperament Change Chance At Tick",
+        "description": "The chance the nation's temperament changed at the last tick",
+        "hidden":true,
+        "view_access_level": 10
+      },
+      "temperament_roll": {
+        "bsonType": "number",
+        "label": "Temperament Roll",
+        "description": "The roll that determined the nation's temperament",
+        "hidden":true,
+        "view_access_level": 10
+      },
+      "temperament_odds": {
+        "bsonType": "object",
+        "label": "Temperament Odds",
+        "description": "The odds of each temperament at the last temperament change",
+        "hidden":true,
+        "view_access_level": 10
+      },
         "region": {
           "bsonType": "linked_object",
       "label": "Region",

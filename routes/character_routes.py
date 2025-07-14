@@ -57,7 +57,8 @@ def new_character_request():
     form_data = form.data.copy()
     form_data.pop('csrf_token', None)
     form_data.pop('submit', None)
-    form_data["name"] = form_data.get("name", "").strip()
+    if "name" in form_data:
+        form_data["name"] = form_data.get("name", "").strip()
     
     valid, error = validate_form_with_jsonschema(form, schema)
     if not valid:
@@ -111,7 +112,8 @@ def new_character_approve():
     form_data = form.data.copy()
     form_data.pop('csrf_token', None)
     form_data.pop('submit', None)
-    form_data["name"] = form_data.get("name", "").strip()
+    if "name" in form_data:
+        form_data["name"] = form_data.get("name", "").strip()
     
     valid, error = validate_form_with_jsonschema(form, schema)
     if not valid:

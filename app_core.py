@@ -111,6 +111,34 @@ json_data = {"general_resources": [
         ]
 }
 
+temperament_enum = ["Player", "Neutral", "Friendly", "Hostile", "Withdrawn", "Curious", "Supremacist", "Zealous"]
+
+base_temperament_odds = {
+    "Player": 0,
+    "Neutral": 0.15,
+    "Friendly": 0.2,
+    "Hostile": 0.2,
+    "Withdrawn": 0.1,
+    "Curious": 0.15,
+    "Supremacist": 0.1,
+    "Zealous": 0.1
+}
+
+cultural_trait_temperament_modifiers = {
+    "Absolutist": {"Player": 0, "Neutral": 0, "Friendly": -0.05, "Hostile": 0, "Withdrawn": 0, "Curious": -0.05, "Supremacist": 0.1, "Zealous": 0},
+    "Communalist": {"Player": 0, "Neutral": -0.05, "Friendly": 0.05, "Hostile": 0, "Withdrawn": 0.05, "Curious": -0.05, "Supremacist": 0, "Zealous": 0},
+    "Egalitarian": {"Player": 0, "Neutral": 0, "Friendly": 0.05, "Hostile": 0.05, "Withdrawn": -0.05, "Curious": 0, "Supremacist": -0.05, "Zealous": 0},
+    "Individualist": {"Player": 0, "Neutral": 0, "Friendly": 0, "Hostile": 0, "Withdrawn": 0.05, "Curious": 0.05, "Supremacist": -0.05, "Zealous": -0.05},
+    "Isolationist": {"Player": 0, "Neutral": -0.05, "Friendly": 0, "Hostile": 0, "Withdrawn": 0.2, "Curious": -0.05, "Supremacist": -0.05, "Zealous": -0.05},
+    "Mercantilist": {"Player": 0, "Neutral": 0, "Friendly": 0.09, "Hostile": -0.09, "Withdrawn": -0.09, "Curious": 0.09, "Supremacist": 0, "Zealous": 0},
+    "Militarist": {"Player": 0, "Neutral": -0.06, "Friendly": -0.09, "Hostile": 0.11, "Withdrawn": -0.06, "Curious": 0, "Supremacist": 0.05, "Zealous": 0.05},
+    "Pacifist": {"Player": 0, "Neutral": -0.05, "Friendly": 0.09, "Hostile": -0.09, "Withdrawn": 0, "Curious": 0, "Supremacist": 0, "Zealous": 0},
+    "Progressive": {"Player": 0, "Neutral": -0.05, "Friendly": 0, "Hostile": 0, "Withdrawn": -0.05, "Curious": 0.1, "Supremacist": 0, "Zealous": 0},
+    "Secular": {"Player": 0, "Neutral": -0.05, "Friendly": 0.04, "Hostile": 0, "Withdrawn": 0, "Curious": 0.06, "Supremacist": 0.04, "Zealous": -0.09},
+    "Spiritualist": {"Player": 0, "Neutral": -0.05, "Friendly": 0, "Hostile": 0, "Withdrawn": 0, "Curious": -0.05, "Supremacist": 0, "Zealous": 0.1},
+    "Traditionalist": {"Player": 0, "Neutral": 0, "Friendly": 0, "Hostile": 0, "Withdrawn": 0, "Curious": -0.09, "Supremacist": 0.05, "Zealous": 0.04}
+}
+
 def load_json(file_path):
     with open(file_path, "r") as file:
         json_data = json.load(file)
