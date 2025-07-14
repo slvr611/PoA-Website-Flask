@@ -788,6 +788,8 @@ def reset_rolling_karma_to_zero(old_nation, new_nation, schema):
     return ""
 
 def reset_all_temperaments(old_nation, new_nation, schema):
+    if old_nation.get("temperament", "None") == "Player":
+        return ""
     culture = mongo.db.cultures.find_one({"_id": old_nation.get("primary_culture", "Unknown")})
     trait_1_modifier = {}
     trait_2_modifier = {}
