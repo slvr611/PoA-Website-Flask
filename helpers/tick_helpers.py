@@ -790,6 +790,7 @@ def reset_rolling_karma_to_zero(old_nation, new_nation, schema):
 def reset_all_temperaments(old_nation, new_nation, schema):
     if old_nation.get("temperament", "None") == "Player":
         return ""
+    result = ""
     culture = mongo.db.cultures.find_one({"_id": old_nation.get("primary_culture", "Unknown")})
     trait_1_modifier = {}
     trait_2_modifier = {}
@@ -821,7 +822,7 @@ def reset_all_temperaments(old_nation, new_nation, schema):
             break
 
     new_nation["sessions_since_temperament_change"] = 1
-    return ""
+    return result
 
 ###########################################################
 # Tick Function Constants
