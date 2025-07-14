@@ -1,0 +1,36 @@
+{% extends "layout.html" %}
+
+{% block title %}Temperament Overview{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1>Temperament Overview</h1>
+    
+    <div class="temperament-summary">
+        <h2>Summary</h2>
+        {% for temperament in temperament_enum %}
+            <div class="temperament-count">
+                <strong>{{ temperament }}:</strong> {{ temperament_counts.get(temperament, 0) }} nations
+            </div>
+        {% endfor %}
+    </div>
+
+    {% for temperament in temperament_enum %}
+        {% if temperament_groups.get(temperament) %}
+            <div class="temperament-section">
+                <h2>{{ temperament }} Nations ({{ temperament_groups[temperament]|length }})</h2>
+                <div class="nation-grid">
+                    {% for nation in temperament_groups[temperament] %}
+                        <div class="nation-card">
+                            <a href="/nations/item/{{ nation.name }}">{{ nation.name }}</a>
+                            {% if nation.get('sessions_since_temperament_change') %}
+                                <small>({{ nation.sessions_since_temperament_change }} sessions)</small>
+                            {% endif %}
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+    {% endfor %}
+</div>
+{% endblock %}

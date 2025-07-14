@@ -3,7 +3,7 @@ from helpers.auth_helpers import admin_required
 from helpers.data_helpers import get_data_on_category, generate_id_to_name_dict, compute_demographics
 from helpers.admin_tool_helpers import grow_all_population_async, roll_events_async
 from helpers.change_helpers import request_change, approve_change
-from app_core import category_data, rarity_rankings, mongo, json_data
+from app_core import category_data, rarity_rankings, mongo, json_data, temperament_enum
 from pymongo import ASCENDING
 from app_core import restore_mongodb
 from forms import form_generator
@@ -318,3 +318,27 @@ def edit_global_modifiers():
                           schema=schema,
                           form=form)
 
+@admin_tool_routes.route("/temperament_overview")
+@admin_required
+def temperament_overview():
+    schema, db = get_data_on_category("nations")
+    nations = list(db.find().sort("name", ASCENDING))
+    
+    # Group nations by temperament
+    temperament_groups = {}
+    for temperament in temperament_enum:
+        temperament_groups[temperament] = []
+    
+    for nation in nations:
+        temperament = nation.get("temperament", "Neutral")
+        if temperament not in temperament_groups:
+            temperament_groups[temperament] = []
+        temperament_groups[temperament].append(nation)
+    
+    # Count nations per temperament
+    temperament_counts = {temp: len(nations) for temp, nations in temperament_groups.items()}
+    
+    return render_template("temperament_overview.html", 
+                         temperament_groups=temperament_groups,
+                         temperament_counts=temperament_counts,
+                         temperament_enum=temperament_enum)
