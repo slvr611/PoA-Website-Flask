@@ -237,6 +237,8 @@ def compute_stability_gain_chance(field, target, base_value, field_schema, overa
     if unique_minority_count == 0:
         minority_stability_gain += overall_total_modifiers.get("homogeneous_stability_gain_chance", 0)
 
+    foreign_religious_pop_stability_gain = 0
+
     if overall_total_modifiers.get("stability_gain_chance_per_foreign_religious_pop", 0) != 0:
         pop_database = category_data["pops"]["database"]
         religion_id = str(target.get("primary_religion", ""))
