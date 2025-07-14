@@ -183,6 +183,13 @@
           "calculated": true,
           "format": "percentage"
         },
+        "pop_loss_chance": {
+          "bsonType": "number",
+          "label": "Pop Loss Chance",
+          "description": "The nation's percentage chance of losing a pop each tick",
+          "calculated": true,
+          "format": "percentage"
+        },
       "infamy": {
           "bsonType": "number",
       "label": "Infamy",
