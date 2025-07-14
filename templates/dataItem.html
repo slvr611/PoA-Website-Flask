@@ -21,294 +21,296 @@
 				{{ item._id }}:
 			{% endif %}
 		</h1>
-		<table class="info-table">
-			{% for field, properties in schema.properties.items() %}
-				{% if properties and not properties.hidden
-				and not (properties.hideIfNone is defined and (item.get(properties.hideIfNone) is none or item.get(properties.hideIfNone) == "" or not item.get(properties.hideIfNone)))
-				and (view_access_level >= properties.get("view_access_level", 0)) %}
-					<tr>
-						<th><strong>{{ properties.label }}:</strong></th>
-						{% if properties.bsonType == "string" or properties.bsonType == "enum" or properties.bsonType == "date"%}
-							{% if properties.image %}
-								<td><img src="{{ item[field] }}" alt="{{ properties.label }}" style="border-radius: 50%; width: 100px; height: 100px;"></td>
-							{% elif properties.long_text %}
-								<td>
-									<div class="multiline-text">
-										{{ item[field] }}
-									</div>
-								</td>
-							{% else %}
-								<td>{{ item[field] }}</td>
-							{% endif %}
-						{% elif properties.bsonType == "json_district_enum" %}
-							{% if item[field] and item[field] in json_data[properties.json_data] %}
-								<td>{{ json_data[properties.json_data][item[field]]["display_name"] }}</td>
-							{% else %}
-								<td>None</td>
-							{% endif %}
-						{% elif properties.bsonType == "number" %}
-							{% if properties.format == "percentage" %}
-								<td>{{ (item.get(field, 0) * 100)|int }}%</td>
-							{% else %}
-								<td>{{ item.get(field, 0) }}
-									{% if properties.get("max") %}
-										{% if properties.get("max") is string %}
-											/ {{ item.get(properties.get("max"), 0) }}
-										{% else %}
-											/ {{ properties.get("max") }}
+		<div class="table-wrapper">
+			<table class="info-table">
+				{% for field, properties in schema.properties.items() %}
+					{% if properties and not properties.hidden
+					and not (properties.hideIfNone is defined and (item.get(properties.hideIfNone) is none or item.get(properties.hideIfNone) == "" or not item.get(properties.hideIfNone)))
+					and (view_access_level >= properties.get("view_access_level", 0)) %}
+						<tr>
+							<th><strong>{{ properties.label }}:</strong></th>
+							{% if properties.bsonType == "string" or properties.bsonType == "enum" or properties.bsonType == "date"%}
+								{% if properties.image %}
+									<td><img src="{{ item[field] }}" alt="{{ properties.label }}" style="border-radius: 50%; width: 100px; height: 100px;"></td>
+								{% elif properties.long_text %}
+									<td>
+										<div class="multiline-text">
+											{{ item[field] }}
+										</div>
+									</td>
+								{% else %}
+									<td>{{ item[field] }}</td>
+								{% endif %}
+							{% elif properties.bsonType == "json_district_enum" %}
+								{% if item[field] and item[field] in json_data[properties.json_data] %}
+									<td>{{ json_data[properties.json_data][item[field]]["display_name"] }}</td>
+								{% else %}
+									<td>None</td>
+								{% endif %}
+							{% elif properties.bsonType == "number" %}
+								{% if properties.format == "percentage" %}
+									<td>{{ (item.get(field, 0) * 100)|int }}%</td>
+								{% else %}
+									<td>{{ item.get(field, 0) }}
+										{% if properties.get("max") %}
+											{% if properties.get("max") is string %}
+												/ {{ item.get(properties.get("max"), 0) }}
+											{% else %}
+												/ {{ properties.get("max") }}
+											{% endif %}
 										{% endif %}
-									{% endif %}
-								</td>
-							{% endif %}
-						{% elif properties.bsonType == "boolean" %}
-							<td>{{ item[field] }}</td>
-						{% elif properties.bsonType == "linked_object" %}
-							<td>
-								{% if field in linked_objects and linked_objects[field] is not none %}
-									<a href="{{ linked_objects[field]['link'] }}">{{ linked_objects[field]["name"] }}</a>
-								{% else %}
-									{{ properties.get("noneResult", "None") }}
+									</td>
 								{% endif %}
-							</td>
-						{% elif properties.bsonType == "object" %}
-							<td>
-								{% if properties.resource_storage or field == "resource_storage" or field == "resource_capacity" or field == "resource_production" or field == "resource_consumption" or field == "resource_excess" %}
-									<table class="compact-table resource-table">
-										<tbody>
-											{% for resource_key, resource_value in item.get(field, {}).items()|sort %}
-												<tr>
-													<th>{{ resource_key }}</th>
-													<td>{{ resource_value }}</td>
-												</tr>
-											{% endfor %}
-										</tbody>
-									</table>
-								{% else %}
-									<table class="compact-table">
-										<tbody>
-											{% for key, value in item[field].items()|sort %}
-												<tr>
-													<th>{{ key }}</th>
-													<td>{{ value }}</td>
-												</tr>
-											{% endfor %}
-										</tbody>
-									</table>
-								{% endif %}
-							</td>
-						{% elif properties.bsonType == "json_resource_enum" %}
-							<td>
-								{% if item[field] is not none %}
-									{% set resource = find_dict_in_list(json_data["general_resources"], "key", item[field]) %}
-									{% if not resource %}
-										{% set resource = find_dict_in_list(json_data["unique_resources"], "key", item[field]) %}
-									{% endif %}
-									
-									{% if resource and resource is not none %}
-										{{ resource["name"] }}
-									{% elif resource is none %}
-										None
+							{% elif properties.bsonType == "boolean" %}
+								<td>{{ item[field] }}</td>
+							{% elif properties.bsonType == "linked_object" %}
+								<td>
+									{% if field in linked_objects and linked_objects[field] is not none %}
+										<a href="{{ linked_objects[field]['link'] }}">{{ linked_objects[field]["name"] }}</a>
 									{% else %}
-										Unknown Resource ({{ item[field] }})
+										{{ properties.get("noneResult", "None") }}
 									{% endif %}
-								{% else %}
-									None
-								{% endif %}
-							</td>
-						{% elif properties.bsonType == "array" %}
-							{% if properties.get("items", {}).get("bsonType", "None") == "string" %}
-								<td>
-									{% for sub_item in item[field] %}
-										{{ sub_item }}<br>
-									{% endfor %}
 								</td>
-							{% elif properties.get("items", {}).get("bsonType", "None") == "linked_object" %}
+							{% elif properties.bsonType == "object" %}
 								<td>
-									{% if linked_objects[field] %}
-										<table class="linked-objects-table">
-											<thead>
-												<tr>
-													<th>Name</th>
-													{% if linked_objects[field][0] and linked_objects[field][0].get("linked_objects") %}
-														{% for preview_field in linked_objects[field][0].get("linked_objects", {}).keys() %}
-															<th>{{ preview_field|title }}</th>
-														{% endfor %}
-													{% endif %}
-													{% set preview_fields = properties.get("preview", []) %}
-													{% for preview_field in preview_fields %}
-														<th>{{ schema.properties.get(preview_field, {}).get("label", preview_field|title) }}</th>
-													{% endfor %}
-												</tr>
-											</thead>
+									{% if properties.resource_storage or field == "resource_storage" or field == "resource_capacity" or field == "resource_production" or field == "resource_consumption" or field == "resource_excess" %}
+										<table class="compact-table resource-table">
 											<tbody>
-												{% for item in linked_objects[field] %}
+												{% for resource_key, resource_value in item.get(field, {}).items()|sort %}
 													<tr>
-														<td><a href="{{ item['link'] }}">{{ item["name"] }}</a></td>
-														{% if item.get("linked_objects") %}
-															{% for preview_field, preview_obj in item.get("linked_objects", {}).items() %}
-																<td>
-																	{% if preview_obj %}
-																		<a href="{{ preview_obj['link'] }}">{{ preview_obj["name"] }}</a>
-																	{% else %}
-																		None
-																	{% endif %}
-																</td>
+														<th>{{ resource_key }}</th>
+														<td>{{ resource_value }}</td>
+													</tr>
+												{% endfor %}
+											</tbody>
+										</table>
+									{% else %}
+										<table class="compact-table">
+											<tbody>
+												{% for key, value in item[field].items()|sort %}
+													<tr>
+														<th>{{ key }}</th>
+														<td>{{ value }}</td>
+													</tr>
+												{% endfor %}
+											</tbody>
+										</table>
+									{% endif %}
+								</td>
+							{% elif properties.bsonType == "json_resource_enum" %}
+								<td>
+									{% if item[field] is not none %}
+										{% set resource = find_dict_in_list(json_data["general_resources"], "key", item[field]) %}
+										{% if not resource %}
+											{% set resource = find_dict_in_list(json_data["unique_resources"], "key", item[field]) %}
+										{% endif %}
+										
+										{% if resource and resource is not none %}
+											{{ resource["name"] }}
+										{% elif resource is none %}
+											None
+										{% else %}
+											Unknown Resource ({{ item[field] }})
+										{% endif %}
+									{% else %}
+										None
+									{% endif %}
+								</td>
+							{% elif properties.bsonType == "array" %}
+								{% if properties.get("items", {}).get("bsonType", "None") == "string" %}
+									<td>
+										{% for sub_item in item[field] %}
+											{{ sub_item }}<br>
+										{% endfor %}
+									</td>
+								{% elif properties.get("items", {}).get("bsonType", "None") == "linked_object" %}
+									<td>
+										{% if linked_objects[field] %}
+											<table class="linked-objects-table">
+												<thead>
+													<tr>
+														<th>Name</th>
+														{% if linked_objects[field][0] and linked_objects[field][0].get("linked_objects") %}
+															{% for preview_field in linked_objects[field][0].get("linked_objects", {}).keys() %}
+																<th>{{ preview_field|title }}</th>
 															{% endfor %}
 														{% endif %}
 														{% set preview_fields = properties.get("preview", []) %}
 														{% for preview_field in preview_fields %}
-															<td>{{ item.get(preview_field, "None") }}</td>
+															<th>{{ schema.properties.get(preview_field, {}).get("label", preview_field|title) }}</th>
 														{% endfor %}
 													</tr>
-												{% endfor %}
-											</tbody>
-										</table>
-									{% else %}
-										None
-									{% endif %}
-								</td>
-							{% elif properties.get("items", {}).get("bsonType", "None") == "object" %}
-								<td>
-									{% if field == "progress_quests" %}
-										<table class="linked-objects-table">
-											<thead>
-												<tr>
-													<th>Quest Name</th>
-													<th>Progress Per Tick</th>
-													<th>Current Progress</th>
-													<th>Link</th>
-												</tr>
-											</thead>
-											<tbody>
-												{% for sub_item in item[field] %}
-													<tr>
-														<td>{{ sub_item["quest_name"] }}</td>
-														<td>{{ sub_item["progress_per_tick"] }}</td>
-														<td>{{ sub_item["current_progress"] }} / {{ sub_item["required_progress"] }}</td>
-														<td>{{ sub_item["link"]|format_discord_link|safe }}</td>
-													</tr>
-												{% endfor %}
-											</tbody>
-										</table>
-									{% elif properties.get("items", {}).get("properties", {}).get("name") %}
-										<table class="linked-objects-table">
-											<thead>
-												<tr>
-													<th>Name</th>
-													{% for preview_field, preview_properties in properties.get("items", {}).get("properties", {}).items() %}
-														{% if preview_field != "name" %}
-															<th>{{ preview_properties.label }}</th>
-														{% endif %}
+												</thead>
+												<tbody>
+													{% for item in linked_objects[field] %}
+														<tr>
+															<td><a href="{{ item['link'] }}">{{ item["name"] }}</a></td>
+															{% if item.get("linked_objects") %}
+																{% for preview_field, preview_obj in item.get("linked_objects", {}).items() %}
+																	<td>
+																		{% if preview_obj %}
+																			<a href="{{ preview_obj['link'] }}">{{ preview_obj["name"] }}</a>
+																		{% else %}
+																			None
+																		{% endif %}
+																	</td>
+																{% endfor %}
+															{% endif %}
+															{% set preview_fields = properties.get("preview", []) %}
+															{% for preview_field in preview_fields %}
+																<td>{{ item.get(preview_field, "None") }}</td>
+															{% endfor %}
+														</tr>
 													{% endfor %}
-												</tr>
-											</thead>
-											<tbody>
-												{% for sub_item in item[field] %}
+												</tbody>
+											</table>
+										{% else %}
+											None
+										{% endif %}
+									</td>
+								{% elif properties.get("items", {}).get("bsonType", "None") == "object" %}
+									<td>
+										{% if field == "progress_quests" %}
+											<table class="linked-objects-table">
+												<thead>
 													<tr>
-														<td>{{ sub_item["name"] }}</td>
+														<th>Quest Name</th>
+														<th>Progress Per Tick</th>
+														<th>Current Progress</th>
+														<th>Link</th>
+													</tr>
+												</thead>
+												<tbody>
+													{% for sub_item in item[field] %}
+														<tr>
+															<td>{{ sub_item["quest_name"] }}</td>
+															<td>{{ sub_item["progress_per_tick"] }}</td>
+															<td>{{ sub_item["current_progress"] }} / {{ sub_item["required_progress"] }}</td>
+															<td>{{ sub_item["link"]|format_discord_link|safe }}</td>
+														</tr>
+													{% endfor %}
+												</tbody>
+											</table>
+										{% elif properties.get("items", {}).get("properties", {}).get("name") %}
+											<table class="linked-objects-table">
+												<thead>
+													<tr>
+														<th>Name</th>
 														{% for preview_field, preview_properties in properties.get("items", {}).get("properties", {}).items() %}
 															{% if preview_field != "name" %}
-																<td>{{ sub_item[preview_field] }}</td>
+																<th>{{ preview_properties.label }}</th>
 															{% endif %}
 														{% endfor %}
 													</tr>
+												</thead>
+												<tbody>
+													{% for sub_item in item[field] %}
+														<tr>
+															<td>{{ sub_item["name"] }}</td>
+															{% for preview_field, preview_properties in properties.get("items", {}).get("properties", {}).items() %}
+																{% if preview_field != "name" %}
+																	<td>{{ sub_item[preview_field] }}</td>
+																{% endif %}
+															{% endfor %}
+														</tr>
+													{% endfor %}
+												</tbody>
+											</table>
+										{% else %}
+										<table class="linked-objects-table">
+											<thead>
+												<tr>
+													{% for preview_field, preview_properties in properties.get("items", {}).get("properties", {}).items() %}
+														<th>{{ preview_properties.label }}</th>
+													{% endfor %}
+												</tr>
+											</thead>
+											<tbody>
+												{% for sub_item in item[field] %}
+													<tr>
+														{% for preview_field, preview_properties in properties.get("items", {}).get("properties", {}).items() %}
+															<td>{{ sub_item[preview_field] }}</td>
+														{% endfor %}
+													</tr>
 												{% endfor %}
 											</tbody>
 										</table>
-									{% else %}
-									<table class="linked-objects-table">
-										<thead>
-											<tr>
-												{% for preview_field, preview_properties in properties.get("items", {}).get("properties", {}).items() %}
-													<th>{{ preview_properties.label }}</th>
-												{% endfor %}
-											</tr>
-										</thead>
-										<tbody>
-											{% for sub_item in item[field] %}
-												<tr>
-													{% for preview_field, preview_properties in properties.get("items", {}).get("properties", {}).items() %}
-														<td>{{ sub_item[preview_field] }}</td>
-													{% endfor %}
-												</tr>
-											{% endfor %}
-										</tbody>
-									</table>
 
-									{% endif %}
-								</td>
-							{% elif properties.get("items", {}).get("bsonType", "None") == "json_district_enum" %}
-								<td>
-									<ul>
-										{% set length = item[field]|length %}
-										{% set max_length = properties.get("max_length") %}
-										{% if max_length and max_length is string %}
-											{% set max_length = item.get(max_length, 0) %}
 										{% endif %}
-										{% if max_length and length < max_length %}
-											{% set length = max_length %}
-										{% endif %}
-										{% set district_data = json_data[properties.get("items", {}).get("json_data")] %}
-										{% for i in range(0, length) %}
-											{% if item.get(field, [])[i] in district_data and item.get(field, [])[i] %}
-												<li>{{ district_data[item[field][i]]["display_name"] }}</li>
-											{% else %}
-												<li>None</li>
+									</td>
+								{% elif properties.get("items", {}).get("bsonType", "None") == "json_district_enum" %}
+									<td>
+										<ul>
+											{% set length = item[field]|length %}
+											{% set max_length = properties.get("max_length") %}
+											{% if max_length and max_length is string %}
+												{% set max_length = item.get(max_length, 0) %}
 											{% endif %}
-										{% endfor %}
-									</ul>
-								</td>
-							{% elif properties.get("items", {}).get("bsonType", "None") == "json_unit_enum" %}
-								<td>
-									<ul>
-										{% set length = item[field]|length %}
-										{% set max_length = properties.get("max_length") %}
-										{% if max_length and max_length is string %}
-											{% set max_length = item.get(max_length, 0) %}
-										{% endif %}
-										{% if max_length and length < max_length %}
-											{% set length = max_length %}
-										{% endif %}
-										{% set combined_data = {} %}
-										{% for file_name in properties.get("items", {}).get("json_data", []) %}
-											{% set combined_data = combined_data.update(json_data[file_name]) %}
-										{% endfor %}
-										{% for i in range(0, length) %}
-											{% if item.get(field, [])[i] and item.get(field, [])[i] in combined_data %}
-												<li>{{ combined_data[item.get(field, [])[i]]["display_name"] }}</li>
-											{% else %}
-												<li>None</li>
+											{% if max_length and length < max_length %}
+												{% set length = max_length %}
 											{% endif %}
-										{% endfor %}
-									</ul>
-								</td>
-							{% elif properties.get("items", {}).get("bsonType", "None") == "json_resource_enum" %}
-								<td>
-									<ul>
-										{% set length = item[field]|length %}
-										{% set max_length = properties.get("max_length") %}
-										{% if max_length and max_length is string %}
-											{% set max_length = item.get(max_length, 0) %}
-										{% endif %}
-										{% if max_length and length < max_length %}
-											{% set length = max_length %}
-										{% endif %}
-										{% set resources = json_data.get("general_resources", []) + json_data.get("unique_resources", []) %}
-										{% for i in range(0, length) %}
-											{% if item[field][i] in resources %}
-												<li>{{ resources[item[field][i]]["name"] }}</li>
-											{% else %}
-												<li>None</li>
+											{% set district_data = json_data[properties.get("items", {}).get("json_data")] %}
+											{% for i in range(0, length) %}
+												{% if item.get(field, [])[i] in district_data and item.get(field, [])[i] %}
+													<li>{{ district_data[item[field][i]]["display_name"] }}</li>
+												{% else %}
+													<li>None</li>
+												{% endif %}
+											{% endfor %}
+										</ul>
+									</td>
+								{% elif properties.get("items", {}).get("bsonType", "None") == "json_unit_enum" %}
+									<td>
+										<ul>
+											{% set length = item[field]|length %}
+											{% set max_length = properties.get("max_length") %}
+											{% if max_length and max_length is string %}
+												{% set max_length = item.get(max_length, 0) %}
 											{% endif %}
-										{% endfor %}
-									</ul>
-								</td>
+											{% if max_length and length < max_length %}
+												{% set length = max_length %}
+											{% endif %}
+											{% set combined_data = {} %}
+											{% for file_name in properties.get("items", {}).get("json_data", []) %}
+												{% set combined_data = combined_data.update(json_data[file_name]) %}
+											{% endfor %}
+											{% for i in range(0, length) %}
+												{% if item.get(field, [])[i] and item.get(field, [])[i] in combined_data %}
+													<li>{{ combined_data[item.get(field, [])[i]]["display_name"] }}</li>
+												{% else %}
+													<li>None</li>
+												{% endif %}
+											{% endfor %}
+										</ul>
+									</td>
+								{% elif properties.get("items", {}).get("bsonType", "None") == "json_resource_enum" %}
+									<td>
+										<ul>
+											{% set length = item[field]|length %}
+											{% set max_length = properties.get("max_length") %}
+											{% if max_length and max_length is string %}
+												{% set max_length = item.get(max_length, 0) %}
+											{% endif %}
+											{% if max_length and length < max_length %}
+												{% set length = max_length %}
+											{% endif %}
+											{% set resources = json_data.get("general_resources", []) + json_data.get("unique_resources", []) %}
+											{% for i in range(0, length) %}
+												{% if item[field][i] in resources %}
+													<li>{{ resources[item[field][i]]["name"] }}</li>
+												{% else %}
+													<li>None</li>
+												{% endif %}
+											{% endfor %}
+										</ul>
+									</td>
+								{% endif %}
 							{% endif %}
-						{% endif %}
-					</tr>
-				{% endif %}
-			{% endfor %}
-		</table>
+						</tr>
+					{% endif %}
+				{% endfor %}
+			</table>
+		</div>
 	</div>
 </div>
 {% endblock %}

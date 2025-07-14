@@ -780,7 +780,7 @@ class DynamicSchemaForm(BaseSchemaForm):
                 ResourceStorageDict.create_form_class()
                 return FormField(ResourceStorageDict)
         
-        elif field_type == "array":
+        elif field_type == "array" and not field_schema.get("queryTargetAttribute"): # Hide arrays that are purely to display all objects with a certain variable linked to this object
             # Handle different types of arrays
             items_schema = field_schema.get("items", {})
             items_type = items_schema.get("bsonType")

@@ -514,7 +514,10 @@ def check_job_requirements(target, job_details):
     for district in districts:
         district_types.append(json_data["nation_districts"].get(district, {}))
     region = target.get("region", "")
-    region_name = category_data["regions"]["database"].find_one({"_id": ObjectId(region)}, {"name": 1})["name"]
+    try:
+        region_name = category_data["regions"]["database"].find_one({"_id": ObjectId(region)}, {"name": 1})["name"]
+    except:
+        region_name = ""
 
     for requirement, value in requirements.items():
         if requirement == "district":
@@ -583,8 +586,8 @@ def check_unit_requirements(target, unit_details):
         
         if check_defensive_pact:
             defensive_pacts = []
-            defensive_pacts = list(mongo.db.diplo_relations.find({"nation_1": str(target["_id"]), "pact_type": {"$eq": "Defensive Pact"}}, {"nation_2": 1}))
-            defensive_pacts += list(mongo.db.diplo_relations.find({"nation_2": str(target["_id"]), "pact_type": {"$eq": "Defensive Pact"}}, {"nation_1": 1}))
+            defensive_pacts = list(mongo.db.diplo_relations.find({"nation_1": str(target.get("_id", "")), "pact_type": {"$eq": "Defensive Pact"}}, {"nation_2": 1}))
+            defensive_pacts += list(mongo.db.diplo_relations.find({"nation_2": str(target.get("_id", "")), "pact_type": {"$eq": "Defensive Pact"}}, {"nation_1": 1}))
             
             # Convert defensive pact IDs to nation objects with names
             defensive_pact_nations = []
@@ -604,8 +607,8 @@ def check_unit_requirements(target, unit_details):
 
         if check_military_alliance:
             military_alliances = []
-            military_alliances = list(mongo.db.diplo_relations.find({"nation_1": str(target["_id"]), "pact_type": {"$eq": "Military Alliance"}}, {"nation_2": 1}))
-            military_alliances += list(mongo.db.diplo_relations.find({"nation_2": str(target["_id"]), "pact_type": {"$eq": "Military Alliance"}}, {"nation_1": 1}))
+            military_alliances = list(mongo.db.diplo_relations.find({"nation_1": str(target.get("_id", "")), "pact_type": {"$eq": "Military Alliance"}}, {"nation_2": 1}))
+            military_alliances += list(mongo.db.diplo_relations.find({"nation_2": str(target.get("_id", "")), "pact_type": {"$eq": "Military Alliance"}}, {"nation_1": 1}))
             
             # Convert military alliance IDs to nation objects with names
             military_alliance_nations = []

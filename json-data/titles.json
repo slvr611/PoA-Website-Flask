@@ -528,7 +528,7 @@
 		"tier": 1,
 		"type": "positive",
 		"modifiers": {
-			"ignore_elderly_strength": true
+			"ignore_elderly_strengths": true
 		}
 	},
 	"the_energetic": {
@@ -536,7 +536,7 @@
 		"tier": 2,
 		"type": "positive",
 		"modifiers": {
-			"ignore_elderly_penalties": true
+			"ignore_elderly": true
 		}
 	},
 	"the_vigorous_elder": {
@@ -544,7 +544,7 @@
 		"tier": 3,
 		"type": "positive",
 		"modifiers": {
-			"ignore_elderly_penalties": true,
+			"ignore_elderly": true,
 			"elderly_mechrp_bonus": 1
 		}
 	},

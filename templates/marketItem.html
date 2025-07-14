@@ -21,107 +21,111 @@
         </h1>
         
         <!-- Standard market information -->
-        <table class="info-table">
-            {% for field, properties in schema.properties.items() %}
-                {% if properties and not properties.hidden
-                and not (properties.hideIfNone is defined and (item.get(properties.hideIfNone) is none or item.get(properties.hideIfNone) == "" or not item.get(properties.hideIfNone)))%}
-                    <tr>
-                        <th><strong>{{ properties.label }}:</strong></th>
-                        {% if properties.bsonType == "string" or properties.bsonType == "enum" or properties.bsonType == "date"%}
-                            <td>{{ item[field] }}</td>
-                        {% elif properties.bsonType == "number" %}
-                            <td>{{ item[field] }}</td>
-                        {% elif properties.bsonType == "linked_object" %}
-                            <td>
-                                {% if field in linked_objects and linked_objects[field] is not none %}
-                                    <a href="{{ linked_objects[field]['link'] }}">{{ linked_objects[field]['name'] }}</a>
-                                {% else %}
-                                    None
-                                {% endif %}
-                            </td>
-                        {% elif properties.bsonType == "array" %}
-                            <td>
-                                {% if field in linked_objects and linked_objects[field] %}
-                                    <table class="linked-objects-table">
-                                        <thead>
-                                            <tr>
-                                                <th>#</th>
-                                                <th>Name</th>
-                                                {% for preview_field in properties.get("preview", []) %}
-                                                    {% if schema.properties[field].items and schema.properties[field].items.properties and preview_field in schema.properties[field].items.properties %}
-                                                        <th>{{ schema.properties[field].items.properties[preview_field].label }}</th>
-                                                    {% else %}
-                                                        <th>{{ preview_field|title }}</th>
-                                                    {% endif %}
-                                                {% endfor %}
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {% for linked_item in linked_objects[field] %}
+        <div class="table-wrapper">
+            <table class="info-table">
+                {% for field, properties in schema.properties.items() %}
+                    {% if properties and not properties.hidden
+                    and not (properties.hideIfNone is defined and (item.get(properties.hideIfNone) is none or item.get(properties.hideIfNone) == "" or not item.get(properties.hideIfNone)))%}
+                        <tr>
+                            <th><strong>{{ properties.label }}:</strong></th>
+                            {% if properties.bsonType == "string" or properties.bsonType == "enum" or properties.bsonType == "date"%}
+                                <td>{{ item[field] }}</td>
+                            {% elif properties.bsonType == "number" %}
+                                <td>{{ item[field] }}</td>
+                            {% elif properties.bsonType == "linked_object" %}
+                                <td>
+                                    {% if field in linked_objects and linked_objects[field] is not none %}
+                                        <a href="{{ linked_objects[field]['link'] }}">{{ linked_objects[field]['name'] }}</a>
+                                    {% else %}
+                                        None
+                                    {% endif %}
+                                </td>
+                            {% elif properties.bsonType == "array" %}
+                                <td>
+                                    {% if field in linked_objects and linked_objects[field] %}
+                                        <table class="linked-objects-table">
+                                            <thead>
                                                 <tr>
-                                                    <td>
-                                                        {% if linked_item.link_id %}
-                                                            <a href="/{{ linked_item.link_collection }}/item/{{ linked_item.link_id }}">{{ loop.index }}</a>
-                                                        {% else %}
-                                                            {{ loop.index }}
-                                                        {% endif %}
-                                                    </td>
-                                                    <td><a href="{{ linked_item['link'] }}">{{ linked_item['name'] }}</a></td>
+                                                    <th>#</th>
+                                                    <th>Name</th>
                                                     {% for preview_field in properties.get("preview", []) %}
-                                                        <td>{{ linked_item.get(preview_field, "None") }}</td>
+                                                        {% if schema.properties[field].items and schema.properties[field].items.properties and preview_field in schema.properties[field].items.properties %}
+                                                            <th>{{ schema.properties[field].items.properties[preview_field].label }}</th>
+                                                        {% else %}
+                                                            <th>{{ preview_field|title }}</th>
+                                                        {% endif %}
                                                     {% endfor %}
                                                 </tr>
-                                            {% endfor %}
-                                        </tbody>
-                                    </table>
-                                {% else %}
-                                    None
-                                {% endif %}
-                            </td>
-                        {% endif %}
-                    </tr>
-                {% endif %}
-            {% endfor %}
-        </table>
-        
-        <!-- Resource Desires Section -->
-        <h2>Market Resource Desires</h2>
-        {% if resource_desires %}
-            <table class="info-table resource-desires-table">
-                <thead>
-                    <tr>
-                        <th>Nation</th>
-                        <th>Resource</th>
-                        <th>Trade Type</th>
-                        <th>Price</th>
-                        <th>Quantity</th>
-                        {% if g.user is not none %}
-                            <th>Actions</th>
-                        {% endif %}
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for desire in resource_desires %}
-                        <tr>
-                            <td>{{ desire.nation }}</td>
-                            <td>{{ desire.resource }}</td>
-                            <td class="{% if 'Need to Buy' in desire.trade_type %}need-buy-indicator{% elif 'Need to Sell' in desire.trade_type %}need-sell-indicator{% elif 'Buy' in desire.trade_type %}buy-indicator{% elif 'Sell' in desire.trade_type %}sell-indicator{% endif %}">
-                                {{ desire.trade_type }}
-                            </td>
-                            <td>{{ desire.price }}</td>
-                            <td>{{ desire.quantity }}</td>
-                            {% if g.user is not none %}
-                                <td>
-                                    <button type="button" class="btn btn-primary" 
-                                            onclick='openTradeModal("{{ desire.nation }}", "{{ desire.nation_id }}", "{{ desire.resource }}", "{{ desire.trade_type }}", {{ desire.price }}, {{ desire.quantity }})'>
-                                        Trade
-                                    </button>
+                                            </thead>
+                                            <tbody>
+                                                {% for linked_item in linked_objects[field] %}
+                                                    <tr>
+                                                        <td>
+                                                            {% if linked_item.link_id %}
+                                                                <a href="/{{ linked_item.link_collection }}/item/{{ linked_item.link_id }}">{{ loop.index }}</a>
+                                                            {% else %}
+                                                                {{ loop.index }}
+                                                            {% endif %}
+                                                        </td>
+                                                        <td><a href="{{ linked_item['link'] }}">{{ linked_item['name'] }}</a></td>
+                                                        {% for preview_field in properties.get("preview", []) %}
+                                                            <td>{{ linked_item.get(preview_field, "None") }}</td>
+                                                        {% endfor %}
+                                                    </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    {% else %}
+                                        None
+                                    {% endif %}
                                 </td>
                             {% endif %}
                         </tr>
-                    {% endfor %}
-                </tbody>
+                    {% endif %}
+                {% endfor %}
             </table>
+        </div>
+
+        <!-- Resource Desires Section -->
+        <h2>Market Resource Desires</h2>
+        {% if resource_desires %}
+            <div class="table-wrapper">
+                <table class="info-table resource-desires-table">
+                    <thead>
+                        <tr>
+                            <th>Nation</th>
+                            <th>Resource</th>
+                            <th>Trade Type</th>
+                            <th>Price</th>
+                            <th>Quantity</th>
+                            {% if g.user is not none %}
+                                <th>Actions</th>
+                            {% endif %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for desire in resource_desires %}
+                            <tr>
+                                <td>{{ desire.nation }}</td>
+                                <td>{{ desire.resource }}</td>
+                                <td class="{% if 'Need to Buy' in desire.trade_type %}need-buy-indicator{% elif 'Need to Sell' in desire.trade_type %}need-sell-indicator{% elif 'Buy' in desire.trade_type %}buy-indicator{% elif 'Sell' in desire.trade_type %}sell-indicator{% endif %}">
+                                    {{ desire.trade_type }}
+                                </td>
+                                <td>{{ desire.price }}</td>
+                                <td>{{ desire.quantity }}</td>
+                                {% if g.user is not none %}
+                                    <td>
+                                        <button type="button" class="btn btn-primary" 
+                                                onclick='openTradeModal("{{ desire.nation }}", "{{ desire.nation_id }}", "{{ desire.resource }}", "{{ desire.trade_type }}", {{ desire.price }}, {{ desire.quantity }})'>
+                                            Trade
+                                        </button>
+                                    </td>
+                                {% endif %}
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         {% else %}
             <p>No resource desires found for nations in this market.</p>
         {% endif %}

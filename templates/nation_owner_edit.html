@@ -487,106 +487,110 @@
                 </div>
                 <div class="section-content">
                     <h2>Resources</h2>
-                    <table class="resources-table">
-                        <thead>
-                            <tr class="resources-header-row">
-                                <th colspan="6" class="resources-header">General Resources</th>
-                            </tr>
-                            <tr>
-                                <th>Resource</th>
-                                <th>Production</th>
-                                <th>Consumption</th>
-                                <th>Excess</th>
-                                <th>Storage</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for resource in json_data["general_resources"] %}
-                                {% set resource_index = loop.index0 %}
-                                <tr>
-                                    <td>{{ resource.name }}</td>
-                                    <td>{{ nation.resource_production[resource.key] if resource.key in nation.resource_production else 0 }}</td>
-                                    <td>{{ nation.resource_consumption[resource.key] if resource.key in nation.resource_consumption else 0 }}</td>
-                                    {% set excess_value = nation.get("resource_excess", {}).get(resource["key"], 0) %}
-                                    {% if excess_value < 0 %}
-                                        <td class="excess-negative">{{ excess_value }}</td>
-                                    {% elif excess_value > 0 %}
-                                        <td class="excess-positive">{{ excess_value }}</td>
-                                    {% else %}
-                                        <td>{{ excess_value }}</td>
-                                    {% endif %}
-                                    <td>{{ form.resource_storage[resource.key](class="form-control") }} / {{ nation.resource_capacity[resource.key] if resource.key in nation.resource_capacity else 0 }}</td>
-                                </tr>
-                            {% endfor %}
-                        </tbody>
-                        <thead>
-                            <tr class="resources-header-row">
-                                <th colspan="6" class="resources-header">Unique Resources</th>
-                            </tr>
-                            <tr>
-                                <th>Resource</th>
-                                <th>Production</th>
-                                <th>Consumption</th>
-                                <th>Excess</th>
-                                <th>Storage</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for resource in json_data["unique_resources"] %}
-                                {% set resource_index = json_data["general_resources"]|length + loop.index0 %}
-                                <tr>
-                                    <td>{{ resource.name }}</td>
-                                    <td>{{ nation.resource_production[resource.key] if resource.key in nation.resource_production else 0 }}</td>
-                                    <td>{{ nation.resource_consumption[resource.key] if resource.key in nation.resource_consumption else 0 }}</td>
-                                    {% set excess_value = nation.get("resource_excess", {}).get(resource["key"], 0) %}
-                                    {% if excess_value < 0 %}
-                                        <td class="excess-negative">{{ excess_value }}</td>
-                                    {% elif excess_value > 0 %}
-                                        <td class="excess-positive">{{ excess_value }}</td>
-                                    {% else %}
-                                        <td>{{ excess_value }}</td>
-                                    {% endif %}
-                                    <td>{{ form.resource_storage[resource.key](class="form-control") }} / {{ nation.resource_capacity[resource.key] if resource.key in nation.resource_capacity else 0 }}</td>
-                                </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                    <h2>Jobs</h2>
-                    <section class="jobs-section">
-                        <h2>Jobs</h2>
-                        <p>Pop Count: {{ nation.pop_count }}</p>
-                        <table class="jobs-table">
+                    <div class="table-wrapper">
+                        <table class="resources-table">
                             <thead>
+                                <tr class="resources-header-row">
+                                    <th colspan="6" class="resources-header">General Resources</th>
+                                </tr>
                                 <tr>
-                                    <th>Job</th>
-                                    <th>Assigned Pops</th>
-                                    <th>Upkeep</th>
+                                    <th>Resource</th>
                                     <th>Production</th>
+                                    <th>Consumption</th>
+                                    <th>Excess</th>
+                                    <th>Storage</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {% for job, details in nation.job_details.items() %}
+                                {% for resource in json_data["general_resources"] %}
+                                    {% set resource_index = loop.index0 %}
                                     <tr>
-                                        <td>{{ details.display_name }}</td>
-                                        <td>{{ form.jobs[job] }}</td>
-                                        <td>
-                                        {% if details.upkeep is defined %}
-                                            {% for resource, cost in details.upkeep.items() %}
-                                                {{ resource }}: {{ cost }}<br>
-                                            {% endfor %}
+                                        <td>{{ resource.name }}</td>
+                                        <td>{{ nation.resource_production[resource.key] if resource.key in nation.resource_production else 0 }}</td>
+                                        <td>{{ nation.resource_consumption[resource.key] if resource.key in nation.resource_consumption else 0 }}</td>
+                                        {% set excess_value = nation.get("resource_excess", {}).get(resource["key"], 0) %}
+                                        {% if excess_value < 0 %}
+                                            <td class="excess-negative">{{ excess_value }}</td>
+                                        {% elif excess_value > 0 %}
+                                            <td class="excess-positive">{{ excess_value }}</td>
+                                        {% else %}
+                                            <td>{{ excess_value }}</td>
                                         {% endif %}
-                                        </td>
-                                        <td>
-                                        {% if details.production is defined %}
-                                            {% for resource, prod in details.production.items() %}
-                                                {{ resource }}: {{ prod }}<br>
-                                            {% endfor %}
+                                        <td>{{ form.resource_storage[resource.key](class="form-control") }} / {{ nation.resource_capacity[resource.key] if resource.key in nation.resource_capacity else 0 }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                            <thead>
+                                <tr class="resources-header-row">
+                                    <th colspan="6" class="resources-header">Unique Resources</th>
+                                </tr>
+                                <tr>
+                                    <th>Resource</th>
+                                    <th>Production</th>
+                                    <th>Consumption</th>
+                                    <th>Excess</th>
+                                    <th>Storage</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for resource in json_data["unique_resources"] %}
+                                    {% set resource_index = json_data["general_resources"]|length + loop.index0 %}
+                                    <tr>
+                                        <td>{{ resource.name }}</td>
+                                        <td>{{ nation.resource_production[resource.key] if resource.key in nation.resource_production else 0 }}</td>
+                                        <td>{{ nation.resource_consumption[resource.key] if resource.key in nation.resource_consumption else 0 }}</td>
+                                        {% set excess_value = nation.get("resource_excess", {}).get(resource["key"], 0) %}
+                                        {% if excess_value < 0 %}
+                                            <td class="excess-negative">{{ excess_value }}</td>
+                                        {% elif excess_value > 0 %}
+                                            <td class="excess-positive">{{ excess_value }}</td>
+                                        {% else %}
+                                            <td>{{ excess_value }}</td>
                                         {% endif %}
-                                        </td>
+                                        <td>{{ form.resource_storage[resource.key](class="form-control") }} / {{ nation.resource_capacity[resource.key] if resource.key in nation.resource_capacity else 0 }}</td>
                                     </tr>
                                 {% endfor %}
                             </tbody>
                         </table>
+                    </div>
+                    <h2>Jobs</h2>
+                    <section class="jobs-section">
+                        <h2>Jobs</h2>
+                        <p>Pop Count: {{ nation.pop_count }}</p>
+                        <div class="table-wrapper">
+                            <table class="jobs-table">
+                                <thead>
+                                    <tr>
+                                        <th>Job</th>
+                                        <th>Assigned Pops</th>
+                                        <th>Upkeep</th>
+                                        <th>Production</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for job, details in nation.job_details.items() %}
+                                        <tr>
+                                            <td>{{ details.display_name }}</td>
+                                            <td>{{ form.jobs[job] }}</td>
+                                            <td>
+                                            {% if details.upkeep is defined %}
+                                                {% for resource, cost in details.upkeep.items() %}
+                                                    {{ resource }}: {{ cost }}<br>
+                                                {% endfor %}
+                                            {% endif %}
+                                            </td>
+                                            <td>
+                                            {% if details.production is defined %}
+                                                {% for resource, prod in details.production.items() %}
+                                                    {{ resource }}: {{ prod }}<br>
+                                                {% endfor %}
+                                            {% endif %}
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
                     </section>
                 </div>
         </div>

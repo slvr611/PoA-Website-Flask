@@ -26,105 +26,107 @@
 	{% endif %}
 	<form method="POST" action="{{ default_action }}">
 		{{ form.csrf_token }}
-		<table class="info-table">
-			{% for field in form if field.name != 'csrf_token' and field.name != 'submit' and field.name != 'reason' %}
+		<div class="table-wrapper">
+			<table class="info-table">
+				{% for field in form if field.name != 'csrf_token' and field.name != 'submit' and field.name != 'reason' %}
+					<tr>
+						<th><label for="{{ field.id }}">{{ field.label.text }}</label></th>
+						<td>
+							{% if field.type == 'FieldList' and field.name == 'external_modifiers' %}
+								<table class="modifiers-table">
+									<thead>
+										<tr>
+											<th>Type</th>
+											<th>Modifier</th>
+											<th>Value</th>
+											<th>Actions</th>
+										</tr>
+									</thead>
+									<tbody id="{{ field.name }}-tbody">
+										{% for modifier_field in field %}
+											<tr>
+												<td>{{ modifier_field.form.type(class="form-control") }}</td>
+												<td>{{ modifier_field.form.modifier(class="form-control") }}</td>
+												<td>{{ modifier_field.form.value(class="form-control") }}</td>
+												<td><button type="button" class="btn btn-danger" onclick="removeFromArray(this, '{{ field.name }}')">Remove</button></td>
+											</tr>
+										{% endfor %}
+									</tbody>
+								</table>
+								<button type="button" class="btn btn-primary" onclick="addToArray('{{ field.name }}')">Add Modifier</button>
+							{% elif field.type == 'FieldList' and field.name == 'modifiers' %}
+								<table class="modifiers-table">
+									<thead>
+										<tr>
+											<th>Field</th>
+											<th>Value</th>
+											<th>Duration</th>
+											<th>Source</th>
+											<th>Actions</th>
+										</tr>
+									</thead>
+									<tbody id="{{ field.name }}-tbody">
+										{% for modifier_field in field %}
+											<tr>
+												<td>{{ modifier_field.form.field(class="form-control") }}</td>
+												<td>{{ modifier_field.form.value(class="form-control") }}</td>
+												<td>{{ modifier_field.form.duration(class="form-control") }}</td>
+												<td>{{ modifier_field.form.source(class="form-control") }}</td>
+												<td><button type="button" class="btn btn-danger" onclick="removeFromArray(this, '{{ field.name }}')">Remove</button></td>
+											</tr>
+										{% endfor %}
+									</tbody>
+								</table>
+								<button type="button" class="btn btn-primary" onclick="addToArray('{{ field.name }}')">Add Modifier</button>
+							{% elif field.type == 'FieldList' and field.name == 'progress_quests' %}
+								<table class="modifiers-table">
+									<thead>
+										<tr>
+											<th>Name</th>
+											<th>Progress Per Tick</th>
+											<th>Current Progress</th>
+											<th>Required Progress</th>
+											<th>Link</th>
+											<th>Actions</th>
+										</tr>
+									</thead>
+									<tbody id="{{ field.name }}-tbody">
+										{% for quest_field in field %}
+											<tr>
+												<td>{{ quest_field.form.quest_name(class="form-control") }}</td>
+												<td>{{ quest_field.form.progress_per_tick(class="form-control") }}</td>
+												<td>{{ quest_field.form.current_progress(class="form-control") }}</td>
+												<td>{{ quest_field.form.required_progress(class="form-control") }}</td>
+												<td>{{ quest_field.form.link(class="form-control") }}</td>
+												<td><button type="button" class="btn btn-danger" onclick="removeFromArray(this, '{{ field.name }}')">Remove</button></td>
+											</tr>
+										{% endfor %}
+									</tbody>
+								</table>
+								<button type="button" class="btn btn-primary" onclick="addToArray('{{ field.name }}')">Add Quest</button>
+							{% else %}
+								{{ field(class="form-control") }}
+							{% endif %}
+							
+							{% if field.errors %}
+								<ul class="errors">
+									{% for error in field.errors %}
+										<li>{{ error }}</li>
+									{% endfor %}
+								</ul>
+							{% endif %}
+							{% if field.description %}
+								<small class="form-text text-muted">{{ field.description }}</small>
+							{% endif %}
+						</td>
+					</tr>
+				{% endfor %}
 				<tr>
-					<th><label for="{{ field.id }}">{{ field.label.text }}</label></th>
-					<td>
-						{% if field.type == 'FieldList' and field.name == 'external_modifiers' %}
-							<table class="modifiers-table">
-								<thead>
-									<tr>
-										<th>Type</th>
-										<th>Modifier</th>
-										<th>Value</th>
-										<th>Actions</th>
-									</tr>
-								</thead>
-								<tbody id="{{ field.name }}-tbody">
-									{% for modifier_field in field %}
-										<tr>
-											<td>{{ modifier_field.form.type(class="form-control") }}</td>
-											<td>{{ modifier_field.form.modifier(class="form-control") }}</td>
-											<td>{{ modifier_field.form.value(class="form-control") }}</td>
-											<td><button type="button" class="btn btn-danger" onclick="removeFromArray(this, '{{ field.name }}')">Remove</button></td>
-										</tr>
-									{% endfor %}
-								</tbody>
-							</table>
-							<button type="button" class="btn btn-primary" onclick="addToArray('{{ field.name }}')">Add Modifier</button>
-						{% elif field.type == 'FieldList' and field.name == 'modifiers' %}
-							<table class="modifiers-table">
-								<thead>
-									<tr>
-										<th>Field</th>
-										<th>Value</th>
-										<th>Duration</th>
-										<th>Source</th>
-										<th>Actions</th>
-									</tr>
-								</thead>
-								<tbody id="{{ field.name }}-tbody">
-									{% for modifier_field in field %}
-										<tr>
-											<td>{{ modifier_field.form.field(class="form-control") }}</td>
-											<td>{{ modifier_field.form.value(class="form-control") }}</td>
-											<td>{{ modifier_field.form.duration(class="form-control") }}</td>
-											<td>{{ modifier_field.form.source(class="form-control") }}</td>
-											<td><button type="button" class="btn btn-danger" onclick="removeFromArray(this, '{{ field.name }}')">Remove</button></td>
-										</tr>
-									{% endfor %}
-								</tbody>
-							</table>
-							<button type="button" class="btn btn-primary" onclick="addToArray('{{ field.name }}')">Add Modifier</button>
-						{% elif field.type == 'FieldList' and field.name == 'progress_quests' %}
-							<table class="modifiers-table">
-								<thead>
-									<tr>
-										<th>Name</th>
-										<th>Progress Per Tick</th>
-										<th>Current Progress</th>
-										<th>Required Progress</th>
-										<th>Link</th>
-										<th>Actions</th>
-									</tr>
-								</thead>
-								<tbody id="{{ field.name }}-tbody">
-									{% for quest_field in field %}
-										<tr>
-											<td>{{ quest_field.form.quest_name(class="form-control") }}</td>
-											<td>{{ quest_field.form.progress_per_tick(class="form-control") }}</td>
-											<td>{{ quest_field.form.current_progress(class="form-control") }}</td>
-											<td>{{ quest_field.form.required_progress(class="form-control") }}</td>
-											<td>{{ quest_field.form.link(class="form-control") }}</td>
-											<td><button type="button" class="btn btn-danger" onclick="removeFromArray(this, '{{ field.name }}')">Remove</button></td>
-										</tr>
-									{% endfor %}
-								</tbody>
-							</table>
-							<button type="button" class="btn btn-primary" onclick="addToArray('{{ field.name }}')">Add Quest</button>
-						{% else %}
-							{{ field(class="form-control") }}
-						{% endif %}
-						
-						{% if field.errors %}
-							<ul class="errors">
-								{% for error in field.errors %}
-									<li>{{ error }}</li>
-								{% endfor %}
-							</ul>
-						{% endif %}
-						{% if field.description %}
-							<small class="form-text text-muted">{{ field.description }}</small>
-						{% endif %}
-					</td>
+					<th><label for="{{ form.reason.id }}">{{ form.reason.label.text }}</label></th>
+					<td>{{ form.reason(class="form-control") }}</td>
 				</tr>
-			{% endfor %}
-			<tr>
-				<th><label for="{{ form.reason.id }}">{{ form.reason.label.text }}</label></th>
-				<td>{{ form.reason(class="form-control") }}</td>
-			</tr>
-		</table>
+			</table>
+		</div>
 		
 		{% if g.user.is_admin %}
 			<button type="submit" formaction="{{ request.path }}/save">Save</button>

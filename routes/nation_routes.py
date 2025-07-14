@@ -105,6 +105,7 @@ def nation_edit_request(item_ref):
     form_data = form.data.copy()
     form_data.pop('csrf_token', None)
     form_data.pop('submit', None)
+    form_data["name"] = form_data.get("name", "").strip()
     
     # Process concessions field
     if 'concessions' in form_data:
@@ -151,6 +152,7 @@ def nation_edit_approve(item_ref):
     form_data = form.data.copy()
     form_data.pop('csrf_token', None)
     form_data.pop('submit', None)
+    form_data["name"] = form_data.get("name", "").strip()
     
     # Process concessions field
     if 'concessions' in form_data:

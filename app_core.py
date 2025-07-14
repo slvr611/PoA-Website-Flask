@@ -15,7 +15,6 @@ from email.mime.text import MIMEText
 from email.utils import formatdate
 from email import encoders
 import boto3
-from botocore.exceptions import ClientError
 
 load_dotenv(override=True)
 

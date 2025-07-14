@@ -513,7 +513,9 @@
           "city_slots": 5
         },
         "Sacred Vicar": {
-          "city_slots": 5
+          "city_slots": 5,
+          "stability_gain_chance_per_foreign_religious_pop": 0.01,
+          "max_stability_gain_chance_per_foreign_religious_pop": 0.5
         },
         "Great Khanate:": {
           "morale": 2,

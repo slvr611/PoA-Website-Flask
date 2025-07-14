@@ -151,6 +151,7 @@ def data_item_new_request(data_type):
     form_data = form.data.copy()
     form_data.pop('csrf_token', None)
     form_data.pop('submit', None)
+    form_data["name"] = form_data.get("name", "").strip()
     
     # Additional JSON schema validation
     valid, error = validate_form_with_jsonschema(form, schema)
@@ -202,6 +203,7 @@ def data_item_new_approve(data_type):
     form_data = form.data.copy()
     form_data.pop('csrf_token', None)
     form_data.pop('submit', None)
+    form_data["name"] = form_data.get("name", "").strip()
     
     # Additional JSON schema validation
     valid, error = validate_form_with_jsonschema(form, schema)
@@ -287,6 +289,7 @@ def data_item_edit_request(data_type, item_ref):
     form_data = form.data.copy()
     form_data.pop('csrf_token', None)
     form_data.pop('submit', None)
+    form_data["name"] = form_data.get("name", "").strip()
     
     valid, error = validate_form_with_jsonschema(form, schema)
     if not valid:
@@ -344,6 +347,7 @@ def data_item_edit_approve(data_type, item_ref):
     form_data = form.data.copy()
     form_data.pop('csrf_token', None)
     form_data.pop('submit', None)
+    form_data["name"] = form_data.get("name", "").strip()
     
     valid, error = validate_form_with_jsonschema(form, schema)
     if not valid:
