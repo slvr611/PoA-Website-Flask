@@ -1,0 +1,77 @@
+{% extends "layout.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container">
+    {% if g.user is not none %}
+        <a href="/characters/new">Create New Character</a>
+    {% endif %}
+    
+    <h1>Living Characters ({{ living_characters|length }})</h1>
+    <div class="table-wrapper">
+        <table class="info-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    {% for preview_category in schema.preview %}
+                        <th>{{ schema.properties[preview_category]["label"] }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for character in living_characters %}
+                    <tr>
+                        <td><a href="/characters/item/{{ character.name }}">{{ character.name }}</a></td>
+                        {% for preview_category in schema.preview %}
+                            {% if preview_category in preview_references %}
+                                {% set item_value = character[preview_category]|string %}
+                                {% if preview_references.get(preview_category, {}).get(item_value, {}).get('link') %}
+                                    <td><a href="{{ preview_references.get(preview_category, {}).get(item_value, {}).get('link', '') }}">{{ preview_references.get(preview_category, {}).get(item_value, {}).get('name', '') }}</a></td>
+                                {% else %}
+                                    <td>Unknown</td>
+                                {% endif %}
+                            {% else %}
+                                <td>{{ character[preview_category] }}</td>
+                            {% endif %}
+                        {% endfor %}
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <h1>Dead Characters ({{ dead_characters|length }})</h1>
+    <div class="table-wrapper">
+        <table class="info-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    {% for preview_category in schema.preview %}
+                        <th>{{ schema.properties[preview_category]["label"] }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for character in dead_characters %}
+                    <tr class="dead-character">
+                        <td><a href="/characters/item/{{ character.name }}">{{ character.name }}</a></td>
+                        {% for preview_category in schema.preview %}
+                            {% if preview_category in preview_references %}
+                                {% set item_value = character[preview_category]|string %}
+                                {% if preview_references.get(preview_category, {}).get(item_value, {}).get('link') %}
+                                    <td><a href="{{ preview_references.get(preview_category, {}).get(item_value, {}).get('link', '') }}">{{ preview_references.get(preview_category, {}).get(item_value, {}).get('name', '') }}</a></td>
+                                {% else %}
+                                    <td>Unknown</td>
+                                {% endif %}
+                            {% else %}
+                                <td>{{ character[preview_category] }}</td>
+                            {% endif %}
+                        {% endfor %}
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

@@ -12,6 +12,48 @@ import random
 
 character_routes = Blueprint("character_routes", __name__)
 
+@character_routes.route("/characters", methods=["GET"])
+def character_list():
+    schema, db = get_data_on_category("characters")
+    
+    # Build preview references lookup like dataList does
+    preview_overall_lookup_dict = {}
+    for preview_item in schema.get("preview", {}):
+        collection_names = schema.get("properties", {}).get(preview_item, {}).get("collections", None)
+        if collection_names:
+            preview_individual_lookup_dict = {}
+            for collection_name in collection_names:
+                preview_db = category_data[collection_name]["database"]
+                preview_data = list(preview_db.find({}, {"_id": 1, "name": 1}))
+                for data in preview_data:
+                    preview_individual_lookup_dict[str(data["_id"])] = {
+                        "name": data.get("name", "None"),
+                        "link": f"{collection_name}/item/{data.get('name', data.get('_id', '#'))}"
+                    }
+            preview_overall_lookup_dict[preview_item] = preview_individual_lookup_dict
+    
+    # Get all characters
+    all_characters = list(db.find().sort("name", ASCENDING))
+    
+    # Separate living and dead characters
+    living_characters = []
+    dead_characters = []
+    
+    for character in all_characters:
+        if character.get("health_status") == "Dead":
+            dead_characters.append(character)
+        else:
+            living_characters.append(character)
+    
+    return render_template(
+        "character_list.html",
+        title="Characters",
+        living_characters=living_characters,
+        dead_characters=dead_characters,
+        schema=schema,
+        preview_references=preview_overall_lookup_dict
+    )
+
 @character_routes.route("/characters/new", methods=["GET"])
 def new_character():
     """Display new character form"""
