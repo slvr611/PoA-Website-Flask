@@ -81,16 +81,22 @@ def grow_population(nation, foreign_nation):
         print(pacted_ally)
         try:
             pops = list(mongo.db.pops.find({"nation": ObjectId(pacted_ally)}, {"_id": 1, "race": 1, "culture": 1, "religion": 1}))
+            if len(pops) == 0:
+                pops = [{"race": pacted_ally.get("primary_race", ""), "culture": pacted_ally.get("primary_culture", ""), "religion": pacted_ally.get("primary_religion", "")}]
         except:
             pass
     elif pop_roll + roll_modifier + len(pacted_allies) >= 9:
         try:
             pops = list(mongo.db.pops.find({"nation": ObjectId(foreign_nation["_id"])}, {"_id": 1, "race": 1, "culture": 1, "religion": 1}))
+            if len(pops) == 0:
+                pops = [{"race": foreign_nation.get("primary_race", ""), "culture": foreign_nation.get("primary_culture", ""), "religion": foreign_nation.get("primary_religion", "")}]
         except:
             pass
     else:
         try:
             pops = list(mongo.db.pops.find({"nation": ObjectId(nation["_id"])}, {"_id": 1, "race": 1, "culture": 1, "religion": 1}))
+            if len(pops) == 0:
+                pops = [{"race": nation.get("primary_race", ""), "culture": nation.get("primary_culture", ""), "religion": nation.get("primary_religion", "")}]
         except:
             pass
     

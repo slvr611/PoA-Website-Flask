@@ -21,7 +21,7 @@
         
         <div class="expandable-sections">
             <!-- General Information Section -->
-            <div class="expandable-section">
+            <div class="expandable-section" id="general-info-section">
                 <div class="section-header" onclick="toggleSection(this)">
                     <h2>General Information</h2>
                     <span class="toggle-icon">▼</span>
@@ -67,6 +67,28 @@
                                     <th>{{ form.temporary_karma.label.text }}:</th>
                                     <td>{{ form.temporary_karma(class="form-control") }}</td>
                                 </tr>
+                                {% if nation.nomadic > 0 %}
+                                    <tr>
+                                        <th>{{ schema.properties.migration_distance.label }}:</th>
+                                        <td>{{ nation.migration_distance }}</td>
+                                    </tr>
+                                    <tr>
+                                        <th>{{ schema.properties.stationary_delay.label }}:</th>
+                                        <td>{{ nation.stationary_delay }}</td>
+                                    </tr>
+                                {% endif %}
+                                {% if nation.vampirism_chance > 0 %}
+                                    <tr>
+                                        <th>{{ schema.properties.vampirism_chance.label }}:</th>
+                                        <td>{{ (nation.vampirism_chance * 100)|int }}%</td>
+                                    </tr>
+                                {% endif %}
+                                {% if nation.pop_loss_chance > 0 %}
+                                    <tr>
+                                        <th>{{ schema.properties.pop_loss_chance.label }}:</th>
+                                        <td>{{ (nation.pop_loss_chance * 100)|int }}%</td>
+                                    </tr>
+                                {% endif %}
                             </table>
                         </div>
                                                 
@@ -122,7 +144,7 @@
             </div>
 
             <!-- Administration & Holdings Section -->
-            <div class="expandable-section">
+            <div class="expandable-section" id="administration-section">
                 <div class="section-header" onclick="toggleSection(this)">
                     <h2>Administration & Holdings</h2>
                     <span class="toggle-icon">▼</span>
@@ -169,7 +191,7 @@
 
             
             <!-- Demographics Section -->
-            <div class="expandable-section">
+            <div class="expandable-section" id="demographics-section">
                 <div class="section-header" onclick="toggleSection(this)">
                     <h2>Demographics & Population</h2>
                     <span class="toggle-icon">▼</span>
@@ -259,7 +281,7 @@
             </div>
             
             <!-- Government & Laws Section -->
-            <div class="expandable-section">
+            <div class="expandable-section" id="government-laws-section">
                 <div class="section-header" onclick="toggleSection(this)">
                     <h2>Government & Laws</h2>
                     <span class="toggle-icon">▼</span>
@@ -284,9 +306,9 @@
             </div>
             
             <!-- Vassalship Section -->
-            <div class="expandable-section">
+            <div class="expandable-section" id="vassalship-section">
                 <div class="section-header" onclick="toggleSection(this)">
-                    <h2>Vassalship & Diplomacy</h2>
+                    <h2>Vassalship</h2>
                     <span class="toggle-icon">▼</span>
                 </div>
                 <div class="section-content">
@@ -339,8 +361,17 @@
                             </tr>
                         </table>
                     </div>
-                    
-                    <div class="table-wrapper">
+                </div>
+            </div>
+            
+            <!-- Diplomacy Section -->
+            <div class="expandable-section" id="diplomacy-section">
+                <div class="section-header" onclick="toggleSection(this)">
+                    <h2>Diplomacy</h2>
+                    <span class="toggle-icon">▼</span>
+                </div>
+                <div class="section-content">
+                    <div class="table-wrapper" id="diplomatic-relations-table">
                         <table class="info-table">
                             <thead>
                                 <tr class="resources-header-row">
@@ -379,9 +410,8 @@
                     </div>
                 </div>
             </div>
-            
-            <!-- War & Military Units Section (Combined) -->
-            <div class="expandable-section">
+
+            <div class="expandable-section" id="war-section">
                 <div class="section-header" onclick="toggleSection(this)">
                     <h2>War</h2>
                     <span class="toggle-icon">▼</span>
@@ -482,7 +512,7 @@
             </div>
             
             <!-- Resources & Jobs Section -->
-            <div class="expandable-section">
+            <div class="expandable-section" id="resources-jobs-section">
                 <div class="section-header" onclick="toggleSection(this)">
                     <h2>Resources & Jobs</h2>
                     <span class="toggle-icon">▼</span>
@@ -511,8 +541,14 @@
                                         <td>{{ nation.resource_production[resource.key] if resource.key in nation.resource_production else 0 }}</td>
                                         <td>{{ nation.resource_consumption[resource.key] if resource.key in nation.resource_consumption else 0 }}</td>
                                         {% set excess_value = nation.get("resource_excess", {}).get(resource["key"], 0) %}
-                                        {% if excess_value < 0 %}
+                                        {% set storage = nation.get("resource_storage", {}).get(resource["key"], 0) %}
+                                        {% set capacity = nation.get("resource_capacity", {}).get(resource["key"], 0) %}
+                                        {% if excess_value + storage < 0 %}
+                                            <td class="excess-critical-negative">{{ excess_value }}</td>
+                                        {% elif excess_value < 0 %}
                                             <td class="excess-negative">{{ excess_value }}</td>
+                                        {% elif excess_value + storage > capacity %}
+                                            <td class="excess-overflow">{{ excess_value }}</td>
                                         {% elif excess_value > 0 %}
                                             <td class="excess-positive">{{ excess_value }}</td>
                                         {% else %}
@@ -598,7 +634,7 @@
         </div>
         
         <!-- Districts Section -->
-        <div class="expandable-section">
+        <div class="expandable-section" id="districts-cities-wonders-section">
             <div class="section-header" onclick="toggleSection(this)">
                 <h2>Districts, Cities, & Wonders</h2>
                 <span class="toggle-icon">▼</span>
@@ -692,7 +728,18 @@
             </div>
         </div>
 
-        <div class="expandable-section">
+        <!-- Tech Section -->
+        <div class="expandable-section" id="tech-section">
+            <div class="section-header" onclick="toggleSection(this)">
+                <h2>Technologies</h2>
+                <span class="toggle-icon">▼</span>
+            </div>
+            <div class="section-content">
+                {{ render_tech_tree(nation.get("technologies", {"political_philosophy": {"researched": true}}), nation.get("technology_cost_modifier", 0), nation.get("technology_cost_minimum", 2), json_data, editable=True, form=form, form_json=form_json["technologies"]) }}
+            </div>
+        </div>
+
+        <div class="expandable-section" id="progress-quests-section">
             <div class="section-header" onclick="toggleSection(this)">
                 <h2>Progress Quests</h2>
                 <span class="toggle-icon">▼</span>
@@ -726,7 +773,7 @@
         </div>
 
 
-        <div class="expandable-section">
+        <div class="expandable-section" id="modifiers-section">
             <div class="section-header" onclick="toggleSection(this)">
                 <h2>Modifiers</h2>
                 <span class="toggle-icon">▼</span>
@@ -755,17 +802,6 @@
                     </tbody>
                 </table>
                 <button type="button" class="btn btn-primary" onclick="addToArray('modifiers')">Add Modifier</button>
-            </div>
-        </div>
-
-        <!-- Tech Section -->
-        <div class="expandable-section" id="tech-section">
-            <div class="section-header" onclick="toggleSection(this)">
-                <h2>Technologies</h2>
-                <span class="toggle-icon">▼</span>
-            </div>
-            <div class="section-content">
-                {{ render_tech_tree(nation.get("technologies", {"political_philosophy": {"researched": true}}), nation.get("technology_cost_modifier", 0), nation.get("technology_cost_minimum", 2), json_data, editable=True, form=form, form_json=form_json["technologies"]) }}
             </div>
         </div>
 

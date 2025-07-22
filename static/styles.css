@@ -400,15 +400,27 @@ h1, h2 {
 }
 
 /* Example highlight for negative excess */
-.resources-table td.excess-negative {
+.resources-table td.excess-critical-negative {
   background-color: #451b1b; /* dark red background */
   color: #ff9f9f;            /* lighter red text */
+}
+
+/* Example highlight for negative excess */
+.resources-table td.excess-negative {
+  background-color: #45451b; /* dark yellow background */
+  color: #ffff9f;            /* lighter yellow text */
 }
 
 /* Example highlight for positive excess */
 .resources-table td.excess-positive {
   background-color: #1b4522; /* dark green background */
   color: #afffbd;            /* light green text */
+}
+
+/* Example highlight for overflow excess */
+.resources-table td.excess-overflow {
+  background-color: #45331b; /* dark orange background */
+  color: #ffbd9f;            /* light orange text */
 }
 
 .pops-table {
