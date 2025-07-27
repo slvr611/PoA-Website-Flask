@@ -68,5 +68,10 @@
 		"display_name": "Hazardous Water",
 		"resource": "magic",
 		"count_required": 4
+	},
+	"disconnected": {
+		"display_name": "Disconnected",
+		"resource": "none",
+		"count_required": 1
 	}
 }

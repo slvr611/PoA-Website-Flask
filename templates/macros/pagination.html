@@ -423,7 +423,9 @@
                 <td class="reason-column wrap-content">
                     {{ change.request_reason|format_discord_link|safe }}
                 </td>
-                {% if change.time_requested is defined and change.time_requested is not none and change.time_requested|string is not string and change.time_requested.__class__.__name__ == 'datetime' %}
+                {% if change.last_modified_time is defined and change.last_modified_time is not none and change.last_modified_time|string is not string and change.last_modified_time.__class__.__name__ == 'datetime' %}
+                    <td>{{ change.last_modified_time.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                {% elif change.time_requested is defined and change.time_requested is not none and change.time_requested|string is not string and change.time_requested.__class__.__name__ == 'datetime' %}
                     <td>{{ change.time_requested.strftime('%Y-%m-%d %H:%M:%S') }}</td>
                 {% else %}
                     <td>{{ change.time_requested }}</td>

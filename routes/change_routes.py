@@ -67,7 +67,7 @@ def pending_change_list(page=1):
     # Get paginated results
     skip = (page - 1) * items_per_page
     pending_changes = list(db.find({"status": "Pending"}, query_dict)
-                          .sort([("time_requested", ASCENDING), ("time_approved", ASCENDING)])
+                          .sort([("last_modified_time", ASCENDING), ("time_requested", ASCENDING)])
                           .skip(skip).limit(items_per_page))
 
     # Add all collection types that appear in changes
@@ -127,7 +127,7 @@ def archived_change_list(page=1):
     # Get paginated results
     skip = (page - 1) * items_per_page
     archived_changes = list(db.find({"status": {"$ne": "Pending"}}, query_dict)
-                           .sort([("time_requested", DESCENDING), ("time_approved", DESCENDING)])
+                           .sort([("last_modified_time", DESCENDING), ("time_requested", DESCENDING)])
                            .skip(skip).limit(items_per_page))
 
     # Add all collection types that appear in changes
@@ -291,7 +291,7 @@ def data_type_pending_changes(data_type, page=1):
     pending_changes = list(db.find(
         {"status": "Pending", "target_collection": data_type}, 
         query_dict
-    ).sort([("time_requested", ASCENDING), ("time_approved", ASCENDING)])
+    ).sort([("last_modified_time", ASCENDING), ("time_requested", ASCENDING)])
      .skip(skip).limit(items_per_page))
 
     # Add the data_type to collections_to_preview
@@ -359,7 +359,7 @@ def data_type_archived_changes(data_type, page=1):
     archived_changes = list(db.find(
         {"status": {"$ne": "Pending"}, "target_collection": data_type}, 
         query_dict
-    ).sort([("time_requested", DESCENDING), ("time_approved", DESCENDING)])
+    ).sort([("last_modified_time", DESCENDING), ("time_requested", DESCENDING)])
      .skip(skip).limit(items_per_page))
 
     # Add the data_type to collections_to_preview
@@ -439,7 +439,7 @@ def item_pending_changes(data_type, item_ref, page=1):
             "target": item_id
         }, 
         query_dict
-    ).sort([("time_requested", ASCENDING), ("time_approved", ASCENDING)])
+    ).sort([("last_modified_time", ASCENDING), ("time_requested", ASCENDING)])
      .skip(skip).limit(items_per_page))
 
     # Add the data_type to collections_to_preview
@@ -520,7 +520,7 @@ def item_archived_changes(data_type, item_ref, page=1):
             "target": item_id
         }, 
         query_dict
-    ).sort([("time_requested", DESCENDING), ("time_approved", DESCENDING)])
+    ).sort([("last_modified_time", DESCENDING), ("time_requested", DESCENDING)])
      .skip(skip).limit(items_per_page))
 
     # Add the data_type to collections_to_preview

@@ -2,7 +2,7 @@
   "$jsonSchema": {
     "bsonType": "object",
     "required": ["target", "target_collection", "request_reason"],
-    "preview": ["target_collection", "change_type", "status", "target", "time_requested", "time_implemented", "time_denied", "time_reverted", "requester", "approver", "denier", "reverter", "before_requested_data", "after_requested_data", "before_implemented_data", "after_implemented_data", "before_revert_data", "after_revert_data", "request_reason"],
+    "preview": ["target_collection", "change_type", "status", "target", "last_modified_time", "time_requested", "time_implemented", "time_denied", "time_reverted", "requester", "approver", "denier", "reverter", "before_requested_data", "after_requested_data", "before_implemented_data", "after_implemented_data", "before_revert_data", "after_revert_data", "request_reason"],
     "properties": {
       "target_collection": {
         "bsonType": "string",
@@ -14,6 +14,12 @@
         "bsonType": "linked_object",
         "label": "Target",
         "description": "The object on which the changes are happening",
+        "static": true
+      },
+      "last_modified_time": {
+        "bsonType": "date",
+        "label": "Last Modified Time",
+        "description": "The time the change was last modified",
         "static": true
       },
       "time_requested": {

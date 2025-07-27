@@ -62,7 +62,7 @@
         "bsonType": "linked_object",
         "label": "Owner",
         "description": "The artifact's owner",
-        "default_options": ["Unknown", "Lost"],
+        "default_options": ["Unknown"],
 		    "collections": ["characters"]
       },
       "creator": {

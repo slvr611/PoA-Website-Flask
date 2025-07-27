@@ -67,6 +67,8 @@
 								<td>
 									{% if field in linked_objects and linked_objects[field] is not none %}
 										<a href="{{ linked_objects[field]['link'] }}">{{ linked_objects[field]["name"] }}</a>
+									{% elif item[field] %}
+										{{ item[field] }}
 									{% else %}
 										{{ properties.get("noneResult", "None") }}
 									{% endif %}

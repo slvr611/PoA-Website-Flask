@@ -523,6 +523,12 @@ class BaseSchemaForm(FlaskForm):
         field_schema = schema.get("properties", {}).get(field_name, {})
         none_result = field_schema.get("noneResult", "None")
         default_options = field_schema.get("default_options", [])
+
+        if field_name == "owner": #For artifacts
+            regions = category_data["regions"]["database"].find({}, {"name": 1}).sort("name", 1)
+            for region in regions:
+                choice = "Lost in " + region["name"]
+                default_options.append(choice)
         
         choices = [("", none_result)] + [(option, option) for option in default_options]
         if field_name == "districts":

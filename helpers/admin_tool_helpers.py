@@ -4,6 +4,7 @@ from helpers.change_helpers import system_request_change, system_approve_change
 from helpers.data_helpers import get_data_on_category
 from pymongo import ASCENDING
 from threading import Thread
+from copy import deepcopy
 import random
 
 def grow_all_population_async(form_data):
@@ -126,6 +127,8 @@ def roll_events_async():
 def roll_events():
     schema, db = get_data_on_category("nations")
 
+    recalculate_all_nations()
+
     nations = list(db.find().sort("name", ASCENDING))
 
     for nation in nations:
@@ -167,3 +170,19 @@ def roll_events():
         system_approve_change(change_id)
     
     pass
+
+def recalculate_all_nations():
+    schema, db = get_data_on_category("nations")
+    nations = list(db.find().sort("name", ASCENDING))
+    for nation in nations:
+        new_nation = deepcopy(nation)
+        change_id = system_request_change(
+            data_type="nations",
+            item_id=nation["_id"],
+            change_type="Update",
+            before_data=nation,
+            after_data=new_nation,
+            reason="Recalculate " + nation["name"] + " before event roll"
+        )
+        system_approve_change(change_id)
+    return True

@@ -25,6 +25,7 @@ def request_change(data_type, item_id, change_type, before_data, after_data, rea
         "target_collection": data_type,
         "target": item_id,
         "time_requested": now,
+        "last_modified_time": now,
         "requester": requester,
         "change_type": change_type,
         "before_requested_data": before_data,
@@ -55,6 +56,7 @@ def system_request_change(data_type, item_id, change_type, before_data, after_da
         "target_collection": data_type,
         "target": item_id,
         "time_requested": now,
+        "last_modified_time": now,
         "requester": requester,
         "change_type": change_type,
         "before_requested_data": before_data,
@@ -87,6 +89,7 @@ def approve_change(change_id):
             "target": inserted_item_id,
             "status": "Approved",
             "time_implemented": now,
+            "last_modified_time": now,
             "approver": approver["_id"],
             "before_implemented_data": {},
             "after_implemented_data": after_data
@@ -118,6 +121,7 @@ def approve_change(change_id):
             changes_collection.update_one({"_id": change_id}, {"$set": {
                 "status": "Approved",
                 "time_implemented": now,
+                "last_modified_time": now,
                 "approver": approver["_id"],
                 "before_implemented_data": before_data,
                 "after_implemented_data": after_data
@@ -153,6 +157,7 @@ def system_approve_change(change_id):
             "target": inserted_item_id,
             "status": "Approved",
             "time_implemented": now,
+            "last_modified_time": now,
             "approver": approver["_id"],
             "before_implemented_data": {},
             "after_implemented_data": after_data
@@ -183,6 +188,7 @@ def system_approve_change(change_id):
             changes_collection.update_one({"_id": change_id}, {"$set": {
                 "status": "Approved",
                 "time_implemented": now,
+                "last_modified_time": now,
                 "approver": approver["_id"],
                 "before_implemented_data": target,
                 "after_implemented_data": after_data
@@ -209,6 +215,7 @@ def deny_change(change_id):
     changes_collection.update_one({"_id": change_id}, {"$set": {
         "status": "Rejected",
         "time_rejected": now,
+        "last_modified_time": now,
         "denier": denier["_id"]
     }})
     return True
@@ -393,9 +400,12 @@ def get_dependent_objects(changed_data_type, changed_object_id, changed_object):
                 dependent_ids = []
                 if schema.get("properties")[local_field].get("queryTargetAttribute"):
                     db = mongo.db[category]
-                    new_id = _find_referencing_objects_single(db, ObjectId(changed_object.get(schema.get("properties")[local_field].get("queryTargetAttribute", ""), "")))
-                    if new_id:
-                        dependent_ids.append(new_id)
+                    try:
+                        new_id = _find_referencing_objects_single(db, ObjectId(changed_object.get(schema.get("properties")[local_field].get("queryTargetAttribute", ""), "")))
+                        if new_id:
+                            dependent_ids.append(new_id)
+                    except:
+                        pass
                 else:
                     for collection in schema.get("properties")[local_field].get("collections"):
                         db = mongo.db[collection]
