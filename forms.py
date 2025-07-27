@@ -6,7 +6,7 @@ from wtforms.validators import DataRequired, NumberRange, Optional, ValidationEr
 from bson import ObjectId
 from app_core import json_data, category_data, land_unit_json_files, naval_unit_json_files
 import json
-import copy
+from copy import deepcopy
 
 class FormGenerator:
     """Singleton class to manage form generation and caching"""
@@ -522,13 +522,12 @@ class BaseSchemaForm(FlaskForm):
 
         field_schema = schema.get("properties", {}).get(field_name, {})
         none_result = field_schema.get("noneResult", "None")
-        default_options = field_schema.get("default_options", [])
+        default_options = deepcopy(field_schema.get("default_options", []))
 
         if field_name == "owner": #For artifacts
             regions = category_data["regions"]["database"].find({}, {"name": 1}).sort("name", 1)
             for region in regions:
-                choice = "Lost in " + region["name"]
-                default_options.append(choice)
+                default_options.append("Lost in " + region["name"])
         
         choices = [("", none_result)] + [(option, option) for option in default_options]
         if field_name == "districts":
