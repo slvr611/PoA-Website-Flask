@@ -3,6 +3,7 @@ from app_core import mongo, category_data
 from flask import g, flash
 from calculations.field_calculations import calculate_all_fields
 from copy import deepcopy
+from bson import ObjectId
 
 def request_change(data_type, item_id, change_type, before_data, after_data, reason):
     requester = mongo.db.players.find_one({"id": g.user.get("id", None)})["_id"]
@@ -90,6 +91,14 @@ def approve_change(change_id):
             "before_implemented_data": {},
             "after_implemented_data": after_data
         }})
+
+        propagate_updates(
+            changed_data_type=change["target_collection"],
+            changed_object_id=inserted_item_id,
+            changed_object=merged,
+            reason=f"Dependency update from change #{change_id}"
+        )
+
         return True
     else:
         target = target_collection.find_one({"_id": change["target"]})
@@ -113,6 +122,14 @@ def approve_change(change_id):
                 "before_implemented_data": before_data,
                 "after_implemented_data": after_data
             }})
+
+            propagate_updates(
+                changed_data_type=change["target_collection"],
+                changed_object_id=change["target"],
+                changed_object=merged,
+                reason=f"Dependency update from change #{change_id}"
+            )
+
             return True
         else:
             flash("Change approval failed because the target has changed since the request was made.")
@@ -140,6 +157,13 @@ def system_approve_change(change_id):
             "before_implemented_data": {},
             "after_implemented_data": after_data
         }})
+
+        propagate_updates(
+            changed_data_type=change["target_collection"],
+            changed_object_id=inserted_item_id,
+            changed_object=merged,
+            reason=f"Dependency update from change #{change_id}"
+        )
         return True
     else:
         target = target_collection.find_one({"_id": change["target"]})
@@ -163,6 +187,13 @@ def system_approve_change(change_id):
                 "before_implemented_data": target,
                 "after_implemented_data": after_data
             }})
+
+            propagate_updates(
+                changed_data_type=change["target_collection"],
+                changed_object_id=change["target"],
+                changed_object=merged,
+                reason=f"Dependency update from change #{change_id}"
+            )
             return True
     return False
 
@@ -342,3 +373,83 @@ def check_no_other_changes(before_data, after_data, current_data):
             return False
     
     return True
+
+def get_dependent_objects(changed_data_type, changed_object_id, changed_object):
+    """Find all objects that depend on the changed object"""
+    dependent_objects = []
+    
+    # Check all schemas for external_calculation_requirements
+    for category, category_info in category_data.items():
+        schema = category_info.get("schema", {})
+        external_reqs = schema.get("external_calculation_requirements", {})
+        
+        if not external_reqs:
+            continue
+            
+        # Check if this category depends on the changed data type
+        for local_field, foreign_fields in external_reqs.items():
+            if _depends_on_data_type(changed_data_type, schema["properties"][local_field]):
+                # Find objects that reference the changed object
+                dependent_ids = []
+                if schema.get("properties")[local_field].get("queryTargetAttribute"):
+                    db = mongo.db[category]
+                    new_id = _find_referencing_objects_single(db, ObjectId(changed_object.get(schema.get("properties")[local_field].get("queryTargetAttribute", ""), "")))
+                    if new_id:
+                        dependent_ids.append(new_id)
+                else:
+                    for collection in schema.get("properties")[local_field].get("collections"):
+                        db = mongo.db[collection]
+                        dependent_ids += _find_referencing_objects_array(db, local_field, changed_object_id)
+
+                for dep_id in dependent_ids:
+                    dependent_objects.append({
+                        "data_type": category,
+                        "object_id": dep_id
+                    })
+    
+    return dependent_objects
+
+def _depends_on_data_type(data_type, field_schema):
+    """Check if requirements list depends on a specific data type"""
+    if (field_schema.get("bsonType") == "linked_object" or field_schema.get("bsonType") == "array") and field_schema.get("collections"):
+        if data_type in field_schema.get("collections"):
+            return True
+    return False
+
+def _find_referencing_objects_single(db, id):
+    """Find objects in category that reference the given ID in the specified field"""
+    return db.find_one({"_id": id})
+
+def _find_referencing_objects_array(db, target_field, id):
+    """Find objects in category that reference the given ID in the specified field"""
+    return list(db.find({target_field: id}))
+
+def propagate_updates(changed_data_type, changed_object_id, changed_object, reason="Dependency update"):
+    """Propagate updates to all dependent objects"""
+    dependent_objects = get_dependent_objects(changed_data_type, changed_object_id, changed_object)
+
+    for dep in dependent_objects:
+        try:
+            # Get the object and its schema
+            db = mongo.db[dep["data_type"]]
+            schema = category_data[dep["data_type"]]["schema"]
+            
+            old_object = db.find_one({"_id": dep["object_id"]["_id"]})
+            if not old_object:
+                continue
+
+            new_object = deepcopy(old_object)
+
+            # Create change request
+            change_id = system_request_change(
+                data_type=dep["data_type"],
+                item_id=old_object["_id"],
+                change_type="Update",
+                before_data=old_object,
+                after_data=new_object,
+                reason=f"{reason} - {changed_data_type} {changed_object_id} changed"
+            )
+            system_approve_change(change_id)
+            
+        except Exception as e:
+            print(f"Error updating {dep['data_type']} {dep['object_id']}: {e}")

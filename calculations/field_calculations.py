@@ -110,6 +110,8 @@ def calculate_all_fields(target, schema, target_data_type):
             )
             target[field] = calculated_values[field]
     
+    #print(overall_total_modifiers)
+    
     if target_data_type == "nation":
         food_consumption_per_pop = 1 + overall_total_modifiers.get("food_consumption_per_pop", 0)
         food_consumption = calculated_values.get("pop_count", 0) * food_consumption_per_pop
@@ -122,6 +124,7 @@ def calculate_all_fields(target, schema, target_data_type):
 
         if excess_food < -food_consumption / 2:
             #Nation is Starving
+            #print("Nation is Starving")
             overall_total_modifiers["strength"] = overall_total_modifiers.get("strength", 0) - 2
             modifier_totals["stability_loss_chance"] = modifier_totals.get("stability_loss_chance", 0) + 0.25
             modifier_totals["job_resource_production"] = modifier_totals.get("job_resource_production", 0) - 1
@@ -133,6 +136,7 @@ def calculate_all_fields(target, schema, target_data_type):
 
         elif excess_food < 0:
             #Nation is Underfed
+            #print("Nation is Underfed")
             overall_total_modifiers["strength"] = overall_total_modifiers.get("strength", 0) - 1
             modifier_totals["stability_loss_chance"] = modifier_totals.get("stability_loss_chance", 0) + 0.1
             modifier_totals["job_resource_production"] = modifier_totals.get("job_resource_production", 0) - 1
@@ -142,6 +146,7 @@ def calculate_all_fields(target, schema, target_data_type):
             modifier_totals["fisherman_food_production"] = modifier_totals.get("fisherman_food_production", 0) + 1
 
         if excess_food < food_consumption:
+            #print("Nation excess food is less than food consumption")
             job_details = calculate_job_details(target, district_details, modifier_totals, district_totals, tech_totals, city_totals, law_totals, external_modifiers_total)
             job_totals = sum_job_totals(target, target.get("jobs", {}), job_details)
             calculated_values["job_details"] = job_details

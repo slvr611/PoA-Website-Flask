@@ -14,7 +14,8 @@
       "wonders": ["external_modifiers", "node"],
       "region": ["external_modifiers"],
       "rulers": ["titles", "modifiers", {"artifacts": ["external_modifiers"]}],
-      "markets": ["market_safety_stance"]
+      "markets": ["market_safety_stance"],
+      "pops": []
     },
     "properties": {
       "name": {

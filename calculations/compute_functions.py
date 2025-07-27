@@ -216,7 +216,7 @@ def compute_stability_gain_chance(field, target, base_value, field_schema, overa
     minority_impact = 1 + overall_total_modifiers.get("minority_impact", 0)
     pop_count = target.get("pop_count", 0)
     road_usage = target.get("road_usage", 0)
-    war = False,
+    war = False
 
     production = compute_resource_production("resource_production", target, 0, {}, overall_total_modifiers)
 
