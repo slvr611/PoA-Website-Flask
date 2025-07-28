@@ -37,11 +37,11 @@
           },
           "Protect": {
             "nation_money_income_per_market_tier": -75,
-            "market_trade_risk": 0.05
+            "market_trade_risk": -0.05
           },
           "Preserve": {
             "nation_money_income_per_market_tier": -150,
-            "market_trade_risk": 0.08
+            "market_trade_risk": -0.08
           }
         }
       }

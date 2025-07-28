@@ -74,6 +74,13 @@ def calculate_all_fields(target, schema, target_data_type):
         job_details = calculate_job_details(target, district_details, modifier_totals, district_totals, tech_totals, city_totals, law_totals, external_modifiers_total)
     elif target_data_type == "character":
         title_modifiers = calculate_title_modifiers(target, target_data_type, schema_properties)
+    elif target_data_type == "market":
+        primary_resource = target.get("primary_resource", "")
+        secondary_resource_one = target.get("secondary_resource_one", "")
+        secondary_resource_two = target.get("secondary_resource_two", "")
+        law_totals[primary_resource + "_production"] = law_totals.get("primary_resource_production", 0)
+        law_totals[secondary_resource_one + "_production"] = law_totals.get("secondary_resource_production", 0)
+        law_totals[secondary_resource_two + "_production"] = law_totals.get("secondary_resource_production", 0)
 
     attributes_to_precalculate = ["administration", "effective_territory", "current_territory", "road_capacity", "effective_pop_capacity", "pop_count"]
 
@@ -110,7 +117,7 @@ def calculate_all_fields(target, schema, target_data_type):
             )
             target[field] = calculated_values[field]
     
-    #print(overall_total_modifiers)
+    print(overall_total_modifiers)
     
     if target_data_type == "nation":
         food_consumption_per_pop = 1 + overall_total_modifiers.get("food_consumption_per_pop", 0)
@@ -703,7 +710,28 @@ def collect_external_requirements(target, schema, target_data_type):
         for collection in collections:
             linked_object_schema = category_data.get(collection, {}).get("schema", {})
 
-            if field_schema.get("queryTargetAttribute"):
+            # Handle indirect links through join tables
+            if field_schema.get("linkCollection") and field_schema.get("linkQueryTarget"):
+                link_collection = field_schema["linkCollection"]
+                link_query_target = field_schema["linkQueryTarget"]
+                query_target = field_schema.get("queryTarget")
+                
+                if query_target:
+                    # Find all links in the join table
+                    links = list(mongo.db[link_collection].find({link_query_target: str(target["_id"])}))
+                    
+                    for link in links:
+                        # Check the link object itself for modifiers
+                        collected_modifiers.extend(collect_external_modifiers_from_object(link, required_fields, category_data.get(link_collection, {}).get("schema", {}), target_data_type))
+                        
+                        # Get the target object and check it too
+                        if query_target in link:
+                            target_id = link[query_target]
+                            target_object = mongo.db[collection].find_one({"_id": ObjectId(target_id)})
+                            if target_object:
+                                collected_modifiers.extend(collect_external_modifiers_from_object(target_object, required_fields, linked_object_schema, target_data_type))
+            
+            elif field_schema.get("queryTargetAttribute"):
                 query_target = field_schema["queryTargetAttribute"]
                 linked_objects = []
 
@@ -739,7 +767,28 @@ def collect_external_modifiers_from_object(object, required_fields, linked_objec
                 for collection in collections:
                     linked_object_schema = category_data.get(collection, {}).get("schema", {})
 
-                    if req_field_schema.get("queryTargetAttribute"):
+                    # Handle indirect links through join tables
+                    if req_field_schema.get("linkCollection") and req_field_schema.get("linkQueryTarget"):
+                        link_collection = req_field_schema["linkCollection"]
+                        link_query_target = req_field_schema["linkQueryTarget"]
+                        query_target = req_field_schema.get("queryTarget")
+                        
+                        if query_target:
+                            # Find all links in the join table
+                            links = list(mongo.db[link_collection].find({link_query_target: str(object["_id"])}))
+                            
+                            for link in links:
+                                # Check the link object itself for modifiers
+                                collected_modifiers.extend(collect_external_modifiers_from_object(link, value, category_data.get(link_collection, {}).get("schema", {}), target_data_type))
+                                
+                                # Get the target object and check it too
+                                if query_target in link:
+                                    target_id = link[query_target]
+                                    target_object = mongo.db[collection].find_one({"_id": ObjectId(target_id)})
+                                    if target_object:
+                                        collected_modifiers.extend(collect_external_modifiers_from_object(target_object, value, linked_object_schema, target_data_type))
+                    
+                    elif req_field_schema.get("queryTargetAttribute"):
                         query_target = req_field_schema["queryTargetAttribute"]
                         linked_objects = list(mongo.db[collection].find({query_target: str(object["_id"])}))
                         for object in linked_objects:

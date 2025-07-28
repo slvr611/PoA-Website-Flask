@@ -422,7 +422,7 @@ def compute_resource_excess(field, target, base_value, field_schema, overall_tot
     
     return excess_dict
 
-def compute_resource_storage_capacity(field, target, base_value, field_schema, overall_total_modifiers):
+def compute_nation_resource_storage_capacity(field, target, base_value, field_schema, overall_total_modifiers):
     storage_dict = {}
     
     all_resources = json_data["general_resources"] + json_data["unique_resources"]
@@ -432,6 +432,19 @@ def compute_resource_storage_capacity(field, target, base_value, field_schema, o
         specific_resource_storage += overall_total_modifiers.get(resource["key"] + "_storage_capacity", 0)
         if specific_resource_storage > 0:
             specific_resource_storage += overall_total_modifiers.get("resource_storage_capacity", 0)
+        storage_dict[resource["key"]] = int(specific_resource_storage)
+    
+    return storage_dict
+
+def compute_market_resource_storage_capacity(field, target, base_value, field_schema, overall_total_modifiers):
+    storage_dict = {}
+    
+    all_resources = json_data["general_resources"] + json_data["unique_resources"]
+    
+    for resource in all_resources:
+        specific_resource_storage = 0
+        specific_resource_storage += overall_total_modifiers.get(resource["key"] + "_storage_capacity", 0)
+        specific_resource_storage += overall_total_modifiers.get("resource_storage_capacity", 0)
         storage_dict[resource["key"]] = int(specific_resource_storage)
     
     return storage_dict
@@ -725,7 +738,8 @@ CUSTOM_COMPUTE_FUNCTIONS = {
     "resource_production": compute_resource_production,
     "resource_consumption": compute_resource_consumption,
     "resource_excess": compute_resource_excess,
-    "resource_capacity": compute_resource_storage_capacity,
+    "nation_resource_capacity": compute_nation_resource_storage_capacity,
+    "market_resource_capacity": compute_market_resource_storage_capacity,
     "export_slots": compute_export_slots,
     "import_slots": compute_import_slots,
     "remaining_export_slots": compute_remaining_export_slots,

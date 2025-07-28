@@ -152,6 +152,29 @@ def tick(form_data):
                 for i in range(len(old_factions)):
                     tick_summary += tick_function(old_factions[i], new_factions[i], faction_schema)
 
+    collect_market_data = False
+    for tick_function_label, tick_function in MARKET_TICK_FUNCTIONS.items():
+        run_key = f"run_{tick_function_label}"
+        if run_key in form_data:
+            collect_market_data = True
+            break
+    
+    if collect_market_data:
+        market_schema, market_db = get_data_on_category("markets")
+        old_markets = list(market_db.find().sort("name", ASCENDING))
+        new_markets = []
+        for market in old_markets:
+            if market:
+                market.update(calculate_all_fields(market, market_schema, "market"))
+                new_markets.append(deepcopy(market))
+
+        for tick_function_label, tick_function in MARKET_TICK_FUNCTIONS.items():
+            run_key = f"run_{tick_function_label}"
+            if run_key in form_data:
+                print(tick_function_label)
+                for i in range(len(old_markets)):
+                    tick_summary += tick_function(old_markets[i], new_markets[i], market_schema)
+
 
 
     collect_nation_data = False
@@ -247,6 +270,18 @@ def tick(form_data):
                 before_data=old_factions[i],
                 after_data=new_factions[i],
                 reason="Tick Update for " + old_factions[i]["name"]
+            )
+            system_approve_change(change_id)
+
+    if collect_market_data:
+        for i in range(len(old_markets)):
+            change_id = system_request_change(
+                data_type="markets",
+                item_id=old_markets[i]["_id"],
+                change_type="Update",
+                before_data=old_markets[i],
+                after_data=new_markets[i],
+                reason="Tick Update for " + old_markets[i]["name"]
             )
             system_approve_change(change_id)
 
@@ -390,10 +425,7 @@ def character_death_tick(old_character, new_character, schema):
                 system_approve_change(change_id)
         
         artifact_schema, artifact_db = get_data_on_category("artifacts")
-        try:
-            artifacts = list(artifact_db.find({"owner": ObjectId(old_character.get("_id", ""))})) #Maybe this needs to be a string?  Dunno
-        except:
-            artifacts = []
+        artifacts = list(artifact_db.find({"owner": str(old_character.get("_id", ""))}))
         for old_artifact in artifacts:
             if old_artifact:
                 old_artifact.update(calculate_all_fields(old_artifact, artifact_schema, "artifact"))
@@ -488,6 +520,18 @@ def faction_income_tick(old_faction, new_faction, schema):
     new_faction["influence"] = int(old_faction.get("influence", 0)) + old_faction.get("influence_income", 0)
     return ""
 
+###########################################################
+# Market Tick Functions
+###########################################################
+
+def market_income_tick(old_market, new_market, schema):
+    new_market["resource_storage"] = {}
+    for resource, amount in old_market.get("resource_production", {}).items():
+        new_market["resource_storage"][resource] = old_market.get("resource_storage", {}).get(resource, 0) + amount
+        new_market["resource_storage"][resource] = min(new_market["resource_storage"][resource], old_market.get("market_resource_capacity", {}).get(resource, 0))
+        new_market["resource_storage"][resource] = max(new_market["resource_storage"][resource], 0)
+        new_market["resource_storage"][resource] = int(new_market["resource_storage"][resource])
+    return ""
 
 ###########################################################
 # Nation Tick Functions
@@ -884,6 +928,10 @@ MERCENARY_TICK_FUNCTIONS = {
 FACTION_TICK_FUNCTIONS = {
     "Faction Income Tick": faction_income_tick,
     "Faction Progress Quests Tick": progress_quests_tick,
+}
+
+MARKET_TICK_FUNCTIONS = {
+    "Market Income Tick": market_income_tick,
 }
 
 NATION_TICK_FUNCTIONS = {

@@ -98,7 +98,7 @@ def approve_change(change_id):
         propagate_updates(
             changed_data_type=change["target_collection"],
             changed_object_id=inserted_item_id,
-            changed_object=merged,
+            changed_object=after_data,
             reason=f"Dependency update from change #{change_id}"
         )
 
@@ -166,7 +166,7 @@ def system_approve_change(change_id):
         propagate_updates(
             changed_data_type=change["target_collection"],
             changed_object_id=inserted_item_id,
-            changed_object=merged,
+            changed_object=after_data,
             reason=f"Dependency update from change #{change_id}"
         )
         return True

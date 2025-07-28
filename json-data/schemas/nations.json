@@ -146,90 +146,91 @@
       "format": "percentage"
         },
       "stability": {
-          "bsonType": "enum",
-      "label": "Stability",
-          "description": "The nation's level of stability",
-      "enum": ["Fragile", "Unsettled", "Balanced", "Stable", "United"],
-      "default": "Balanced",
-      "laws": {
-        "Fragile": {
-          "civil_war_chance": 0.2,
-          "karma": -2
-        },
-        "Unsettled": {
-          "karma": -2
-        },
-        "Balanced": {},
-        "Stable": {
-          "stability_loss_chance": 0.15,
-          "karma": 2
-        },
-        "United": {
-          "stability_loss_chance": 0.35,
-          "karma": 2
+        "bsonType": "enum",
+        "label": "Stability",
+        "description": "The nation's level of stability",
+        "enum": ["Fragile", "Unsettled", "Balanced", "Stable", "United"],
+        "default": "Balanced",
+        "laws": {
+          "Fragile": {
+            "civil_war_chance": 0.2,
+            "karma": -2
+          },
+          "Unsettled": {
+            "karma": -2
+          },
+          "Balanced": {},
+          "Stable": {
+            "stability_loss_chance": 0.15,
+            "karma": 2
+          },
+          "United": {
+            "stability_loss_chance": 0.35,
+            "karma": 2
+          }
         }
-      }
-        },
+      },
       "stability_loss_chance_on_leader_death": {
-          "bsonType": "number",
-          "label": "Stability Loss Chance On Leader Death",
-          "description": "The nation's percentage chance of losing a level of stability when their leader dies",
-          "calculated": true,
-          "format": "percentage"
-        },
-        "vampirism_chance": {
-          "bsonType": "number",
-          "label": "Vampirism Chance",
-          "description": "The nation's percentage chance of a vampire rising each tick",
-          "calculated": true,
-          "format": "percentage"
-        },
-        "pop_loss_chance": {
-          "bsonType": "number",
-          "label": "Pop Loss Chance",
-          "description": "The nation's percentage chance of losing a pop each tick",
-          "calculated": true,
-          "format": "percentage"
-        },
+        "bsonType": "number",
+        "label": "Stability Loss Chance On Leader Death",
+        "description": "The nation's percentage chance of losing a level of stability when their leader dies",
+        "calculated": true,
+        "format": "percentage"
+      },
+      "vampirism_chance": {
+        "bsonType": "number",
+        "label": "Vampirism Chance",
+        "description": "The nation's percentage chance of a vampire rising each tick",
+        "calculated": true,
+        "format": "percentage"
+      },
+      "pop_loss_chance": {
+        "bsonType": "number",
+        "label": "Pop Loss Chance",
+        "description": "The nation's percentage chance of losing a pop each tick",
+        "calculated": true,
+        "format": "percentage"
+      },
       "infamy": {
-          "bsonType": "number",
-      "label": "Infamy",
-          "description": "The nation's current level of infamy",
-      "default": 0
-        },
+        "bsonType": "number",
+        "label": "Infamy",
+        "description": "The nation's current level of infamy",
+        "default": 0
+      },
       "wars": {
-          "bsonType": "array",
-      "label": "Wars",
-          "description": "The list of wars the nation is currently fighting, if any",
-      "linkCollection": "war_links",
-      "linkQueryTarget": "participant",
-      "collections": ["wars"],
-      "queryTarget": "war"
-        },
+        "bsonType": "array",
+        "label": "Wars",
+        "description": "The list of wars the nation is currently fighting, if any",
+        "linkCollection": "war_links",
+        "linkQueryTarget": "participant",
+        "collections": ["wars"],
+        "queryTarget": "war"
+      },
       "markets": {
-          "bsonType": "array",
-      "label": "Markets",
-          "description": "The list of markets the nation is currently a part of, if any",
-      "linkCollection": "market_links",
-      "linkQueryTarget": "member",
-      "collections": ["markets"],
-      "queryTarget": "market",
-      "preview": ["tier"]
-        },
+        "bsonType": "array",
+        "label": "Markets",
+        "description": "The list of markets the nation is currently a part of, if any",
+        "linkCollection": "market_links",
+        "linkQueryTarget": "member",
+        "collections": ["markets"],
+        "queryTarget": "market",
+        "preview": ["primary_resource", "secondary_resource_one", "secondary_resource_two"],
+        "items": {}
+      },
       "factions": {
-          "bsonType": "array",
-      "label": "Factions",
-          "description": "The list of factions currently based in the nation, if any",
-      "collections": ["factions"],
-      "queryTargetAttribute": "base"
-        },
+        "bsonType": "array",
+        "label": "Factions",
+        "description": "The list of factions currently based in the nation, if any",
+        "collections": ["factions"],
+        "queryTargetAttribute": "base"
+      },
       "hired_mercenaries": {
-          "bsonType": "array",
-      "label": "Hired Mercenaries",
-          "description": "The list of mercenaries the nation has currently employed",
-      "collections": ["mercenaries"],
-      "queryTargetAttribute": "patron"
-        },
+        "bsonType": "array",
+        "label": "Hired Mercenaries",
+        "description": "The list of mercenaries the nation has currently employed",
+        "collections": ["mercenaries"],
+        "queryTargetAttribute": "patron"
+      },
       "money": {
           "bsonType": "number",
       "label": "Money",
@@ -417,21 +418,21 @@
       "preview": ["name", "compliance", "disobey_chance", "rebellion_chance", "concessions_chance", "concessions", "temperament"]
         },
       "diplomatic_relations_1": {
-          "bsonType": "array",
-      "label": "Diplomatic Relations",
-          "description": "The list of relations this nation has with other nations",
-      "collections": ["diplo_relations"],
-      "queryTargetAttribute": "nation_1",
-      "preview": ["nation_2", "relation", "pact_type"]
-        },
+        "bsonType": "array",
+        "label": "Diplomatic Relations",
+        "description": "The list of relations this nation has with other nations",
+        "collections": ["diplo_relations"],
+        "queryTargetAttribute": "nation_1",
+        "preview": ["nation_2", "relation", "pact_type"]
+      },
       "diplomatic_relations_2": {
-          "bsonType": "array",
-      "label": "Diplomatic Relations",
-          "description": "The list of relations this nation has with other nations",
-      "collections": ["diplo_relations"],
-      "queryTargetAttribute": "nation_2",
-      "preview": ["nation_1", "relation", "pact_type"]
-        },
+        "bsonType": "array",
+        "label": "Diplomatic Relations",
+        "description": "The list of relations this nation has with other nations",
+        "collections": ["diplo_relations"],
+        "queryTargetAttribute": "nation_2",
+        "preview": ["nation_1", "relation", "pact_type"]
+      },
       "working_pop_count": {
           "bsonType": "number",
       "label": "Working Pops Count",
@@ -1176,7 +1177,7 @@
       "label": "Resource Storage",
           "description": "The resource reserves of the nation"
         },
-      "resource_capacity": {
+      "nation_resource_capacity": {
           "bsonType": "object",
       "label": "Resource Capacity",
           "description": "The resource reserves of the nation",

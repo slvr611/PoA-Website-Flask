@@ -28,10 +28,43 @@
                     and not (properties.hideIfNone is defined and (item.get(properties.hideIfNone) is none or item.get(properties.hideIfNone) == "" or not item.get(properties.hideIfNone)))%}
                         <tr>
                             <th><strong>{{ properties.label }}:</strong></th>
-                            {% if properties.bsonType == "string" or properties.bsonType == "enum" or properties.bsonType == "date"%}
+                            {% if field == "resource_storage" %}
+                                <td>
+                                    <table class="resources-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Resource</th>
+                                                <th>Production</th>
+                                                <th>Storage</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr>
+                                                <td>{{ item.primary_resource }}</td>
+                                                <td>{{ item.get("resource_production", {}).get(item.primary_resource, 0) }}</td>
+                                                <td>{{ item.get("resource_storage", {}).get(item.primary_resource, 0) }}/{{ item.get("market_resource_capacity", {}).get(item.primary_resource, 0) }}</td>
+                                            </tr>
+                                            <tr>
+                                                <td>{{ item.secondary_resource_one }}</td>
+                                                <td>{{ item.get("resource_production", {}).get(item.secondary_resource_one, 0) }}</td>
+                                                <td>{{ item.get("resource_storage", {}).get(item.secondary_resource_one, 0) }}/{{ item.get("market_resource_capacity", {}).get(item.secondary_resource_one, 0) }}</td>
+                                            </tr>
+                                            <tr>
+                                                <td>{{ item.secondary_resource_two }}</td>
+                                                <td>{{ item.get("resource_production", {}).get(item.secondary_resource_two, 0) }}</td>
+                                                <td>{{ item.get("resource_storage", {}).get(item.secondary_resource_two, 0) }}/{{ item.get("market_resource_capacity", {}).get(item.secondary_resource_two, 0) }}</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </td>
+                            {% elif properties.bsonType == "string" or properties.bsonType == "enum" or properties.bsonType == "date" or properties.bsonType == "json_resource_enum" %}
                                 <td>{{ item[field] }}</td>
                             {% elif properties.bsonType == "number" %}
-                                <td>{{ item[field] }}</td>
+                                {% if properties.format == "percentage" %}
+                                    <td>{{ (item.get(field, 0) * 100)|int }}%</td>
+                                {% else %}
+                                    <td>{{ item.get(field, 0) }}</td>
+                                {% endif %}
                             {% elif properties.bsonType == "linked_object" %}
                                 <td>
                                     {% if field in linked_objects and linked_objects[field] is not none %}
@@ -40,6 +73,19 @@
                                         None
                                     {% endif %}
                                 </td>
+                            {% elif properties.bsonType == "object" %}
+								<td>
+                                    <table class="compact-table resource-table">
+                                        <tbody>
+                                            {% for resource_key, resource_value in item.get(field, {}).items()|sort %}
+                                                <tr>
+                                                    <th>{{ resource_key }}</th>
+                                                    <td>{{ resource_value }}</td>
+                                                </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+								</td>
                             {% elif properties.bsonType == "array" %}
                                 <td>
                                     {% if field in linked_objects and linked_objects[field] %}
