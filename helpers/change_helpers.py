@@ -126,13 +126,20 @@ def approve_change(change_id):
                 "before_implemented_data": before_data,
                 "after_implemented_data": after_data
             }})
-
-            propagate_updates(
-                changed_data_type=change["target_collection"],
-                changed_object_id=change["target"],
-                changed_object=merged,
-                reason=f"Dependency update from change #{change_id}"
-            )
+            if change["change_type"] == "Update":
+                propagate_updates(
+                    changed_data_type=change["target_collection"],
+                    changed_object_id=change["target"],
+                    changed_object=merged,
+                    reason=f"Dependency update from change #{change_id}"
+                )
+            else:
+                propagate_updates(
+                    changed_data_type=change["target_collection"],
+                    changed_object_id=change["target"],
+                    changed_object={},
+                    reason=f"Dependency update from change #{change_id}"
+                )
 
             return True
         else:
@@ -193,13 +200,21 @@ def system_approve_change(change_id):
                 "before_implemented_data": target,
                 "after_implemented_data": after_data
             }})
-
-            propagate_updates(
-                changed_data_type=change["target_collection"],
-                changed_object_id=change["target"],
-                changed_object=merged,
-                reason=f"Dependency update from change #{change_id}"
-            )
+            
+            if change["change_type"] == "Update":
+                propagate_updates(
+                    changed_data_type=change["target_collection"],
+                    changed_object_id=change["target"],
+                    changed_object=merged,
+                    reason=f"Dependency update from change #{change_id}"
+                )
+            else:
+                propagate_updates(
+                    changed_data_type=change["target_collection"],
+                    changed_object_id=change["target"],
+                    changed_object={},
+                    reason=f"Dependency update from change #{change_id}"
+                )
             return True
     return False
 
