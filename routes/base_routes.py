@@ -55,6 +55,15 @@ def home():
     current_session = global_modifiers.get("session_counter", 1)
     return render_template("index.html", current_session=current_session)
 
+@base_routes.route("/map")
+def map():
+    global_modifiers = mongo.db.global_modifiers.find_one({"name": "global_modifiers"})
+    if not global_modifiers:
+        global_modifiers = {"name": "global_modifiers"}
+        mongo.db.global_modifiers.insert_one(global_modifiers)
+    current_session = global_modifiers.get("session_counter", 1)
+    return render_template("map.html", current_session=current_session)
+
 @base_routes.route("/go_back")
 def go_back():
     previous_url = session.get('second_previous_url', url_for("base_routes.home"))

@@ -1,0 +1,271 @@
+{% extends "layout.html" %}
+
+{% block title %}Path of Ages - Interactive Map{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="map-controls">
+        <div class="button-group">
+            <button id="map1-btn" class="map-btn active">Political Map</button>
+            <button id="map2-btn" class="map-btn">Terrain Map</button>
+        </div>
+        <div class="session-selector">
+            <label for="session-select">Session: </label>
+            <select id="session-select">
+                {% for session in range(current_session, 0, -1) %}
+                    <option value="{{ session }}" {% if loop.first %}selected{% endif %}>Session {{ session }}</option>
+                {% endfor %}
+            </select>
+            <div class="era-display">
+                <span id="era-age-text">Unknown | Unknown</span>
+            </div>
+        </div>
+        <div class="slider-container">
+            <label for="opacity-slider">Overlay Opacity: </label>
+            <input type="range" id="opacity-slider" min="0" max="100" value="0">
+            <span id="opacity-value">0%</span>
+        </div>
+    </div>
+    <div id="map-viewer" class="map-viewer"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/openseadragon@3.1.0/build/openseadragon/openseadragon.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const sessionSelect = document.getElementById('session-select');
+    const currentSession = parseInt(sessionSelect.value);
+    const maxSession = parseInt(sessionSelect.options[0].value);
+    const eraAgeText = document.getElementById('era-age-text');
+    
+    // Define eras and ages based on session numbers
+    const eraData = [
+        { maxSession: 7, era: "Tribal Era", age: "Age of Stone" },
+        { maxSession: 17, era: "Tribal Era", age: "Age of Fire" },
+        { maxSession: 28, era: "Ancient Era", age: "Age of Myth" },
+        { maxSession: 42, era: "Ancient Era", age: "Age of Bronze" },
+        { maxSession: 99, era: "Classical Era", age: "Age of Wonder" },
+    ];
+    
+    function updateEraAge(sessionNum) {
+        for (const data of eraData) {
+            if (sessionNum <= data.maxSession) {
+                eraAgeText.textContent = `${data.era} | ${data.age}`;
+                break;
+            }
+        }
+    }
+    
+    // Update era/age when session changes
+    sessionSelect.addEventListener('change', () => {
+        const selectedSession = parseInt(sessionSelect.value);
+        updateEraAge(selectedSession);
+        updateMapVisibility();
+    });
+    
+    // Initialize era/age display
+    updateEraAge(currentSession);
+    
+    const viewer = OpenSeadragon({
+        id: "map-viewer",
+        prefixUrl: "https://cdn.jsdelivr.net/npm/openseadragon@3.1.0/build/openseadragon/images/",
+        showNavigationControl: true,
+        navigatorPosition: "BOTTOM_RIGHT",
+        maxZoomPixelRatio: 2,
+        minZoomImageRatio: 0.1,
+        visibilityRatio: 0.1,
+        immediateRender: true,
+        blendTime: 0,
+        animationTime: 0.5,
+        tileCache: 1000
+    });
+
+    const loadedSessions = {}; // { sessionNum: { political: TiledImage, terrain: TiledImage } }
+    let currentMapType = 'political';
+    let loadingInProgress = false;
+    let loadQueue = [];
+
+    // Track opacity slider
+    const opacitySlider = document.getElementById('opacity-slider');
+    const opacityValue = document.getElementById('opacity-value');
+
+    function updateMapVisibility() {
+        const selectedSession = parseInt(sessionSelect.value);
+        const sliderVal = parseInt(opacitySlider.value);
+
+        // Hide all maps
+        for (const session in loadedSessions) {
+            if (loadedSessions[session].political) loadedSessions[session].political.setOpacity(0);
+            if (loadedSessions[session].terrain) loadedSessions[session].terrain.setOpacity(0);
+        }
+
+        // Show selected maps
+        const sessionMaps = loadedSessions[selectedSession];
+        if (sessionMaps) {
+            const politicalOpacity = 1 - (sliderVal / 100);
+            const terrainOpacity = sliderVal / 100;
+            if (sessionMaps.political) sessionMaps.political.setOpacity(politicalOpacity);
+            if (sessionMaps.terrain) sessionMaps.terrain.setOpacity(terrainOpacity);
+        } else {
+            // If maps aren't loaded yet, load them
+            loadSession(selectedSession, true);
+        }
+    }
+
+    function getTerrainMapPath(sessionNum, basePath) {
+        if (sessionNum <= 17) {
+            return basePath + "PoA_Geographical_Map_Tribal.dzi";
+        } else if (sessionNum <= 42) {
+            return basePath + "PoA_Terrain_Map_Ancient.dzi";
+        } else {
+            return basePath + "PoA_Terrain_Map_Classical.dzi";
+        }
+    }
+
+    function loadSession(sessionNum, isPriority = false) {
+        // Don't load if already loaded or in queue
+        if (loadedSessions[sessionNum] || loadQueue.includes(sessionNum)) return;
+        
+        // Add to queue
+        if (isPriority) {
+            loadQueue.unshift(sessionNum); // Add to front of queue
+        } else {
+            loadQueue.push(sessionNum); // Add to end of queue
+        }
+        
+        // Start processing queue if not already in progress
+        if (!loadingInProgress) {
+            processLoadQueue();
+        }
+    }
+    
+    function processLoadQueue() {
+        if (loadQueue.length === 0) {
+            loadingInProgress = false;
+            return;
+        }
+        
+        loadingInProgress = true;
+        const sessionNum = loadQueue.shift();
+        
+        // Skip if already loaded (might have been loaded by another request)
+        if (loadedSessions[sessionNum]) {
+            processLoadQueue();
+            return;
+        }
+        
+        loadedSessions[sessionNum] = {};
+        const basePath = "https://poa-website-static-assets.s3.us-east-1.amazonaws.com/maps/";
+        let loadedCount = 0;
+        
+        // Function to check if both maps are loaded
+        const checkBothLoaded = () => {
+            loadedCount++;
+            if (loadedCount === 2) {
+                // Both maps loaded, continue with next in queue
+                setTimeout(processLoadQueue, 100);
+                
+                // If this was the current session, update visibility
+                if (parseInt(sessionSelect.value) === sessionNum) {
+                    updateMapVisibility();
+                }
+            }
+        };
+
+        viewer.addTiledImage({
+            tileSource: `${basePath}PoA_Political_Map_Session_${sessionNum}.dzi`,
+            buildPyramid: false,
+            opacity: 0,
+            success: ({ item }) => {
+                loadedSessions[sessionNum].political = item;
+                checkBothLoaded();
+            },
+            error: () => {
+                console.error(`Failed to load political map for session ${sessionNum}`);
+                checkBothLoaded();
+            }
+        });
+
+        viewer.addTiledImage({
+            tileSource: getTerrainMapPath(sessionNum, basePath),
+            buildPyramid: false,
+            opacity: 0,
+            success: ({ item }) => {
+                loadedSessions[sessionNum].terrain = item;
+                checkBothLoaded();
+            },
+            error: () => {
+                console.error(`Failed to load terrain map for session ${sessionNum}`);
+                checkBothLoaded();
+            }
+        });
+    }
+
+    // Load only the current session immediately
+    loadSession(currentSession, true);
+
+    // Session selector logic
+    sessionSelect.addEventListener('change', () => {
+        const selectedSession = parseInt(sessionSelect.value);
+        updateEraAge(selectedSession);
+        
+        // Load the selected session if not already loaded
+        loadSession(selectedSession, true);
+        
+        // Update visibility
+        updateMapVisibility();
+    });
+
+    // Map swap buttons
+    const map1Btn = document.getElementById('map1-btn');
+    const map2Btn = document.getElementById('map2-btn');
+
+    map1Btn.addEventListener('click', () => {
+        opacitySlider.value = 0;
+        opacityValue.textContent = '0%';
+        currentMapType = 'political';
+        map1Btn.classList.add('active');
+        map2Btn.classList.remove('active');
+        updateMapVisibility();
+    });
+
+    map2Btn.addEventListener('click', () => {
+        opacitySlider.value = 100;
+        opacityValue.textContent = '100%';
+        currentMapType = 'terrain';
+        map2Btn.classList.add('active');
+        map1Btn.classList.remove('active');
+        updateMapVisibility();
+    });
+
+    // Slider listener
+    opacitySlider.addEventListener('input', function () {
+        const val = parseInt(this.value);
+        opacityValue.textContent = val + '%';
+        currentMapType = val < 50 ? 'political' : 'terrain';
+        map1Btn.classList.toggle('active', val < 50);
+        map2Btn.classList.toggle('active', val >= 50);
+        updateMapVisibility();
+    });
+
+    // Add preload functionality for adjacent sessions
+    function preloadAdjacentSessions() {
+        const currentSessionNum = parseInt(sessionSelect.value);
+        
+        // Preload one session before and one after the current session
+        if (currentSessionNum > 1) {
+            loadSession(currentSessionNum - 1);
+        }
+        
+        if (currentSessionNum < maxSession) {
+            loadSession(currentSessionNum + 1);
+        }
+    }
+    
+    // Preload adjacent sessions after a delay
+    setTimeout(preloadAdjacentSessions, 3000);
+
+    // Initial render update
+    setTimeout(updateMapVisibility, 500);
+});
+</script>
+{% endblock %}
