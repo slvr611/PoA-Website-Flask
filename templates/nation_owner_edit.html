@@ -542,7 +542,7 @@
                                         <td>{{ nation.resource_consumption[resource.key] if resource.key in nation.resource_consumption else 0 }}</td>
                                         {% set excess_value = nation.get("resource_excess", {}).get(resource["key"], 0) %}
                                         {% set storage = nation.get("resource_storage", {}).get(resource["key"], 0) %}
-                                        {% set capacity = nation.get("resource_capacity", {}).get(resource["key"], 0) %}
+                                        {% set capacity = nation.get("nation_resource_capacity", {}).get(resource["key"], 0) %}
                                         {% if excess_value + storage < 0 %}
                                             <td class="excess-critical-negative">{{ excess_value }}</td>
                                         {% elif excess_value < 0 %}
@@ -554,7 +554,7 @@
                                         {% else %}
                                             <td>{{ excess_value }}</td>
                                         {% endif %}
-                                        <td>{{ form.resource_storage[resource.key](class="form-control") }} / {{ nation.resource_capacity[resource.key] if resource.key in nation.resource_capacity else 0 }}</td>
+                                        <td>{{ form.resource_storage[resource.key](class="form-control") }} / {{ nation.nation_resource_capacity[resource.key] if resource.key in nation.nation_resource_capacity else 0 }}</td>
                                     </tr>
                                 {% endfor %}
                             </tbody>
@@ -585,7 +585,7 @@
                                         {% else %}
                                             <td>{{ excess_value }}</td>
                                         {% endif %}
-                                        <td>{{ form.resource_storage[resource.key](class="form-control") }} / {{ nation.resource_capacity[resource.key] if resource.key in nation.resource_capacity else 0 }}</td>
+                                        <td>{{ form.resource_storage[resource.key](class="form-control") }} / {{ nation.nation_resource_capacity[resource.key] if resource.key in nation.nation_resource_capacity else 0 }}</td>
                                     </tr>
                                 {% endfor %}
                             </tbody>

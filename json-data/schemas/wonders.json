@@ -13,7 +13,8 @@
                 "bsonType": "enum",
                 "label": "Era Created",
                 "description": "The era the wonder was created in",
-                "enum": ["Ancient", "Classical", "Medieval", "Industrial", "Modern", "Crisis"]
+                "enum": ["Ancient", "Classical", "Medieval", "Industrial", "Modern", "Crisis"],
+                "default": "Classical"
             },
             "legacy_status": {
                 "bsonType": "boolean",

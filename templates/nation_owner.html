@@ -722,7 +722,7 @@
 									<td>{{ nation.get("resource_consumption", {}).get(resource["key"], 0) }}</td>
 									{% set excess_value = nation.get("resource_excess", {}).get(resource["key"], 0) %}
 									{% set storage = nation.get("resource_storage", {}).get(resource["key"], 0) %}
-									{% set capacity = nation.get("resource_capacity", {}).get(resource["key"], 0) %}
+									{% set capacity = nation.get("nation_resource_capacity", {}).get(resource["key"], 0) %}
 
 									{% if excess_value + storage < 0 %}
                                             <td class="excess-critical-negative">{{ excess_value }}</td>
@@ -735,7 +735,7 @@
                                         {% else %}
                                             <td>{{ excess_value }}</td>
 									{% endif %}
-									<td>{{ nation.get("resource_storage", {}).get(resource["key"], 0) }} / {{ nation.get("resource_capacity", {}).get(resource["key"], 0) }}</td>
+									<td>{{ nation.get("resource_storage", {}).get(resource["key"], 0) }} / {{ nation.get("nation_resource_capacity", {}).get(resource["key"], 0) }}</td>
 								</tr>
 							{% endfor %}
 						</tbody>
@@ -766,7 +766,7 @@
 									{% else %}
 										<td>{{ excess_value }}</td>
 									{% endif %}
-									<td>{{ nation.get("resource_storage", {}).get(resource["key"], 0) }} / {{ nation.get("resource_capacity", {}).get(resource["key"], 0) }}</td>
+									<td>{{ nation.get("resource_storage", {}).get(resource["key"], 0) }} / {{ nation.get("nation_resource_capacity", {}).get(resource["key"], 0) }}</td>
 								</tr>
 							{% endfor %}
 						</tbody>
