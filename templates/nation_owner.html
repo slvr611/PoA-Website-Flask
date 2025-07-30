@@ -759,8 +759,14 @@
 									<td>{{ nation.get("resource_production", {}).get(resource["key"], 0) }}</td>
 									<td>{{ nation.get("resource_consumption", {}).get(resource["key"], 0) }}</td>
 									{% set excess_value = nation.get("resource_excess", {}).get(resource["key"], 0) %}
-									{% if excess_value < 0 %}
+									{% set storage = nation.get("resource_storage", {}).get(resource["key"], 0) %}
+									{% set capacity = nation.get("nation_resource_capacity", {}).get(resource["key"], 0) %}
+									{% if excess_value + storage < 0 %}
+										<td class="excess-critical-negative">{{ excess_value }}</td>
+									{% elif excess_value < 0 %}
 										<td class="excess-negative">{{ excess_value }}</td>
+									{% elif excess_value + storage > capacity %}
+										<td class="excess-overflow">{{ excess_value }}</td>
 									{% elif excess_value > 0 %}
 										<td class="excess-positive">{{ excess_value }}</td>
 									{% else %}
