@@ -1045,19 +1045,33 @@
       "calculated": true
         },
       "defensive_pact_slots": {
-          "bsonType": "number",
-      "label": "Defensive Pact Slots",
-          "description": "The number of defensive pacts the nation can support",
-      "calculated": true,
-      "base_value": 1
-        },
+        "bsonType": "number",
+        "label": "Defensive Pact Slots",
+        "description": "The number of defensive pacts the nation can support",
+        "calculated": true,
+        "base_value": 1
+      },
       "military_alliance_slots": {
-          "bsonType": "number",
-      "label": "Military Alliance Slots",
-          "description": "The number of military alliances the nation can support",
-      "calculated": true,
-      "base_value": 1
-        },
+        "bsonType": "number",
+        "label": "Military Alliance Slots",
+        "description": "The number of military alliances the nation can support",
+        "calculated": true,
+        "base_value": 1
+      },
+      "vassal_slots": {
+        "bsonType": "number",
+        "label": "Vassal Slots",
+        "description": "The number of vassals the nation can support",
+        "calculated": true,
+        "base_value": 5
+      },
+      "non_aggression_pact_slots": {
+        "bsonType": "number",
+        "label": "Non-Aggression Pact Slots",
+        "description": "The number of non-aggression pacts the nation can support",
+        "calculated": true,
+        "base_value": 5
+      },
       "origin": {
           "bsonType": "enum",
       "label": "Origin",

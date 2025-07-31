@@ -371,6 +371,25 @@
                     <span class="toggle-icon">▼</span>
                 </div>
                 <div class="section-content">
+                    <div class="table-wrapper">
+                        <table class="info-table">
+                            <tr class="resources-header-row">
+                                <th colspan="2" class="resources-header">General</th>
+                            </tr>
+                            <tr>
+                                <th>{{ schema.properties.military_alliance_slots.label }}:</th>
+                                <td>{{ nation.military_alliance_slots }}</td>
+                            </tr>
+                            <tr>
+                                <th>{{ schema.properties.defensive_pact_slots.label }}:</th>
+                                <td>{{ nation.defensive_pact_slots }}</td>
+                            </tr>
+                            <tr>
+                                <th>{{ schema.properties.non_aggression_pact_slots.label }}:</th>
+                                <td>{{ nation.non_aggression_pact_slots }}</td>
+                            </tr>
+                        </table>
+                    </div>
                     <div class="table-wrapper" id="diplomatic-relations-table">
                         <table class="info-table">
                             <thead>
