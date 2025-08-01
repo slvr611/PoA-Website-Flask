@@ -9,6 +9,19 @@
 			"artifact": ["Arkhonic Gryphon"]
 		}
 	},
+	"classical_citadel_crab": {
+		"display_name": "Classical Citadel Crab",
+		"recruitment_cost": {
+			"money": 1000
+		},
+		"upkeep": {
+			"food": 4
+		},
+		"requirements": {
+			"district": ["classical_workshop"],
+			"mercenary": ["The Revenants"]
+		}
+	},
 	"classical_golem_warrior": {
 		"display_name": "Classical Golem Warrior",
 		"recruitment_cost": {
@@ -31,6 +44,21 @@
 		},
 		"requirements": {
 			"mercenary": ["Grey Knights"]
+		}
+	},
+	"classical_thorn_wardens": {
+		"display_name": "Classical Thorn Wardens",
+		"recruitment_cost": {
+			"money": 600
+		},
+		"upkeep": {
+			"bronze": 2,
+			"magic": 1
+		},
+		"requirements": {
+			"name": ["The Vysaffia Coven"],
+			"defensive_pact": ["The Vysaffia Coven"],
+			"military_alliance": ["The Vysaffia Coven"]
 		}
 	},
 	"classical_uqnia_guardian": {
