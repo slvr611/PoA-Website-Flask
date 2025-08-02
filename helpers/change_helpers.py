@@ -449,6 +449,34 @@ def _find_referencing_objects_array(db, target_field, id):
     """Find objects in category that reference the given ID in the specified field"""
     return list(db.find({target_field: id}))
 
+def recalculate_all_objects(data_type):
+    """Recalculate all fields for all objects of a given type"""
+    db = mongo.db[data_type]
+    schema = category_data[data_type]["schema"]
+    objects = list(db.find())
+    for object in objects:
+        calculated_fields = calculate_all_fields(object, schema, category_data[data_type]["singularName"].lower())
+        object.update(calculated_fields)
+        db.update_one({"_id": object["_id"]}, {"$set": object})
+
+def recalculate_object(data_type, object_ref):
+    """Recalculate all fields for an object"""
+    db = mongo.db[data_type]
+    object_id = None
+    object = None
+    try:
+        object_id = ObjectId(object_ref)
+        object = db.find_one({"_id": object_id})
+    except:
+        object_id = object_ref
+        object = db.find_one({"name": object_id})
+    if not object:
+        return
+    schema = category_data[data_type]["schema"]
+    calculated_fields = calculate_all_fields(object, schema, category_data[data_type]["singularName"].lower())
+    object.update(calculated_fields)
+    db.update_one({"_id": object_id}, {"$set": object})
+
 def propagate_updates(changed_data_type, changed_object_id, changed_object, reason="Dependency update"):
     """Propagate updates to all dependent objects"""
     dependent_objects = get_dependent_objects(changed_data_type, changed_object_id, changed_object)
@@ -463,18 +491,9 @@ def propagate_updates(changed_data_type, changed_object_id, changed_object, reas
             if not old_object:
                 continue
 
-            new_object = deepcopy(old_object)
+            propagate_updates(dep["data_type"], dep["object_id"]["_id"], old_object, reason)
 
-            # Create change request
-            change_id = system_request_change(
-                data_type=dep["data_type"],
-                item_id=old_object["_id"],
-                change_type="Update",
-                before_data=old_object,
-                after_data=new_object,
-                reason=f"{reason} - {changed_data_type} {changed_object_id} changed"
-            )
-            system_approve_change(change_id)
+            recalculate_object(dep["data_type"], dep["object_id"]["_id"])
             
         except Exception as e:
             print(f"Error updating {dep['data_type']} {dep['object_id']}: {e}")

@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, request, redirect, flash
 from forms import form_generator
 from helpers.data_helpers import get_data_on_category, get_data_on_item
-from helpers.change_helpers import request_change, approve_change
+from helpers.change_helpers import request_change, approve_change, recalculate_object
 from helpers.render_helpers import get_linked_objects
 from helpers.form_helpers import validate_form_with_jsonschema
 from routes.nation_routes import edit_nation, nation_edit_request, nation_edit_approve
@@ -487,6 +487,12 @@ def data_item_delete_save(data_type, item_ref):
     flash(f"Delete request #{change_id} created and approved.")
 
     return redirect("/" + data_type)
+
+@data_item_routes.route("/<data_type>/item/<item_ref>/recalculate", methods=["GET"])
+def data_item_recalculate(data_type, item_ref):
+    recalculate_object(data_type, item_ref)
+    flash(f"Recalculated {data_type} {item_ref}")
+    return redirect("/" + data_type + "/item/" + item_ref)
 
 @data_item_routes.route("/wonders")
 def wonder_list():
