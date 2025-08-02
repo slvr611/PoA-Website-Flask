@@ -481,7 +481,11 @@ def character_age_tick(old_character, new_character, schema):
 
 def artifact_loss_tick(old_artifact, new_artifact, schema):
     result = ""
-    if old_artifact.get("owner", "") == "Lost" or old_artifact.get("owner", "") == "":
+    try:
+        owner = ObjectId(old_artifact.get("owner", "")) # If owner is not a valid ObjectId, return
+    except:
+        owner = None
+    if not owner and old_artifact.get("owner", "") != "Unknown":
         return ""
     loss_roll = random.random()
     new_artifact["loss_roll"] = loss_roll

@@ -652,6 +652,15 @@ def compute_heal_chance(field, target, base_value, field_schema, overall_total_m
 
     return value
 
+def compute_stat_gain_chance(field, target, base_value, field_schema, overall_total_modifiers):
+    BASE_STAT_GAIN_CHANCE_PER_CUNNING = 0.1
+    value = base_value + overall_total_modifiers.get(field, 0)
+
+    cunning = compute_stat("cunning", target, 0, {}, overall_total_modifiers)
+    value += cunning * (BASE_STAT_GAIN_CHANCE_PER_CUNNING + overall_total_modifiers.get("stat_gain_chance_per_cunning", 0))
+
+    return value
+
 def compute_magic_point_income(field, target, base_value, field_schema, overall_total_modifiers):
     magic = target.get("magic", 0)
 
@@ -767,6 +776,7 @@ CUSTOM_COMPUTE_FUNCTIONS = {
     "strategy": compute_stat,
     "death_chance": compute_death_chance,
     "heal_chance": compute_heal_chance,
+    "stat_gain_chance": compute_stat_gain_chance,
     "magic_point_income": compute_magic_point_income,
     "magic_point_capacity": compute_magic_point_capacity,
     "land_budget": compute_budget,

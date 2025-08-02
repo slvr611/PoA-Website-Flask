@@ -475,7 +475,12 @@ def recalculate_object(data_type, object_ref):
     schema = category_data[data_type]["schema"]
     calculated_fields = calculate_all_fields(object, schema, category_data[data_type]["singularName"].lower())
     object.update(calculated_fields)
-    db.update_one({"_id": object_id}, {"$set": object})
+    search_dict = {}
+    if object_id == object_ref:
+        search_dict = {"name": object_id}
+    else:
+        search_dict = {"_id": object_id}
+    db.update_one(search_dict, {"$set": object})
 
 def propagate_updates(changed_data_type, changed_object_id, changed_object, reason="Dependency update"):
     """Propagate updates to all dependent objects"""

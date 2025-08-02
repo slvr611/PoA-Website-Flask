@@ -269,6 +269,13 @@
         "heal_chance_per_prowess": 0.05,
         "format": "percentage"
       },
+      "stat_gain_chance": {
+        "bsonType": "number",
+		"label": "Stat Gain Chance",
+        "description": "The percentage chance of the Character gaining a stat point each tick",
+		"calculated": true,
+        "format": "percentage"
+      },
       "rulership_cap": {
         "bsonType": "number",
 		"label": "Rulership Cap",
