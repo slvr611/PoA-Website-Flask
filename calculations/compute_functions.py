@@ -679,6 +679,8 @@ def compute_stat_gain_chance(field, target, base_value, field_schema, overall_to
     cunning = compute_stat("cunning", target, 0, {}, overall_total_modifiers)
     value += cunning * (BASE_STAT_GAIN_CHANCE_PER_CUNNING + overall_total_modifiers.get("stat_gain_chance_per_cunning", 0))
 
+    value = round(max(min(value, 1), 0), 2)
+
     return value
 
 def compute_magic_point_income(field, target, base_value, field_schema, overall_total_modifiers):

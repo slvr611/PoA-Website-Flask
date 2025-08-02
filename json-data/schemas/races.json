@@ -73,7 +73,8 @@
           "Undying": {
             "character_elderly_age": 3,
             "nation_vampiric": 1,
-            "nation_locks_partial_vampire": 1
+            "nation_locks_partial_vampire": 1,
+            "nation_vampirism_chance": -100
           },
           "Venerable": {
             "character_elderly_age": 1,

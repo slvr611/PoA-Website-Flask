@@ -804,7 +804,7 @@ def vampirism_tick(old_nation, new_nation, schema):
     new_nation["vampirism_roll"] = vampirism_roll
     new_nation["vampirism_chance_at_tick"] = old_nation.get("vampirism_chance", 0)
     if vampirism_roll <= old_nation.get("vampirism_chance", 0):
-        new_nation["jobs"]["vampire"] = old_nation.get("jobs", {}).get("vampire", 0) + 1
+        new_nation["jobs"]["partial_vampire"] = old_nation.get("jobs", {}).get("partial_vampire", 0) + 1
         result += f"{old_nation.get('name', 'Unknown')} has gained a vampire.\n"
     return result
 
