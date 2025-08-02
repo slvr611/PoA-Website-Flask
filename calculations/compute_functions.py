@@ -1,5 +1,7 @@
 import math
 from app_core import category_data, json_data, land_unit_json_files, naval_unit_json_files
+from bson.objectid import ObjectId
+import copy
 
 def compute_prestige_gain(field, target, base_value, field_schema, overall_total_modifiers):
     value = base_value
@@ -280,6 +282,24 @@ def compute_stability_loss_chance(field, target, base_value, field_schema, overa
         stab_loss_chance_from_stability = overall_total_modifiers.get("stability_loss_chance_at_united", 0)
     elif stability == "Stable":
         stab_loss_chance_from_stability = overall_total_modifiers.get("stability_loss_chance_at_stable", 0)
+    
+    stability_loss_chance_per_bloodthirsty_pop = overall_total_modifiers.get("stability_loss_chance_per_bloodthirsty_pop", 0)
+    if stability_loss_chance_per_bloodthirsty_pop > 0:
+        pop_database = category_data["pops"]["database"]
+        target_id = str(target.get("_id", ""))
+        
+        pops = pop_database.find({"nation": target_id})
+        pop_races = [pop.get("race", "") for pop in pops]
+        bloodthirsty_pop_count = 0
+        pop_races_set = list(set(copy.deepcopy(pop_races)))
+        pop_race_ids = [ObjectId(race) for race in pop_races_set]
+        races = category_data["races"]["database"].find({"_id": {"$in": pop_race_ids}}, {"_id": 1, "negative_trait": 1})
+        race_dict = {str(race["_id"]): race["negative_trait"] for race in races}
+        for race in pop_races:
+            if race_dict.get(race, "") == "Bloodthirsty":
+                bloodthirsty_pop_count += 1
+        
+        pop_stability_loss += bloodthirsty_pop_count * stability_loss_chance_per_bloodthirsty_pop
 
     value = round(min(max(base_value + overall_total_modifiers.get(field, 0) + karma_stability_loss + minority_stability_loss + pop_stability_loss + stab_loss_chance_from_stability + road_stability_loss + war_stability_loss, 0), 2), 2)
 

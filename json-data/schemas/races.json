@@ -19,7 +19,7 @@
         "bsonType": "enum",
 		    "label": "Positive Trait",
         "description": "The positive trait associated with this race",
-		    "enum": ["None", "Airborne", "Abstemious", "Aggressive", "Aquatic", "Charismatic", "Courageous", "Curious", "Docile", "Fecund", "Industrious", "Lucky", "Magical", "Semi-Aquatic", "Sturdy", "Swift", "Venerable"],
+		    "enum": ["None", "Airborne", "Abstemious", "Aggressive", "Aquatic", "Charismatic", "Courageous", "Curious", "Docile", "Fecund", "Industrious", "Lucky", "Magical", "Semi-Aquatic", "Sturdy", "Swift", "Undying", "Venerable"],
         "laws": {
           "Airborne": {
             "nation_mundane_unit_terrain_speed_cost": -1
@@ -70,6 +70,11 @@
           "Swift": {
             "nation_unit_speed": 1
           },
+          "Undying": {
+            "character_elderly_age": 3,
+            "nation_vampiric": 1,
+            "nation_locks_partial_vampire": 1
+          },
           "Venerable": {
             "character_elderly_age": 1,
             "character_ignore_elderly": 1
@@ -80,11 +85,14 @@
         "bsonType": "enum",
 		    "label": "Negative Trait",
         "description": "The negative trait associated with this race",
-		    "enum": ["None", "Acrophobia", "Clumsy", "Craven", "Dim", "Fleeting", "Frail", "Hydrophobic", "Infertile", "Insatiable", "Irksome", "Meek", "Mundane", "Rowdy", "Slow", "Unlucky"],
+		    "enum": ["None", "Acrophobia", "Bloodthirsty", "Clumsy", "Craven", "Dim", "Fleeting", "Frail", "Hydrophobic", "Infertile", "Insatiable", "Irksome", "Meek", "Mundane", "Rowdy", "Slow", "Unlucky"],
         "laws": {
           "Acrophobia": {
             "nation_mountain_attrition": 0.25,
             "nation_hill_attrition": 0.25
+          },
+          "Bloodthirsty": {
+            "nation_stability_loss_chance_per_bloodthirsty_pop": 0.1
           },
           "Clumsy": {
             "nation_district_cost": 0.2,

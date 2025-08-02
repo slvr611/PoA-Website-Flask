@@ -117,7 +117,7 @@ def calculate_all_fields(target, schema, target_data_type):
             )
             target[field] = calculated_values[field]
     
-    #print(overall_total_modifiers)
+    print(overall_total_modifiers)
     
     if target_data_type == "nation":
         food_consumption_per_pop = 1 + overall_total_modifiers.get("food_consumption_per_pop", 0)
@@ -454,7 +454,7 @@ def calculate_job_details(target, district_details, modifier_totals, district_to
     new_job_details = {}
     for job, details in job_details.items():
         locked = modifier_totals.get("locks_" + job, 0) + district_totals.get("locks_" + job, 0) + city_totals.get("locks_" + job, 0) + law_totals.get("locks_" + job, 0) + external_modifiers_total.get("locks_" + job, 0)
-        meets_job_requirements = check_job_requirements(target, details)
+        meets_job_requirements = check_job_requirements(target, details, external_modifiers_total)
         if not locked and meets_job_requirements:
             new_details = copy.deepcopy(details)
             all_resource_production = 0
@@ -517,7 +517,7 @@ def calculate_job_details(target, district_details, modifier_totals, district_to
     
     return new_job_details
 
-def check_job_requirements(target, job_details):
+def check_job_requirements(target, job_details, overall_total_modifiers):
     requirements = job_details.get("requirements", {})
     meets_requirements = True
     districts = []
@@ -543,6 +543,10 @@ def check_job_requirements(target, job_details):
         elif requirement == "region":
             if region_name not in value:
                 meets_requirements = False
+        elif requirement == "modifier":
+            for modifier in value:
+                if overall_total_modifiers.get(modifier, 0) <= 0:
+                    meets_requirements = False
     
     return meets_requirements
 
@@ -751,6 +755,8 @@ def collect_external_requirements(target, schema, target_data_type):
                     continue
                 collected_modifiers.extend(collect_external_modifiers_from_object(object, required_fields, linked_object_schema, target_data_type))
 
+    print(collected_modifiers)
+
     return collected_modifiers
 
 def collect_external_modifiers_from_object(object, required_fields, linked_object_schema, target_data_type):
@@ -806,6 +812,7 @@ def collect_external_modifiers_from_object(object, required_fields, linked_objec
                             collected_modifiers.append({modifier.get("modifier", ""): modifier.get("value", 0)})
                 
                 elif field_type == "enum" and req_field_schema.get("laws"):
+                    print("Found law from " + req_field)
                     law_modifiers = req_field_schema["laws"].get(object[req_field], {})
                     for key, value in law_modifiers.items():
                         if key.startswith(target_data_type + "_"):

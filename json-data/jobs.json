@@ -137,7 +137,7 @@
 			"research": 1
 		}
 	},
-	"vampire": {
+	"partial_vampire": {
 		"display_name": "Vampire",
 		"requirements":{
 			"region": ["Twilight Mire"]
@@ -147,6 +147,19 @@
 			"stability_loss_chance": 0.1,
 			"food": 1,
 			"magic": 1
+		}
+	},
+	"full_vampire": {
+		"display_name": "Vampire",
+		"requirements":{
+			"modifier": ["vampiric"]
+		},
+		"production": {
+			"stability_loss_chance": -0.2,
+			"magic": 2
+		},
+		"upkeep": {
+			"food": 1
 		}
 	}
 }
