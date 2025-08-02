@@ -3,7 +3,7 @@ from helpers.data_helpers import get_data_on_category
 from calculations.field_calculations import calculate_all_fields
 from pymongo import ASCENDING
 from helpers.change_helpers import system_request_change, system_approve_change
-from app_core import mongo, json_data, upload_to_s3
+from app_core import mongo, json_data, upload_to_s3, character_stats
 from flask import flash
 from app_core import backup_mongodb, category_data, temperament_enum, base_temperament_odds, cultural_trait_temperament_modifiers
 from copy import deepcopy
@@ -475,6 +475,22 @@ def character_age_tick(old_character, new_character, schema):
     new_character["age"] = old_character["age"] + 1
     return ""
 
+def character_stat_gain_tick(old_character, new_character, schema):
+    result = ""
+    stat_gain_roll = random.random()
+    new_character["stat_gain_roll"] = stat_gain_roll
+    new_character["stat_gain_chance_at_tick"] = old_character.get("stat_gain_chance", 0)
+    if stat_gain_roll <= old_character.get("stat_gain_chance", 0):
+        possible_stats = []
+        for stat in character_stats:
+            if old_character.get(stat, 0) < old_character.get(stat + "_cap", 6):
+                possible_stats.append(stat)
+        if possible_stats and len(possible_stats) > 0:
+            stat = random.choice(possible_stats)
+            new_character["modifiers"] = old_character.get("modifiers", []) + [{"field": stat, "value": 1, "duration": -1, "source": "Stat gain tick"}]
+            result = f"{old_character.get('name', 'Unknown')} has gained a level of {stat}.\n"
+    return result
+
 ###########################################################
 # Artifact Tick Functions
 ###########################################################
@@ -911,6 +927,7 @@ CHARACTER_TICK_FUNCTIONS = {
     "Character Heal Tick": character_heal_tick,
     "Character Mana Tick": character_mana_tick,
     "Character Age Tick": character_age_tick,
+    "Character Stat Gain Tick": character_stat_gain_tick,
     "Character Modifier Decay Tick": modifier_decay_tick,
     "Character Progress Quests Tick": progress_quests_tick,
 }
