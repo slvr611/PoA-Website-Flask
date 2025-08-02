@@ -477,6 +477,8 @@ def character_age_tick(old_character, new_character, schema):
 
 def character_stat_gain_tick(old_character, new_character, schema):
     result = ""
+    if old_character.get("stat_gain_chance", 0) <= 0 or old_character.get("health_status", "Healthy") == "Dead":
+        return ""
     stat_gain_roll = random.random()
     new_character["stat_gain_roll"] = stat_gain_roll
     new_character["stat_gain_chance_at_tick"] = old_character.get("stat_gain_chance", 0)
