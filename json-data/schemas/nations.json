@@ -368,7 +368,9 @@
           "Provincial": {
             "defensive_pact_slots_maximum": 0,
             "military_pact_slots_maximum": 0,
-            "vassal_slots_maximum": 0
+            "vassal_slots_maximum": 0,
+            "overlord_nation_research_production": 1,
+            "nation_max_research_production": 0
           }
         }
       },
