@@ -8,14 +8,21 @@
       "vassal_type"],
     "preview": ["region"],
     "external_calculation_requirements": {
-      "overlord": ["subject_stance"],
+      "overlord": {
+        "fields": ["subject_stance"],
+        "modifier_prefix": "vassal"
+      },
       "primary_race": ["positive_trait", "negative_trait"],
       "primary_religion": ["external_modifiers"],
       "wonders": ["external_modifiers", "node"],
       "region": ["external_modifiers"],
       "rulers": ["titles", "modifiers", {"artifacts": ["external_modifiers"]}],
       "markets": ["market_safety_stance"],
-      "pops": []
+      "pops": [],
+      "vassals": {
+        "fields": ["vassal_type"],
+        "modifier_prefix": "overlord"
+      }
     },
     "properties": {
       "name": {
@@ -331,39 +338,40 @@
       "hideIfNone": "overlord"
         },
       "vassal_type": {
-          "bsonType": "enum",
-      "label": "Vassal Type",
-          "description": "The type of vassal of the nation",
-      "enum": ["None", "Tributary", "Protectorate", "Mercantile", "Martial", "Provincial"],
-      "hideIfNone": "overlord",
-      "laws": {
-        "None": {},
-        "Tributary": {},
-        "Protectorate": {
-          "defensive_pact_slots_maximum": 1,
-          "military_pact_slots_maximum": 0,
-          "vassal_slots_maximum": 0
-        },
-        "Mercantile": {
-          "defensive_pact_slots_maximum": 0,
-          "military_pact_slots_maximum": 0,
-          "vassal_slots_maximum": 0,
-          "money_income": -75,
-          "trade_slots": 3,
-          "trade_distance": 3
-        },
-        "Martial": {
-          "defensive_pact_slots_maximum": 0,
-          "military_pact_slots_maximum": 1,
-          "vassal_slots_maximum": 0
-        },
-        "Provincial": {
-          "defensive_pact_slots_maximum": 0,
-          "military_pact_slots_maximum": 0,
-          "vassal_slots_maximum": 0
+        "bsonType": "enum",
+        "label": "Vassal Type",
+        "description": "The type of vassal of the nation",
+        "enum": ["None", "Tributary", "Protectorate", "Mercantile", "Martial", "Provincial"],
+        "hideIfNone": "overlord",
+        "laws": {
+          "None": {},
+          "Tributary": {},
+          "Protectorate": {
+            "defensive_pact_slots_maximum": 1,
+            "military_pact_slots_maximum": 0,
+            "vassal_slots_maximum": 0
+          },
+          "Mercantile": {
+            "defensive_pact_slots_maximum": 0,
+            "military_pact_slots_maximum": 0,
+            "vassal_slots_maximum": 0,
+            "money_income": -75,
+            "overlord_nation_money_income": 75,
+            "trade_slots": 3,
+            "trade_distance": 3
+          },
+          "Martial": {
+            "defensive_pact_slots_maximum": 0,
+            "military_pact_slots_maximum": 1,
+            "vassal_slots_maximum": 0
+          },
+          "Provincial": {
+            "defensive_pact_slots_maximum": 0,
+            "military_pact_slots_maximum": 0,
+            "vassal_slots_maximum": 0
+          }
         }
-      }
-        },
+      },
       "compliance": {
           "bsonType": "enum",
       "label": "Compliance",
@@ -759,23 +767,22 @@
       }
         },
       "subject_stance": {
-          "bsonType": "enum",
-      "label": "Subject Stance",
-          "description": "The way the nation tends to interact with its vassals",
-      "enum": ["Suppression", "Balanced", "Benevolence"],
-      "default": "Balanced",
-      "laws": {
-        "Suppression": {
-          "nation_concessions_chance": -1
-        },
-        "Balanced": {},
-        "Benevolence": {
-          "//These modifiers only apply to vassals, despite starting with nation": 0,
-          "nation_rebellion_chance_above_rebellious": -1,
-          "nation_concessions_qty_mult": 2
+        "bsonType": "enum",
+        "label": "Subject Stance",
+        "description": "The way the nation tends to interact with its vassals",
+        "enum": ["Suppression", "Balanced", "Benevolence"],
+        "default": "Balanced",
+        "laws": {
+          "Suppression": {
+            "vassal_nation_concessions_chance": -1
+          },
+          "Balanced": {},
+          "Benevolence": {
+            "vassal_nation_rebellion_chance_above_rebellious": -1,
+            "vassal_nation_concessions_qty_mult": 2
+          }
         }
-      }
-        },
+      },
       "land_doctrine": {
           "bsonType": "enum",
       "label": "Land Doctrine",

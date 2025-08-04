@@ -711,6 +711,12 @@ def collect_external_requirements(target, schema, target_data_type):
         if not collections:
             continue
 
+        # Handle new format with modifier_prefix
+        modifier_prefix = None
+        if isinstance(required_fields, dict):
+            modifier_prefix = required_fields.get("modifier_prefix")
+            required_fields = required_fields.get("fields", [])
+
         for collection in collections:
             linked_object_schema = category_data.get(collection, {}).get("schema", {})
 
@@ -726,14 +732,14 @@ def collect_external_requirements(target, schema, target_data_type):
                     
                     for link in links:
                         # Check the link object itself for modifiers
-                        collected_modifiers.extend(collect_external_modifiers_from_object(link, required_fields, category_data.get(link_collection, {}).get("schema", {}), target_data_type))
+                        collected_modifiers.extend(collect_external_modifiers_from_object(link, required_fields, category_data.get(link_collection, {}).get("schema", {}), target_data_type, modifier_prefix))
                         
                         # Get the target object and check it too
                         if query_target in link:
                             target_id = link[query_target]
                             target_object = mongo.db[collection].find_one({"_id": ObjectId(target_id)})
                             if target_object:
-                                collected_modifiers.extend(collect_external_modifiers_from_object(target_object, required_fields, linked_object_schema, target_data_type))
+                                collected_modifiers.extend(collect_external_modifiers_from_object(target_object, required_fields, linked_object_schema, target_data_type, modifier_prefix))
             
             elif field_schema.get("queryTargetAttribute"):
                 query_target = field_schema["queryTargetAttribute"]
@@ -744,7 +750,7 @@ def collect_external_requirements(target, schema, target_data_type):
                 
                 for object in linked_objects:
                     if object.get("equipped", True):
-                        collected_modifiers.extend(collect_external_modifiers_from_object(object, required_fields, linked_object_schema, target_data_type))
+                        collected_modifiers.extend(collect_external_modifiers_from_object(object, required_fields, linked_object_schema, target_data_type, modifier_prefix))
             else:
                 object_id = target.get(field)
                 if not object_id:
@@ -753,13 +759,11 @@ def collect_external_requirements(target, schema, target_data_type):
                 object = mongo.db[collection].find_one({"_id": ObjectId(object_id)})
                 if not object:
                     continue
-                collected_modifiers.extend(collect_external_modifiers_from_object(object, required_fields, linked_object_schema, target_data_type))
-
-    print(collected_modifiers)
+                collected_modifiers.extend(collect_external_modifiers_from_object(object, required_fields, linked_object_schema, target_data_type, modifier_prefix))
 
     return collected_modifiers
 
-def collect_external_modifiers_from_object(object, required_fields, linked_object_schema, target_data_type):
+def collect_external_modifiers_from_object(object, required_fields, linked_object_schema, target_data_type, modifier_prefix=None):
     collected_modifiers = []
 
     for req_field in required_fields:
@@ -785,21 +789,21 @@ def collect_external_modifiers_from_object(object, required_fields, linked_objec
                             
                             for link in links:
                                 # Check the link object itself for modifiers
-                                collected_modifiers.extend(collect_external_modifiers_from_object(link, value, category_data.get(link_collection, {}).get("schema", {}), target_data_type))
+                                collected_modifiers.extend(collect_external_modifiers_from_object(link, value, category_data.get(link_collection, {}).get("schema", {}), target_data_type, modifier_prefix))
                                 
                                 # Get the target object and check it too
                                 if query_target in link:
                                     target_id = link[query_target]
                                     target_object = mongo.db[collection].find_one({"_id": ObjectId(target_id)})
                                     if target_object:
-                                        collected_modifiers.extend(collect_external_modifiers_from_object(target_object, value, linked_object_schema, target_data_type))
+                                        collected_modifiers.extend(collect_external_modifiers_from_object(target_object, value, linked_object_schema, target_data_type, modifier_prefix))
                     
                     elif req_field_schema.get("queryTargetAttribute"):
                         query_target = req_field_schema["queryTargetAttribute"]
                         linked_objects = list(mongo.db[collection].find({query_target: str(object["_id"])}))
                         for object in linked_objects:
                             if object.get("equipped", True):
-                                collected_modifiers.extend(collect_external_modifiers_from_object(object, value, linked_object_schema, target_data_type))
+                                collected_modifiers.extend(collect_external_modifiers_from_object(object, value, linked_object_schema, target_data_type, modifier_prefix))
             continue
         else:
             req_field_schema = linked_object_schema["properties"].get(req_field, {})
@@ -812,14 +816,23 @@ def collect_external_modifiers_from_object(object, required_fields, linked_objec
                             collected_modifiers.append({modifier.get("modifier", ""): modifier.get("value", 0)})
                 
                 elif field_type == "enum" and req_field_schema.get("laws"):
-                    print("Found law from " + req_field)
                     law_modifiers = req_field_schema["laws"].get(object[req_field], {})
                     for key, value in law_modifiers.items():
-                        if key.startswith(target_data_type + "_"):
-                            collected_modifiers.append({key.replace(target_data_type + "_", ""): value})
+                        # Check for custom prefix first
+                        if modifier_prefix and key.startswith(f"{modifier_prefix}_{target_data_type}_"):
+                            collected_modifiers.append({key.replace(f"{modifier_prefix}_{target_data_type}_", ""): value})
+                            print(f"Found custom prefix {modifier_prefix} for {key}")
+                        # Fall back to standard target_data_type prefix
+                        elif key.startswith(f"{target_data_type}_"):
+                            collected_modifiers.append({key.replace(f"{target_data_type}_", ""): value})
                 
                 elif field_type == "array" and req_field == "modifiers":
                     for modifier in object[req_field]:
+                        # Check for custom prefix first
+                        if modifier_prefix and modifier.get("field").startswith(f"{modifier_prefix}_{target_data_type}_"):
+                            field = modifier["field"].replace(f"{modifier_prefix}_{target_data_type}_", "")
+                            collected_modifiers.append({field: modifier["value"]})
+                        # Fall back to standard target_data_type prefix
                         if modifier.get("field").startswith(target_data_type + "_"):
                             field = modifier["field"].replace(target_data_type + "_", "")
                             collected_modifiers.append({field: modifier["value"]})
@@ -827,6 +840,7 @@ def collect_external_modifiers_from_object(object, required_fields, linked_objec
                 elif field_type == "array" and req_field == "titles":
                     calculated_title_modifiers = calculate_title_modifiers(object, target_data_type, linked_object_schema["properties"])
                     for key, value in calculated_title_modifiers.items():
+                        #calculate_title_modifers already filters based on the prefix
                         collected_modifiers.append({key: value})
                 
                 elif field_type == "json_resource_enum" and req_field == "node":
