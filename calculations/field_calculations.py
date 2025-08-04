@@ -608,7 +608,7 @@ def check_unit_requirements(target, unit_details):
             # Convert defensive pact IDs to nation objects with names
             defensive_pact_nations = []
             for pact in defensive_pacts:
-                nation_id = pact.get("nation_1") if pact.get("nation_1") != str(target["_id"]) else pact.get("nation_2")
+                nation_id = pact.get("nation_1") if pact.get("nation_1") != str(target.get("_id", "")) else pact.get("nation_2")
                 if nation_id:
                     nation = mongo.db.nations.find_one({"_id": ObjectId(nation_id)}, {"name": 1})
                     if nation:
@@ -629,7 +629,7 @@ def check_unit_requirements(target, unit_details):
             # Convert military alliance IDs to nation objects with names
             military_alliance_nations = []
             for alliance in military_alliances:
-                nation_id = alliance.get("nation_1") if alliance.get("nation_1") != str(target["_id"]) else alliance.get("nation_2")
+                nation_id = alliance.get("nation_1") if alliance.get("nation_1") != str(target.get("_id", "")) else alliance.get("nation_2")
                 if nation_id:
                     nation = mongo.db.nations.find_one({"_id": ObjectId(nation_id)}, {"name": 1})
                     if nation:
@@ -722,7 +722,7 @@ def collect_external_requirements(target, schema, target_data_type):
                 
                 if query_target:
                     # Find all links in the join table
-                    links = list(mongo.db[link_collection].find({link_query_target: str(target["_id"])}))
+                    links = list(mongo.db[link_collection].find({link_query_target: str(target.get("_id", ""))}))
                     
                     for link in links:
                         # Check the link object itself for modifiers
@@ -740,7 +740,7 @@ def collect_external_requirements(target, schema, target_data_type):
                 linked_objects = []
 
                 if "_id" in target:
-                    linked_objects = list(mongo.db[collection].find({query_target: str(target["_id"])}))
+                    linked_objects = list(mongo.db[collection].find({query_target: str(target.get("_id", ""))}))
                 
                 for object in linked_objects:
                     if object.get("equipped", True):
