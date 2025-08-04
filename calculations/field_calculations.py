@@ -117,7 +117,7 @@ def calculate_all_fields(target, schema, target_data_type):
             )
             target[field] = calculated_values[field]
     
-    print(overall_total_modifiers)
+    #print(overall_total_modifiers)
     
     if target_data_type == "nation":
         food_consumption_per_pop = 1 + overall_total_modifiers.get("food_consumption_per_pop", 0)
@@ -732,7 +732,6 @@ def collect_external_requirements(target, schema, target_data_type):
                     
                     for link in links:
                         # Check the link object itself for modifiers
-                        print("Link modifiers")
                         collected_modifiers.extend(collect_external_modifiers_from_object(link, required_fields, category_data.get(link_collection, {}).get("schema", {}), target_data_type, modifier_prefix))
                         
                         # Get the target object and check it too
@@ -740,7 +739,6 @@ def collect_external_requirements(target, schema, target_data_type):
                             target_id = link[query_target]
                             target_object = mongo.db[collection].find_one({"_id": ObjectId(target_id)})
                             if target_object:
-                                print("Target modifiers")
                                 collected_modifiers.extend(collect_external_modifiers_from_object(target_object, required_fields, linked_object_schema, target_data_type, modifier_prefix))
             
             elif field_schema.get("queryTargetAttribute"):
@@ -808,7 +806,6 @@ def collect_external_modifiers_from_object(object, required_fields, linked_objec
                                 collected_modifiers.extend(collect_external_modifiers_from_object(object, value, linked_object_schema, target_data_type, modifier_prefix))
             continue
         else:
-            print("Collecting external modifiers from " + req_field)
             req_field_schema = linked_object_schema["properties"].get(req_field, {})
             if req_field in object:
                 field_type = linked_object_schema["properties"].get(req_field, {}).get("bsonType")
@@ -832,7 +829,6 @@ def collect_external_modifiers_from_object(object, required_fields, linked_objec
                             found_modifier = True
                         if found_modifier:
                             if "_per_market_tier" in modifier:
-                                print("Market tier")
                                 if linked_object_schema.get("properties", {}).get("tier", {}).get("laws", {}).get(object.get("tier", "I"), {}).get("tier_multiplier", 1) > 0:
                                     value *= linked_object_schema.get("properties", {}).get("tier", {}).get("laws", {}).get(object.get("tier", "I"), {}).get("tier_multiplier", 1)
                                     modifier = modifier.replace("_per_market_tier", "")
@@ -867,10 +863,6 @@ def collect_external_modifiers_from_object(object, required_fields, linked_objec
                 elif field_type == "json_resource_enum" and req_field == "node":
                     collected_modifiers.append({object[req_field] + "_nodes": 1})
     
-    print(object.get("name", ""))
-    print(required_fields)
-    print(collected_modifiers)
-
     return collected_modifiers
 
 def calculate_effective_territory_modifiers(target):

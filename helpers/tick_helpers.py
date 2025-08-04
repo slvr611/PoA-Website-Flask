@@ -383,7 +383,6 @@ def character_death_tick(old_character, new_character, schema):
         result = f"{old_character.get('name', 'Unknown')} has died.\n"
 
         if old_character.get("ruling_nation_org", "") != "":
-            print(f"{old_character.get('name', 'Unknown')} died while leading {old_character.get('ruling_nation_org', 'Unknown')}")
             nation_schema, nation_db = get_data_on_category("nations")
             try:
                 old_nation = nation_db.find_one({"_id": ObjectId(old_character.get("ruling_nation_org", ""))})
@@ -864,7 +863,7 @@ def temperament_tick(old_nation, new_nation, schema):
 
         new_nation["sessions_since_temperament_change"] = 1
     else:
-        new_nation["sessions_since_temperament_change"] += 1
+        new_nation["sessions_since_temperament_change"] = sessions_since_temperament_change + 1
     
     return result
 
