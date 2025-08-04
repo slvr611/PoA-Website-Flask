@@ -17,11 +17,18 @@
       "wonders": ["external_modifiers", "node"],
       "region": ["external_modifiers"],
       "rulers": ["titles", "modifiers", {"artifacts": ["external_modifiers"]}],
-      "markets": ["market_safety_stance"],
       "pops": [],
       "vassals": {
         "fields": ["vassal_type"],
         "modifier_prefix": "overlord"
+      },
+      "markets": {
+        "fields": ["market_safety_stance", "tariff_stance", "market_type", "tier"],
+        "modifier_prefix": "member"
+      },
+      "owned_markets": {
+        "fields": ["tariff_stance", "market_type", "tier"],
+        "modifier_prefix": "owner"
       }
     },
     "properties": {
@@ -221,6 +228,15 @@
         "linkQueryTarget": "member",
         "collections": ["markets"],
         "queryTarget": "market",
+        "preview": ["primary_resource", "secondary_resource_one", "secondary_resource_two"],
+        "items": {}
+      },
+      "owned_markets": {
+        "bsonType": "array",
+        "label": "Owned Markets",
+        "description": "The list of markets the nation currently owns, if any",
+        "collections": ["markets"],
+        "queryTargetAttribute": "market_head",
         "preview": ["primary_resource", "secondary_resource_one", "secondary_resource_two"],
         "items": {}
       },

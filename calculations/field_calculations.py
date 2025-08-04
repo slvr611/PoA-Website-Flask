@@ -732,6 +732,7 @@ def collect_external_requirements(target, schema, target_data_type):
                     
                     for link in links:
                         # Check the link object itself for modifiers
+                        print("Link modifiers")
                         collected_modifiers.extend(collect_external_modifiers_from_object(link, required_fields, category_data.get(link_collection, {}).get("schema", {}), target_data_type, modifier_prefix))
                         
                         # Get the target object and check it too
@@ -739,6 +740,7 @@ def collect_external_requirements(target, schema, target_data_type):
                             target_id = link[query_target]
                             target_object = mongo.db[collection].find_one({"_id": ObjectId(target_id)})
                             if target_object:
+                                print("Target modifiers")
                                 collected_modifiers.extend(collect_external_modifiers_from_object(target_object, required_fields, linked_object_schema, target_data_type, modifier_prefix))
             
             elif field_schema.get("queryTargetAttribute"):
@@ -806,6 +808,7 @@ def collect_external_modifiers_from_object(object, required_fields, linked_objec
                                 collected_modifiers.extend(collect_external_modifiers_from_object(object, value, linked_object_schema, target_data_type, modifier_prefix))
             continue
         else:
+            print("Collecting external modifiers from " + req_field)
             req_field_schema = linked_object_schema["properties"].get(req_field, {})
             if req_field in object:
                 field_type = linked_object_schema["properties"].get(req_field, {}).get("bsonType")
@@ -819,12 +822,30 @@ def collect_external_modifiers_from_object(object, required_fields, linked_objec
                     law_modifiers = req_field_schema["laws"].get(object[req_field], {})
                     for key, value in law_modifiers.items():
                         # Check for custom prefix first
+                        found_modifier = False
                         if modifier_prefix and key.startswith(f"{modifier_prefix}_{target_data_type}_"):
-                            collected_modifiers.append({key.replace(f"{modifier_prefix}_{target_data_type}_", ""): value})
-                            print(f"Found custom prefix {modifier_prefix} for {key}")
+                            modifier = key.replace(f"{modifier_prefix}_{target_data_type}_", "")
+                            found_modifier = True
                         # Fall back to standard target_data_type prefix
                         elif key.startswith(f"{target_data_type}_"):
-                            collected_modifiers.append({key.replace(f"{target_data_type}_", ""): value})
+                            modifier = key.replace(f"{target_data_type}_", "")
+                            found_modifier = True
+                        if found_modifier:
+                            if "_per_market_tier" in modifier:
+                                print("Market tier")
+                                if linked_object_schema.get("properties", {}).get("tier", {}).get("laws", {}).get(object.get("tier", "I"), {}).get("tier_multiplier", 1) > 0:
+                                    value *= linked_object_schema.get("properties", {}).get("tier", {}).get("laws", {}).get(object.get("tier", "I"), {}).get("tier_multiplier", 1)
+                                    modifier = modifier.replace("_per_market_tier", "")
+                                elif "market" in linked_object_schema.get("properties", {}):
+                                    market = mongo.db["markets"].find_one({"_id": ObjectId(object["market"])})
+                                    if market:
+                                        value *= category_data["markets"]["schema"]["properties"].get("tier", {}).get("laws", {}).get(market.get("tier", "I"), {}).get("tier_multiplier", 1)
+                                        modifier = modifier.replace("_per_market_tier", "")
+                            if "_per_member" in modifier:
+                                member_count = mongo.db["market_links"].count_documents({"market": str(object["_id"])})
+                                value *= member_count
+                                modifier = modifier.replace("_per_member", "")
+                            collected_modifiers.append({modifier: value})
                 
                 elif field_type == "array" and req_field == "modifiers":
                     for modifier in object[req_field]:
@@ -846,6 +867,10 @@ def collect_external_modifiers_from_object(object, required_fields, linked_objec
                 elif field_type == "json_resource_enum" and req_field == "node":
                     collected_modifiers.append({object[req_field] + "_nodes": 1})
     
+    print(object.get("name", ""))
+    print(required_fields)
+    print(collected_modifiers)
+
     return collected_modifiers
 
 def calculate_effective_territory_modifiers(target):

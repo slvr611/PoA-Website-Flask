@@ -45,26 +45,26 @@
         "enum": ["None", "Low", "Moderate", "High", "Extreme"],
         "laws": {
           "None": {
-            "member_trade_distance": 3,
-            "member_stability_gain_chance": 0.1
+            "member_nation_trade_distance": 3,
+            "member_nation_stability_gain_chance": 0.1
           },
           "Low": {
-            "owner_money_income_per_market_tier_per_member": 3
+            "owner_nation_money_income_per_market_tier_per_member": 3
           },
           "Moderate": {
-            "owner_money_income_per_market_tier_per_member": 6,
-            "member_trade_distance": -3
+            "owner_nation_money_income_per_market_tier_per_member": 6,
+            "member_nation_trade_distance": -3
           },
           "High": {
-            "owner_money_income_per_market_tier_per_member": 15,
-            "member_trade_distance": -6,
-            "member_trade_slots": -3
+            "owner_nation_money_income_per_market_tier_per_member": 15,
+            "member_nation_trade_distance": -6,
+            "member_nation_trade_slots": -3
           },
           "Extreme": {
-            "owner_money_income_per_market_tier_per_member": 30,
-            "member_trade_distance": -9,
-            "member_trade_slots": -3,
-            "member_stability_loss_chance": 0.1
+            "owner_nation_money_income_per_market_tier_per_member": 30,
+            "member_nation_trade_distance": -9,
+            "member_nation_trade_slots": -3,
+            "member_nation_stability_loss_chance": 0.1
           }
         }
       },

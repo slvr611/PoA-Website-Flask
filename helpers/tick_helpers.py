@@ -729,7 +729,7 @@ def nation_concessions_tick(old_nation, new_nation, schema):
 
     result = ""
 
-    if old_nation.get("concessions", {}) != {}:
+    if old_nation.get("concessions", {}) and old_nation.get("concessions", {}) != {} and old_nation.get("concessions", {}) != "":
         new_nation["concessions"] = {}
         compliance_enum = schema["properties"]["compliance"]["enum"]
         compliance_index = compliance_enum.index(old_nation["compliance"])
