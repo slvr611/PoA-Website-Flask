@@ -596,7 +596,7 @@ def ai_resource_desire_tick(old_nation, new_nation, schema):
     for resource in luxury_resources:
         desire_roll = random.random()
         base_price = resource_prices[resource]
-        price_roll = random.random() / 10 #Rolls somewhere between 0 and 10
+        price_roll = random.random() / 10 #Rolls somewhere between 0 and 0.1
         trade_type = "None"
         price = 0
         quantity = 1

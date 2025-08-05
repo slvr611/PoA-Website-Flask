@@ -19,7 +19,7 @@
         "bsonType": "enum",
 		    "label": "Positive Trait",
         "description": "The positive trait associated with this race",
-		    "enum": ["None", "Airborne", "Abstemious", "Aggressive", "Aquatic", "Charismatic", "Courageous", "Curious", "Docile", "Fecund", "Industrious", "Lucky", "Magical", "Semi-Aquatic", "Sturdy", "Swift", "Undying", "Venerable"],
+		    "enum": ["None", "Airborne", "Abstemious", "Aggressive", "Aquatic", "Arcane", "Charismatic", "Courageous", "Curious", "Docile", "Fecund", "Industrious", "Lucky", "Magical", "Semi-Aquatic", "Sturdy", "Swift", "Undying", "Venerable"],
         "laws": {
           "Airborne": {
             "nation_mundane_unit_terrain_speed_cost": -1
@@ -30,6 +30,12 @@
           },
           "Aggressive": {
             "nation_attack": 1
+          },
+          "Aquatic": {
+          },
+          "Arcane": {
+            "character_magic_cost": -1,
+            "character_magic_cost_minimum": 2
           },
           "Charismatic": {
             "nation_trade_slots": 6
@@ -86,7 +92,7 @@
         "bsonType": "enum",
 		    "label": "Negative Trait",
         "description": "The negative trait associated with this race",
-		    "enum": ["None", "Acrophobia", "Bloodthirsty", "Clumsy", "Craven", "Dim", "Fleeting", "Frail", "Hydrophobic", "Infertile", "Insatiable", "Irksome", "Meek", "Mundane", "Rowdy", "Slow", "Unlucky"],
+		    "enum": ["None", "Acrophobia", "Bloodthirsty", "Clumsy", "Craven", "Dim", "Ethereal", "Fleeting", "Frail", "Hydrophobic", "Infertile", "Insatiable", "Irksome", "Meek", "Mundane", "Rowdy", "Slow", "Unlucky"],
         "laws": {
           "Acrophobia": {
             "nation_mountain_attrition": 0.25,
@@ -106,6 +112,11 @@
           },
           "Dim": {
             "nation_research_production": -1
+          },
+          "Ethereal": {
+            "locks_mundane_units": 1,
+            "character_elderly_age": 97,
+            "nation_food_to_magic_consumption_conversion": 0.5
           },
           "Fleeting": {
             "character_elderly_age": -1,
