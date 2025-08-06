@@ -118,6 +118,7 @@
             "character_elderly_age": 97,
             "character_heal_chance": -100,
             "character_stat_gain_chance_per_cunning": -0.08,
+            "character_title_slots": -1,
             "nation_food_to_magic_consumption_conversion": 0.5
           },
           "Fleeting": {
