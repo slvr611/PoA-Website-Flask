@@ -624,6 +624,8 @@ def compute_age_status(field, target, base_value, field_schema, overall_total_mo
 def compute_stat_cap(field, target, base_value, field_schema, overall_total_modifiers):
     value = base_value + overall_total_modifiers.get(field, 0) + overall_total_modifiers.get("stat_cap", 0)
 
+    value = min(value, 8)
+
     return int(value)
 
 def compute_stat(field, target, base_value, field_schema, overall_total_modifiers):
