@@ -776,7 +776,6 @@
                             <th>Name</th>
                             <th>Slot</th>
                             <th>Bonus Progress Per Tick</th>
-                            <th>Total Progress Per Tick</th>
                             <th>Current Progress</th>
                             <th>Required Progress</th>
                             <th>Link</th>
@@ -789,13 +788,6 @@
                                 <td>{{ quest_field.quest_name(class="form-control") }}</td>
                                 <td>{{ quest_field.slot(class="form-control") }}</td>
                                 <td>{{ quest_field.bonus_progress_per_tick(class="form-control") }}</td>
-                                <td class="calculated-field">
-                                    {% if quest_field.data %}
-                                        {{ quest_field.data.get('total_progress_per_tick', 'N/A') }}
-                                    {% else %}
-                                        N/A
-                                    {% endif %}
-                                </td>
                                 <td>{{ quest_field.current_progress(class="form-control") }}</td>
                                 <td>{{ quest_field.required_progress(class="form-control") }}</td>
                                 <td>{{ quest_field.link(class="form-control") }}</td>
@@ -876,9 +868,36 @@
                 const currentCount = tbody.children.length;
                 
                 const newRow = document.createElement('tr');
-                newRow.className = 'sortable-row';
-        
                 if (fieldName === "progress_quests") {
+                    newRow.className = 'sortable-row';
+                }
+
+                if (fieldName === "external_modifiers") {
+                    const typeChoices = ["nation", "character"].map(choice => [choice, choice]);
+                    
+                    const typeOptions = typeChoices.map(([value, label]) => 
+                        `<option value="${value}">${label}</option>`
+                    ).join('');
+                    
+                    newRow.innerHTML = `
+                        <td>
+                            <select class="form-control" name="${fieldName}-${currentCount}-type" id="${fieldName}-${currentCount}-type">
+                                ${typeOptions}
+                            </select>
+                        </td>
+                        <td><input type="text" class="form-control" name="${fieldName}-${currentCount}-modifier" id="${fieldName}-${currentCount}-modifier" required></td>
+                        <td><input type="float" class="form-control" name="${fieldName}-${currentCount}-value" id="${fieldName}-${currentCount}-value" required></td>
+                        <td><button type="button" class="btn btn-danger" onclick="removeFromArray(this, '${fieldName}')">Remove</button></td>
+                    `;
+                } else if (fieldName === "modifiers") {
+                    newRow.innerHTML = `
+                        <td><input type="text" class="form-control" name="${fieldName}-${currentCount}-field" id="${fieldName}-${currentCount}-field" required></td>
+                        <td><input type="float" class="form-control" name="${fieldName}-${currentCount}-value" id="${fieldName}-${currentCount}-value" required></td>
+                        <td><input type="float" class="form-control" name="${fieldName}-${currentCount}-duration" id="${fieldName}-${currentCount}-duration" value="0" required></td>
+                        <td><input type="text" class="form-control" name="${fieldName}-${currentCount}-source" id="${fieldName}-${currentCount}-source" required></td>
+                        <td><button type="button" class="btn btn-danger" onclick="removeFromArray(this, '${fieldName}')">Remove</button></td>
+                    `;
+                } else if (fieldName === "progress_quests") {
                     newRow.innerHTML = `
                         <td><input type="text" class="form-control" name="${fieldName}-${currentCount}-quest_name" id="${fieldName}-${currentCount}-name" required></td>
                         <td>
@@ -891,7 +910,6 @@
                             </select>
                         </td>
                         <td><input type="number" class="form-control" name="${fieldName}-${currentCount}-bonus_progress_per_tick" id="${fieldName}-${currentCount}-bonus_progress_per_tick" value="0" required></td>
-                        <td class="calculated-field">N/A</td>
                         <td><input type="number" class="form-control" name="${fieldName}-${currentCount}-current_progress" id="${fieldName}-${currentCount}-current_progress" value="0" required></td>
                         <td><input type="number" class="form-control" name="${fieldName}-${currentCount}-required_progress" id="${fieldName}-${currentCount}-required_progress" value="0" required></td>
                         <td><input type="text" class="form-control" name="${fieldName}-${currentCount}-link" id="${fieldName}-${currentCount}-link" required></td>
@@ -900,12 +918,8 @@
                             <button type="button" class="btn btn-danger" onclick="removeFromArray(this, '${fieldName}')">Remove</button>
                         </td>
                     `;
-                    
-                    // Update the new slot dropdown with current centralization options
-                    updateProgressQuestSlots();
                 }
-                // ... other fieldName conditions remain the same
-        
+
                 tbody.appendChild(newRow);
             }
         
