@@ -1,9 +1,10 @@
 {
   "$jsonSchema": {
+    "title": "Nations",
     "bsonType": "object",
     "required": ["name", "region", "primary_race", "primary_culture", "primary_religion", "government_type", "succession_type", "foreign_acceptance", "origin"],
     "laws": ["stability", "government_type", "succession_type", "nomad_camp_type", "conscription_type", "military_funding",
-      "magic_stance", "citizenship_stance", "foreign_acceptance", "subject_stance", "land_doctrine", "naval_doctrine",
+      "magic_stance", "centralization_law", "citizenship_stance", "foreign_acceptance", "subject_stance", "land_doctrine", "naval_doctrine",
       "diplomatic_stance", "scientific_stance", "economy_type", "expansion_stance", "mercenary_law", "consumption_stance", "tax_stance", "justice_stance",
       "vassal_type"],
     "preview": ["region"],
@@ -736,6 +737,31 @@
           "magic_node_value": -1
         }
       }
+      },
+      "centralization_law": {
+          "bsonType": "enum",
+          "label": "Centralization Law",
+          "description": "The degree to which the nation is centralized",
+          "enum": ["Autonomous", "Decentralized", "Standard", "Focused", "Absolute"],
+          "default": "Standard",
+          "laws": {
+            "Autonomous": {
+              "0_progress_slots": 4
+            },
+            "Decentralized": {
+              "1_progress_slots": 3
+            },
+            "Standard": {
+              "2_progress_slots": 2
+            },
+            "Focused": {
+              "3_progress_slots": 1,
+              "1_progress_slots": 1
+            },
+            "Absolute": {
+              "4_progress_slots": 1
+            }
+          }
         },
       "citizenship_stance": {
           "bsonType": "enum",
@@ -1409,6 +1435,36 @@
       "items":{
         "bsonType": "linked_object"
       }
+        },
+      "0_progress_slots": {
+          "bsonType": "number",
+      "label": "0 Progress Slots",
+          "description": "The number of 0 progress slots the nation has available",
+      "calculated": true
+        },
+      "1_progress_slots": {
+          "bsonType": "number",
+      "label": "1 Progress Slots",
+          "description": "The number of 1 progress slots the nation has available",
+      "calculated": true
+        },
+      "2_progress_slots": {
+          "bsonType": "number",
+      "label": "2 Progress Slots",
+          "description": "The number of 2 progress slots the nation has available",
+      "calculated": true
+        },
+      "3_progress_slots": {
+          "bsonType": "number",
+      "label": "3 Progress Slots",
+          "description": "The number of 3 progress slots the nation has available",
+      "calculated": true
+        },
+      "4_progress_slots": {
+          "bsonType": "number",
+      "label": "4 Progress Slots",
+          "description": "The number of 4 progress slots the nation has available",
+      "calculated": true
         },
       "progress_quests": {
           "bsonType": "array",

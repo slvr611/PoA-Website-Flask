@@ -276,10 +276,11 @@ class ProgressQuestForm(Form):
     """Form for handling progress quests as a dictionary"""
     
     quest_name = StringField("Quest Name", validators=[DataRequired()])
-    progress_per_tick = IntegerField("Progress Per Tick", validators=[NumberRange()], default=0)
+    bonus_progress_per_tick = IntegerField("Bonus Progress Per Tick", validators=[NumberRange()], default=0)
     current_progress = IntegerField("Current Progress", validators=[NumberRange()], default=0)
     required_progress = IntegerField("Required Progress", validators=[NumberRange()], default=0)
     link = StringField("Link", validators=[DataRequired()])
+    slot = SelectField("Slot", choices=[], default="no_slot")
 
     class Meta:
         csrf = False
@@ -319,7 +320,7 @@ class ProgressQuestForm(Form):
                     elif isinstance(field, FormField):
                         field.load_form_from_item(field_value, schema)
                     else:
-                        field.data = field_value
+                        field.data = field_value        
 
 class DistrictDict(Form):
     """Form for handling each district as a dictionary"""
@@ -508,6 +509,141 @@ class BaseSchemaForm(FlaskForm):
     """Base form class with common functionality"""
     reason = TextAreaField("Reason")
     submit = SubmitField("Save")
+    
+    def __init__(self, *args, **kwargs):
+        self._schema = kwargs.pop('schema', None)
+        super().__init__(*args, **kwargs)
+    
+    def validate_progress_quests(self, field):
+        """Validate progress quest slot assignments"""
+        if not hasattr(self, 'progress_quests'):
+            return
+            
+        # Get available slots for this entity
+        nation_data = {}
+        for field_name, form_field in self._fields.items():
+            if hasattr(form_field, 'data') and form_field.data is not None:
+                nation_data[field_name] = form_field.data
+        
+        # Use the schema passed to the form
+        schema = self._schema
+        if not schema:
+            # Fallback to the old method if schema wasn't passed
+            from helpers.data_helpers import get_data_on_category
+            schema, _ = get_data_on_category("nations")
+        
+        # Check if this is a nation or another entity type
+        entity_type = schema.get("title", "").lower()
+        if entity_type != "nations":
+            # Non-nation entities: simple validation
+            available_slot_options = self.get_available_slots(nation_data, schema)
+            valid_slot_values = [slot[0] for slot in available_slot_options]
+            
+            # Update slot choices
+            for quest in self.progress_quests:
+                if hasattr(quest, 'slot'):
+                    quest.slot.choices = available_slot_options
+            
+            # Validate max 3 progress slots
+            progress_slot_count = 0
+            for quest in self.progress_quests:
+                if hasattr(quest, 'slot') and quest.slot.data:
+                    slot_type = quest.slot.data
+                    
+                    # Check if slot type is valid
+                    if slot_type not in valid_slot_values:
+                        slot_name = slot_type.replace("_", " ").title()
+                        raise ValidationError(f"Invalid slot type '{slot_name}' for this entity type.")
+                    
+                    if quest.slot.data == "1_progress_slot":
+                        progress_slot_count += 1
+            
+            if progress_slot_count > 3:
+                raise ValidationError("Non-nation entities can only have 3 progress slots maximum.")
+            return
+        
+        # Nation-specific validation
+        available_slot_options = self.get_available_slots(nation_data, schema)
+        valid_slot_values = [slot[0] for slot in available_slot_options]
+        
+        # Update slot choices for all progress quest fields
+        for quest in self.progress_quests:
+            if hasattr(quest, 'slot'):
+                quest.slot.choices = available_slot_options
+        
+        # Get centralization law modifiers for slot limits
+        centralization_law = nation_data.get("centralization_law", "Standard")
+        centralization_modifiers = schema.get("properties", {}).get("centralization_law", {}).get("laws", {}).get(centralization_law, {})
+        
+        # Count used slots by type
+        slot_usage = {}
+        for quest in self.progress_quests:
+            if hasattr(quest, 'slot') and quest.slot.data:
+                slot_type = quest.slot.data
+                
+                # Check if slot type is valid
+                if slot_type not in valid_slot_values:
+                    slot_name = slot_type.replace("_", " ").title()
+                    raise ValidationError(f"Invalid slot type '{slot_name}' for current centralization law.")
+                
+                if slot_type != "no_slot" and not slot_type.endswith("_spell_slot"):
+                    slot_usage[slot_type] = slot_usage.get(slot_type, 0) + 1
+        
+        # Validate against limits using the schema data
+        for slot_type, used_count in slot_usage.items():
+            slot_key = slot_type.replace("_slot", "_slots")
+            available_count = centralization_modifiers.get(slot_key, 0)
+            if used_count > available_count:
+                slot_name = slot_type.replace("_", " ").title()
+                raise ValidationError(f"Too many quests assigned to {slot_name}. Available: {available_count}, Used: {used_count}")
+
+    def get_available_slots(self, nation, schema):
+        """Get available slot options based on nation's centralization law and modifiers"""
+        from calculations.field_calculations import calculate_all_fields
+        
+        # Check if this is actually a nation or another entity type
+        entity_type = schema.get("title", "").lower()
+        if entity_type != "nations":
+            # Non-nation entities get 3 basic progress slots + spell slots
+            return [
+                ("no_slot", "No Slot"),
+                ("1_progress_slot", "1 Progress Slot"),
+                ("tier_1_spell_slot", "Tier 1 Spell Slot"),
+                ("tier_2_spell_slot", "Tier 2 Spell Slot"),
+                ("tier_3_spell_slot", "Tier 3 Spell Slot")
+            ]
+        
+        # Recalculate nation to get current modifiers
+        calculated_nation = calculate_all_fields(nation, schema, "nation")
+        
+        # Build available slots
+        available_slots = [("no_slot", "No Slot")]
+        
+        # Add progress slots based on centralization
+        slot_types = [
+            ("0_progress_slots", "0 Progress Slot"),
+            ("1_progress_slots", "1 Progress Slot"), 
+            ("2_progress_slots", "2 Progress Slot"),
+            ("3_progress_slots", "3 Progress Slot"),
+            ("4_progress_slots", "4 Progress Slot")
+        ]
+        
+        print("Calculated Nation:", calculated_nation)
+
+        for slot_key, slot_name in slot_types:
+            slot_count = calculated_nation.get(slot_key, 0)
+            print(f"Slot Key: {slot_key}, Slot Count: {slot_count}")
+            if slot_count > 0:
+                available_slots.append((slot_key.replace("_slots", "_slot"), slot_name))
+        
+        # Always add spell slots
+        available_slots.extend([
+            ("tier_1_spell_slot", "Tier 1 Spell Slot"),
+            ("tier_2_spell_slot", "Tier 2 Spell Slot"),
+            ("tier_3_spell_slot", "Tier 3 Spell Slot")
+        ])
+        
+        return available_slots
 
     def populate_select_field(self, field_name, field, schema, dropdown_options):
         """Populates a select field with options"""
@@ -579,6 +715,20 @@ class BaseSchemaForm(FlaskForm):
                     node_choices.append((resource.get("key", resource), resource.get("name", resource)))
                 field = getattr(self, field_name)
                 field.choices = node_choices
+            
+        # Populate progress quest slots for ALL entity types
+        if hasattr(self, 'progress_quests'):
+            # Get current form data for slot calculation
+            nation_data = {}
+            for field_name, field in self._fields.items():
+                if hasattr(field, 'data') and field.data is not None:
+                    nation_data[field_name] = field.data
+            
+            available_slots = self.get_available_slots(nation_data, schema)
+            
+            for quest_field in self.progress_quests:
+                if hasattr(quest_field, 'slot'):
+                    quest_field.slot.choices = available_slots
     
     def load_form_from_item(self, item, schema):
         """Loads form data from a database item with proper type conversion"""
@@ -691,6 +841,32 @@ class BaseSchemaForm(FlaskForm):
                     # If conversion fails, use the original value
                     field.data = field_value
 
+    def validate(self, extra_validators=None):
+        """Override validate to update progress quest slot choices before validation"""
+        # Update progress quest slot choices based on current form data
+        if hasattr(self, 'progress_quests'):
+            # Get current form data
+            nation_data = {}
+            for field_name, field in self._fields.items():
+                if hasattr(field, 'data') and field.data is not None:
+                    nation_data[field_name] = field.data
+            
+            # Use the schema passed to the form
+            schema = self._schema
+            if not schema:
+                # Fallback to the old method if schema wasn't passed
+                from helpers.data_helpers import get_data_on_category
+                schema, _ = get_data_on_category("nations")
+            
+            available_slots = self.get_available_slots(nation_data, schema)
+            
+            for quest_field in self.progress_quests:
+                if hasattr(quest_field, 'slot'):
+                    quest_field.slot.choices = available_slots
+        
+        # Now run the normal validation
+        return super().validate(extra_validators)
+
 class DynamicSchemaForm(BaseSchemaForm):
     """Dynamic form generated from JSON schema"""
     
@@ -713,12 +889,12 @@ class DynamicSchemaForm(BaseSchemaForm):
         form_class = cls.create_form_class(schema)
         
         if formdata:
-            form = form_class(formdata=formdata)
+            form = form_class(formdata=formdata, schema=schema)
         elif item:
-            form = form_class()
+            form = form_class(schema=schema)
             form.load_form_from_item(item, schema)
         else:
-            form = form_class()
+            form = form_class(schema=schema)
         
         return form
 
@@ -943,6 +1119,20 @@ class NationForm(BaseSchemaForm):
                 choices = [(v, v) for v in field_schema.get("enum", [])]
                 field = getattr(self, field_name)
                 field.choices = choices
+        
+        # Populate progress quest slots based on nation's centralization - do this FIRST
+        if hasattr(self, 'progress_quests'):
+            # Get current form data for slot calculation
+            nation_data = {}
+            for field_name, field in self._fields.items():
+                if hasattr(field, 'data') and field.data is not None:
+                    nation_data[field_name] = field.data
+            
+            available_slots = self.get_available_slots(nation_data, schema)
+            
+            for quest_field in self.progress_quests:
+                if hasattr(quest_field, 'slot'):
+                    quest_field.slot.choices = available_slots
         
         node_choices = [("", "None"), ("luxury", "Luxury")]
         general_resources = json_data.get("general_resources", [])
@@ -1188,6 +1378,34 @@ def wtform_to_json(form):
             result[field_name] = field_data
     
     return result
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

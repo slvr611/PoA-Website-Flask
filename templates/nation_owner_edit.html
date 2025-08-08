@@ -774,21 +774,35 @@
                     <thead>
                         <tr>
                             <th>Name</th>
-                            <th>Progress Per Tick</th>
+                            <th>Slot</th>
+                            <th>Bonus Progress Per Tick</th>
+                            <th>Total Progress Per Tick</th>
                             <th>Current Progress</th>
                             <th>Required Progress</th>
                             <th>Link</th>
+                            <th>Actions</th>
                         </tr>
                     </thead>
-                    <tbody id="progress_quests-tbody">
+                    <tbody id="progress_quests-tbody" class="sortable-tbody">
                         {% for quest_field in form.progress_quests %}
-                            <tr>
+                            <tr class="sortable-row">
                                 <td>{{ quest_field.quest_name(class="form-control") }}</td>
-                                <td>{{ quest_field.progress_per_tick(class="form-control") }}</td>
+                                <td>{{ quest_field.slot(class="form-control") }}</td>
+                                <td>{{ quest_field.bonus_progress_per_tick(class="form-control") }}</td>
+                                <td class="calculated-field">
+                                    {% if quest_field.data %}
+                                        {{ quest_field.data.get('total_progress_per_tick', 'N/A') }}
+                                    {% else %}
+                                        N/A
+                                    {% endif %}
+                                </td>
                                 <td>{{ quest_field.current_progress(class="form-control") }}</td>
                                 <td>{{ quest_field.required_progress(class="form-control") }}</td>
                                 <td>{{ quest_field.link(class="form-control") }}</td>
-                                <td><button type="button" class="btn btn-danger" onclick="removeFromArray(this, 'progress_quests')">Remove</button></td>
+                                <td>
+                                    <span class="drag-handle">⋮⋮</span>
+                                    <button type="button" class="btn btn-danger" onclick="removeFromArray(this, 'progress_quests')">Remove</button>
+                                </td>
                             </tr>
                         {% endfor %}
                     </tbody>
@@ -830,48 +844,67 @@
             </div>
         </div>
 
+        <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
         <script>
+            // Initialize sortable for progress quests
+            document.addEventListener('DOMContentLoaded', function() {
+                const progressQuestsTbody = document.getElementById('progress_quests-tbody');
+                if (progressQuestsTbody) {
+                    new Sortable(progressQuestsTbody, {
+                        handle: '.drag-handle',
+                        animation: 150,
+                        onEnd: function() {
+                            reindexProgressQuests();
+                        }
+                    });
+                }
+            });
+
+            function reindexProgressQuests() {
+                const tbody = document.getElementById('progress_quests-tbody');
+                Array.from(tbody.children).forEach((row, index) => {
+                    row.querySelectorAll('select, input').forEach(input => {
+                        const fieldName = input.name.split('-').pop();
+                        input.name = `progress_quests-${index}-${fieldName}`;
+                        input.id = `progress_quests-${index}-${fieldName}`;
+                    });
+                });
+            }
+
             function addToArray(fieldName) {
                 const tbody = document.getElementById(`${fieldName}-tbody`);
                 const currentCount = tbody.children.length;
                 
                 const newRow = document.createElement('tr');
+                newRow.className = 'sortable-row';
         
-                if (fieldName === "external_modifiers") {
-                    const typeChoices = ["nation", "character"].map(choice => [choice, choice]);
-                    
-                    const typeOptions = typeChoices.map(([value, label]) => 
-                        `<option value="${value}">${label}</option>`
-                    ).join('');
-                    
-                    newRow.innerHTML = `
-                        <td>
-                            <select class="form-control" name="${fieldName}-${currentCount}-type" id="${fieldName}-${currentCount}-type">
-                                ${typeOptions}
-                            </select>
-                        </td>
-                        <td><input type="text" class="form-control" name="${fieldName}-${currentCount}-modifier" id="${fieldName}-${currentCount}-modifier" required></td>
-                        <td><input type="float" class="form-control" name="${fieldName}-${currentCount}-value" id="${fieldName}-${currentCount}-value" required></td>
-                        <td><button type="button" class="btn btn-danger" onclick="removeFromArray(this, '${fieldName}')">Remove</button></td>
-                    `;
-                } else if (fieldName === "modifiers") {
-                    newRow.innerHTML = `
-                        <td><input type="text" class="form-control" name="${fieldName}-${currentCount}-field" id="${fieldName}-${currentCount}-field" required></td>
-                        <td><input type="float" class="form-control" name="${fieldName}-${currentCount}-value" id="${fieldName}-${currentCount}-value" required></td>
-                        <td><input type="float" class="form-control" name="${fieldName}-${currentCount}-duration" id="${fieldName}-${currentCount}-duration" value="0" required></td>
-                        <td><input type="text" class="form-control" name="${fieldName}-${currentCount}-source" id="${fieldName}-${currentCount}-source" required></td>
-                        <td><button type="button" class="btn btn-danger" onclick="removeFromArray(this, '${fieldName}')">Remove</button></td>
-                    `;
-                } else if (fieldName === "progress_quests") {
+                if (fieldName === "progress_quests") {
                     newRow.innerHTML = `
                         <td><input type="text" class="form-control" name="${fieldName}-${currentCount}-quest_name" id="${fieldName}-${currentCount}-name" required></td>
-                        <td><input type="number" class="form-control" name="${fieldName}-${currentCount}-progress_per_tick" id="${fieldName}-${currentCount}-progress_per_tick" value="0" required></td>
+                        <td>
+                            <select class="form-control" name="${fieldName}-${currentCount}-slot" id="${fieldName}-${currentCount}-slot">
+                                <option value="no_slot">No Slot</option>
+                                <option value="1_progress_slot">1 Progress Slot</option>
+                                <option value="tier_1_spell_slot">Tier 1 Spell Slot</option>
+                                <option value="tier_2_spell_slot">Tier 2 Spell Slot</option>
+                                <option value="tier_3_spell_slot">Tier 3 Spell Slot</option>
+                            </select>
+                        </td>
+                        <td><input type="number" class="form-control" name="${fieldName}-${currentCount}-bonus_progress_per_tick" id="${fieldName}-${currentCount}-bonus_progress_per_tick" value="0" required></td>
+                        <td class="calculated-field">N/A</td>
                         <td><input type="number" class="form-control" name="${fieldName}-${currentCount}-current_progress" id="${fieldName}-${currentCount}-current_progress" value="0" required></td>
                         <td><input type="number" class="form-control" name="${fieldName}-${currentCount}-required_progress" id="${fieldName}-${currentCount}-required_progress" value="0" required></td>
                         <td><input type="text" class="form-control" name="${fieldName}-${currentCount}-link" id="${fieldName}-${currentCount}-link" required></td>
-                        <td><button type="button" class="btn btn-danger" onclick="removeFromArray(this, '${fieldName}')">Remove</button></td>
+                        <td>
+                            <span class="drag-handle">⋮⋮</span>
+                            <button type="button" class="btn btn-danger" onclick="removeFromArray(this, '${fieldName}')">Remove</button>
+                        </td>
                     `;
+                    
+                    // Update the new slot dropdown with current centralization options
+                    updateProgressQuestSlots();
                 }
+                // ... other fieldName conditions remain the same
         
                 tbody.appendChild(newRow);
             }
@@ -880,15 +913,19 @@
                 const row = button.closest('tr');
                 row.remove();
                 
-                // Reindex remaining modifiers
-                const tbody = document.getElementById(`${categoryName}-tbody`);
-                Array.from(tbody.children).forEach((row, index) => {
-                    row.querySelectorAll('select, input').forEach(input => {
-                        const fieldName = input.name.split('-').pop();
-                        input.name = `${categoryName}-${index}-${fieldName}`;
-                        input.id = `${categoryName}-${index}-${fieldName}`;
+                if (categoryName === 'progress_quests') {
+                    reindexProgressQuests();
+                } else {
+                    // Reindex other arrays
+                    const tbody = document.getElementById(`${categoryName}-tbody`);
+                    Array.from(tbody.children).forEach((row, index) => {
+                        row.querySelectorAll('select, input').forEach(input => {
+                            const fieldName = input.name.split('-').pop();
+                            input.name = `${categoryName}-${index}-${fieldName}`;
+                            input.id = `${categoryName}-${index}-${fieldName}`;
+                        });
                     });
-                });
+                }
             }
 
             function resetConcessions() {
@@ -921,6 +958,67 @@
                     }
                 }
             });
+
+            // Add event listener for centralization law changes
+            document.addEventListener('DOMContentLoaded', function() {
+                const centralizationField = document.querySelector('select[name="centralization_law"]');
+                if (centralizationField) {
+                    centralizationField.addEventListener('change', function() {
+                        updateProgressQuestSlots();
+                    });
+                }
+            });
+
+            function updateProgressQuestSlots() {
+                // Get current centralization law
+                const centralizationLaw = document.querySelector('select[name="centralization_law"]').value;
+                
+                // Define slot availability based on centralization law
+                const slotAvailability = {
+                    'Autonomous': { 'zero_slots': 4 },
+                    'Decentralized': { 'one_slots': 3 },
+                    'Standard': { 'two_slots': 2 },
+                    'Focused': { 'three_slots': 1, 'one_slots': 1 },
+                    'Absolute': { 'four_slots': 1 }
+                };
+                
+                const availableSlots = slotAvailability[centralizationLaw] || {};
+                
+                // Update all progress quest slot dropdowns
+                document.querySelectorAll('select[name*="progress_quests"][name*="slot"]').forEach(select => {
+                    const currentValue = select.value;
+                    
+                    // Clear existing options
+                    select.innerHTML = '<option value="no_slot">No Slot</option>';
+                    
+                    // Add progress slots based on centralization
+                    if (availableSlots.zero_slots) {
+                        select.innerHTML += '<option value="0_progress_slot">0 Progress Slot</option>';
+                    }
+                    if (availableSlots.one_slots) {
+                        select.innerHTML += '<option value="1_progress_slot">1 Progress Slot</option>';
+                    }
+                    if (availableSlots.two_slots) {
+                        select.innerHTML += '<option value="2_progress_slot">2 Progress Slot</option>';
+                    }
+                    if (availableSlots.three_slots) {
+                        select.innerHTML += '<option value="3_progress_slot">3 Progress Slot</option>';
+                    }
+                    if (availableSlots.four_slots) {
+                        select.innerHTML += '<option value="4_progress_slot">4 Progress Slot</option>';
+                    }
+                    
+                    // Always add spell slots
+                    select.innerHTML += '<option value="tier_1_spell_slot">Tier 1 Spell Slot</option>';
+                    select.innerHTML += '<option value="tier_2_spell_slot">Tier 2 Spell Slot</option>';
+                    select.innerHTML += '<option value="tier_3_spell_slot">Tier 3 Spell Slot</option>';
+                    
+                    // Restore previous value if still valid
+                    if (Array.from(select.options).some(option => option.value === currentValue)) {
+                        select.value = currentValue;
+                    }
+                });
+            }
         </script>
         
         

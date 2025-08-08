@@ -178,7 +178,9 @@
 												<thead>
 													<tr>
 														<th>Quest Name</th>
-														<th>Progress Per Tick</th>
+														<th>Slot</th>
+														<th>Bonus Progress Per Tick</th>
+														<th>Total Progress Per Tick</th>
 														<th>Current Progress</th>
 														<th>Link</th>
 													</tr>
@@ -187,7 +189,9 @@
 													{% for sub_item in item[field] %}
 														<tr>
 															<td>{{ sub_item["quest_name"] }}</td>
-															<td>{{ sub_item["progress_per_tick"] }}</td>
+															<td>{{ json_data["slot_types"][sub_item.get("slot", "no_slot")]["name"] }}</td>
+															<td>{{ sub_item["bonus_progress_per_tick"] }}</td>
+															<td>{{ sub_item["total_progress_per_tick"] }}</td>
 															<td>{{ sub_item["current_progress"] }} / {{ sub_item["required_progress"] }}</td>
 															<td>{{ sub_item["link"]|format_discord_link|safe }}</td>
 														</tr>

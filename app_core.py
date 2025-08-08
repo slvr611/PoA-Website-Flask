@@ -108,7 +108,18 @@ json_data = {"general_resources": [
             {"key": "moonstone", "name": "Moonstone", "base_price": 300},
             {"key": "furs", "name": "Furs", "base_price": 300},
             {"key": "quintessence", "name": "Quintessence", "base_price": 300},
-        ]
+        ],
+        "slot_types": {
+            "no_slot": {"progress_per_tick": 0, "name": "No Slot"},
+            "0_progress_slot": {"progress_per_tick": 0, "name": "0 Progress Slot"},
+            "1_progress_slot": {"progress_per_tick": 1, "name": "1 Progress Slot"},
+            "2_progress_slot": {"progress_per_tick": 2, "name": "2 Progress Slot"},
+            "3_progress_slot": {"progress_per_tick": 3, "name": "3 Progress Slot"},
+            "4_progress_slot": {"progress_per_tick": 4, "name": "4 Progress Slot"},
+            "tier_1_spell_slot": {"progress_per_tick": 1, "name": "Tier 1 Spell Slot"},
+            "tier_2_spell_slot": {"progress_per_tick": 2, "name": "Tier 2 Spell Slot"},
+            "tier_3_spell_slot": {"progress_per_tick": 3, "name": "Tier 3 Spell Slot"}
+        }
 }
 
 temperament_enum = ["Player", "Neutral", "Friendly", "Hostile", "Withdrawn", "Curious", "Supremacist", "Zealous"]

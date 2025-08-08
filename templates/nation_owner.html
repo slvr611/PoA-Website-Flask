@@ -1038,7 +1038,8 @@
 					<thead>
 						<tr>
 							<th>Quest Name</th>
-							<th>Progress Per Tick</th>
+							<th>Slot</th>
+							<th>Total Progress Per Tick</th>
 							<th>Current Progress</th>
 							<th>Link</th>
 						</tr>
@@ -1047,7 +1048,8 @@
 						{% for quest in nation.progress_quests %}
 							<tr>
 								<td>{{ quest.quest_name }}</td>
-								<td>{{ quest.progress_per_tick }}</td>
+								<td>{{ json_data["slot_types"][quest.get("slot", "no_slot")]["name"] }}</td>
+								<td>{{ quest.total_progress_per_tick }}</td>
 								<td>{{ quest.current_progress }} / {{ quest.required_progress }}</td>
 								<td>{{ quest.link|format_discord_link|safe }}</td>
 							</tr>

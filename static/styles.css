@@ -1359,3 +1359,23 @@ h1, h2 {
     font-weight: bold;
     margin-bottom: 4px;
 }
+
+.drag-handle {
+    cursor: grab;
+    user-select: none;
+    color: #888;
+    margin-right: 8px;
+    font-weight: bold;
+}
+
+.drag-handle:active {
+    cursor: grabbing;
+}
+
+.sortable-row.sortable-ghost {
+    opacity: 0.4;
+}
+
+.sortable-row.sortable-chosen {
+    background-color: #333;
+}

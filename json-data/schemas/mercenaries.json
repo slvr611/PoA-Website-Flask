@@ -192,7 +192,8 @@
         "items":{
           "bsonType": "json_unit_enum",
           "json_data": ["ancient_magical_land_units", "ancient_mundane_land_units",
-                         "classical_magical_land_units", "classical_mundane_land_units"]
+                         "classical_magical_land_units", "classical_mundane_land_units",
+                        "ancient_unique_land_units", "classical_unique_land_units"]
         }
       },
       "naval_units": {

@@ -159,7 +159,8 @@
         "label": "Trade Risk",
         "description": "The risk of trading in the market",
         "format": "percentage",
-        "calculated": true
+        "calculated": true,
+        "base_value": 0.05
       },
       "members": {
         "bsonType": "array",

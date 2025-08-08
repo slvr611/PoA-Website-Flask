@@ -744,6 +744,31 @@ def compute_hiring_cost(field, target, base_value, field_schema, overall_total_m
 
     return int(value)
 
+def compute_progress_per_session(field, target, base_value, field_schema, overall_total_modifiers):
+    """Calculate progress per session for each progress quest"""
+    from app_core import json_data
+    
+    progress_quests = target.get("progress_quests", [])
+    
+    # Update each quest with its calculated progress per session
+    for quest in progress_quests:
+        slot = quest.get("slot", "no_slot")
+        bonus_progress = quest.get("bonus_progress_per_tick", 0)
+        
+        # Get progress from slot type using json_data
+        slot_progress = json_data.get("slot_types", {}).get(slot, {}).get("progress_per_tick", 0)
+        
+        if slot_progress > 0:
+            # Calculate total progress per session
+            total_progress = slot_progress + bonus_progress
+        else:
+            total_progress = 0
+        
+        # Store the calculated value in the quest
+        quest["total_progress_per_tick"] = max(int(total_progress), 0)
+    
+    return progress_quests
+
 ##############################################################
 
 CUSTOM_COMPUTE_FUNCTIONS = {
@@ -808,5 +833,6 @@ CUSTOM_COMPUTE_FUNCTIONS = {
     "land_budget_spent": compute_budget_spent,
     "naval_budget_spent": compute_budget_spent,
     "hiring_cost": compute_hiring_cost,
-
+    "progress_quests": compute_progress_per_session,
+    "progress_per_session": compute_progress_per_session,
 }

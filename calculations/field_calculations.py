@@ -117,6 +117,14 @@ def calculate_all_fields(target, schema, target_data_type):
             )
             target[field] = calculated_values[field]
     
+    # Calculate progress per session for progress quests
+    if "progress_quests" in target:
+        target["progress_quests"] = compute_field(
+            "progress_quests", target, 0, {},
+            overall_total_modifiers
+        )
+        calculated_values["progress_quests"] = target["progress_quests"]
+    
     #print(overall_total_modifiers)
     
     if target_data_type == "nation":
