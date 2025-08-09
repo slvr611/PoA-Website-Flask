@@ -419,7 +419,8 @@ def collect_cities(target):
         wall_modifiers = wall_json_data.get(city.get("wall", ""), {}).get("modifiers", {})
         collected_modifiers.append(city_modifiers)
         collected_modifiers.append(wall_modifiers)
-        collected_modifiers.append({city_node + "_nodes": 1})
+        if city_node:
+            collected_modifiers.append({city_node + "_nodes": 1})
 
     return collected_modifiers
 
