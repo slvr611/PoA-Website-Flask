@@ -137,6 +137,18 @@
 			"research": 1
 		}
 	},
+	"stone_speaker": {
+		"display_name": "Stone Speaker",
+		"requirements":{
+			"wonder": ["The Vorkatir Peaks"]
+		},
+		"production": {
+			"administration": 2
+		},
+		"upkeep": {
+			"stone": 5
+		}
+	},
 	"partial_vampire": {
 		"display_name": "Vampire",
 		"requirements":{

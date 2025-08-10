@@ -437,11 +437,40 @@ def collect_territory_terrain(target, modifier_totals, external_modifier_totals)
     territory_types = target.get("territory_types", {})
     total_modifiers = {}
     terrain_json_data = json_data["terrains"]
+
+    terrain_resource_swap_modifiers = {} # A List of modifiers in the format: {terrain}_swap_{resource}_production: 1       Anything above 1 will swap the base resource production for that tile
+
+    extra_terrain_production_modifiers = {} # A List of modifiers in the format: {terrain}_extra_{resource}_production_per: {num_tiles}
+
+    for modifier, value in modifier_totals.items():
+        if modifier.endswith("_production_per") and "_extra_" in modifier:
+            extra_terrain_production_modifiers[modifier] = value
+        elif modifier.endswith("_production") and "_swap_" in modifier:
+            terrain_resource_swap_modifiers[modifier] = value
+    for modifier, value in external_modifier_totals.items():
+        if modifier.endswith("_production_per") and "_extra_" in modifier:
+            extra_terrain_production_modifiers[modifier] = value
+        elif modifier.endswith("_production") and "_swap_" in modifier:
+            terrain_resource_swap_modifiers[modifier] = value
+
     for terrain, value in territory_types.items():
         terrain_modifier = terrain_json_data.get(terrain, {}).get("resource", "none") + "_production"
+
+        for modifier, mod_value in terrain_resource_swap_modifiers.items():
+            if modifier.startswith(terrain + "_swap_"):
+                if mod_value > 1:
+                    resource = modifier.replace("_production", "").replace(terrain + "_swap_", "")
+                    terrain_modifier = resource + "_production"
+
         terrain_count_required = terrain_json_data.get(terrain, {}).get("count_required", 4)
         terrain_count_required += modifier_totals.get(terrain + "_terrain_count_required", 0) + external_modifier_totals.get(terrain + "_terrain_count_required", 0)
         total_modifiers[terrain_modifier] = total_modifiers.get(terrain_modifier, 0) + value // terrain_count_required
+
+        for modifier, mod_value in extra_terrain_production_modifiers.items():
+            if modifier.startswith(terrain + "_extra_"):
+                resource = modifier.replace("_production_per", "").replace(terrain + "_extra_", "")
+                total_modifiers[resource + "_production"] = total_modifiers.get(resource + "_production", 0) + (value // mod_value)
+        
     return total_modifiers
 
 def collect_jobs_assigned(target):
@@ -555,6 +584,12 @@ def check_job_requirements(target, job_details, overall_total_modifiers):
         elif requirement == "modifier":
             for modifier in value:
                 if overall_total_modifiers.get(modifier, 0) <= 0:
+                    meets_requirements = False
+        elif requirement == "wonder":
+            for wonder in value:
+                wonderdb = category_data["wonders"]["database"]
+                wonder = wonderdb.find_one({"name": wonder})
+                if str(target.get("_id", "")) != wonder.get("owner_nation", ""):
                     meets_requirements = False
     
     return meets_requirements

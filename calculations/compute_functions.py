@@ -82,7 +82,11 @@ def compute_field_effective_territory(field, target, base_value, field_schema, o
     return int(value)
 
 def compute_field_current_territory(field, target, base_value, field_schema, overall_total_modifiers):
-    territory_types = target.get("territory_types", {})
+    territory_types = copy.deepcopy(target.get("territory_types", {}))
+
+    for terrain, value in territory_types.items():
+        effective_territory_multiplier = overall_total_modifiers.get(terrain + "_effective_territory_multiplier", 1) * overall_total_modifiers.get("tile_effective_territory_multiplier", 1)
+        territory_types[terrain] = int(math.ceil(value * effective_territory_multiplier))
 
     value = sum(territory_types.values())
     
@@ -219,6 +223,7 @@ def compute_stability_gain_chance(field, target, base_value, field_schema, overa
     pop_count = target.get("pop_count", 0)
     road_usage = target.get("road_usage", 0)
     war = False
+    territory_types = target.get("territory_types", {})
 
     production = compute_resource_production("resource_production", target, 0, {}, overall_total_modifiers)
 
@@ -250,8 +255,16 @@ def compute_stability_gain_chance(field, target, base_value, field_schema, overa
         
         foreign_religious_pop_stability_gain = foreign_religious_pop_count * overall_total_modifiers.get("stability_gain_chance_per_foreign_religious_pop", 0)
         foreign_religious_pop_stability_gain = max(foreign_religious_pop_stability_gain, overall_total_modifiers.get("max_stability_gain_chance_per_foreign_religious_pop", 0))
+    
+    terrain_stability_gain = 0
 
-    value = round(min(max(base_value + overall_total_modifiers.get(field, 0) + karma_stability_gain + minority_stability_gain + pop_stability_gain + stability_gain_chance_from_resource_production + road_stability_gain + war_stability_gain + foreign_religious_pop_stability_gain, 0), 1), 2)
+    for terrain, terrain_count in territory_types.items():
+        if overall_total_modifiers.get("stability_gain_chance_per_tile", 0) != 0 or overall_total_modifiers.get("stability_gain_chance_per_" + terrain, 0) != 0:
+            terrain_stability_gain += (overall_total_modifiers.get("stability_gain_chance_per_tile", 0) + overall_total_modifiers.get("stability_gain_chance_per_" + terrain, 0)) * terrain_count
+    
+    print(terrain_stability_gain)
+
+    value = round(min(max(base_value + overall_total_modifiers.get(field, 0) + karma_stability_gain + minority_stability_gain + pop_stability_gain + stability_gain_chance_from_resource_production + road_stability_gain + war_stability_gain + foreign_religious_pop_stability_gain + terrain_stability_gain, 0), 1), 2)
 
     return value
 
