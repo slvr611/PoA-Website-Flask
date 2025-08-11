@@ -683,7 +683,10 @@ def compute_death_chance(field, target, base_value, field_schema, overall_total_
 def compute_heal_chance(field, target, base_value, field_schema, overall_total_modifiers):
     prowess = target.get("prowess", 0)
 
-    value = round(max(base_value + overall_total_modifiers.get(field, 0) + max(prowess * field_schema.get("heal_chance_per_prowess", 0), 0.1), 0), 2)
+    minimum_heal_chance = 0
+    minimum_heal_chance += overall_total_modifiers.get("minimum_heal_chance_per_prowess", 0) * prowess + overall_total_modifiers.get("minimum_heal_chance", 0)
+
+    value = round(max(base_value + overall_total_modifiers.get(field, 0) + max(prowess * field_schema.get("heal_chance_per_prowess", 0), 0.1), minimum_heal_chance), 2)
 
     return value
 
