@@ -17,7 +17,6 @@ def tick(form_data):
         if not success:
             return message
     tick_summary = ""
-    changes = []
 
     global_modifiers = mongo.db["global_modifiers"].find_one({"name": "global_modifiers"})
     old_target = global_modifiers
@@ -28,16 +27,6 @@ def tick(form_data):
         if run_key in form_data:
             print("Tick Session Number")
             tick_summary += tick_session_number(old_target, new_target, schema)
-
-    if "run_Tick Session Number" in form_data:
-        changes.append(system_request_change(
-            data_type="global_modifiers",
-            item_id=old_target["_id"],
-            change_type="Update",
-            before_data=old_target,
-            after_data=new_target,
-            reason="Tick Update for Tick Session Number"
-        ))
 
 
 
@@ -64,16 +53,6 @@ def tick(form_data):
                 for i in range(len(old_characters)):
                     tick_summary += tick_function(old_characters[i], new_characters[i], character_schema)
 
-        for i in range(len(old_characters)):
-            changes.append(system_request_change(
-                data_type="characters",
-                item_id=old_characters[i]["_id"],
-                change_type="Update",
-                before_data=old_characters[i],
-                after_data=new_characters[i],
-                reason="Tick Update for " + old_characters[i]["name"]
-            ))
-
 
 
     collect_artifact_data = False
@@ -99,17 +78,6 @@ def tick(form_data):
                 for i in range(len(old_artifacts)):
                     tick_summary += tick_function(old_artifacts[i], new_artifacts[i], artifact_schema)
 
-        for i in range(len(old_artifacts)):
-            changes.append(system_request_change(
-                data_type="artifacts",
-                item_id=old_artifacts[i]["_id"],
-                change_type="Update",
-                before_data=old_artifacts[i],
-                after_data=new_artifacts[i],
-                reason="Tick Update for " + old_artifacts[i]["name"]
-            ))
-
-
 
     collect_merchant_data = False
     for tick_function_label, tick_function in MERCHANT_TICK_FUNCTIONS.items():
@@ -133,16 +101,6 @@ def tick(form_data):
                 print(tick_function_label)
                 for i in range(len(old_merchants)):
                     tick_summary += tick_function(old_merchants[i], new_merchants[i], merchant_schema)
-
-        for i in range(len(old_merchants)):
-            changes.append(system_request_change(
-                data_type="merchants",
-                item_id=old_merchants[i]["_id"],
-                change_type="Update",
-                before_data=old_merchants[i],
-                after_data=new_merchants[i],
-                reason="Tick Update for " + old_merchants[i]["name"]
-            ))
 
 
 
@@ -169,16 +127,6 @@ def tick(form_data):
                 for i in range(len(old_mercenaries)):
                     tick_summary += tick_function(old_mercenaries[i], new_mercenaries[i], mercenary_schema)
 
-        for i in range(len(old_mercenaries)):
-            changes.append(system_request_change(
-                data_type="mercenaries",
-                item_id=old_mercenaries[i]["_id"],
-                change_type="Update",
-                before_data=old_mercenaries[i],
-                after_data=new_mercenaries[i],
-                reason="Tick Update for " + old_mercenaries[i]["name"]
-            ))
-    
 
 
     collect_faction_data = False
@@ -204,19 +152,6 @@ def tick(form_data):
                 for i in range(len(old_factions)):
                     tick_summary += tick_function(old_factions[i], new_factions[i], faction_schema)
 
-        for i in range(len(old_factions)):
-            changes.append(system_request_change(
-                data_type="factions",
-                item_id=old_factions[i]["_id"],
-                change_type="Update",
-                before_data=old_factions[i],
-                after_data=new_factions[i],
-                reason="Tick Update for " + old_factions[i]["name"]
-            ))
-
-
-
-
     collect_market_data = False
     for tick_function_label, tick_function in MARKET_TICK_FUNCTIONS.items():
         run_key = f"run_{tick_function_label}"
@@ -239,16 +174,6 @@ def tick(form_data):
                 print(tick_function_label)
                 for i in range(len(old_markets)):
                     tick_summary += tick_function(old_markets[i], new_markets[i], market_schema)
-
-        for i in range(len(old_markets)):
-            changes.append(system_request_change(
-                data_type="markets",
-                item_id=old_markets[i]["_id"],
-                change_type="Update",
-                before_data=old_markets[i],
-                after_data=new_markets[i],
-                reason="Tick Update for " + old_markets[i]["name"]
-            ))
 
 
 
@@ -274,21 +199,103 @@ def tick(form_data):
                 print(tick_function_label)
                 for i in range(len(old_nations)):
                     tick_summary += tick_function(old_nations[i], new_nations[i], nation_schema)
+
+
+
+    if "run_Tick Session Number" in form_data:
+        change_id = system_request_change(
+            data_type="global_modifiers",
+            item_id=old_target["_id"],
+            change_type="Update",
+            before_data=old_target,
+            after_data=new_target,
+            reason="Tick Update for Tick Session Number"
+        )
+        system_approve_change(change_id)
     
+    if collect_character_data:
+        for i in range(len(old_characters)):
+            change_id = system_request_change(
+                data_type="characters",
+                item_id=old_characters[i]["_id"],
+                change_type="Update",
+                before_data=old_characters[i],
+                after_data=new_characters[i],
+                reason="Tick Update for " + old_characters[i]["name"]
+            )
+            system_approve_change(change_id)
+    
+    if collect_artifact_data:    
+        for i in range(len(old_artifacts)):
+            change_id = system_request_change(
+                data_type="artifacts",
+                item_id=old_artifacts[i]["_id"],
+                change_type="Update",
+                before_data=old_artifacts[i],
+                after_data=new_artifacts[i],
+                reason="Tick Update for " + old_artifacts[i]["name"]
+            )
+            system_approve_change(change_id)
+
+    if collect_merchant_data:
+        for i in range(len(old_merchants)):
+            change_id = system_request_change(
+                data_type="merchants",
+                item_id=old_merchants[i]["_id"],
+                change_type="Update",
+                before_data=old_merchants[i],
+                after_data=new_merchants[i],
+                reason="Tick Update for " + old_merchants[i]["name"]
+            )
+            system_approve_change(change_id)
+
+    if collect_mercenary_data:
+        for i in range(len(old_mercenaries)):
+            change_id = system_request_change(
+                data_type="mercenaries",
+                item_id=old_mercenaries[i]["_id"],
+                change_type="Update",
+                before_data=old_mercenaries[i],
+                after_data=new_mercenaries[i],
+                reason="Tick Update for " + old_mercenaries[i]["name"]
+            )
+            system_approve_change(change_id)
+    
+    if collect_faction_data:
+        for i in range(len(old_factions)):
+            change_id = system_request_change(
+                data_type="factions",
+                item_id=old_factions[i]["_id"],
+                change_type="Update",
+                before_data=old_factions[i],
+                after_data=new_factions[i],
+                reason="Tick Update for " + old_factions[i]["name"]
+            )
+            system_approve_change(change_id)
+
+    if collect_market_data:
+        for i in range(len(old_markets)):
+            change_id = system_request_change(
+                data_type="markets",
+                item_id=old_markets[i]["_id"],
+                change_type="Update",
+                before_data=old_markets[i],
+                after_data=new_markets[i],
+                reason="Tick Update for " + old_markets[i]["name"]
+            )
+            system_approve_change(change_id)
+
+    if collect_nation_data:
         for i in range(len(old_nations)):
-            changes.append(system_request_change(
+            change_id = system_request_change(
                 data_type="nations",
                 item_id=old_nations[i]["_id"],
                 change_type="Update",
                 before_data=old_nations[i],
                 after_data=new_nations[i],
                 reason="Tick Update for " + old_nations[i]["name"]
-            ))
-
-
-    
-    for change in changes:
-        system_approve_change(change)
+            )
+            system_approve_change(change_id)
 
     if "run_Give Tick Summary" in form_data:
         give_tick_summary(tick_summary)

@@ -263,29 +263,43 @@ def backup_mongodb():
             collection_dir = os.path.join(backup_path, db_name)
             os.makedirs(collection_dir, exist_ok=True)
             
-            # Get all documents from the collection
+            # Get collection reference
             collection = db[collection_name]
-            documents = list(collection.find({}))
             
-            # Convert ObjectId to string for JSON serialization
-            for doc in documents:
-                if '_id' in doc and hasattr(doc['_id'], '__str__'):
-                    doc['_id'] = str(doc['_id'])
+            # Stream documents in batches to reduce memory usage
+            batch_size = 1000
+            file_path = os.path.join(collection_dir, f"{collection_name}.json")
+            
+            with open(file_path, 'w') as f:
+                f.write('[\n')
+                first_doc = True
                 
-                # Convert any other ObjectId fields
-                for key, value in doc.items():
-                    if hasattr(value, '__str__') and str(type(value)) == "<class 'bson.objectid.ObjectId'>":
-                        doc[key] = str(value)
-            
-            # Write to JSON file
-            with open(os.path.join(collection_dir, f"{collection_name}.json"), 'w') as f:
-                json.dump(documents, f, default=str, indent=2)
+                # Use cursor with batch processing
+                cursor = collection.find({}).batch_size(batch_size)
+                
+                for doc in cursor:
+                    # Convert ObjectId to string for JSON serialization
+                    if '_id' in doc and hasattr(doc['_id'], '__str__'):
+                        doc['_id'] = str(doc['_id'])
+                    
+                    # Convert any other ObjectId fields
+                    for key, value in doc.items():
+                        if hasattr(value, '__str__') and str(type(value)) == "<class 'bson.objectid.ObjectId'>":
+                            doc[key] = str(value)
+                    
+                    # Write document to file immediately
+                    if not first_doc:
+                        f.write(',\n')
+                    json.dump(doc, f, default=str, indent=2)
+                    first_doc = False
+                
+                f.write('\n]')
         
-        # Create a zip file of the backup
+        # Create a zip file of the backup with compression
         import zipfile
         
         zip_path = f"{backup_path}.zip"
-        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as zipf:
             for root, dirs, files in os.walk(backup_path):
                 for file in files:
                     file_path = os.path.join(root, file)
@@ -301,6 +315,10 @@ def backup_mongodb():
         
         # Upload to S3 if configured
         s3_success, s3_message = upload_to_s3(zip_path, f"backups/{os.path.basename(zip_path)}")
+        
+        # Clean up local zip file after S3 upload to save space
+        if s3_success and os.path.exists(zip_path):
+            os.remove(zip_path)
         
         return True, f"Backup created successfully. Email: {email_message}. S3: {s3_message}"
 
