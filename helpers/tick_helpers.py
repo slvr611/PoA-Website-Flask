@@ -356,7 +356,7 @@ def modifier_decay_tick(old_target, new_target, schema):
 
 def progress_quests_tick(old_target, new_target, schema):
     for quest in new_target.get("progress_quests", []):
-        quest["current_progress"] += quest.get("progress_per_tick", 0)
+        quest["current_progress"] += quest.get("total_progress_per_tick", 0)
     
     return ""
 
