@@ -770,35 +770,37 @@
                 <span class="toggle-icon">▼</span>
             </div>
             <div class="section-content">
-                <table class="jobs-table">
-                    <thead>
-                        <tr>
-                            <th>Name</th>
-                            <th>Slot</th>
-                            <th>Bonus Progress Per Tick</th>
-                            <th>Current Progress</th>
-                            <th>Required Progress</th>
-                            <th>Link</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="progress_quests-tbody" class="sortable-tbody">
-                        {% for quest_field in form.progress_quests %}
-                            <tr class="sortable-row">
-                                <td>{{ quest_field.quest_name(class="form-control") }}</td>
-                                <td>{{ quest_field.slot(class="form-control") }}</td>
-                                <td>{{ quest_field.bonus_progress_per_tick(class="form-control") }}</td>
-                                <td>{{ quest_field.current_progress(class="form-control") }}</td>
-                                <td>{{ quest_field.required_progress(class="form-control") }}</td>
-                                <td>{{ quest_field.link(class="form-control") }}</td>
-                                <td>
-                                    <span class="drag-handle">⋮⋮</span>
-                                    <button type="button" class="btn btn-danger" onclick="removeFromArray(this, 'progress_quests')">Remove</button>
-                                </td>
+                <div class="table-wrapper">
+                    <table class="jobs-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Slot</th>
+                                <th>Bonus Progress Per Tick</th>
+                                <th>Current Progress</th>
+                                <th>Required Progress</th>
+                                <th>Link</th>
+                                <th>Actions</th>
                             </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody id="progress_quests-tbody" class="sortable-tbody">
+                            {% for quest_field in form.progress_quests %}
+                                <tr class="sortable-row">
+                                    <td>{{ quest_field.quest_name(class="form-control") }}</td>
+                                    <td>{{ quest_field.slot(class="form-control") }}</td>
+                                    <td>{{ quest_field.bonus_progress_per_tick(class="form-control") }}</td>
+                                    <td>{{ quest_field.current_progress(class="form-control") }}</td>
+                                    <td>{{ quest_field.required_progress(class="form-control") }}</td>
+                                    <td>{{ quest_field.link(class="form-control") }}</td>
+                                    <td>
+                                        <span class="drag-handle">⋮⋮</span>
+                                        <button type="button" class="btn btn-danger" onclick="removeFromArray(this, 'progress_quests')">Remove</button>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
                 <button type="button" class="btn btn-primary" onclick="addToArray('progress_quests')">Add Quest</button>
             </div>
         </div>
@@ -903,7 +905,6 @@
                         <td>
                             <select class="form-control" name="${fieldName}-${currentCount}-slot" id="${fieldName}-${currentCount}-slot">
                                 <option value="no_slot">No Slot</option>
-                                <option value="1_progress_slot">1 Progress Slot</option>
                                 <option value="tier_1_spell_slot">Tier 1 Spell Slot</option>
                                 <option value="tier_2_spell_slot">Tier 2 Spell Slot</option>
                                 <option value="tier_3_spell_slot">Tier 3 Spell Slot</option>
@@ -921,6 +922,10 @@
                 }
 
                 tbody.appendChild(newRow);
+
+                if (fieldName === "progress_quests") {
+                    updateProgressQuestSlots();
+                }
             }
         
             function removeFromArray(button, categoryName) {
@@ -986,7 +991,7 @@
             function updateProgressQuestSlots() {
                 // Get current centralization law
                 const centralizationLaw = document.querySelector('select[name="centralization_law"]').value;
-                
+
                 // Define slot availability based on centralization law
                 const slotAvailability = {
                     'Autonomous': { 'zero_slots': 4 },
