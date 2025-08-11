@@ -425,6 +425,8 @@ def character_death_tick(old_character, new_character, schema):
         
         artifact_schema, artifact_db = get_data_on_category("artifacts")
         artifacts = list(artifact_db.find({"owner": str(old_character.get("_id", ""))}))
+        print(f"Artifacts from {old_character.get('name', 'Unknown')}: ")
+        print(artifacts)
         for old_artifact in artifacts:
             if old_artifact:
                 old_artifact.update(calculate_all_fields(old_artifact, artifact_schema, "artifact"))
@@ -488,7 +490,7 @@ def character_stat_gain_tick(old_character, new_character, schema):
                 possible_stats.append(stat)
         if possible_stats and len(possible_stats) > 0:
             stat = random.choice(possible_stats)
-            new_character["modifiers"] = old_character.get("modifiers", []) + [{"field": stat, "value": 1, "duration": -1, "source": "Stat gain tick"}]
+            new_character["modifiers"].append({"field": stat, "value": 1, "duration": -1, "source": "Stat gain tick"})
             result = f"{old_character.get('name', 'Unknown')} has gained a level of {stat}.\n"
     return result
 
