@@ -262,8 +262,6 @@ def compute_stability_gain_chance(field, target, base_value, field_schema, overa
         if overall_total_modifiers.get("stability_gain_chance_per_tile", 0) != 0 or overall_total_modifiers.get("stability_gain_chance_per_" + terrain, 0) != 0:
             terrain_stability_gain += (overall_total_modifiers.get("stability_gain_chance_per_tile", 0) + overall_total_modifiers.get("stability_gain_chance_per_" + terrain, 0)) * terrain_count
     
-    print(terrain_stability_gain)
-
     value = round(min(max(base_value + overall_total_modifiers.get(field, 0) + karma_stability_gain + minority_stability_gain + pop_stability_gain + stability_gain_chance_from_resource_production + road_stability_gain + war_stability_gain + foreign_religious_pop_stability_gain + terrain_stability_gain, 0), 1), 2)
 
     return value

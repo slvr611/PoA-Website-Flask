@@ -111,13 +111,15 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
-    function getTerrainMapPath(sessionNum, basePath) {
+    function getTerrainMapPath(sessionNum, basePath) { // TODO: Improve this loading so it's modular
         if (sessionNum <= 17) {
-            return basePath + "PoA_Geographical_Map_Tribal.dzi";
+            return basePath + "PoA_Geographical_Map_Tribal_Session_1.dzi";
         } else if (sessionNum <= 42) {
-            return basePath + "PoA_Terrain_Map_Ancient.dzi";
+            return basePath + "PoA_Terrain_Map_Ancient_Session_18.dzi";
+        } else if (sessionNum <= 53) {
+            return basePath + "PoA_Terrain_Map_Classical_Session_43.dzi";
         } else {
-            return basePath + "PoA_Terrain_Map_Classical.dzi";
+            return basePath + "PoA_Terrain_Map_Classical_Session_54.dzi";
         }
     }
 
