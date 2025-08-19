@@ -355,9 +355,11 @@ def modifier_decay_tick(old_target, new_target, schema):
     return ""
 
 def progress_quests_tick(old_target, new_target, schema):
-    for quest in new_target.get("progress_quests", []):
-        quest["current_progress"] += quest.get("total_progress_per_tick", 0)
-    
+    for i in range(len(old_target.get("progress_quests", []))):
+        new_target["progress_quests"][i]["current_progress"] = old_target["progress_quests"][i].get("current_progress", 0) + old_target["progress_quests"][i].get("total_progress_per_tick", 0)
+        if new_target["progress_quests"][i].get("current_progress", 0) >= new_target["progress_quests"][i].get("required_progress", 0):
+            new_target["progress_quests"][i]["current_progress"] = new_target["progress_quests"][i].get("required_progress", 0)
+            
     return ""
 
 def tick_session_number(old_target, new_target, schema):
