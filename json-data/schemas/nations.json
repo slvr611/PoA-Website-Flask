@@ -480,13 +480,14 @@
       "base_value": 13
         },
       "pops": {
-          "bsonType": "array",
-      "label": "Pops",
-          "description": "The list of pops in the nation",
-      "collections": ["pops"],
-      "queryTargetAttribute": "nation",
-      "preview": ["race", "culture", "religion"]
-        },
+        "bsonType": "array",
+        "label": "Pops",
+        "description": "The list of pops in the nation",
+        "collections": ["pops"],
+        "queryTargetAttribute": "nation",
+        "preview": ["race", "culture", "religion"],
+        "sort_by": ["race", "culture", "religion"]
+      },
       "unique_minority_count": {
           "bsonType": "number",
       "label": "Minority Count",

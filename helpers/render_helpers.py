@@ -71,7 +71,18 @@ def get_linked_objects(schema, item, preview_items=None):
 
                     related_items = []
                     for related_collection in related_collections:
-                        related_items += list(mongo.db[related_collection].find({query_target: item_id}, query_dict).sort("name", ASCENDING))
+                        items = mongo.db[related_collection].find({query_target: item_id}, query_dict)
+                        if attributes.get("sort_by"):
+                            sort_by = attributes["sort_by"]
+                            if isinstance(sort_by, list):
+                                sort_by_tuples = []
+                                for sort_field in sort_by:
+                                    sort_by_tuples.append((sort_field, ASCENDING))
+                                items.sort(sort_by_tuples)
+                            else:
+                                items.sort(sort_by, ASCENDING)
+                        
+                        related_items += list(items)
 
                     if related_items:
                         linked_objects[field] = []
