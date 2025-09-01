@@ -628,7 +628,10 @@ def compute_age_status(field, target, base_value, field_schema, overall_total_mo
     if age < 1:
         value = "Child"
     elif age >= target.get("elderly_age", 3):
-        value = "Elderly"
+        if overall_total_modifiers.get("ignore_elderly", 0) > 0:
+            value = "Adult"
+        else:
+            value = "Elderly"
 
     return value
 
