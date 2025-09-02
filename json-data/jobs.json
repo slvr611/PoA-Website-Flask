@@ -47,6 +47,19 @@
 			"administration": 1
 		}
 	},
+	"entertainer": {
+		"display_name": "Entertainer",
+		"requirements":{
+			"wonder": ["Haley University of Fine Arts"]
+		},
+		"production": {
+			"rerolls": 1
+		},
+		"upkeep": {
+			"wood": 2,
+			"bronze": 1
+		}
+	},
 	"farmer": {
 		"display_name": "Farmer",
 		"requirements":{

@@ -2,7 +2,7 @@
   "$jsonSchema": {
     "bsonType": "object",
     "required": ["name", "reknown"],
-	  "laws": ["reknown", "size"],
+	  "laws": ["renown", "size"],
     "preview": ["region", "size", "patron"],
     "sort": "region",
     "properties": {
@@ -102,9 +102,9 @@
           }
         }
       },
-      "reknown": {
+      "renown": {
         "bsonType": "enum",
-		    "label": "Reknown",
+		    "label": "Renown",
         "description": "The mercenary company's reputation",
 		    "enum": ["Scoundrels", "Unscrupulous", "Standard", "Honorable"],
         "default": "Standard",
