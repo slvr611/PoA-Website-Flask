@@ -1,7 +1,7 @@
 {
   "$jsonSchema": {
     "bsonType": "object",
-    "required": ["name", "reknown"],
+    "required": ["name", "renown"],
 	  "laws": ["renown", "size"],
     "preview": ["region", "size", "patron"],
     "sort": "region",
