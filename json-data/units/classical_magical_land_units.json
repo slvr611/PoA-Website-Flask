@@ -13,6 +13,21 @@
 			"research": ["novitiates"]
 		}
 	},
+	"classical_drake": {
+		"display_name": "Classical Drake",
+		"recruitment_cost": {
+			"money": 750
+		},
+		"upkeep": {
+			"magic": 2,
+			"iron": 2,
+			"stone": 2
+		},
+		"requirements": {
+			"district": ["classical_magic_site"],
+			"research": ["summoning_circles"]
+		}
+	},
 	"classical_extraplanar_bastion": {
 		"display_name": "Classical Extraplanar Bastion",
 		"recruitment_cost": {},
@@ -48,6 +63,19 @@
 		"requirements": {
 			"district": ["classical_magic_site"],
 			"research": ["cosmology"]
+		}
+	},
+	"classical_pulsar": {
+		"display_name": "Classical Pulsar",
+		"recruitment_cost": {
+			"money": 150
+		},
+		"upkeep": {
+			"magic": 2
+		},
+		"requirements": {
+			"district": ["classical_magic_site"],
+			"research": ["summoning_circles"]
 		}
 	},
 	"classical_undead_army": {

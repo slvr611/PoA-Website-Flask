@@ -24,12 +24,68 @@
 			"research": ["frame_saddles"]
 		}
 	},
+	"classical_chariot": {
+		"display_name": "Classical Chariot",
+		"recruitment_cost": {
+			"money": 375
+		},
+		"upkeep": {
+			"mounts": 1,
+			"bronze": 1
+		},
+		"requirements": {
+			"district": ["classical_workshop"],
+			"research": ["draught_armor"]
+		}
+	},
 	"classical_civilian": {
 		"display_name": "Classical Civilian",
 		"recruitment_cost": {},
 		"upkeep": {},
 		"requirements": {
 			"research": ["city_defense"]
+		}
+	},
+	"classical_elite_infantry": {
+		"display_name": "Classical Elite Infantry",
+		"recruitment_cost": {
+			"money": 500
+		},
+		"upkeep": {
+			"iron": 2,
+			"stone": 1
+		},
+		"requirements": {
+			"district": ["classical_forge"],
+			"research": ["riveted_armor"]
+		}
+	},
+	"classical_heavy_cavalry": {
+		"display_name": "Classical Heavy Cavalry",
+		"recruitment_cost": {
+			"money": 450
+		},
+		"upkeep": {
+			"mounts": 2,
+			"iron": 1
+		},
+		"requirements": {
+			"district": ["classical_ranch"],
+			"research": ["draught_armor"]
+		}
+	},
+	"classical_heavy_infantry": {
+		"display_name": "Classical Heavy Infantry",
+		"recruitment_cost": {
+			"money": 375
+		},
+		"upkeep": {
+			"iron": 1,
+			"stone": 1
+		},
+		"requirements": {
+			"district": ["classical_forge"],
+			"research": ["riveted_armor"]
 		}
 	},
 	"classical_light_archers": {
@@ -84,6 +140,19 @@
 		"requirements": {
 			"district": ["classical_forge", "classical_workshop"],
 			"research": ["war_engineers"]
+		}
+	},
+	"classical_skirmisher": {
+		"display_name": "Classical Skirmisher",
+		"recruitment_cost": {
+			"money": 250
+		},
+		"upkeep": {
+			"wood": 2
+		},
+		"requirements": {
+			"district": ["classical_workshop"],
+			"research": ["asymmetrical_warfare"]
 		}
 	},
 	"classical_spearmen": {

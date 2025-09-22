@@ -11,20 +11,6 @@
 			"effective_pop_capacity": 1
 		}
 	},
-	"metropolis": {
-		"display_name": "Metropolis",
-		"cost": {
-			"wood": 14,
-			"stone": 10,
-			"food": 8,
-			"bronze": 4
-		},
-		"modifiers": {
-			"wood_consumption": 1,
-			"stone_consumption": 1,
-			"effective_pop_capacity": 3
-		}
-	},
 	"commerce": {
 		"display_name": "Commerce",
 		"cost": {
@@ -40,6 +26,37 @@
 			"money_income": 75,
 			"trade_distance": 3,
 			"trade_slots": 3
+		}
+	},
+	"heritage": {
+		"display_name": "Heritage",
+		"cost": {
+			"stone": 12,
+			"wood": 10,
+			"food": 10,
+			"iron": 3
+		},
+		"modifiers": {
+			"food_consumption": 2,
+			"stability_gain_chance_per_x_foreign_cultural_pop": 3,
+			"max_stability_gain_chance_per_foreign_cultural_pop": 0.25,
+			"stability_loss_chance_per_x_foreign_cultural_pop": -3,
+			"max_stability_loss_chance_per_foreign_cultural_pop": -0.25,
+			"effective_pop_capacity": 1
+		}
+	},
+	"metropolis": {
+		"display_name": "Metropolis",
+		"cost": {
+			"wood": 14,
+			"stone": 10,
+			"food": 8,
+			"bronze": 4
+		},
+		"modifiers": {
+			"wood_consumption": 1,
+			"stone_consumption": 1,
+			"effective_pop_capacity": 3
 		}
 	},
 	"sanctum": {

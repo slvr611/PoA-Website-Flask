@@ -358,14 +358,18 @@
         "bsonType": "enum",
         "label": "Vassal Type",
         "description": "The type of vassal of the nation",
-        "enum": ["None", "Tributary", "Protectorate", "Mercantile", "Martial", "Provincial"],
+        "enum": ["None", "Enclave", "Martial", "Mercantile", "Protectorate", "Provincial", "Tributary"],
         "hideIfNone": "overlord",
         "laws": {
           "None": {},
-          "Tributary": {},
-          "Protectorate": {
-            "defensive_pact_slots_maximum": 1,
+          "Enclave": {
+            "defensive_pact_slots_maximum": 0,
             "military_pact_slots_maximum": 0,
+            "vassal_slots_maximum": 0
+          },
+          "Martial": {
+            "defensive_pact_slots_maximum": 0,
+            "military_pact_slots_maximum": 1,
             "vassal_slots_maximum": 0
           },
           "Mercantile": {
@@ -377,9 +381,9 @@
             "trade_slots": 3,
             "trade_distance": 3
           },
-          "Martial": {
-            "defensive_pact_slots_maximum": 0,
-            "military_pact_slots_maximum": 1,
+          "Protectorate": {
+            "defensive_pact_slots_maximum": 1,
+            "military_pact_slots_maximum": 0,
             "vassal_slots_maximum": 0
           },
           "Provincial": {
@@ -388,7 +392,8 @@
             "vassal_slots_maximum": 0,
             "overlord_nation_research_production": 1,
             "nation_max_research_production": 0
-          }
+          },
+          "Tributary": {}
         }
       },
       "compliance": {

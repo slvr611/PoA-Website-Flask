@@ -1,6 +1,11 @@
 {% macro render_tech_tree(nation_tech, tech_cost_modifier, tech_cost_minimum, json_data, editable=False, form=None, form_json=None) %}
 <section class="tech-section">
     <h2>Tech</h2>
+    <div class="tech-controls" style="margin-bottom: 10px;">
+        <button type="button" onclick="zoomIn()" style="margin-right: 5px;">Zoom In</button>
+        <button type="button" onclick="zoomOut()" style="margin-right: 5px;">Zoom Out</button>
+        <button type="button" onclick="resetZoom()">Reset View</button>
+    </div>
     <div id="cy" style="width: 100%; height: 800px; background-color: #222;"></div>
     
     <!-- Hidden form fields for tech investments -->
@@ -214,13 +219,39 @@
                 }
             }
         ],
-        // Disable user interaction
-        userZoomingEnabled: false,
-        userPanningEnabled: false,
         boxSelectionEnabled: false,
         autounselectify: true,
-        autoungrabify: true
+        autoungrabify: true,
+        userZoomingEnabled: true,
+        userPanningEnabled: true,
+        minZoom: 0.3,
+        maxZoom: 2.0,
+        wheelSensitivity: 0.1, // Reduce wheel zoom sensitivity (default is 1)
+        zoomingEnabled: true
     });
+
+    // Add custom zoom functions
+    function zoomIn() {
+        const currentZoom = cy.zoom();
+        const newZoom = Math.min(currentZoom * 1.1, 2.0); // 10% increment
+        cy.zoom(newZoom);
+    }
+    
+    function zoomOut() {
+        const currentZoom = cy.zoom();
+        const newZoom = Math.max(currentZoom * 0.9, 0.3); // 10% decrement
+        cy.zoom(newZoom);
+    }
+    
+    function resetZoom() {
+        cy.fit();
+        cy.zoom(cy.zoom() * 0.9);
+    }
+    
+    // Make zoom functions globally accessible
+    window.zoomIn = zoomIn;
+    window.zoomOut = zoomOut;
+    window.resetZoom = resetZoom;
 
     // Define the rows and their node order
     const rowDefinitions = [
@@ -235,7 +266,23 @@
         // Row 5 (tier 5)
         ["deep_hulls", "rig_and_sail", "official_courts", "war_engineers", "mote_stabilization", "novitiates"],
         // Row 6 (tier 6)
-        ["philosophy", "national_identity", "citizenship"]
+        ["philosophy", "national_identity", "citizenship"],
+        // Row 7 (tier 7)
+        ["academics", "archival_history", "metal_silos"],
+        // Row 8 (tier 8)
+        ["bureacratic_legacies", "communal_baths", "collection_teams", "public_awareness", "deep_cellars", "riveted_armor"],
+        // Row 9 (tier 9)
+        ["dedicated_magery", "violent_destiny", "public_safety", "mentor_smiths", "market_control", "formal_storage", "asymmetrical_warfare", "draught_armor"],
+        // Row 10 (tier 10)
+        ["summoning_circles", "naval_bombardment", "penitent_faith", "poultices", "cutting_edge_weaponry", "mobile_governance"],
+        // Row 11 (tier 11)
+        ["stylized_buildings", "drastic_action", "subsidized_labor"],
+        // Row 12 (tier 12)
+        ["cultural_prophecy", "tenant_farming"],
+        // Row 13 (tier 13)
+        ["national_fervor"],
+        // Row 14 (tier 14)
+        ["dusk_till_dawn"]
     ];
 
     // Apply custom layout
@@ -305,6 +352,8 @@
     // After the graph is rendered, add input overlays for editable nodes
     cy.ready(function() {
         if (editable) {
+            const overlays = []; // Track all overlays for batch updates
+            
             cy.nodes().forEach(node => {
                 if (node.data('editable')) {
                     const techId = node.id();
@@ -330,7 +379,7 @@
                     overlay.id = `overlay-${techId}`;
                     overlay.style.position = 'absolute';
                     overlay.style.zIndex = '10';
-                    overlay.style.pointerEvents = 'auto'; // Always allow pointer events
+                    overlay.style.pointerEvents = 'auto';
                     
                     // Create the input field
                     const inputHtml = `
@@ -354,16 +403,21 @@
                     // Add to the Cytoscape container
                     document.getElementById('cy').appendChild(overlay);
                     
+                    // Store overlay reference
+                    overlays.push({ overlay, node });
+                    
                     // Position the overlay on the node
                     const updatePosition = () => {
                         const pos = node.renderedPosition();
+                        const zoom = cy.zoom();
                         overlay.style.left = `${pos.x - overlay.offsetWidth/2}px`;
-                        overlay.style.top = `${pos.y}px`; // Position below the node text
+                        overlay.style.top = `${pos.y}px`;
+                        overlay.style.transform = `scale(${Math.max(0.8, Math.min(1.2, zoom))})`;
+                        overlay.style.transformOrigin = 'center top';
                     };
                     
-                    // Update position initially and on zoom/pan
+                    // Update position initially
                     updatePosition();
-                    cy.on('zoom pan', updatePosition);
                     
                     // Update the hidden form field when input changes
                     document.getElementById(investingID).addEventListener('change', function(e) {
@@ -383,10 +437,7 @@
                     
                     // Add click handler to select all text when clicked
                     document.getElementById(investingID).addEventListener('click', function(e) {
-                        // Select all text in the input
                         e.target.select();
-                        
-                        // Prevent the event from bubbling
                         e.stopPropagation();
                     });
 
@@ -407,13 +458,26 @@
                     
                     // Add click handler to select all text when clicked
                     document.getElementById(costID).addEventListener('click', function(e) {
-                        // Select all text in the input
                         e.target.select();
-                        
-                        // Prevent the event from bubbling
                         e.stopPropagation();
                     });
                 }
+            });
+            
+            // Batch update all overlay positions on zoom/pan for better performance
+            let updateTimeout;
+            cy.on('zoom pan drag', function() {
+                clearTimeout(updateTimeout);
+                updateTimeout = setTimeout(() => {
+                    overlays.forEach(({ overlay, node }) => {
+                        const pos = node.renderedPosition();
+                        const zoom = cy.zoom();
+                        overlay.style.left = `${pos.x - overlay.offsetWidth/2}px`;
+                        overlay.style.top = `${pos.y}px`;
+                        overlay.style.transform = `scale(${Math.max(0.8, Math.min(1.2, zoom))})`;
+                        overlay.style.transformOrigin = 'center top';
+                    });
+                }, 16); // ~60fps
             });
         }
     });
@@ -530,10 +594,6 @@
     
     {{ all_prereqs_met and one_prereq_met }}
 {% endmacro %}
-
-
-
-
 
 
 

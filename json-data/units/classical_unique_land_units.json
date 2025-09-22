@@ -12,7 +12,7 @@
 	"classical_citadel_crab": {
 		"display_name": "Classical Citadel Crab",
 		"recruitment_cost": {
-			"money": 1000
+			"money": 825
 		},
 		"upkeep": {
 			"food": 4
@@ -44,6 +44,19 @@
 		},
 		"requirements": {
 			"mercenary": ["Grey Knights"]
+		}
+	},
+	"classical_orchal_cavalry": {
+		"display_name": "Classical Orchal Cavalry",
+		"recruitment_cost": {
+			"money": 600
+		},
+		"upkeep": {
+			"mounts": 2,
+			"iron": 1
+		},
+		"requirements": {
+			"nation": ["Vandador"]
 		}
 	},
 	"classical_thorn_wardens": {

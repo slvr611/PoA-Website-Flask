@@ -81,6 +81,19 @@
 			"food": 3
 		}
 	},
+	"guard": {
+		"display_name": "Guard",
+		"requirements":{
+			"district": ["guardhouse"]
+		},
+		"production": {
+			"stability_loss_chance": -0.1,
+			"contested_cunning_checks": 1
+		},
+		"upkeep": {
+			"food": 1
+		}
+	},
 	"harvester": {
 		"display_name": "Harvester",
 		"upkeep": {
