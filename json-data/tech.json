@@ -266,10 +266,10 @@
 	"archival_history": {
 		"display_name": "Archival History",
 		"type": "Culture",
-		"cost": 4,
+		"cost": 7,
 		"modifiers": {},
-		"prerequisites_all": ["national_identity"],
-		"prerequisites_one": []
+		"prerequisites_all": [],
+		"prerequisites_one": ["public_safety", "mentor_smiths"]
 	},
 	"asymmetrical_warfare": {
 		"display_name": "Asymmetrical Warfare",
@@ -316,7 +316,7 @@
 		"type": "Industry",
 		"cost": 5,
 		"modifiers": {},
-		"prerequisites_all": ["archival_history"],
+		"prerequisites_all": ["penitent_faith"],
 		"prerequisites_one": []
 	},
 	"dedicated_magery": {
@@ -341,7 +341,7 @@
 		"cost": 8,
 		"modifiers": {},
 		"prerequisites_all": [],
-		"prerequisites_one": ["penitent_faith", "poultices"]
+		"prerequisites_one": ["archival_history", "poultices"]
 	},
 	"draught_armor": {
 		"display_name": "Draught Armor",
@@ -418,10 +418,10 @@
 	"penitent_faith": {
 		"display_name": "Penitent Faith",
 		"type": "Culture",
-		"cost": 7,
+		"cost": 4,
 		"modifiers": {},
 		"prerequisites_all": [],
-		"prerequisites_one": ["public_safety", "mentor_smiths"]
+		"prerequisites_one": ["national_identity"]
 	},
 	"poultices": {
 		"display_name": "Poultices",
@@ -436,7 +436,7 @@
 		"type": "Infrastructure",
 		"cost": 5,
 		"modifiers": {},
-		"prerequisites_all": ["archival_history"],
+		"prerequisites_all": ["penitent_faith"],
 		"prerequisites_one": []
 	},
 	"public_safety": {
@@ -460,7 +460,7 @@
 		"type": "Culture",
 		"cost": 8,
 		"modifiers": {},
-		"prerequisites_all": ["penitent_faith"],
+		"prerequisites_all": ["archival_history"],
 		"prerequisites_one": []
 	},
 	"subsidized_labor": {
