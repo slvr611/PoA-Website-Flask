@@ -90,9 +90,9 @@ json_data = {"general_resources": [
             {"key": "food", "name": "Food", "base_storage": 20, "base_price": 50},
             {"key": "wood", "name": "Wood", "base_storage": 15, "base_price": 75},
             {"key": "stone", "name": "Stone", "base_storage": 15, "base_price": 75},
-            {"key": "mounts", "name": "Mounts", "base_storage": 15, "base_price": 75},
+            {"key": "mounts", "name": "Mounts", "base_storage": 15, "base_price": 750},
             {"key": "research", "name": "Research", "base_storage": 0},
-            {"key": "magic", "name": "Magic", "base_storage": 10, "base_price": 100}
+            {"key": "magic", "name": "Magic", "base_storage": 10, "base_price": 10}
         ],
         "unique_resources": [
             {"key": "bronze", "name": "Bronze", "base_storage": 5, "base_price": 125},
