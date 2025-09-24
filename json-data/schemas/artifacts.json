@@ -48,14 +48,12 @@
         "bsonType": "string",
         "label": "Effect Description",
         "description": "The description of the artifact's mechanical effects",
-        "view_access_level": 5,
         "long_text": true
       },
       "mechanical_effects": {
         "bsonType": "array",
         "label": "Mechanical Effects",
         "description": "The artifact's mechanical effects",
-        "view_access_level": 5,
         "hidden": true
       },
       "owner": {
