@@ -847,7 +847,7 @@ def temperament_tick(old_nation, new_nation, schema):
             trait_1_modifier = cultural_trait_temperament_modifiers.get(trait_1, {})
             trait_2_modifier = cultural_trait_temperament_modifiers.get(trait_2, {})
             trait_3_modifier = cultural_trait_temperament_modifiers.get(trait_3, {})
-
+        
         temperament_odds = base_temperament_odds.copy()
         for temperament in temperament_enum:
             temperament_odds[temperament] += trait_1_modifier.get(temperament, 0)
@@ -871,6 +871,23 @@ def temperament_tick(old_nation, new_nation, schema):
     
     return result
 
+def nation_tech_cost_reduction_tick(old_nation, new_nation, schema):
+    result = ""
+    json_tech_data = json_data["tech"]
+    
+    for tech, value in new_nation["technologies"].items():
+        base_cost = json_tech_data.get(tech, {}).get("cost", 0)
+        current_cost = value.get("cost", base_cost + old_nation.get("technology_cost_modifier", 0))
+        invested = value.get("invested", 0)
+        
+        # Reduce cost by 1 if it's higher than base cost and at least 2 higher than invested
+        if current_cost > base_cost and current_cost >= invested + 2:
+            value["cost"] = current_cost - 1
+            result += f"{old_nation.get('name', 'Unknown')} has reduced the cost of {tech} from {current_cost} to {current_cost - 1}.\n"
+        
+        new_nation["technologies"][tech] = value
+    
+    return result
 
 def reset_rolling_karma_to_zero(old_nation, new_nation, schema):
     new_nation["rolling_karma"] = 0
@@ -978,6 +995,7 @@ NATION_TICK_FUNCTIONS = {
     "Nation Vampirism Tick": vampirism_tick,
     "Nation Pop Loss Tick": pop_loss_tick,
     "Nation Temperament Tick": temperament_tick,
+    "Nation Tech Cost Reduction Tick (Generally Don't Use)": nation_tech_cost_reduction_tick,
     "Nation Reset Rolling Karma to Zero (Generally Don't Use)": reset_rolling_karma_to_zero,
     "Nation Reset All Temperaments (Generally Don't Use)": reset_all_temperaments,
 }

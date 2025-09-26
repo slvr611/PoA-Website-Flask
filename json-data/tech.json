@@ -2,7 +2,7 @@
 	"aqueducts": {
 		"display_name": "Aqueducts",
 		"type": "Food",
-		"cost": 4,
+		"cost": 3,
 		"modifiers": {},
 		"prerequisites_all": ["public_programs"],
 		"prerequisites_one": []
@@ -10,7 +10,7 @@
 	"caravansaries": {
 		"display_name": "Caravansaries",
 		"type": "Infrastructure",
-		"cost": 4,
+		"cost": 3,
 		"modifiers": {},
 		"prerequisites_all": ["trade_records"],
 		"prerequisites_one": []
@@ -18,7 +18,7 @@
 	"chests": {
 		"display_name": "Chests",
 		"type": "Industry",
-		"cost": 3,
+		"cost": 2,
 		"modifiers": {
 			"bronze_storage_capacity": 5
 		},
@@ -28,7 +28,7 @@
 	"citizenship": {
 		"display_name": "Citizenship",
 		"type": "Culture",
-		"cost": 8,
+		"cost": 7,
 		"modifiers": {},
 		"prerequisites_all": ["war_engineers", "mote_stabilization"],
 		"prerequisites_one": []
@@ -36,7 +36,7 @@
 	"city_defense": {
 		"display_name": "City Defense",
 		"type": "Military",
-		"cost": 6,
+		"cost": 5,
 		"modifiers": {},
 		"prerequisites_all": [],
 		"prerequisites_one": ["dynastic_hunters", "pit_mining"]
@@ -44,7 +44,7 @@
 	"cosmology": {
 		"display_name": "Cosmology",
 		"type": "Military",
-		"cost": 6,
+		"cost": 5,
 		"modifiers": {},
 		"prerequisites_all": [],
 		"prerequisites_one": ["fermentation", "lumber_yards"]
@@ -52,7 +52,7 @@
 	"deep_hulls": {
 		"display_name": "Deep Hulls",
 		"type": "Military",
-		"cost": 7,
+		"cost": 6,
 		"modifiers": {},
 		"prerequisites_all": ["rig_and_sail"],
 		"prerequisites_one": []
@@ -60,7 +60,7 @@
 	"dynastic_hunters": {
 		"display_name": "Dynastic Hunters",
 		"type": "Food",
-		"cost": 5,
+		"cost": 4,
 		"modifiers": {},
 		"prerequisites_all": ["aqueducts"],
 		"prerequisites_one": []
@@ -68,7 +68,7 @@
 	"fermentation": {
 		"display_name": "Fermentation",
 		"type": "Food",
-		"cost": 5,
+		"cost": 4,
 		"modifiers": {},
 		"prerequisites_all": ["metal_hooks"],
 		"prerequisites_one": []
@@ -76,7 +76,7 @@
 	"frame_saddles": {
 		"display_name": "Frame Saddles",
 		"type": "Military",
-		"cost": 3,
+		"cost": 2,
 		"modifiers": {
 			"migration_distance": 2
 		},
@@ -86,7 +86,7 @@
 	"levers_and_pulleys": {
 		"display_name": "Levers and Pulleys",
 		"type": "Culture",
-		"cost": 6,
+		"cost": 5,
 		"modifiers": {},
 		"prerequisites_all": ["city_defense"],
 		"prerequisites_one": []
@@ -94,7 +94,7 @@
 	"lumber_yards": {
 		"display_name": "Lumber Yards",
 		"type": "Industry",
-		"cost": 5,
+		"cost": 4,
 		"modifiers": {},
 		"prerequisites_all": ["caravansaries"],
 		"prerequisites_one": []
@@ -102,7 +102,7 @@
 	"metal_hooks": {
 		"display_name": "Metal Hooks",
 		"type": "Food",
-		"cost": 4,
+		"cost": 3,
 		"modifiers": {},
 		"prerequisites_all": ["caravansaries"],
 		"prerequisites_one": []
@@ -110,7 +110,7 @@
 	"military_wages": {
 		"display_name": "Military Wages",
 		"type": "Military",
-		"cost": 6,
+		"cost": 5,
 		"modifiers": {},
 		"prerequisites_all": [],
 		"prerequisites_one": ["mine_shafts", "lumber_yards"]
@@ -118,7 +118,7 @@
 	"mine_shafts": {
 		"display_name": "Mine Shafts",
 		"type": "Industry",
-		"cost": 5,
+		"cost": 4,
 		"modifiers": {
 			"iron_storage_capacity": 5,
 			"metallurgist_iron_production": 1
@@ -129,7 +129,7 @@
 	"mints": {
 		"display_name": "Mints",
 		"type": "Industry",
-		"cost": 4,
+		"cost": 3,
 		"modifiers": {},
 		"prerequisites_all": ["political_philosophy"],
 		"prerequisites_one": []
@@ -137,7 +137,7 @@
 	"mote_stabilization": {
 		"display_name": "Mote Stabilization",
 		"type": "Industry",
-		"cost": 7,
+		"cost": 6,
 		"modifiers": {
 			"magic_storage_capacity": 5
 		},
@@ -147,7 +147,7 @@
 	"national_identity": {
 		"display_name": "National Identity",
 		"type": "Capstone",
-		"cost": 8,
+		"cost": 7,
 		"modifiers": {
 			"researcher_stone_upkeep": -1,
 			"researcher_iron_upkeep": 1
@@ -158,7 +158,7 @@
 	"novitiates": {
 		"display_name": "Novitiates",
 		"type": "Industry",
-		"cost": 7,
+		"cost": 6,
 		"modifiers": {},
 		"prerequisites_all": ["mote_stabilization"],
 		"prerequisites_one": []
@@ -166,7 +166,7 @@
 	"official_courts": {
 		"display_name": "Official Courts",
 		"type": "Infrastructure",
-		"cost": 7,
+		"cost": 6,
 		"modifiers": {},
 		"prerequisites_all": ["ramparts"],
 		"prerequisites_one": []
@@ -174,7 +174,7 @@
 	"philosophy": {
 		"display_name": "Philosophy",
 		"type": "Culture",
-		"cost": 8,
+		"cost": 7,
 		"modifiers": {},
 		"prerequisites_all": ["rig_and_sail", "official_courts"],
 		"prerequisites_one": []
@@ -182,7 +182,7 @@
 	"pit_mining": {
 		"display_name": "Pit Mining",
 		"type": "Industry",
-		"cost": 5,
+		"cost": 4,
 		"modifiers": {},
 		"prerequisites_all": ["public_programs"],
 		"prerequisites_one": []
@@ -198,7 +198,7 @@
 	"public_programs": {
 		"display_name": "Public Programs",
 		"type": "Infrastructure",
-		"cost": 4,
+		"cost": 3,
 		"modifiers": {},
 		"prerequisites_all": ["sewers"],
 		"prerequisites_one": []
@@ -206,7 +206,7 @@
 	"public_zeal": {
 		"display_name": "Public Zeal",
 		"type": "Culture",
-		"cost": 6,
+		"cost": 5,
 		"modifiers": {},
 		"prerequisites_all": ["cosmology"],
 		"prerequisites_one": []
@@ -214,7 +214,7 @@
 	"ramparts": {
 		"display_name": "Ramparts",
 		"type": "Military",
-		"cost": 6,
+		"cost": 5,
 		"modifiers": {},
 		"prerequisites_all": [],
 		"prerequisites_one": ["pit_mining", "mine_shafts"]
@@ -222,7 +222,7 @@
 	"rig_and_sail": {
 		"display_name": "Rig and Sail",
 		"type": "Military",
-		"cost": 7,
+		"cost": 6,
 		"modifiers": {},
 		"prerequisites_all": ["city_defense"],
 		"prerequisites_one": []
@@ -230,7 +230,7 @@
 	"sewers": {
 		"display_name": "Sewers",
 		"type": "Infrastructure",
-		"cost": 3,
+		"cost": 2,
 		"modifiers": {
 			"effective_pop_capacity": 1
 		},
@@ -240,7 +240,7 @@
 	"trade_records": {
 		"display_name": "Trade Records",
 		"type": "Infrastructure",
-		"cost": 3,
+		"cost": 2,
 		"modifiers": {
 			"trade_slots": 1
 		},
@@ -250,7 +250,7 @@
 	"war_engineers": {
 		"display_name": "War Engineers",
 		"type": "Military",
-		"cost": 7,
+		"cost": 6,
 		"modifiers": {},
 		"prerequisites_all": ["military_wages"],
 		"prerequisites_one": []

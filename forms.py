@@ -1319,26 +1319,6 @@ form_generator = FormGenerator()
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 def wtform_to_json(form):
     """Convert a WTForm to a JSON-serializable dictionary
     
@@ -1378,35 +1358,3 @@ def wtform_to_json(form):
             result[field_name] = field_data
     
     return result
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
