@@ -1038,6 +1038,55 @@
 		</div>
 		<div class="section-content">
 			<div class="table-wrapper">
+				<h3>Progress Slots</h3>
+				<table class="info-table">
+					<thead>
+						<tr>
+							<th>Progress</th>
+							<th>Count</th>
+						</tr>
+					</thead>
+					<tbody>
+						{% if nation.get("0_progress_slots", 0) > 0 %}
+							<tr>
+								<td>0</td>
+								<td>{{ nation.get("0_progress_slots", 0) }}</td>
+							</tr>
+						{% endif %}
+						{% if nation.get("1_progress_slots", 0) > 0 %}
+							<tr>
+								<td>1</td>
+								<td>{{ nation.get("1_progress_slots", 0) }}</td>
+							</tr>
+						{% endif %}
+						{% if nation.get("2_progress_slots", 0) > 0 %}
+							<tr>
+								<td>2</td>
+								<td>{{ nation.get("2_progress_slots", 0) }}</td>
+							</tr>
+						{% endif %}
+						{% if nation.get("3_progress_slots", 0) > 0 %}
+							<tr>
+								<td>3</td>
+								<td>{{ nation.get("3_progress_slots", 0) }}</td>
+							</tr>
+						{% endif %}
+						{% if nation.get("4_progress_slots", 0) > 0 %}
+							<tr>
+								<td>4</td>
+								<td>{{ nation.get("4_progress_slots", 0) }}</td>
+							</tr>
+						{% endif %}
+						{% if nation.get("5_progress_slots", 0) > 0 %}
+							<tr>
+								<td>5</td>
+								<td>{{ nation.get("5_progress_slots", 0) }}</td>
+							</tr>
+						{% endif %}
+					</tbody>
+				</table>
+			</div>
+			<div class="table-wrapper">
 				<table class="info-table">
 					<thead>
 						<tr>
