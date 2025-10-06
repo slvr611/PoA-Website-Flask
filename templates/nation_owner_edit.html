@@ -1042,53 +1042,45 @@
             });
 
             function updateProgressQuestSlots() {
-                // Get current centralization law
-                const centralizationLaw = document.querySelector('select[name="centralization_law"]').value;
-
-                // Define slot availability based on centralization law
-                const slotAvailability = {
-                    'Autonomous': { 'zero_slots': 4 },
-                    'Decentralized': { 'one_slots': 3 },
-                    'Standard': { 'two_slots': 2 },
-                    'Focused': { 'three_slots': 1, 'one_slots': 1 },
-                    'Absolute': { 'four_slots': 1 }
-                };
+                // Get current form data to send to backend for calculation
+                const formData = new FormData(document.querySelector('form'));
                 
-                const availableSlots = slotAvailability[centralizationLaw] || {};
-                
-                // Update all progress quest slot dropdowns
-                document.querySelectorAll('select[name*="progress_quests"][name*="slot"]').forEach(select => {
-                    const currentValue = select.value;
-                    
-                    // Clear existing options
-                    select.innerHTML = '<option value="no_slot">No Slot</option>';
-                    
-                    // Add progress slots based on centralization
-                    if (availableSlots.zero_slots) {
-                        select.innerHTML += '<option value="0_progress_slot">0 Progress Slot</option>';
-                    }
-                    if (availableSlots.one_slots) {
-                        select.innerHTML += '<option value="1_progress_slot">1 Progress Slot</option>';
-                    }
-                    if (availableSlots.two_slots) {
-                        select.innerHTML += '<option value="2_progress_slot">2 Progress Slot</option>';
-                    }
-                    if (availableSlots.three_slots) {
-                        select.innerHTML += '<option value="3_progress_slot">3 Progress Slot</option>';
-                    }
-                    if (availableSlots.four_slots) {
-                        select.innerHTML += '<option value="4_progress_slot">4 Progress Slot</option>';
-                    }
-                    
-                    // Always add spell slots
-                    select.innerHTML += '<option value="tier_1_spell_slot">Tier 1 Spell Slot</option>';
-                    select.innerHTML += '<option value="tier_2_spell_slot">Tier 2 Spell Slot</option>';
-                    select.innerHTML += '<option value="tier_3_spell_slot">Tier 3 Spell Slot</option>';
-                    
-                    // Restore previous value if still valid
-                    if (Array.from(select.options).some(option => option.value === currentValue)) {
-                        select.value = currentValue;
-                    }
+                // Make AJAX request to get available slots based on current nation state
+                fetch('/get_available_slots', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(availableSlots => {
+                    // Update all progress quest slot dropdowns
+                    document.querySelectorAll('select[name*="progress_quests"][name*="slot"]').forEach(select => {
+                        const currentValue = select.value;
+                        
+                        // Clear existing options and rebuild from backend response
+                        select.innerHTML = '';
+                        
+                        // Add options from backend response
+                        availableSlots.forEach(([value, label]) => {
+                            select.innerHTML += `<option value="${value}">${label}</option>`;
+                        });
+                        
+                        // Restore previous value if still valid
+                        if (Array.from(select.options).some(option => option.value === currentValue)) {
+                            select.value = currentValue;
+                        }
+                    });
+                })
+                .catch(error => {
+                    console.error('Error updating progress quest slots:', error);
+                    // Fallback to basic slots if request fails
+                    document.querySelectorAll('select[name*="progress_quests"][name*="slot"]').forEach(select => {
+                        select.innerHTML = `
+                            <option value="no_slot">No Slot</option>
+                            <option value="tier_1_spell_slot">Tier 1 Spell Slot</option>
+                            <option value="tier_2_spell_slot">Tier 2 Spell Slot</option>
+                            <option value="tier_3_spell_slot">Tier 3 Spell Slot</option>
+                        `;
+                    });
                 });
             }
         </script>

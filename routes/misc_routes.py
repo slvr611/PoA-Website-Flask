@@ -1,9 +1,30 @@
-from flask import Blueprint, render_template, session, redirect, url_for, g
+from flask import Blueprint, render_template, session, redirect, url_for, g, request, jsonify
 from pymongo import ASCENDING
 from app_core import mongo, json_data, unit_json_files, unit_json_file_titles
 
 
 misc_routes = Blueprint('misc_routes', __name__)
+
+@misc_routes.route('/get_available_slots', methods=['POST'])
+def get_available_slots():
+    try:
+        # Get form data and convert to nation data format
+        nation_data = {}
+        for key, value in request.form.items():
+            if not key.startswith('progress_quests-') and not key.startswith('modifiers-'):
+                nation_data[key] = value
+        
+        # Load schema
+        schema = json_data["nations"]["schema"]
+        
+        # Create a temporary form instance to use get_available_slots method
+        from forms import NationForm
+        form = NationForm()
+        available_slots = form.get_available_slots(nation_data, schema)
+        
+        return jsonify(available_slots)
+    except Exception as e:
+        return jsonify([("no_slot", "No Slot")]), 500
 
 @misc_routes.route("/units")
 def units():

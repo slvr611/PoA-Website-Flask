@@ -7,6 +7,7 @@ from bson import ObjectId
 from app_core import json_data, category_data, land_unit_json_files, naval_unit_json_files
 import json
 from copy import deepcopy
+from calculations.field_calculations import calculate_all_fields
 
 class FormGenerator:
     """Singleton class to manage form generation and caching"""
@@ -589,17 +590,18 @@ class BaseSchemaForm(FlaskForm):
                 if slot_type != "no_slot" and not slot_type.endswith("_spell_slot"):
                     slot_usage[slot_type] = slot_usage.get(slot_type, 0) + 1
         
+        slot_counts = self.get_slot_dict(nation_data, schema)
+
         # Validate against limits using the schema data
         for slot_type, used_count in slot_usage.items():
             slot_key = slot_type.replace("_slot", "_slots")
-            available_count = centralization_modifiers.get(slot_key, 0)
+            available_count = slot_counts.get(slot_key, 0)
             if used_count > available_count:
                 slot_name = slot_type.replace("_", " ").title()
                 raise ValidationError(f"Too many quests assigned to {slot_name}. Available: {available_count}, Used: {used_count}")
 
     def get_available_slots(self, nation, schema):
         """Get available slot options based on nation's centralization law and modifiers"""
-        from calculations.field_calculations import calculate_all_fields
         
         # Check if this is actually a nation or another entity type
         entity_type = schema.get("title", "").lower()
@@ -644,6 +646,16 @@ class BaseSchemaForm(FlaskForm):
         ])
         
         return available_slots
+
+    def get_slot_dict(self, nation, schema):
+        """Get a dictionary of available slots for the nation"""
+        calculated_nation = calculate_all_fields(nation, schema, "nation")
+        slot_dict = {}
+        for slot_key, slot_count in calculated_nation.items():
+            if slot_key.endswith("_slots"):
+                slot_dict[slot_key] = slot_count
+        return slot_dict
+
 
     def populate_select_field(self, field_name, field, schema, dropdown_options):
         """Populates a select field with options"""
@@ -859,7 +871,7 @@ class BaseSchemaForm(FlaskForm):
                 schema, _ = get_data_on_category("nations")
             
             available_slots = self.get_available_slots(nation_data, schema)
-            
+
             for quest_field in self.progress_quests:
                 if hasattr(quest_field, 'slot'):
                     quest_field.slot.choices = available_slots
