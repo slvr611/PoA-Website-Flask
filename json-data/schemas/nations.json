@@ -632,15 +632,18 @@
       "laws": {
         "None": {},
         "Caravan": {
+          "mount_consumption": 1,
           "trade_slots": 3,
-          "money_production": 120,
+          "money_income": 120,
           "strength": -1,
           "morale": -1
         },
         "Canvass": {
+          "food_consumption": 1,
           "production_of_available_nodes": 1
         },
         "Encampment": {
+          "stone_consumption": 1,
           "strength": 1,
           "unit_morale": 1,
           "unit_mount_consumption": -1,
@@ -648,6 +651,7 @@
           "chance_to_lose_stability_while_at_war": -0.1
         },
         "Hearth": {
+          "wood_consumption": 1,
           "food_consumption": -3,
           "hunter_food_production": 1,
           "hunter_food_production_from_dock_or_farm": 1,
@@ -1536,6 +1540,12 @@
           }
         }
       }
+      },
+      "notes": {
+        "bsonType": "string",
+        "label": "Notes",
+        "description": "Any additional notes about the nation",
+        "long_text": true
       }
     }
   }

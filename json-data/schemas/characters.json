@@ -462,6 +462,12 @@
 				}
 			}
 		}
+      },
+      "notes": {
+        "bsonType": "string",
+        "label": "Notes",
+        "description": "Any additional notes about the character",
+        "long_text": true
       }
     }
   }

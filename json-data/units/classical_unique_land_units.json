@@ -59,6 +59,14 @@
 			"nation": ["Vandador"]
 		}
 	},
+	"classical_salamandra_phoenix": {
+		"display_name": "Classical Salamandra Phoenix",
+		"recruitment_cost": {},
+		"upkeep": {},
+		"requirements": {
+			"artifact": ["Salamandra Phoenix"]
+		}
+	},
 	"classical_thorn_wardens": {
 		"display_name": "Classical Thorn Wardens",
 		"recruitment_cost": {

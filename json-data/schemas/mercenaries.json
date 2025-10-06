@@ -242,6 +242,12 @@
             }
           }
         }
+      },
+      "notes": {
+        "bsonType": "string",
+        "label": "Notes",
+        "description": "Any additional notes about the mercenary company",
+        "long_text": true
       }
     }
   }

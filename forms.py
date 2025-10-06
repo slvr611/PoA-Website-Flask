@@ -1058,6 +1058,8 @@ class NationForm(BaseSchemaForm):
 
     progress_quests = FieldList(FormField(ProgressQuestForm), min_entries=0)
 
+    notes = TextAreaField("Notes")
+
     reason = TextAreaField("Reason")
 
     # Add dynamic law fields from schema

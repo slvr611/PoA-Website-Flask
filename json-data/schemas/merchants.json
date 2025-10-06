@@ -165,6 +165,12 @@
             }
           }
         }
+      },
+      "notes": {
+        "bsonType": "string",
+        "label": "Notes",
+        "description": "Any additional notes about the merchant company",
+        "long_text": true
       }
     }
   }

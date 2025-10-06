@@ -471,10 +471,14 @@ def character_heal_tick(old_character, new_character, schema):
     return result
 
 def character_mana_tick(old_character, new_character, schema):
+    if old_character.get("health_status", "Healthy") == "Dead":
+        return ""
     new_character["magic_points"] = min(old_character.get("magic_points", 0) + old_character.get("magic_point_income", 0), old_character.get("magic_point_capacity", 0))
     return ""
 
 def character_age_tick(old_character, new_character, schema):
+    if old_character.get("health_status", "Healthy") == "Dead":
+        return ""
     new_character["age"] = old_character["age"] + 1
     return ""
 
@@ -492,7 +496,9 @@ def character_stat_gain_tick(old_character, new_character, schema):
                 possible_stats.append(stat)
         if possible_stats and len(possible_stats) > 0:
             stat = random.choice(possible_stats)
-            new_character["modifiers"].append({"field": stat, "value": 1, "duration": -1, "source": "Stat gain tick"})
+            modifiers = new_character.get("modifiers", []).copy()
+            modifiers.append({"field": stat, "value": 1, "duration": -1, "source": "Stat gain tick"})
+            new_character["modifiers"] = modifiers
             result = f"{old_character.get('name', 'Unknown')} has gained a level of {stat}.\n"
     return result
 

@@ -673,6 +673,8 @@ def compute_death_chance(field, target, base_value, field_schema, overall_total_
 
     value += overall_total_modifiers.get(field, 0)
 
+    value *= overall_total_modifiers.get("death_chance_multiplier", 1)
+
     minimum_death_chance = overall_total_modifiers.get("minimum_death_chance", 0)
 
     minimum_death_chance += overall_total_modifiers.get("minimum_death_chance_per_cunning", 0) * cunning
