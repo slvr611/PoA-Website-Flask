@@ -387,7 +387,9 @@
 		"display_name": "Metal Silos",
 		"type": "Industry",
 		"cost": 4,
-		"modifiers": {},
+		"modifiers": {
+			"iron_storage_capacity": 5
+		},
 		"prerequisites_all": ["national_identity"],
 		"prerequisites_one": []
 	},
