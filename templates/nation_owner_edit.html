@@ -1042,7 +1042,7 @@
             });
 
             function updateProgressQuestSlots() {
-                const nation_centralization = {{ nation.centralization_law|tojson|safe }};
+                const nation_centralization = {{ nation.get("centralization_law", "Standard")|tojson|safe }};
                 const nation_0_progress_slots = {{ nation.get("0_progress_slots", 0)|tojson|safe }};
                 const nation_1_progress_slots = {{ nation.get("1_progress_slots", 0)|tojson|safe }};
                 const nation_2_progress_slots = {{ nation.get("2_progress_slots", 0)|tojson|safe }};
