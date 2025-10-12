@@ -342,3 +342,43 @@ def temperament_overview():
                          temperament_groups=temperament_groups,
                          temperament_counts=temperament_counts,
                          temperament_enum=temperament_enum)
+
+@admin_tool_routes.route("/player_law_analysis")
+@admin_required
+def player_law_analysis():
+    schema, db = get_data_on_category("nations")
+    player_nations = list(db.find({"temperament": "Player"}).sort("name", ASCENDING))
+    
+    if not player_nations:
+        return render_template("player_law_analysis.html", 
+                             law_stats={}, 
+                             total_players=0)
+    
+    total_players = len(player_nations)
+    law_stats = {}
+    
+    # Get all law fields from schema
+    law_fields = []
+    for field_name, field_data in schema["properties"].items():
+        if field_data.get("bsonType") == "enum" and "laws" in field_data:
+            law_fields.append(field_name)
+    
+    # Calculate percentages for each law field
+    for law_field in law_fields:
+        law_stats[law_field] = {
+            "label": schema["properties"][law_field].get("label", law_field),
+            "options": {}
+        }
+        
+        # Count occurrences of each option
+        for option in schema["properties"][law_field]["enum"]:
+            count = sum(1 for nation in player_nations if nation.get(law_field) == option)
+            percentage = (count / total_players) * 100 if total_players > 0 else 0
+            law_stats[law_field]["options"][option] = {
+                "count": count,
+                "percentage": round(percentage, 1)
+            }
+    
+    return render_template("player_law_analysis.html", 
+                         law_stats=law_stats, 
+                         total_players=total_players)

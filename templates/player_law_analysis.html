@@ -1,0 +1,43 @@
+{% extends "layout.html" %}
+
+{% block title %}Player Law Analysis{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1>Player Law Analysis</h1>
+    
+    <div class="summary-section">
+        <h2>Summary</h2>
+        <p><strong>Total Player Nations:</strong> {{ total_players }}</p>
+    </div>
+
+    {% if total_players > 0 %}
+        {% for law_field, law_data in law_stats.items() %}
+            <div class="law-section">
+                <h2>{{ law_data.label }}</h2>
+                <table class="info-table">
+                    <thead>
+                        <tr>
+                            <th>Option</th>
+                            <th>Count</th>
+                            <th>Percentage</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for option, stats in law_data.options.items() %}
+                            <tr>
+                                <td>{{ option }}</td>
+                                <td>{{ stats.count }}</td>
+                                <td>{{ stats.percentage }}%</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% endfor %}
+    {% else %}
+        <p>No player nations found.</p>
+    {% endif %}
+</div>
+
+{% endblock %}
