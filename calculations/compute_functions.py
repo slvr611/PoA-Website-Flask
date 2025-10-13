@@ -14,6 +14,7 @@ def compute_prestige_gain(field, target, base_value, field_schema, overall_total
     overlord = target.get("overlord", {})
     if overlord and overlord != "" and overlord != "None":
         value -= 15
+        print(f"Overlord Prestige Loss: {value}")
     
     diplomatic_pacts = []
     
@@ -27,9 +28,10 @@ def compute_prestige_gain(field, target, base_value, field_schema, overall_total
         elif pact.get("pact_type", "") == "Military Alliance":
             pact_prestige_loss += 5
     
+    print(f"Pact Prestige Loss: {pact_prestige_loss}")
     value -= min(pact_prestige_loss, 10)
 
-    vassals = list(category_data["nations"]["database"].find({"overlord": str(target.get("_id", ""))}, {"_id": 1, "vassal_type": 1}))
+    vassals = list(category_data["nations"]["database"].find({"overlord": str(target.get("_id", ""))}, {"_id": 1, "vassal_type": 1, "compliance": 1}))
     disloyal_vassal_prestige_loss = 0
     loyal_vassal_prestige_gain = 0
 
@@ -41,6 +43,8 @@ def compute_prestige_gain(field, target, base_value, field_schema, overall_total
         elif vassal.get("compliance", "") == "Defiant":
             disloyal_vassal_prestige_loss += 2
     
+    print(f"Disloyal Vassal Prestige Loss: {disloyal_vassal_prestige_loss}")
+    print(f"Loyal Vassal Prestige Gain: {loyal_vassal_prestige_gain}")
     value -= min(disloyal_vassal_prestige_loss, 10)
     value += min(loyal_vassal_prestige_gain, 3)
 
@@ -54,6 +58,7 @@ def compute_prestige_gain(field, target, base_value, field_schema, overall_total
         if artifact.get("rarity", "") == "Mythical":
             mythical_artifact_prestige_gain += 1
 
+    print(f"Mythical Artifact Prestige Gain: {mythical_artifact_prestige_gain}")
     value += min(mythical_artifact_prestige_gain, 1)
 
     value += overall_total_modifiers.get(field, 0)
