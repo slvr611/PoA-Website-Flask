@@ -8,7 +8,7 @@
 		"modifiers": {
 			"prestige_gain": -1,
 			"unit_strength": 1,
-			"unit_prestige_upkeep": -1
+			"imperial_unit_prestige_upkeep": -1
 		},
 		"synergy_requirement": "any",
 		"synergy_node_active": false,

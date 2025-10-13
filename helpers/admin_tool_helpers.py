@@ -151,7 +151,7 @@ def roll_events():
             event_type = "Bad"
         elif event_roll >= 2:
             event_type = "Very Bad"
-        elif event_roll <= 1:
+        elif event_roll >= -9:
             event_type = "Abysmal"
         elif event_roll <= -10:
             event_type = "Horrendous"

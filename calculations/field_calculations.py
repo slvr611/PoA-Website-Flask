@@ -710,8 +710,8 @@ def calculate_unit_details(target, unit_type, unit_json_files, modifier_totals, 
             all_resource_upkeep_multiplier = 1
             for source in modifier_sources:
                 for modifier, value in source.items():
-                    if modifier.startswith(unit) or modifier.startswith("unit") or modifier.startswith(unit_type + "_unit"):
-                        resource = modifier.replace(unit + "_", "").replace(unit_type + "_unit_", "").replace("unit_", "").replace("_upkeep", "")
+                    if modifier.startswith(unit) or modifier.startswith("unit") or modifier.startswith(unit_type + "_unit") or (modifier.startswith("imperial_unit") and new_details.get("upkeep", {}).get("prestige", 0) > 0):
+                        resource = modifier.replace(unit + "_", "").replace("imperial_unit_", "").replace(unit_type + "_unit_", "").replace("unit_", "").replace("_upkeep", "")
                         if resource != "resource" and modifier.endswith("upkeep"):
                             new_details.setdefault("upkeep", {})[resource] = new_details.get("upkeep", {}).get(resource, 0) + value
                         elif modifier.endswith("resource_upkeep"):

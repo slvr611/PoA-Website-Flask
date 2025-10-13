@@ -291,7 +291,9 @@
 		"display_name": "Communal Baths",
 		"type": "Infrastructure",
 		"cost": 5,
-		"modifiers": {},
+		"modifiers": {
+			"effective_pop_capacity": 1
+		},
 		"prerequisites_all": ["academics"],
 		"prerequisites_one": []
 	},
@@ -315,7 +317,9 @@
 		"display_name": "Collection Teams",
 		"type": "Industry",
 		"cost": 5,
-		"modifiers": {},
+		"modifiers": {
+			"nomad_node_utilization": 1
+		},
 		"prerequisites_all": ["penitent_faith"],
 		"prerequisites_one": []
 	},
@@ -331,7 +335,9 @@
 		"display_name": "Deep Cellars",
 		"type": "Food",
 		"cost": 5,
-		"modifiers": {},
+		"modifiers": {
+			"food_storage_capacity": 5
+		},
 		"prerequisites_all": ["metal_silos"],
 		"prerequisites_one": []
 	},
@@ -339,7 +345,9 @@
 		"display_name": "Drastic Action",
 		"type": "Culture",
 		"cost": 8,
-		"modifiers": {},
+		"modifiers": {
+			"stability_loss_chance": -0.25
+		},
 		"prerequisites_all": [],
 		"prerequisites_one": ["archival_history", "poultices"]
 	},
@@ -355,7 +363,10 @@
 		"display_name": "Dusk Till Dawn",
 		"type": "Capstone",
 		"cost": 12,
-		"modifiers": {},
+		"modifiers": {
+			"researcher_iron_upkeep": 1,
+			"researcher_bronze_upkeep": -1
+		},
 		"prerequisites_all": ["national_fervor"],
 		"prerequisites_one": []
 	},
@@ -379,7 +390,10 @@
 		"display_name": "Mentor Smiths",
 		"type": "Industry",
 		"cost": 6,
-		"modifiers": {},
+		"modifiers": {
+			"bronze_production": 1,
+			"iron_production": 1
+		},
 		"prerequisites_all": ["collection_teams"],
 		"prerequisites_one": []
 	},
@@ -397,7 +411,10 @@
 		"display_name": "Mobile Governance",
 		"type": "Infrastructure",
 		"cost": 7,
-		"modifiers": {},
+		"modifiers": {
+			"nomad_pop_capacity_per_vassal": 1,
+			"migration_distance": 3
+		},
 		"prerequisites_all": ["draught_armor"],
 		"prerequisites_one": []
 	},
@@ -437,7 +454,9 @@
 		"display_name": "Public Awareness",
 		"type": "Infrastructure",
 		"cost": 5,
-		"modifiers": {},
+		"modifiers": {
+			"trade_slots": 1
+		},
 		"prerequisites_all": ["penitent_faith"],
 		"prerequisites_one": []
 	},
@@ -469,7 +488,12 @@
 		"display_name": "Subsidized Labor",
 		"type": "Industry",
 		"cost": 8,
-		"modifiers": {},
+		"modifiers": {
+			"harvester_wood_production": 1,
+			"miner_stone_production": 1,
+			"imperial_harvester_wood_production": 1,
+			"imperial_miner_stone_production": 1
+		},
 		"prerequisites_all": ["poultices"],
 		"prerequisites_one": []
 	},
@@ -485,7 +509,10 @@
 		"display_name": "Tenant Farming",
 		"type": "Food",
 		"cost": 9,
-		"modifiers": {},
+		"modifiers": {
+			"farmer_food_production": 1,
+			"food_production": 2
+		},
 		"prerequisites_all": [],
 		"prerequisites_one": ["drastic_action", "subsidized_labor"]
 	},

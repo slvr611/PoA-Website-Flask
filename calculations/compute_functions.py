@@ -6,6 +6,11 @@ import copy
 def compute_prestige_gain(field, target, base_value, field_schema, overall_total_modifiers):
     value = base_value
 
+    #Lose 1 prestige per session since Strife started (geometric growth)
+    current_session = category_data["global_modifiers"]["database"].find_one({"name": "global_modifiers"}).get("session_counter", 1)
+    value -= 1 * (current_session - 55)
+    print(f"Session Prestige Decay: {value}")
+
     overlord = target.get("overlord", {})
     if overlord and overlord != "" and overlord != "None":
         value -= 15
@@ -18,40 +23,38 @@ def compute_prestige_gain(field, target, base_value, field_schema, overall_total
     pact_prestige_loss = 0
     for pact in diplomatic_pacts:
         if pact.get("pact_type", "") == "Defensive Pact":
-            pact_prestige_loss += 2
+            pact_prestige_loss += 5
         elif pact.get("pact_type", "") == "Military Alliance":
-            pact_prestige_loss += 2
+            pact_prestige_loss += 5
     
-    value -= min(pact_prestige_loss, 8)
+    value -= min(pact_prestige_loss, 10)
 
     vassals = list(category_data["nations"]["database"].find({"overlord": str(target.get("_id", ""))}, {"_id": 1, "vassal_type": 1}))
-    non_provincial_vassal_prestige_gain = 0
-    provincial_vassal_prestige_gain = 0
+    disloyal_vassal_prestige_loss = 0
+    loyal_vassal_prestige_gain = 0
 
     for vassal in vassals:
-        if vassal.get("vassal_type", "") == "Provincial":
-            provincial_vassal_prestige_gain += 1
-        else:
-            non_provincial_vassal_prestige_gain += 1
+        if vassal.get("compliance", "") == "Loyal":
+            loyal_vassal_prestige_gain += 1
+        elif vassal.get("compliance", "") == "Rebellious":
+            disloyal_vassal_prestige_loss += 2
+        elif vassal.get("compliance", "") == "Defiant":
+            disloyal_vassal_prestige_loss += 2
     
-    value += min(non_provincial_vassal_prestige_gain, 2)
-    value += min(provincial_vassal_prestige_gain, 2)
+    value -= min(disloyal_vassal_prestige_loss, 10)
+    value += min(loyal_vassal_prestige_gain, 3)
 
     artifacts = []
     rulers = list(category_data["characters"]["database"].find({"ruling_nation_org": str(target.get("_id", ""))}, {"_id": 1}))
     for ruler in rulers:
         artifacts += list(category_data["artifacts"]["database"].find({"owner": str(ruler["_id"]), "equipped": True}, {"_id": 1, "rarity": 1}))
-    legendary_artifact_prestige_gain = 0
     mythical_artifact_prestige_gain = 0
 
     for artifact in artifacts:
-        if artifact.get("rarity", "") == "Legendary":
-            legendary_artifact_prestige_gain += 1
-        elif artifact.get("rarity", "") == "Mythical":
-            mythical_artifact_prestige_gain += 2
+        if artifact.get("rarity", "") == "Mythical":
+            mythical_artifact_prestige_gain += 1
 
-    value += min(legendary_artifact_prestige_gain, 2)
-    value += min(mythical_artifact_prestige_gain, 2)
+    value += min(mythical_artifact_prestige_gain, 1)
 
     value += overall_total_modifiers.get(field, 0)
 
