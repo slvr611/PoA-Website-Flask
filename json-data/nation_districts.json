@@ -11,13 +11,13 @@
 		},
 		"modifiers": {
 			"magic_consumption": 1,
-			"artifact_owner_death_loss_chance": -0.05,
-			"minimum_artifact_owner_death_loss_chance": 0.1
+			"ruler_artifact_slots": 10,
+			"artificer_bronze_upkeep": -1
 		},
 		"synergy_requirement": "magic",
 		"synergy_node_active": true,
 		"synergy_modifiers": {
-			"artifact_owner_death_loss_chance": -0.05
+			"ruler_artifact_slots": 4
 		},
 		"count": 1
 	},
@@ -449,13 +449,13 @@
 		},
 		"modifiers": {
 			"magic_consumption": 1,
-			"artifact_owner_death_loss_chance": -0.08,
-			"minimum_artifact_owner_death_loss_chance": 0.05
+			"ruler_artifact_slots": 16,
+			"artificer_bronze_upkeep": -1
 		},
 		"synergy_requirement": "magic",
 		"synergy_node_active": true,
 		"synergy_modifiers": {
-			"artifact_owner_death_loss_chance": -0.04
+			"ruler_artifact_slots": 6
 		},
 		"count": 1
 	},

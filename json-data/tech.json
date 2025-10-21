@@ -359,8 +359,8 @@
 		"prerequisites_all": ["riveted_armor"],
 		"prerequisites_one": []
 	},
-	"dusk_till_dawn": {
-		"display_name": "Dusk Till Dawn",
+	"dawn_till_dusk": {
+		"display_name": "Dawn Till Dusk",
 		"type": "Capstone",
 		"cost": 12,
 		"modifiers": {

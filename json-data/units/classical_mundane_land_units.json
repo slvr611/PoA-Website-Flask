@@ -84,7 +84,7 @@
 			"stone": 1
 		},
 		"requirements": {
-			"district": ["classical_forge"],
+			"district": ["classical_workshop"],
 			"research": ["riveted_armor"]
 		}
 	},

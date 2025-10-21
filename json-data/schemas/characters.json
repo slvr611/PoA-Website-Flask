@@ -8,7 +8,11 @@
 		"race": ["positive_trait", "negative_trait"],
         "religion": ["external_modifiers"],
         "artifacts": ["external_modifiers"],
-        "region": ["external_modifiers"]
+        "region": ["external_modifiers"],
+        "ruling_nation_org": {
+            "fields": ["artifact_slots"],
+            "modifier_prefix": "ruler"
+        }
 	},
     "properties": {
       "name": {
@@ -179,6 +183,20 @@
         "items":{
 			"bsonType": "string"
         }
+      },
+      "artifact_slots": {
+        "bsonType": "number",
+		"label": "Artifact Slots",
+        "description": "The number of artifact slots the character has available",
+		"calculated": true,
+        "base_value": 12
+      },
+      "used_artifact_slots": {
+        "bsonType": "number",
+		"label": "Used Artifact Slots",
+        "description": "The number of artifact slots the character is currently using",
+		"calculated": true,
+        "base_value": 0
       },
 	  "artifacts": {
         "bsonType": "array",

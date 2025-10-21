@@ -439,6 +439,7 @@ def character_death_tick(old_character, new_character, schema):
                 new_artifact["owner_death_loss_chance_at_tick"] = old_artifact.get("owner_death_loss_chance", 0)
                 if loss_roll <= old_artifact.get("owner_death_loss_chance", 0):
                     new_artifact["owner"] = "Lost"
+                    result += "Death of " + old_character.get('name', 'Unknown') + " has caused " + old_artifact.get('name', 'Unknown') + " to be lost"
                     change_id = system_request_change(
                         data_type="artifacts",
                         item_id=old_artifact["_id"],

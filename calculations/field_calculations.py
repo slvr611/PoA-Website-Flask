@@ -125,7 +125,7 @@ def calculate_all_fields(target, schema, target_data_type):
         )
         calculated_values["progress_quests"] = target["progress_quests"]
     
-    #print(overall_total_modifiers)
+    print(overall_total_modifiers)
     
     if target_data_type == "nation":
         food_consumption_per_pop = 1 + overall_total_modifiers.get("food_consumption_per_pop", 0)
