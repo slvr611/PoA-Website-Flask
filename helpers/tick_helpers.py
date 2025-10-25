@@ -16,7 +16,8 @@ def tick(form_data):
         success, message = backup_database()
         if not success:
             return message
-    tick_summary = ""
+    player_tick_summary = ""
+    full_tick_summary = ""
 
     global_modifiers = mongo.db["global_modifiers"].find_one({"name": "global_modifiers"})
     old_target = global_modifiers
@@ -26,7 +27,7 @@ def tick(form_data):
         run_key = f"run_Tick Session Number"
         if run_key in form_data:
             print("Tick Session Number")
-            tick_summary += tick_session_number(old_target, new_target, schema)
+            full_tick_summary += tick_session_number(old_target, new_target, schema)
 
 
 
@@ -51,7 +52,10 @@ def tick(form_data):
             if run_key in form_data:
                 print(tick_function_label)
                 for i in range(len(old_characters)):
-                    tick_summary += tick_function(old_characters[i], new_characters[i], character_schema)
+                    result = tick_function(old_characters[i], new_characters[i], character_schema)
+                    if old_characters[i].get("player", "None") != "None":
+                        player_tick_summary += result
+                    full_tick_summary += result
 
 
 
@@ -76,7 +80,13 @@ def tick(form_data):
             if run_key in form_data:
                 print(tick_function_label)
                 for i in range(len(old_artifacts)):
-                    tick_summary += tick_function(old_artifacts[i], new_artifacts[i], artifact_schema)
+                    result = tick_function(old_artifacts[i], new_artifacts[i], artifact_schema)
+                    character = old_artifacts[i].get("owner", "None")
+                    if character != "None":
+                        character = character_db.find_one({"_id": ObjectId(character)})
+                        if character.get("player", "None") != "None":
+                            player_tick_summary += result
+                    full_tick_summary += result
 
 
     collect_merchant_data = False
@@ -100,7 +110,14 @@ def tick(form_data):
             if run_key in form_data:
                 print(tick_function_label)
                 for i in range(len(old_merchants)):
-                    tick_summary += tick_function(old_merchants[i], new_merchants[i], merchant_schema)
+                    result = tick_function(old_merchants[i], new_merchants[i], merchant_schema)
+                    leaders = old_merchants[i].get("leaders", [])
+                    for leader in leaders:
+                        character = character_db.find_one({"_id": ObjectId(leader)})
+                        if character.get("player", "None") != "None":
+                            player_tick_summary += result
+                            break
+                    full_tick_summary += result
 
 
 
@@ -125,7 +142,14 @@ def tick(form_data):
             if run_key in form_data:
                 print(tick_function_label)
                 for i in range(len(old_mercenaries)):
-                    tick_summary += tick_function(old_mercenaries[i], new_mercenaries[i], mercenary_schema)
+                    result = tick_function(old_mercenaries[i], new_mercenaries[i], mercenary_schema)
+                    leaders = old_mercenaries[i].get("leaders", [])
+                    for leader in leaders:
+                        character = character_db.find_one({"_id": ObjectId(leader)})
+                        if character.get("player", "None") != "None":
+                            player_tick_summary += result
+                            break
+                    full_tick_summary += result
 
 
 
@@ -150,7 +174,16 @@ def tick(form_data):
             if run_key in form_data:
                 print(tick_function_label)
                 for i in range(len(old_factions)):
-                    tick_summary += tick_function(old_factions[i], new_factions[i], faction_schema)
+                    result = tick_function(old_factions[i], new_factions[i], faction_schema)
+                    leaders = old_factions[i].get("leaders", [])
+                    for leader in leaders:
+                        character = character_db.find_one({"_id": ObjectId(leader)})
+                        if character.get("player", "None") != "None":
+                            player_tick_summary += result
+                            break
+                    full_tick_summary += result
+
+
 
     collect_market_data = False
     for tick_function_label, tick_function in MARKET_TICK_FUNCTIONS.items():
@@ -173,7 +206,7 @@ def tick(form_data):
             if run_key in form_data:
                 print(tick_function_label)
                 for i in range(len(old_markets)):
-                    tick_summary += tick_function(old_markets[i], new_markets[i], market_schema)
+                    full_tick_summary += tick_function(old_markets[i], new_markets[i], market_schema)
 
 
 
@@ -198,7 +231,14 @@ def tick(form_data):
             if run_key in form_data:
                 print(tick_function_label)
                 for i in range(len(old_nations)):
-                    tick_summary += tick_function(old_nations[i], new_nations[i], nation_schema)
+                    result = tick_function(old_nations[i], new_nations[i], nation_schema)
+                    rulers = old_nations[i].get("rulers", [])
+                    for ruler in rulers:
+                        character = character_db.find_one({"_id": ObjectId(ruler)})
+                        if character.get("player", "None") != "None":
+                            player_tick_summary += result
+                            break
+                    full_tick_summary += result
 
 
 
@@ -298,9 +338,9 @@ def tick(form_data):
             system_approve_change(change_id)
 
     if "run_Give Tick Summary" in form_data:
-        give_tick_summary(tick_summary)
+        give_tick_summary(player_tick_summary, full_tick_summary)
 
-    return tick_summary
+    return full_tick_summary
 
 def run_tick_async(form_data):
     """Queue the tick process to run in the background"""
@@ -318,9 +358,9 @@ def backup_database():
     success, message = backup_mongodb()
     return success, message
 
-def give_tick_summary(tick_summary):
+def give_tick_summary(player_tick_summary, full_tick_summary):
     """Save tick summary to a file and optionally email it"""
-    print(tick_summary)  # Keep console logging
+    print(full_tick_summary)  # Keep console logging
     
     # Create a timestamp for the filename
     timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -330,18 +370,25 @@ def give_tick_summary(tick_summary):
     os.makedirs(summary_dir, exist_ok=True)
     
     # Save to file
-    summary_filename = f"tick_summary_{timestamp}.txt"
-    summary_path = os.path.join(summary_dir, summary_filename)
+    player_summary_filename = f"player_tick_summary_{timestamp}.txt"
+    player_summary_path = os.path.join(summary_dir, player_summary_filename)
     
-    with open(summary_path, 'w') as f:
-        f.write(tick_summary)
+    with open(player_summary_path, 'w') as f:
+        f.write(player_tick_summary)
+
+    full_summary_filename = f"full_tick_summary_{timestamp}.txt"
+    full_summary_path = os.path.join(summary_dir, full_summary_filename)
+    
+    with open(full_summary_path, 'w') as f:
+        f.write(full_tick_summary)
     
     
     # If S3 is configured, upload the summary
     if os.getenv("S3_BUCKET_NAME"):
-        upload_to_s3(summary_path, f"tick_summaries/{summary_filename}")
+        upload_to_s3(player_summary_path, f"tick_summaries/{player_summary_filename}")
+        upload_to_s3(full_summary_path, f"tick_summaries/{full_summary_filename}")
     
-    return summary_path
+    return full_summary_path
 
 def modifier_decay_tick(old_target, new_target, schema):
     new_modifiers = []
@@ -396,25 +443,34 @@ def character_death_tick(old_character, new_character, schema):
                 leader_death_stab_loss_roll = random.random()
                 new_nation["leader_death_stab_loss_roll"] = leader_death_stab_loss_roll
                 new_nation["leader_death_stab_loss_chance_at_tick"] = old_nation.get("stability_loss_chance_on_leader_death", 0)
+
+                amounts = []
+                reasons = []
+
                 if leader_death_stab_loss_roll <= old_nation.get("stability_loss_chance_on_leader_death", 0):
-                    result += f"{old_nation.get('name', 'Unknown')} has lost stability due to the death of their leader.\n"
-                    stability_enum = nation_schema["properties"]["stability"]["enum"]
-                    stability_index = stability_enum.index(old_nation["stability"])
-                    stability_index = stability_index - 1
+                    amounts.append(-1)
+                    reasons.append("stability_loss_chance_on_leader_death")
+                
+                if old_nation.get("stability_loss_chance_on_leader_death_per_age", 0) > 0:
+                    stability_loss_chance = min(old_nation.get("stability_loss_chance_on_leader_death_per_age", 0) * old_character.get("age", 1), old_nation.get("max_stability_loss_chance_on_leader_death_per_age", 0))
+                    leader_death_age_stab_loss_roll = random.random()
 
-                    if stability_index < 0:
-                        civil_war_chance = 0.5
-                        civil_war_roll = random.random()
-                        new_nation["leader_death_negative_stab_civil_war_roll"] = civil_war_roll
-                        new_nation["leader_death_negative_stab_civil_war_chance_at_tick"] = civil_war_chance
-                        if civil_war_roll <= civil_war_chance:
-                            stability_index = 1
-                            result += f"{old_nation.get('name', 'Unknown')} has experienced a civil war due to negative stab from the death of their leader.\n"
-                        else:
-                            stability_index = 0
+                    new_nation["leader_death_age_stab_loss_roll"] = leader_death_age_stab_loss_roll
+                    new_nation["leader_death_age_stab_loss_chance_at_tick"] = stability_loss_chance
 
-                    new_nation["stability"] = stability_enum[stability_index]
-                    # TODO: Add code to account for Autocracy increased stab loss on leader death based on age
+                    amount = 0
+
+                    while stability_loss_chance > 1:
+                        amount += 1
+                        stability_loss_chance -= 1
+                    if leader_death_age_stab_loss_roll <= stability_loss_chance:
+                        amount += 1
+                    if amount > 0:
+                        amounts.append(-amount)
+                        reasons.append("autocracy_increased_stability_loss_chance_on_leader_death")
+                
+                result += adjust_stability(old_nation, new_nation, nation_schema, amounts, reasons)
+
                 change_id = system_request_change(
                     data_type="nations",
                     item_id=old_nation["_id"],
@@ -497,7 +553,7 @@ def character_stat_gain_tick(old_character, new_character, schema):
                 possible_stats.append(stat)
         if possible_stats and len(possible_stats) > 0:
             stat = random.choice(possible_stats)
-            modifiers = new_character.get("modifiers", []).copy()
+            modifiers = new_character.get("modifiers", [])
             modifiers.append({"field": stat, "value": 1, "duration": -1, "source": "Stat gain tick"})
             new_character["modifiers"] = modifiers
             result = f"{old_character.get('name', 'Unknown')} has gained a level of {stat}.\n"
@@ -568,6 +624,30 @@ def market_income_tick(old_market, new_market, schema):
 ###########################################################
 # Nation Tick Functions
 ###########################################################
+
+def isolated_diplo_stance_tick(old_nation, new_nation, schema):
+    if old_nation.get("diplomatic_stance", "None") != "Isolated":
+        modifiers = new_nation.get("modifiers", [])
+        for modifier in modifiers:
+            if modifier.get("field", "") == "stability_gain_chance" and modifier.get("source", "") == "Isolated Diplomatic Stance":
+                removed_stab_gain = modifier["value"]
+                modifiers.remove(modifier)
+                new_nation["modifiers"] = modifiers
+                old_nation["stability_gain_chance"] -= removed_stab_gain #Remove the stab gain chance because if the nation swapped off Isolated, they should not keep the stab gain chance
+                return f"{old_nation.get('name', 'Unknown')} has had the stability gain chance modifier from their Isolated diplomatic stance removed because they are no longer Isolated.\n"
+    else:
+        gain_rate = old_nation.get("isolated_stab_gain_rate", 0)
+        cap = old_nation.get("isolated_stab_gain_max", 0)
+        print(f"Gain Rate: {gain_rate}, Cap: {cap}")
+        modifiers = new_nation.get("modifiers", [])
+        for modifier in modifiers:
+            if modifier.get("field", "") == "stability_gain_chance" and modifier.get("source", "") == "Isolated Diplomatic Stance":
+                modifier["value"] = min(modifier["value"] + gain_rate, cap)
+                new_nation["modifiers"] = modifiers
+                return f"{old_nation.get('name', 'Unknown')} has had the stability gain chance modifier from their Isolated diplomatic stance increased by 0.1.\n"
+        modifiers.append({"field": "stability_gain_chance", "value": max(gain_rate, cap), "duration": -1, "source": "Isolated Diplomatic Stance"})
+        new_nation["modifiers"] = modifiers
+        return f"{old_nation.get('name', 'Unknown')} has had the stability gain chance modifier from their Isolated diplomatic stance increased by 0.1.\n"
 
 def ai_resource_desire_tick(old_nation, new_nation, schema):
     if old_nation.get("temperament", "None") == "Player":
@@ -689,47 +769,40 @@ def nation_civil_war_tick(old_nation, new_nation, schema):
 
 def nation_stability_tick(old_nation, new_nation, schema):
     result = ""
-    stability_enum = schema["properties"]["stability"]["enum"]
-    stability_index = stability_enum.index(old_nation.get("stability", "Balanced"))
+
+    stability_gained = 0
+    stability_lost = 0
 
     stability_gain_roll = random.random()
     new_nation["stability_gain_roll"] = stability_gain_roll
     new_nation["stability_gain_chance_at_tick"] = old_nation.get("stability_gain_chance", 0)
 
     if stability_gain_roll <= old_nation.get("stability_gain_chance", 0):
-        stability_index += 1
-        result += f"{old_nation.get('name', 'Unknown')} has gained a level of stability.\n"
+        stability_gained = 1
 
     stab_loss_chance = old_nation.get("stability_loss_chance", 0)
     stability_loss_roll = random.random()
     new_nation["stability_loss_roll"] = stability_loss_roll
     new_nation["stability_loss_chance_at_tick"] = stab_loss_chance
 
-    stab_loss_amount = 0
-
-    if stab_loss_chance > 1:
-        stab_loss_amount += 1
+    while stab_loss_chance > 1:
+        stability_lost += 1
         stab_loss_chance -= 1
 
     if stability_loss_roll <= stab_loss_chance:
-        stab_loss_amount += 1
+        stability_lost += 1
     
-    if stab_loss_amount > 0:
-        stability_index -= stab_loss_amount
-        result += f"{old_nation.get('name', 'Unknown')} has lost {stab_loss_amount} level(s) of stability.\n"
+    amounts = []
+    reasons = []
 
-    if stability_index < 0:
-        civil_war_chance = 0.5
-        civil_war_roll = random.random()
-        new_nation["passive_negative_stab_civil_war_roll"] = civil_war_roll
-        new_nation["passive_negative_stab_civil_war_chance_at_tick"] = civil_war_chance
-        if civil_war_roll <= civil_war_chance:
-            stability_index = 1
-            result += f"{old_nation.get('name', 'Unknown')} has experienced a civil war due to negative stab.\n"
+    if stability_gained > 0:
+        amounts.append(stability_gained)
+        reasons.append("stability_gain_chance")
+    if stability_lost > 0:
+        amounts.append(-stability_lost)
+        reasons.append("stability_loss_chance")
 
-    stability_index = min(max(stability_index, 0), len(stability_enum) - 1)
-
-    new_nation["stability"] = stability_enum[stability_index]
+    result += adjust_stability(old_nation, new_nation, schema, amounts, reasons)
 
     return result
 
@@ -941,6 +1014,36 @@ def reset_all_temperaments(old_nation, new_nation, schema):
     new_nation["sessions_since_temperament_change"] = 1
     return result
 
+def library_tick(old_nation, new_nation, schema):
+    districts = new_nation.get("districts", [])
+    for district in districts:
+        if "library" in district.get("type", ""):
+            required_turns = old_nation.get("research_production_per_turns_with_library", 0)
+            max_research = old_nation.get("max_research_production_per_turns_with_library", 0)
+            modifiers = new_nation.get("modifiers", [])
+            for modifier in modifiers:
+                if modifier.get("field", "") == "Turns with Library" and modifier.get("source", "") == "Library District":
+                    modifier["value"] += 1
+                    if modifier["value"] % required_turns == 0:
+                        for modifier_2 in modifiers:
+                            if modifier_2.get("field", "") == "research_production" and modifier_2.get("source", "") == "Library District":
+                                modifier_2["value"] = min(modifier_2["value"] + 1, max_research)
+                                new_nation["modifiers"] = modifiers
+                                return f"{old_nation.get('name', 'Unknown')} has had their research production increased by 1 because the library district has been active for {modifier['value']} turns.\n" and modifier_2.get("source", "") == "Library District"
+                            
+                        modifiers.append({"field": "research_production", "value": 1, "duration": -1, "source": "Library District"})
+                        new_nation["modifiers"] = modifiers
+                        return f"{old_nation.get('name', 'Unknown')} has had their research production increased by 1 because the library district has been active for {modifier['value']} turns.\n"
+                    
+                    new_nation["modifiers"] = modifiers
+                    return f"{old_nation.get('name', 'Unknown')} has had their Turns with Library modifier increased by 1.\n"
+                
+            modifiers.append({"field": "Turns with Library", "value": 1, "duration": -1, "source": "Library District"})
+            new_nation["modifiers"] = modifiers
+            return f"{old_nation.get('name', 'Unknown')} has had their Turns with Library modifier increased by 1.\n"
+
+    return ""
+
 ###########################################################
 # Tick Function Constants
 ###########################################################
@@ -985,6 +1088,7 @@ MARKET_TICK_FUNCTIONS = {
 }
 
 NATION_TICK_FUNCTIONS = {
+    "Nation Isolated Diplo Stance Tick": isolated_diplo_stance_tick,
     "AI Resource Desire Tick": ai_resource_desire_tick,
     "Nation Income Tick": nation_income_tick,
     "Nation Tech Tick": nation_tech_tick,
@@ -1002,7 +1106,30 @@ NATION_TICK_FUNCTIONS = {
     "Nation Vampirism Tick": vampirism_tick,
     "Nation Pop Loss Tick": pop_loss_tick,
     "Nation Temperament Tick": temperament_tick,
+    "Nation Library Tick": library_tick,
     "Nation Tech Cost Reduction Tick (Generally Don't Use)": nation_tech_cost_reduction_tick,
     "Nation Reset Rolling Karma to Zero (Generally Don't Use)": reset_rolling_karma_to_zero,
     "Nation Reset All Temperaments (Generally Don't Use)": reset_all_temperaments,
 }
+
+def adjust_stability(old_nation, new_nation, schema, amounts=[-1], reasons=[""]):
+    result = ""
+    stability_enum = schema["properties"]["stability"]["enum"]
+    stability_index = stability_enum.index(old_nation.get("stability", "Balanced"))
+    for i in range(min(len(amounts), len(reasons))):
+        stability_index += amounts[i]
+        result += f"{old_nation.get('name', 'Unknown')} has lost {amounts[i]} level(s) of stability due to {reasons[i]}.\n"
+    if stability_index < 0:
+        civil_war_chance = 0.5
+        civil_war_roll = random.random()
+        worst_reason = reasons[amounts.index(min(amounts))]
+        new_nation[worst_reason + "_civil_war_roll"] = civil_war_roll
+        new_nation[worst_reason + "civil_war_chance_at_tick"] = civil_war_chance
+        if civil_war_roll <= civil_war_chance:
+            stability_index = 1
+            result += f"{old_nation.get('name', 'Unknown')} has experienced a civil war due to negative stability from {worst_reason}.\n"
+        else:
+            stability_index = 0
+    
+    new_nation["stability"] = stability_enum[stability_index]
+    return result

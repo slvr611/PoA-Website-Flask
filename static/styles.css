@@ -423,6 +423,12 @@ h1, h2 {
   color: #ffbd9f;            /* light orange text */
 }
 
+/* Example highlight for positive excess */
+.info-table td.completed-quest {
+  background-color: #1b4522; /* dark green background */
+  color: #afffbd;            /* light green text */
+}
+
 .pops-table {
   width: 100%;
   border-collapse: collapse;

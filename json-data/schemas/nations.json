@@ -536,8 +536,9 @@
       "laws":{
         "Autocracy": {
           "district_slots": 1,
-          "repeat_stability_loss": 0.5,
-          "city_slots": 3
+          "city_slots": 3,
+          "stability_loss_chance_on_leader_death_per_age": 0.2,
+          "max_stability_loss_chance_on_leader_death_per_age": 5
         },
         "Representative Council": {
           "mimimum_weaknesses": -1,
@@ -882,27 +883,29 @@
       }
         },
       "diplomatic_stance": {
-          "bsonType": "enum",
-      "label": "Diplomatic Stance",
-          "description": "The nation's default stance towards interacting with its neighbors",
-      "enum": ["Expansionist", "Cooperative", "Belligerent", "Isolated"],
-      "laws": {
-        "Cooperative": {
-          "defensive_pact_slots": 1
-        },
-        "Expansionist": {
-          "effective_territory": 3,
-          "nomad_effective_territory": 3
-        },
-        "Belligerent": {
-          "unit_recruitment_discount": 0.05,
-          "unit_recruitment_discount_during_offensive_war": 0.05
-        },
-        "Isolated": {
-          "defensive_pact_slots": -1
+        "bsonType": "enum",
+        "label": "Diplomatic Stance",
+        "description": "The nation's default stance towards interacting with its neighbors",
+        "enum": ["Expansionist", "Cooperative", "Belligerent", "Isolated"],
+        "laws": {
+          "Cooperative": {
+            "defensive_pact_slots": 1
+          },
+          "Expansionist": {
+            "effective_territory": 3,
+            "nomad_effective_territory": 3
+          },
+          "Belligerent": {
+            "unit_recruitment_discount": 0.05,
+            "unit_recruitment_discount_during_offensive_war": 0.05
+          },
+          "Isolated": {
+            "military_alliance_slots": -1,
+            "isolated_stab_gain_rate": 0.1,
+            "isolated_stab_gain_max": 0.5
+          }
         }
-      }
-        },
+      },
       "scientific_stance": {
           "bsonType": "enum",
       "label": "Scientific Stance",

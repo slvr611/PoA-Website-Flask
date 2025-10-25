@@ -2,6 +2,7 @@ import math
 from app_core import category_data, json_data, land_unit_json_files, naval_unit_json_files
 from bson.objectid import ObjectId
 import copy
+from bisect import bisect_left
 
 def compute_prestige_gain(field, target, base_value, field_schema, overall_total_modifiers):
     value = base_value
@@ -328,8 +329,20 @@ def compute_district_slots(field, target, base_value, field_schema, overall_tota
     pop_count = target.get("pop_count", 0)
 
     pop_count -= overall_total_modifiers.get("district_pop_requirement", 0)
+
+    district_slot_pop_requirements = json_data["district_slot_pop_requirements"]
+    overcap_pops_per_district_slot = json_data["overcap_pops_per_district_slot"]
+
+    if pop_count > district_slot_pop_requirements[len(district_slot_pop_requirements) - 1]:
+        pop_count -= district_slot_pop_requirements[len(district_slot_pop_requirements) - 1]
+        pop_value = len(district_slot_pop_requirements) + math.floor(pop_count / overcap_pops_per_district_slot)
+    else:
+        pop_value = bisect_left(district_slot_pop_requirements, pop_count)
     
-    value = base_value + overall_total_modifiers.get(field, 0)  + math.floor(pop_count / 5)
+    value = base_value + overall_total_modifiers.get(field, 0) + pop_value
+
+    print(f"Pop Count: {pop_count}")
+    print(f"District Slots: {value}")
     
     return int(value)
 

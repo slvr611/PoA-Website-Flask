@@ -178,7 +178,7 @@
 			"iron": 1
 		},
 		"requirements": {
-			"district": ["classical_school", "classical_library"],
+			"district": ["ancient_school", "classical_school", "classical_library"],
 			"research": ["war_engineers"]
 		}
 	}

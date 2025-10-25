@@ -70,6 +70,8 @@ def calculate_all_fields(target, schema, target_data_type):
         prestige_modifiers = {}
         if target.get("empire", False):
             prestige_modifiers = calculate_prestige_modifiers(target, schema_properties)
+        
+        calculate_karma_from_negative_stockpiles(target, modifier_totals)
     elif target_data_type == "nation_jobs":
         job_details = calculate_job_details(target, district_details, modifier_totals, district_totals, tech_totals, city_totals, law_totals, external_modifiers_total)
     elif target_data_type == "character":
@@ -505,6 +507,8 @@ def calculate_job_details(target, district_details, modifier_totals, district_to
             all_resource_minimum_production = max(all_resource_minimum_production, 0)
             for source in modifier_sources:
                 for modifier, value in source.items():
+                    if modifier.startswith("imperial_") and target.get("empire", False):
+                        modifier = modifier.replace("imperial_", "")
                     if modifier.startswith(job) or modifier.startswith("job"):
                         resource = modifier.replace(job + "_", "").replace("job_", "").replace("_production", "").replace("_upkeep", "")
                         if resource != "resource" and modifier.endswith("production"):
@@ -1156,3 +1160,11 @@ def sum_external_modifier_totals(external_modifiers):
         for field, val in modifier.items():
             totals[field] = totals.get(field, 0) + val
     return totals
+
+def calculate_karma_from_negative_stockpiles(target, modifier_totals):
+    for resource in json_data["general_resources"]:
+        if target.get("resource_storage", {}).get(resource["key"], 0) < 0:
+            modifier_totals["karma"] = modifier_totals.get("karma", 0) + target.get("resource_storage", {}).get(resource["key"], 0)
+    for resource in json_data["unique_resources"]:
+        if target.get("resource_storage", {}).get(resource["key"], 0) < 0:
+            modifier_totals["karma"] = modifier_totals.get("karma", 0) + target.get("resource_storage", {}).get(resource["key"], 0)

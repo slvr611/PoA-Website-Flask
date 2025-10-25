@@ -882,7 +882,10 @@
                                 <td>{{ modifier_field.value(class="form-control") }}</td>
                                 <td>{{ modifier_field.duration(class="form-control") }}</td>
                                 <td>{{ modifier_field.source(class="form-control") }}</td>
-                                <td><button type="button" class="btn btn-danger" onclick="removeFromArray(this)">Remove</button></td>
+                                <td>
+                                    <span class="drag-handle">⋮⋮</span>
+                                    <button type="button" class="btn btn-danger" onclick="removeFromArray(this, 'progress_quests')">Remove</button>
+                                </td>
                             </tr>
                         {% endfor %}
                     </tbody>
@@ -942,7 +945,10 @@
                         </td>
                         <td><input type="text" class="form-control" name="${fieldName}-${currentCount}-modifier" id="${fieldName}-${currentCount}-modifier" required></td>
                         <td><input type="float" class="form-control" name="${fieldName}-${currentCount}-value" id="${fieldName}-${currentCount}-value" required></td>
-                        <td><button type="button" class="btn btn-danger" onclick="removeFromArray(this, '${fieldName}')">Remove</button></td>
+                        <td>
+                            <span class="drag-handle">⋮⋮</span>
+                            <button type="button" class="btn btn-danger" onclick="removeFromArray(this, 'progress_quests')">Remove</button>
+                        </td>
                     `;
                 } else if (fieldName === "modifiers") {
                     newRow.innerHTML = `
@@ -950,7 +956,10 @@
                         <td><input type="float" class="form-control" name="${fieldName}-${currentCount}-value" id="${fieldName}-${currentCount}-value" required></td>
                         <td><input type="float" class="form-control" name="${fieldName}-${currentCount}-duration" id="${fieldName}-${currentCount}-duration" value="0" required></td>
                         <td><input type="text" class="form-control" name="${fieldName}-${currentCount}-source" id="${fieldName}-${currentCount}-source" required></td>
-                        <td><button type="button" class="btn btn-danger" onclick="removeFromArray(this, '${fieldName}')">Remove</button></td>
+                        <td>
+                            <span class="drag-handle">⋮⋮</span>
+                            <button type="button" class="btn btn-danger" onclick="removeFromArray(this, 'progress_quests')">Remove</button>
+                        </td>
                     `;
                 } else if (fieldName === "progress_quests") {
                     newRow.innerHTML = `

@@ -119,7 +119,11 @@ json_data = {"general_resources": [
             "tier_1_spell_slot": {"progress_per_tick": 1, "name": "Tier 1 Spell Slot"},
             "tier_2_spell_slot": {"progress_per_tick": 2, "name": "Tier 2 Spell Slot"},
             "tier_3_spell_slot": {"progress_per_tick": 3, "name": "Tier 3 Spell Slot"}
-        }
+        },
+        "district_slot_pop_requirements": [
+            5, 10, 15, 20, 25, 30
+        ],
+        "overcap_pops_per_district_slot": 10
 }
 
 temperament_enum = ["Player", "Neutral", "Friendly", "Hostile", "Withdrawn", "Curious", "Supremacist", "Zealous"]

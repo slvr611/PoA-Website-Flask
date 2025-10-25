@@ -63,7 +63,13 @@
 									</td>
 								{% endif %}
 							{% elif properties.bsonType == "boolean" %}
-								<td>{{ item[field] }}</td>
+								<td>
+									{% if item[field] %}
+										<span style="color: #4CAF50;">&#10003;</span>
+									{% else %}
+										<span style="color: #f44336;">&#10007;</span>
+									{% endif %}
+								</td>
 							{% elif properties.bsonType == "linked_object" %}
 								<td>
 									{% if field in linked_objects and linked_objects[field] is not none %}
@@ -161,7 +167,17 @@
 															{% endif %}
 															{% set preview_fields = properties.get("preview", []) %}
 															{% for preview_field in preview_fields %}
-																<td>{{ item.get(preview_field, "None") }}</td>
+																{% if properties.get("preview_formats", {}).get(preview_field, "string") == "boolean" %}
+																	<td>
+																		{% if item.get(preview_field, false) %}
+																			<span style="color: #4CAF50;">&#10003;</span>
+																		{% else %}
+																			<span style="color: #f44336;">&#10007;</span>
+																		{% endif %}
+																	</td>
+																{% else %}
+																	<td>{{ item.get(preview_field, "None") }}</td>
+																{% endif %}
 															{% endfor %}
 														</tr>
 													{% endfor %}

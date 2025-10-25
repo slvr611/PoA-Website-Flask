@@ -1103,11 +1103,16 @@
 					</thead>
 					<tbody>
 						{% for quest in nation.progress_quests %}
+							{% if quest.current_progress >= quest.required_progress %}
+								{% set completed_class = "completed-quest" %}
+							{% else %}
+								{% set completed_class = "" %}
+							{% endif %}
 							<tr>
 								<td>{{ quest.quest_name }}</td>
 								<td>{{ json_data["slot_types"][quest.get("slot", "no_slot")]["name"] }}</td>
 								<td>{{ quest.total_progress_per_tick }}</td>
-								<td>{{ quest.current_progress }} / {{ quest.required_progress }}</td>
+								<td class="{{ completed_class }}">{{ quest.current_progress }} / {{ quest.required_progress }}</td>
 								<td>{{ quest.link|format_discord_link|safe }}</td>
 							</tr>
 						{% endfor %}

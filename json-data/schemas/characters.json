@@ -205,6 +205,10 @@
 		"collections": ["artifacts"],
 		"queryTargetAttribute": "owner",
         "preview": ["rarity", "equipped"],
+        "preview_formats": {
+			"rarity": "string",
+			"equipped": "boolean"
+		},
         "items":{
 			"bsonType": "linked_object"
         }

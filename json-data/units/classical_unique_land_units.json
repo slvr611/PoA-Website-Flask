@@ -77,9 +77,9 @@
 			"magic": 1
 		},
 		"requirements": {
-			"name": ["The Vysaffia Coven"],
-			"defensive_pact": ["The Vysaffia Coven"],
-			"military_alliance": ["The Vysaffia Coven"]
+			"name": ["Vyssafia Coven"],
+			"defensive_pact": ["Vyssafia Coven"],
+			"military_alliance": ["Vyssafia Coven"]
 		}
 	},
 	"classical_uqnia_guardian": {
