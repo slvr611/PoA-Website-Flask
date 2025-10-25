@@ -160,6 +160,26 @@
                 }
             });
         }
+		const modifiersTbody = document.getElementById('modifiers-tbody');
+		if (modifiersTbody) {
+			new Sortable(modifiersTbody, {
+				handle: '.drag-handle',
+				animation: 150,
+				onEnd: function() {
+					reindexModifiers();
+				}
+			});
+		}
+		const externalModifiersTbody = document.getElementById('external_modifiers-tbody');
+		if (externalModifiersTbody) {
+			new Sortable(externalModifiersTbody, {
+				handle: '.drag-handle',
+				animation: 150,
+				onEnd: function() {
+					reindexExternalModifiers();
+				}
+			});
+		}
     });
 
     function reindexProgressQuests() {
@@ -172,6 +192,28 @@
             });
         });
     }
+
+	function reindexModifiers() {
+		const tbody = document.getElementById('modifiers-tbody');
+		Array.from(tbody.children).forEach((row, index) => {
+			row.querySelectorAll('input').forEach(input => {
+				const fieldName = input.name.split('-').pop();
+				input.name = `modifiers-${index}-${fieldName}`;
+				input.id = `modifiers-${index}-${fieldName}`;
+			});
+		});
+	}
+
+	function reindexExternalModifiers() {
+		const tbody = document.getElementById('external_modifiers-tbody');
+		Array.from(tbody.children).forEach((row, index) => {
+			row.querySelectorAll('select, input').forEach(input => {
+				const fieldName = input.name.split('-').pop();
+				input.name = `external_modifiers-${index}-${fieldName}`;
+				input.id = `external_modifiers-${index}-${fieldName}`;
+			});
+		});
+	}
 
 	function addToArray(fieldName) {
 		const tbody = document.getElementById(`${fieldName}-tbody`);

@@ -908,6 +908,16 @@
                         }
                     });
                 }
+                const modifiersTbody = document.getElementById('modifiers-tbody');
+                if (modifiersTbody) {
+                    new Sortable(modifiersTbody, {
+                        handle: '.drag-handle',
+                        animation: 150,
+                        onEnd: function() {
+                            reindexModifiers();
+                        }
+                    });
+                }
             });
 
             function reindexProgressQuests() {
@@ -917,6 +927,17 @@
                         const fieldName = input.name.split('-').pop();
                         input.name = `progress_quests-${index}-${fieldName}`;
                         input.id = `progress_quests-${index}-${fieldName}`;
+                    });
+                });
+            }
+
+            function reindexModifiers() {
+                const tbody = document.getElementById('modifiers-tbody');
+                Array.from(tbody.children).forEach((row, index) => {
+                    row.querySelectorAll('input').forEach(input => {
+                        const fieldName = input.name.split('-').pop();
+                        input.name = `modifiers-${index}-${fieldName}`;
+                        input.id = `modifiers-${index}-${fieldName}`;
                     });
                 });
             }
