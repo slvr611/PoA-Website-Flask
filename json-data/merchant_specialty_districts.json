@@ -45,6 +45,18 @@
 			"reputation": ["Acceptable", "Great", "Flawless"]
 		}
 	},
+	"heirloom_containers": {
+		"display_name": "Heirloom Containers",
+		"cost": {
+			"money": 750
+		},
+		"modifiers": {
+			"ruler_artifact_slots": 12
+		},
+		"requirements": {
+			"reputation": ["Acceptable", "Great", "Flawless"]
+		}
+	},
 	"secure_transport": {
 		"display_name": "Secure Transport",
 		"cost": {

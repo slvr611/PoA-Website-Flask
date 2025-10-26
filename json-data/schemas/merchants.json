@@ -2,48 +2,54 @@
   "$jsonSchema": {
     "bsonType": "object",
     "required": ["name", "reputation"],
-	"laws": ["reputation"],
-	"preview": ["location"],
-	"sort": "location",
+	  "laws": ["reputation"],
+	  "preview": ["location"],
+	  "sort": "location",
     "properties": {
       "name": {
         "bsonType": "string",
-		"label": "Name",
+		    "label": "Name",
         "description": "The name of the merchant company"
       },
-	  "leaders": {
+      "leaders": {
         "bsonType": "array",
-		"label": "Leaders",
+        "label": "Leaders",
         "description": "The list of leaders of the merchant company",
-		"collections": ["characters"],
-		"queryTargetAttribute": "ruling_nation_org",
+        "collections": ["characters"],
+        "queryTargetAttribute": "ruling_nation_org",
         "items": {
           "bsonType": "linked_object"
         }
       },
+      "ruler_artifact_slots": {
+        "bsonType": "number",
+        "label": "Ruler Artifact Slots",
+        "description": "The number of artifact slots the merchant company's rulers have available",
+        "calculated": true
+      },
       "reputation": {
         "bsonType": "enum",
-		"label": "Reputation",
+		    "label": "Reputation",
         "description": "The merchant company's reputation",
-		"enum": ["Poor", "Acceptable", "Great", "Flawless"],
-		"laws":{
-			"Poor": {
-				"hostile_encounter_chance": 0.5,
-				"income": 75
-			},
-			"Acceptable": {
-				"hostile_encounter_chance": 0.35,
-				"income": 150
-			},
-			"Great": {
-				"hostile_encounter_chance": 0.30,
-				"income": 225
-			},
-			"Flawless": {
-				"hostile_encounter_chance": 0.20,
-				"income": 300
-			}
-		}
+        "enum": ["Poor", "Acceptable", "Great", "Flawless"],
+        "laws":{
+          "Poor": {
+            "hostile_encounter_chance": 0.5,
+            "income": 75
+          },
+          "Acceptable": {
+            "hostile_encounter_chance": 0.35,
+            "income": 150
+          },
+          "Great": {
+            "hostile_encounter_chance": 0.30,
+            "income": 225
+          },
+          "Flawless": {
+            "hostile_encounter_chance": 0.20,
+            "income": 300
+          }
+        }
       },
 	  "hostile_encounter_chance": {
         "bsonType": "number",

@@ -22,6 +22,12 @@
         },
         "preview": ["name", "character_type"]
       },
+      "ruler_artifact_slots": {
+        "bsonType": "number",
+        "label": "Ruler Artifact Slots",
+        "description": "The number of artifact slots the mercenary company's rulers have available",
+        "calculated": true
+      },
 	    "region": {
         "bsonType": "linked_object",
 		    "label": "Region",

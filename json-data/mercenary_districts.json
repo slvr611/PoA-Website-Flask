@@ -54,6 +54,17 @@
 		},
 		"size": "Small"
 	},
+	"simple_reliquary": {
+		"display_name": "Simple Reliquary",
+		"cost": {
+			"money": 400
+		},
+		"modifiers": {
+			"upkeep": 50,
+			"ruler_artifact_slots": 9
+		},
+		"size": "Small"
+	},
 	"strategist_camp": {
 		"display_name": "Strategist Camp",
 		"cost": {
@@ -304,6 +315,17 @@
 		"modifiers": {
 			"upkeep": 100,
 			"duel_rerolls": 1
+		},
+		"size": "Large"
+	},
+	"perfect_reliquary": {
+		"display_name": "Perfect Reliquary",
+		"cost": {
+			"money": 900
+		},
+		"modifiers": {
+			"upkeep": 100,
+			"ruler_artifact_slots": 15
 		},
 		"size": "Large"
 	},
