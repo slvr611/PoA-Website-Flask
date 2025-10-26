@@ -1,6 +1,6 @@
 from bson import ObjectId
-from app_core import mongo
-from helpers.change_helpers import system_request_change, system_approve_change
+from app_core import mongo, category_data
+from helpers.change_helpers import system_request_change, system_approve_change, recalculate_object, recalculate_all_objects
 from helpers.data_helpers import get_data_on_category
 from pymongo import ASCENDING
 from threading import Thread
@@ -186,3 +186,14 @@ def recalculate_all_nations():
         )
         system_approve_change(change_id)
     return True
+
+def recalculate_all_items():
+    for data_type in category_data:
+        recalculate_all_objects(data_type)
+    return True
+
+def recalculate_all_items_async():
+    thread = Thread(target=recalculate_all_items)
+    thread.daemon = True
+    thread.start()
+    return "Recalculation process started in background. Check logs for results."

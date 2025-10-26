@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, redirect, request, flash, url_for, send_file
 from helpers.auth_helpers import admin_required
 from helpers.data_helpers import get_data_on_category, generate_id_to_name_dict, compute_demographics
-from helpers.admin_tool_helpers import grow_all_population_async, roll_events_async
+from helpers.admin_tool_helpers import grow_all_population_async, roll_events_async, recalculate_all_items_async
 from helpers.change_helpers import request_change, approve_change
 from app_core import category_data, rarity_rankings, mongo, json_data, temperament_enum
 from pymongo import ASCENDING
@@ -382,3 +382,10 @@ def player_law_analysis():
     return render_template("player_law_analysis.html", 
                          law_stats=law_stats, 
                          total_players=total_players)
+
+@admin_tool_routes.route("/recalculate_all_objects")
+@admin_required
+def recalculate_all_objects_route():
+    recalculate_all_items_async()
+    flash("Recalculation process started in background. Check logs for results.", "info")
+    return redirect("/")
