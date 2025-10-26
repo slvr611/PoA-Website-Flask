@@ -63,6 +63,32 @@
         "collections": ["characters"],
         "queryTargetAttribute": "ruling_nation_org"
       },
+      "ruler_artifact_slots": {
+        "bsonType": "number",
+        "label": "Ruler Artifact Slots",
+        "description": "The number of artifact slots the nation's rulers have available",
+        "calculated": true
+      },
+      "ruler_stat_gain_chance": {
+        "bsonType": "number",
+        "label": "Ruler Stat Gain Chance",
+        "description": "The chance the nation's rulers gain a stat each session",
+        "calculated": true,
+        "format": "percentage"
+      },
+      "ruler_immortal_stat_gain_chance": {
+        "bsonType": "number",
+        "label": "Ruler Immortal Stat Gain Chance",
+        "description": "The chance the nation's rulers gain a stat each session if they are immortal",
+        "calculated": true,
+        "format": "percentage"
+      },
+      "ruler_elderly_age": {
+        "bsonType": "number",
+        "label": "Ruler Elderly Age",
+        "description": "The age at which the nation's rulers are considered elderly",
+        "calculated": true
+      },
       "temperament": {
         "bsonType": "enum",
         "label": "Temperament",

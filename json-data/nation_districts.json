@@ -995,8 +995,8 @@
 			"wood_consumption": 1,
 			"stone_consumption": 1,
 			"research_production": 1,
-			"ruler_stat_gain_chance": 0.05,
-			"ruler_mortal_stat_gain_chance": 0.2
+			"ruler_stat_gain_chance": 0.25,
+			"ruler_immortal_stat_gain_chance": -0.2
 		},
 		"synergy_requirement": "research",
 		"synergy_node_active": true,

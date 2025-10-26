@@ -424,11 +424,26 @@
                     {{ change.request_reason|format_discord_link|safe }}
                 </td>
                 {% if change.last_modified_time is defined and change.last_modified_time is not none and change.last_modified_time|string is not string and change.last_modified_time.__class__.__name__ == 'datetime' %}
-                    <td>{{ change.last_modified_time.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                    <td>
+                        <time class="local-time"
+                              datetime="{{ change.last_modified_time.isoformat() }}{% if change.last_modified_time.tzinfo is none %}Z{% endif %}"
+                              title="{{ change.last_modified_time.strftime('%Y-%m-%d %H:%M:%S') }} UTC">
+                        </time>
+                    </td>
                 {% elif change.time_requested is defined and change.time_requested is not none and change.time_requested|string is not string and change.time_requested.__class__.__name__ == 'datetime' %}
-                    <td>{{ change.time_requested.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                    <td>
+                        <time class="local-time"
+                              datetime="{{ change.time_requested.isoformat() }}{% if change.time_requested.tzinfo is none %}Z{% endif %}"
+                              title="{{ change.time_requested.strftime('%Y-%m-%d %H:%M:%S') }} UTC">
+                        </time>
+                    </td>
                 {% else %}
-                    <td>{{ change.time_requested }}</td>
+                    <td>
+                        <time class="local-time"
+                              datetime="{{ change.time_requested }}"
+                              title="{{ change.time_requested }}">
+                        </time>
+                    </td>
                 {% endif %}
                 <td>
                     {% if "requester" in preview_references and change.requester|string in preview_references["requester"] %}
@@ -447,9 +462,64 @@
         {% endfor %}
     </tbody>
 </table>
+<script>
+// Initialize once per page
+(function() {
+  if (window.__localTimeInit) return; window.__localTimeInit = true;
+  function renderLocalTimes() {
+    var nodes = document.querySelectorAll('time.local-time');
+    if (!nodes || !nodes.length) return;
+    try {
+      var fmt = new Intl.DateTimeFormat([], {
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+        hour12: false, timeZoneName: 'short'
+      });
+      nodes.forEach(function(el){
+        var raw = el.getAttribute('datetime');
+        if (!raw) return;
+        var iso = raw;
+        // Normalize common server formats that aren't ISO
+        // e.g. "YYYY-MM-DD HH:MM:SS" -> append Z (treat as UTC)
+        if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}$/.test(iso)) {
+          iso = iso.replace(' ', 'T') + 'Z';
+        } else if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+          iso = iso + 'T00:00:00Z';
+        } else if (!/[Tt]/.test(iso) && !/[Zz]|[\+\-]\d{2}:?\d{2}$/.test(iso)) {
+          // If there's clearly no timezone or T separator, assume UTC midnight
+          iso = iso.trim() + 'Z';
+        }
+        var d = new Date(iso);
+        if (isNaN(d)) {
+          // Last resort try original
+          d = new Date(raw);
+          if (isNaN(d)) {
+            // Give up, show raw
+            el.textContent = raw;
+            return;
+          }
+        }
+        var text = fmt.format(d).replace(',', '');
+        el.textContent = text;
+      });
+    } catch (e) {
+      // Fallback: simple toLocaleString
+      nodes.forEach(function(el){
+        var iso = el.getAttribute('datetime');
+        var d = new Date(iso);
+        if (isNaN(d)) return;
+        el.textContent = d.toLocaleString();
+      });
+    }
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', renderLocalTimes);
+  } else {
+    renderLocalTimes();
+  }
+})();
+</script>
 {% endmacro %}
-
-
 
 
 

@@ -110,6 +110,8 @@ def calculate_all_fields(target, schema, target_data_type):
         for key, value in d.items():
             overall_total_modifiers[key] = overall_total_modifiers.get(key, 0) + value
     
+    #print(overall_total_modifiers)
+
     for field, field_schema in schema_properties.items():
         if isinstance(field_schema, dict) and field_schema.get("calculated") and field not in calculated_values.keys():
             base_value = field_schema.get("base_value", 0)
@@ -126,9 +128,7 @@ def calculate_all_fields(target, schema, target_data_type):
             overall_total_modifiers
         )
         calculated_values["progress_quests"] = target["progress_quests"]
-    
-    print(overall_total_modifiers)
-    
+        
     if target_data_type == "nation":
         food_consumption_per_pop = 1 + overall_total_modifiers.get("food_consumption_per_pop", 0)
         food_consumption = calculated_values.get("pop_count", 0) * food_consumption_per_pop
@@ -761,8 +761,10 @@ def collect_external_requirements(target, schema, target_data_type):
 
         # Handle new format with modifier_prefix
         modifier_prefix = None
+        fields_as_modifiers = []
         if isinstance(required_fields, dict):
             modifier_prefix = required_fields.get("modifier_prefix")
+            fields_as_modifiers = required_fields.get("fields_as_modifiers", [])
             required_fields = required_fields.get("fields", [])
 
         for collection in collections:
@@ -780,14 +782,14 @@ def collect_external_requirements(target, schema, target_data_type):
                     
                     for link in links:
                         # Check the link object itself for modifiers
-                        collected_modifiers.extend(collect_external_modifiers_from_object(link, required_fields, category_data.get(link_collection, {}).get("schema", {}), target_data_type, modifier_prefix))
+                        collected_modifiers.extend(collect_external_modifiers_from_object(link, required_fields, category_data.get(link_collection, {}).get("schema", {}), target_data_type, modifier_prefix, fields_as_modifiers))
                         
                         # Get the target object and check it too
                         if query_target in link:
                             target_id = link[query_target]
                             target_object = mongo.db[collection].find_one({"_id": ObjectId(target_id)})
                             if target_object:
-                                collected_modifiers.extend(collect_external_modifiers_from_object(target_object, required_fields, linked_object_schema, target_data_type, modifier_prefix))
+                                collected_modifiers.extend(collect_external_modifiers_from_object(target_object, required_fields, linked_object_schema, target_data_type, modifier_prefix, fields_as_modifiers))
             
             elif field_schema.get("queryTargetAttribute"):
                 query_target = field_schema["queryTargetAttribute"]
@@ -798,7 +800,7 @@ def collect_external_requirements(target, schema, target_data_type):
                 
                 for object in linked_objects:
                     if object.get("equipped", True):
-                        collected_modifiers.extend(collect_external_modifiers_from_object(object, required_fields, linked_object_schema, target_data_type, modifier_prefix))
+                        collected_modifiers.extend(collect_external_modifiers_from_object(object, required_fields, linked_object_schema, target_data_type, modifier_prefix, fields_as_modifiers))
             else:
                 object_id = target.get(field)
                 if not object_id:
@@ -807,11 +809,11 @@ def collect_external_requirements(target, schema, target_data_type):
                 object = mongo.db[collection].find_one({"_id": ObjectId(object_id)})
                 if not object:
                     continue
-                collected_modifiers.extend(collect_external_modifiers_from_object(object, required_fields, linked_object_schema, target_data_type, modifier_prefix))
+                collected_modifiers.extend(collect_external_modifiers_from_object(object, required_fields, linked_object_schema, target_data_type, modifier_prefix, fields_as_modifiers))
 
     return collected_modifiers
 
-def collect_external_modifiers_from_object(object, required_fields, linked_object_schema, target_data_type, modifier_prefix=None):
+def collect_external_modifiers_from_object(object, required_fields, linked_object_schema, target_data_type, modifier_prefix=None, fields_as_modifiers=[]):
     collected_modifiers = []
 
     for req_field in required_fields:
@@ -911,6 +913,11 @@ def collect_external_modifiers_from_object(object, required_fields, linked_objec
                 elif field_type == "json_resource_enum" and req_field == "node":
                     collected_modifiers.append({object[req_field] + "_nodes": 1})
     
+    for field in fields_as_modifiers:
+        full_modifier = modifier_prefix + "_" + field
+        if full_modifier in object:
+            collected_modifiers.append({field: object[full_modifier]})
+
     return collected_modifiers
 
 def calculate_effective_territory_modifiers(target):

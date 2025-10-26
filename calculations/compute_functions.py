@@ -10,12 +10,12 @@ def compute_prestige_gain(field, target, base_value, field_schema, overall_total
     #Lose 1 prestige per session since Strife started (geometric growth)
     current_session = category_data["global_modifiers"]["database"].find_one({"name": "global_modifiers"}).get("session_counter", 1)
     value -= 1 * (current_session - 55)
-    print(f"Session Prestige Decay: {value}")
+    #print(f"Session Prestige Decay: {value}")
 
     overlord = target.get("overlord", {})
     if overlord and overlord != "" and overlord != "None":
         value -= 15
-        print(f"Overlord Prestige Loss: {value}")
+        #print(f"Overlord Prestige Loss: {value}")
     
     diplomatic_pacts = []
     
@@ -29,7 +29,7 @@ def compute_prestige_gain(field, target, base_value, field_schema, overall_total
         elif pact.get("pact_type", "") == "Military Alliance":
             pact_prestige_loss += 5
     
-    print(f"Pact Prestige Loss: {pact_prestige_loss}")
+    #print(f"Pact Prestige Loss: {pact_prestige_loss}")
     value -= min(pact_prestige_loss, 10)
 
     vassals = list(category_data["nations"]["database"].find({"overlord": str(target.get("_id", ""))}, {"_id": 1, "vassal_type": 1, "compliance": 1}))
@@ -44,8 +44,8 @@ def compute_prestige_gain(field, target, base_value, field_schema, overall_total
         elif vassal.get("compliance", "") == "Defiant":
             disloyal_vassal_prestige_loss += 2
     
-    print(f"Disloyal Vassal Prestige Loss: {disloyal_vassal_prestige_loss}")
-    print(f"Loyal Vassal Prestige Gain: {loyal_vassal_prestige_gain}")
+    #print(f"Disloyal Vassal Prestige Loss: {disloyal_vassal_prestige_loss}")
+    #print(f"Loyal Vassal Prestige Gain: {loyal_vassal_prestige_gain}")
     value -= min(disloyal_vassal_prestige_loss, 10)
     value += min(loyal_vassal_prestige_gain, 3)
 
@@ -59,7 +59,7 @@ def compute_prestige_gain(field, target, base_value, field_schema, overall_total
         if artifact.get("rarity", "") == "Mythical":
             mythical_artifact_prestige_gain += 1
 
-    print(f"Mythical Artifact Prestige Gain: {mythical_artifact_prestige_gain}")
+    #print(f"Mythical Artifact Prestige Gain: {mythical_artifact_prestige_gain}")
     value += min(mythical_artifact_prestige_gain, 1)
 
     value += overall_total_modifiers.get(field, 0)
@@ -340,9 +340,6 @@ def compute_district_slots(field, target, base_value, field_schema, overall_tota
         pop_value = bisect_left(district_slot_pop_requirements, pop_count)
     
     value = base_value + overall_total_modifiers.get(field, 0) + pop_value
-
-    print(f"Pop Count: {pop_count}")
-    print(f"District Slots: {value}")
     
     return int(value)
 
@@ -739,6 +736,27 @@ def compute_magic_point_capacity(field, target, base_value, field_schema, overal
 
     return int(value)
 
+def compute_used_artifact_slots(field, target, base_value, field_schema, overall_total_modifiers):
+    artifacts = category_data["artifacts"]["database"].find({"owner": str(target.get("_id", ""))})
+    value = 0
+    for artifact in artifacts:
+        value += artifact.get("artifact_slot_usage", 1)
+    
+    return int(value)
+
+def compute_artifact_loss_chance(field, target, base_value, field_schema, overall_total_modifiers):
+    value = base_value + overall_total_modifiers.get(field, 0)
+
+    artifact_slots = target.get("artifact_slots", 12)
+    used_artifact_slots = target.get("used_artifact_slots", compute_used_artifact_slots("used_artifact_slots", target, None, None, overall_total_modifiers))
+    artifact_loss_chance_per_slot = target.get("artifact_loss_chance_per_slot", 0.02)
+
+    value += max(0, (used_artifact_slots - artifact_slots) * artifact_loss_chance_per_slot)
+
+    value = round(min(max(value, 0), 1), 2)
+    
+    return value
+
 def compute_budget(field, target, base_value, field_schema, overall_total_modifiers):
     value = base_value + overall_total_modifiers.get(field, 0) + overall_total_modifiers.get("budget", 0)
 
@@ -868,6 +886,8 @@ CUSTOM_COMPUTE_FUNCTIONS = {
     "stat_gain_chance": compute_stat_gain_chance,
     "magic_point_income": compute_magic_point_income,
     "magic_point_capacity": compute_magic_point_capacity,
+    "used_artifact_slots": compute_used_artifact_slots,
+    "artifact_loss_chance": compute_artifact_loss_chance,
     "land_budget": compute_budget,
     "naval_budget": compute_budget,
     "land_budget_spent": compute_budget_spent,

@@ -18,24 +18,19 @@
 		    "enum": ["Mundane", "Good", "Great", "Legendary", "Mythical"],
         "laws": {
           "Mundane": {
-            "owner_death_loss_chance": 0.5,
-            "passive_loss_chance": 0.1
+            "artifact_slot_usage": 1
           },
           "Good": {
-            "owner_death_loss_chance": 0.25,
-            "passive_loss_chance": 0.05
+            "artifact_slot_usage": 2
           },
           "Great": {
-            "owner_death_loss_chance": 0.15,
-            "passive_loss_chance": 0.02
+            "artifact_slot_usage": 4
           },
           "Legendary": {
-            "owner_death_loss_chance": 0.1,
-            "passive_loss_chance": 0.01
+            "artifact_slot_usage": 6
           },
           "Mythical": {
-            "owner_death_loss_chance": 0.05,
-            "passive_loss_chance": 0
+            "artifact_slot_usage": 6
           }
         }
       },
@@ -71,18 +66,10 @@
         "collections": ["characters"],
         "static": true
       },
-      "owner_death_loss_chance": {
+      "artifact_slot_usage": {
         "bsonType": "number",
-        "label": "Owner Death Loss Chance",
-        "description": "The percentage chance of the artifact being lost when its owner dies",
-        "format": "percentage",
-        "calculated": true
-      },
-      "passive_loss_chance": {
-        "bsonType": "number",
-        "label": "Passive Loss Chance",
-        "description": "The percentage chance of the artifact being lost each session",
-        "format": "percentage",
+        "label": "Artifact Slot Usage",
+        "description": "The number of artifact slots this artifact uses",
         "calculated": true
       },
       "external_modifiers": {

@@ -10,8 +10,8 @@
         "artifacts": ["external_modifiers"],
         "region": ["external_modifiers"],
         "ruling_nation_org": {
-            "fields": ["artifact_slots"],
-            "modifier_prefix": "ruler"
+            "modifier_prefix": "ruler",
+            "fields_as_modifiers": ["artifact_slots", "stat_gain_chance", "immortal_stat_gain_chance", "elderly_age"]
         }
 	},
     "properties": {
@@ -197,6 +197,22 @@
         "description": "The number of artifact slots the character is currently using",
 		"calculated": true,
         "base_value": 0
+      },
+      "artifact_loss_chance_per_slot": {
+        "bsonType": "number",
+		"label": "Artifact Loss Chance Per Slot",
+        "description": "The percentage chance of the character losing an artifact each tick per slot used",
+		"calculated": true,
+        "base_value": 0.02,
+        "format": "percentage",
+        "hidden": true
+      },
+      "artifact_loss_chance": {
+        "bsonType": "number",
+		"label": "Artifact Loss Chance",
+        "description": "The percentage chance of the character losing an artifact each tick",
+		"calculated": true,
+        "format": "percentage"
       },
 	  "artifacts": {
         "bsonType": "array",

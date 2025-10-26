@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from app_core import mongo, category_data
 from flask import g, flash
 from calculations.field_calculations import calculate_all_fields
@@ -12,7 +12,7 @@ def request_change(data_type, item_id, change_type, before_data, after_data, rea
         return None
 
     changes_collection = mongo.db.changes
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
 
     after_data.pop("reason", None)
     before_data.pop("_id", None)
@@ -43,7 +43,7 @@ def system_request_change(data_type, item_id, change_type, before_data, after_da
         return None
 
     changes_collection = mongo.db.changes
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
 
     after_data.pop("reason", None)
     before_data.pop("_id", None)
@@ -76,7 +76,7 @@ def approve_change(change_id):
         return None
 
     changes_collection = mongo.db.changes
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     change = changes_collection.find_one({"_id": change_id})
     target_collection = category_data[change["target_collection"]]["database"]
 
@@ -150,7 +150,7 @@ def system_approve_change(change_id):
     approver = mongo.db.players.find_one({"name": "System"})
 
     changes_collection = mongo.db.changes
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     change = changes_collection.find_one({"_id": change_id})
     target_collection = category_data[change["target_collection"]]["database"]
 
@@ -225,7 +225,7 @@ def deny_change(change_id):
         return False
 
     changes_collection = mongo.db.changes
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
 
     changes_collection.update_one({"_id": change_id}, {"$set": {
         "status": "Rejected",
