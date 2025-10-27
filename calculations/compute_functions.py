@@ -330,9 +330,6 @@ def compute_district_slots(field, target, base_value, field_schema, overall_tota
 
     pop_count -= overall_total_modifiers.get("district_pop_requirement", 0)
 
-    print(f"Pop Count: {pop_count}")
-    print(f"District Pop Requirement: {overall_total_modifiers.get('district_pop_requirement', 0)}")
-
     district_slot_pop_requirements = json_data["district_slot_pop_requirements"]
     overcap_pops_per_district_slot = json_data["overcap_pops_per_district_slot"]
 

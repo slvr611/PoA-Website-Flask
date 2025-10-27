@@ -1120,6 +1120,7 @@ NATION_TICK_FUNCTIONS = {
     "Nation Progress Quests Tick": progress_quests_tick,
     "Nation Job Cleanup Tick": nation_job_cleanup_tick,
     "Nation Vampirism Tick": vampirism_tick,
+    "Nation Undead Tick": undead_tick,
     "Nation Pop Loss Tick": pop_loss_tick,
     "Nation Temperament Tick": temperament_tick,
     "Nation Library Tick": library_tick,
