@@ -256,7 +256,13 @@ def backup_mongodb():
         from pymongo import MongoClient
         import json
         
-        client = MongoClient(mongo_uri)
+        client = MongoClient(
+            mongo_uri,
+            serverSelectionTimeoutMS=60000,
+            connectTimeoutMS=60000,
+            socketTimeoutMS=600000,
+            wTimeoutMS=600000
+        )
         db = client[db_name]
         
         # Get all collections
@@ -394,11 +400,19 @@ def restore_mongodb(backup_path=None, backup_date=None, s3_key=None, s3_bucket=N
         # If S3 backup is specified, download it first
         if s3_key and s3_bucket:
             try:
-                # Create S3 client
+                # Create S3 client with retries and generous timeouts
+                from botocore.config import Config as BotoConfig
+                from boto3.s3.transfer import TransferConfig as S3TransferConfig
+
                 s3_client = boto3.client(
                     's3',
                     aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
-                    aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY")
+                    aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+                    config=BotoConfig(
+                        retries={'max_attempts': 8, 'mode': 'standard'},
+                        connect_timeout=30,
+                        read_timeout=300
+                    )
                 )
                 
                 # Ensure backup directory exists
@@ -408,9 +422,15 @@ def restore_mongodb(backup_path=None, backup_date=None, s3_key=None, s3_bucket=N
                 local_filename = os.path.basename(s3_key)
                 local_path = os.path.join(backup_dir, local_filename)
                 
-                # Download the file
+                # Download the file with multipart transfer and limited concurrency (reduce memory)
                 print(f"Downloading {s3_key} from S3 bucket {s3_bucket} to {local_path}")
-                s3_client.download_file(s3_bucket, s3_key, local_path)
+                transfer_cfg = S3TransferConfig(
+                    multipart_threshold=8 * 1024 * 1024,  # 8MB
+                    multipart_chunksize=8 * 1024 * 1024,   # 8MB chunks
+                    max_concurrency=4,                    # fewer threads to reduce memory
+                    use_threads=True
+                )
+                s3_client.download_file(s3_bucket, s3_key, local_path, Config=transfer_cfg)
                 
                 # Set backup_path to the downloaded file
                 backup_path = local_path
@@ -487,29 +507,107 @@ def restore_mongodb(backup_path=None, backup_date=None, s3_key=None, s3_bucket=N
         
         # Get all JSON files (collections)
         collection_files = [f for f in os.listdir(db_dir) if f.endswith('.json')]
+
+        def iter_json_array(file_path, chunk_size=1024 * 1024):
+            """Yield JSON objects from a file that contains a single top-level JSON array.
+            Avoids loading the entire file into memory.
+            """
+            decoder = json.JSONDecoder()
+            with open(file_path, 'r', encoding='utf-8') as f:
+                buf = ''
+                pos = 0
+                in_array = False
+                eof = False
+
+                def ensure(n=1):
+                    nonlocal buf, pos, eof
+                    while len(buf) - pos < n and not eof:
+                        chunk = f.read(chunk_size)
+                        if chunk == '':
+                            eof = True
+                            break
+                        buf += chunk
+
+                # Skip whitespace until '['
+                while True:
+                    ensure(1)
+                    if pos >= len(buf):
+                        break
+                    c = buf[pos]
+                    if c.isspace():
+                        pos += 1
+                        continue
+                    if c == '[':
+                        in_array = True
+                        pos += 1
+                    break
+
+                if not in_array:
+                    return
+
+                while True:
+                    # Skip whitespace and commas
+                    while True:
+                        ensure(1)
+                        if pos >= len(buf):
+                            break
+                        c = buf[pos]
+                        if c.isspace() or c == ',':
+                            pos += 1
+                            continue
+                        break
+
+                    ensure(1)
+                    if pos >= len(buf):
+                        break
+                    if buf[pos] == ']':
+                        # End of array
+                        pos += 1
+                        break
+
+                    # Try to decode an object from the current position; read more if needed
+                    while True:
+                        try:
+                            obj, end = decoder.raw_decode(buf, pos)
+                            yield obj
+                            pos = end
+                            # compact buffer occasionally
+                            if pos > 1024 * 1024:
+                                buf = buf[pos:]
+                                pos = 0
+                            break
+                        except json.JSONDecodeError:
+                            if eof:
+                                # Can't decode and no more data
+                                raise
+                            ensure(chunk_size)
         
         for collection_file in collection_files:
             collection_name = collection_file.replace('.json', '')
-            
-            # Read the JSON file
-            with open(os.path.join(db_dir, collection_file), 'r') as f:
-                documents = json.load(f)
-            
-            # Convert string IDs back to ObjectId
-            for doc in documents:
-                if '_id' in doc and isinstance(doc['_id'], str):
-                    try:
-                        doc['_id'] = ObjectId(doc['_id'])
-                    except:
-                        pass  # Keep as string if not a valid ObjectId
-            
-            # Drop the existing collection
+
+            # Drop the existing collection to avoid duplicates
             if collection_name in db.list_collection_names():
                 db[collection_name].drop()
-            
-            # Insert the documents
-            if documents:
-                db[collection_name].insert_many(documents)
+
+            file_path = os.path.join(db_dir, collection_file)
+            batch = []
+            batch_size = 1000
+
+            for doc in iter_json_array(file_path):
+                # Convert string IDs back to ObjectId where appropriate
+                _id = doc.get('_id')
+                if isinstance(_id, str):
+                    try:
+                        doc['_id'] = ObjectId(_id)
+                    except Exception:
+                        pass  # leave as string if not valid ObjectId
+                batch.append(doc)
+                if len(batch) >= batch_size:
+                    db[collection_name].insert_many(batch, ordered=False)
+                    batch.clear()
+
+            if batch:
+                db[collection_name].insert_many(batch, ordered=False)
         
         # Clean up
         import shutil
