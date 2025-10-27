@@ -83,9 +83,12 @@ def tick(form_data):
                     result = tick_function(old_artifacts[i], new_artifacts[i], artifact_schema)
                     character = old_artifacts[i].get("owner", "None")
                     if character != "None":
-                        character = character_db.find_one({"_id": ObjectId(character)})
-                        if character.get("player", "None") != "None":
-                            player_tick_summary += result
+                        try:
+                            character = character_db.find_one({"_id": ObjectId(character)})
+                            if character.get("player", "None") != "None":
+                                player_tick_summary += result
+                        except:
+                            pass
                     full_tick_summary += result
 
 
@@ -113,10 +116,13 @@ def tick(form_data):
                     result = tick_function(old_merchants[i], new_merchants[i], merchant_schema)
                     leaders = old_merchants[i].get("leaders", [])
                     for leader in leaders:
-                        character = character_db.find_one({"_id": ObjectId(leader)})
-                        if character.get("player", "None") != "None":
-                            player_tick_summary += result
-                            break
+                        try:
+                            character = character_db.find_one({"_id": ObjectId(leader)})
+                            if character.get("player", "None") != "None":
+                                player_tick_summary += result
+                                break
+                        except:
+                            pass
                     full_tick_summary += result
 
 
@@ -145,10 +151,13 @@ def tick(form_data):
                     result = tick_function(old_mercenaries[i], new_mercenaries[i], mercenary_schema)
                     leaders = old_mercenaries[i].get("leaders", [])
                     for leader in leaders:
-                        character = character_db.find_one({"_id": ObjectId(leader)})
-                        if character.get("player", "None") != "None":
-                            player_tick_summary += result
-                            break
+                        try:
+                            character = character_db.find_one({"_id": ObjectId(leader)})
+                            if character.get("player", "None") != "None":
+                                player_tick_summary += result
+                                break
+                        except:
+                            pass
                     full_tick_summary += result
 
 
@@ -177,10 +186,13 @@ def tick(form_data):
                     result = tick_function(old_factions[i], new_factions[i], faction_schema)
                     leaders = old_factions[i].get("leaders", [])
                     for leader in leaders:
-                        character = character_db.find_one({"_id": ObjectId(leader)})
-                        if character.get("player", "None") != "None":
-                            player_tick_summary += result
-                            break
+                        try:
+                            character = character_db.find_one({"_id": ObjectId(leader)})
+                            if character.get("player", "None") != "None":
+                                player_tick_summary += result
+                                break
+                        except:
+                            pass
                     full_tick_summary += result
 
 
@@ -234,10 +246,13 @@ def tick(form_data):
                     result = tick_function(old_nations[i], new_nations[i], nation_schema)
                     rulers = old_nations[i].get("rulers", [])
                     for ruler in rulers:
-                        character = character_db.find_one({"_id": ObjectId(ruler)})
-                        if character.get("player", "None") != "None":
-                            player_tick_summary += result
-                            break
+                        try:
+                            character = character_db.find_one({"_id": ObjectId(ruler)})
+                            if character.get("player", "None") != "None":
+                                player_tick_summary += result
+                                break
+                        except:
+                            pass
                     full_tick_summary += result
 
 
