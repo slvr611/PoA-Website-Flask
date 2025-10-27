@@ -183,9 +183,7 @@
 		"production": {
 			"vampirism_chance": 0.1,
 			"stability_loss_chance": 0.1,
-			"magic": 1
-		},
-		"upkeep": {
+			"magic": 1,
 			"food": 1
 		}
 	},

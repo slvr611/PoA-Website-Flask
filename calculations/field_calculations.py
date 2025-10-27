@@ -524,7 +524,6 @@ def calculate_job_details(target, district_details, modifier_totals, district_to
     for job, details in job_details.items():
         locked = modifier_totals.get("locks_" + job, 0) + district_totals.get("locks_" + job, 0) + city_totals.get("locks_" + job, 0) + law_totals.get("locks_" + job, 0) + external_modifiers_total.get("locks_" + job, 0)
         meets_job_requirements = check_job_requirements(target, details, external_modifiers_total)
-        print(job, locked, meets_job_requirements)
         if not locked and meets_job_requirements:
             new_details = copy.deepcopy(details)
             all_resource_production = 0
