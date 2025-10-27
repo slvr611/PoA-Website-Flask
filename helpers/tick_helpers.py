@@ -1056,7 +1056,7 @@ def library_tick(old_nation, new_nation, schema):
             for modifier in modifiers:
                 if modifier.get("field", "") == "Turns with Library" and modifier.get("source", "") == "Library District":
                     modifier["value"] += 1
-                    if modifier["value"] % required_turns == 0:
+                    if int(modifier["value"]) % required_turns == 0:
                         for modifier_2 in modifiers:
                             if modifier_2.get("field", "") == "research_production" and modifier_2.get("source", "") == "Library District":
                                 modifier_2["value"] = min(modifier["value"] / required_turns, max_research)
