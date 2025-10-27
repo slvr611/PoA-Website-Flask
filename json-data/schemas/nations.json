@@ -667,7 +667,7 @@
         },
         "Canvass": {
           "food_consumption": 1,
-          "production_of_available_nodes": 1
+          "nomad_production_of_available_nodes": 1
         },
         "Encampment": {
           "stone_consumption": 1,

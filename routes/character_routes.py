@@ -141,7 +141,12 @@ def new_character_request():
     for stat, value in random_stats.items():
         form_data["modifiers"].append({"field": stat, "value": value, "duration": -1, "source": "Random stats at character creation"})
 
-    form_data["magic_points"] = min(form_data["magic_point_capacity"], form_data["magic_point_income"])
+    calculated_fields = calculate_all_fields(calculated_character, schema, "character")
+
+    calculated_character.update(calculated_fields)
+
+
+    form_data["magic_points"] = min(calculated_character["magic_point_capacity"], calculated_character["magic_point_income"])
 
     change_id = request_change(
         data_type="characters",

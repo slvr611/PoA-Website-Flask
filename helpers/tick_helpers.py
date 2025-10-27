@@ -480,32 +480,7 @@ def character_death_tick(old_character, new_character, schema):
                     reason="Death of " + old_character.get('name', 'Unknown') + " has caused an update for " + old_nation.get('name', 'Unknown')
                 )
                 system_approve_change(change_id)
-        
-        artifact_schema, artifact_db = get_data_on_category("artifacts")
-        artifacts = list(artifact_db.find({"owner": str(old_character.get("_id", ""))}))
-        print(f"Artifacts from {old_character.get('name', 'Unknown')}: ")
-        print(artifacts)
-        for old_artifact in artifacts:
-            if old_artifact:
-                old_artifact.update(calculate_all_fields(old_artifact, artifact_schema, "artifact"))
-                new_artifact = deepcopy(old_artifact)
-
-                loss_roll = random.random()
-                new_artifact["owner_death_loss_roll"] = loss_roll
-                new_artifact["owner_death_loss_chance_at_tick"] = old_artifact.get("owner_death_loss_chance", 0)
-                if loss_roll <= old_artifact.get("owner_death_loss_chance", 0):
-                    new_artifact["owner"] = "Lost"
-                    result += "Death of " + old_character.get('name', 'Unknown') + " has caused " + old_artifact.get('name', 'Unknown') + " to be lost"
-                    change_id = system_request_change(
-                        data_type="artifacts",
-                        item_id=old_artifact["_id"],
-                        change_type="Update",
-                        before_data=old_artifact,
-                        after_data=new_artifact,
-                        reason="Death of " + old_character.get('name', 'Unknown') + " has caused " + old_artifact.get('name', 'Unknown') + " to be lost"
-                    )
-                    system_approve_change(change_id)
-
+    
     return result
 
 def character_heal_tick(old_character, new_character, schema):
@@ -559,26 +534,51 @@ def character_stat_gain_tick(old_character, new_character, schema):
             result = f"{old_character.get('name', 'Unknown')} has gained a level of {stat}.\n"
     return result
 
+def artifact_loss_tick(old_character, new_character, schema):
+    result = ""
+    
+    artifact_loss_chance = old_character.get("artifact_loss_chance", 0)
+    if artifact_loss_chance <= 0:
+        return ""
+    artifact_loss_roll = random.random()
+    new_character["artifact_loss_roll"] = artifact_loss_roll
+    new_character["artifact_loss_chance_at_tick"] = artifact_loss_chance
+    if artifact_loss_roll <= artifact_loss_chance:
+        artifact_schema, artifact_db = get_data_on_category("artifacts")
+        unequipped_artifacts = list(artifact_db.find({"owner": str(old_character.get("_id", "")), "equipped": False}))
+        if unequipped_artifacts:
+            lost_artifact = random.choice(unequipped_artifacts)
+            lost_artifact["owner"] = "Lost"
+            result = f"{old_character.get('name', 'Unknown')} has lost {lost_artifact.get('name', 'Unknown')}.\n"
+            change_id = system_request_change(
+                data_type="artifacts",
+                item_id=lost_artifact["_id"],
+                change_type="Update",
+                before_data=lost_artifact,
+                after_data=lost_artifact,
+                reason="Loss of " + old_character.get('name', 'Unknown') + " has caused " + lost_artifact.get('name', 'Unknown') + " to be lost"
+            )
+            system_approve_change(change_id)
+        else:
+            equipped_artifacts = list(artifact_db.find({"owner": str(old_character.get("_id", "")), "equipped": True}))
+            if equipped_artifacts:
+                lost_artifact = random.choice(equipped_artifacts)
+                lost_artifact["owner"] = "Lost"
+                result = f"{old_character.get('name', 'Unknown')} has lost {lost_artifact.get('name', 'Unknown')}.\n"
+                change_id = system_request_change(
+                    data_type="artifacts",
+                    item_id=lost_artifact["_id"],
+                    change_type="Update",
+                    before_data=lost_artifact,
+                    after_data=lost_artifact,
+                    reason="Loss of " + old_character.get('name', 'Unknown') + " has caused " + lost_artifact.get('name', 'Unknown') + " to be lost"
+                )
+                system_approve_change(change_id)
+    return result
+
 ###########################################################
 # Artifact Tick Functions
 ###########################################################
-
-def artifact_loss_tick(old_artifact, new_artifact, schema):
-    result = ""
-    try:
-        owner = ObjectId(old_artifact.get("owner", "")) # If owner is not a valid ObjectId, return
-    except:
-        owner = None
-    if not owner and old_artifact.get("owner", "") != "Unknown":
-        return ""
-    loss_roll = random.random()
-    new_artifact["loss_roll"] = loss_roll
-    new_artifact["loss_chance_at_tick"] = old_artifact.get("passive_loss_chance", 0)
-    if loss_roll <= old_artifact.get("passive_loss_chance", 0):
-        new_artifact["owner"] = "Lost"
-        new_artifact["equipped"] = False
-        result = f"{old_artifact.get('name', 'Unknown')} has been lost due to passive loss chance.\n"
-    return result
 
 ###########################################################
 # Merchant Tick Functions
@@ -1062,10 +1062,10 @@ CHARACTER_TICK_FUNCTIONS = {
     "Character Stat Gain Tick": character_stat_gain_tick,
     "Character Modifier Decay Tick": modifier_decay_tick,
     "Character Progress Quests Tick": progress_quests_tick,
+    "Character Artifact Loss Tick": artifact_loss_tick,
 }
 
 ARTIFACT_TICK_FUNCTIONS = {
-    "Artifact Loss Tick": artifact_loss_tick,
 }
 
 MERCHANT_TICK_FUNCTIONS = {

@@ -198,6 +198,19 @@
 							</tr>
 						{% endfor %}
 					</table>
+					{% if nation.nomadic > 0 %}
+						<table class="info-table">
+							<tr class="resources-header-row">
+								<th colspan="2" class="resources-header">Nodes</th>
+							</tr>
+							{% for resource in json_data["general_resources"] + json_data["unique_resources"] %}
+								<tr>
+									<th>{{ resource["name"] }}</th>
+									<td>{{ nation.get("nodes", {}).get(resource["key"], 0) }}</td>
+								</tr>
+							{% endfor %}
+						</table>
+					{% endif %}
 				</div>
 			</div>
 		</div>

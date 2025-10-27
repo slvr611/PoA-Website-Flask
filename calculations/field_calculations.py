@@ -37,6 +37,7 @@ def calculate_all_fields(target, schema, target_data_type):
 
     city_totals = {}
     tech_totals = {}
+    loose_node_totals = {}
     territory_terrain_totals = {}
     job_details = {}
     job_totals = {}
@@ -52,6 +53,9 @@ def calculate_all_fields(target, schema, target_data_type):
 
         technologies = target.get("technologies", {})
         tech_totals = sum_tech_totals(technologies)
+
+        loose_nodes = target.get("nodes", {})
+        loose_node_totals = sum_loose_node_totals(loose_nodes, modifier_totals, external_modifiers_total, law_totals, tech_totals)
 
         territory_terrain_totals = collect_territory_terrain(target, modifier_totals, external_modifiers_total)
 
@@ -88,7 +92,7 @@ def calculate_all_fields(target, schema, target_data_type):
 
     overall_total_modifiers = {}
     calculated_values = {"district_details": district_details, "job_details": job_details, "land_unit_details": land_unit_details, "naval_unit_details": naval_unit_details}
-    for d in [external_modifiers_total, modifier_totals, district_totals, tech_totals, territory_terrain_totals, city_totals, law_totals, job_totals, unit_totals, prestige_modifiers, title_modifiers]:
+    for d in [external_modifiers_total, modifier_totals, district_totals, tech_totals, loose_node_totals, territory_terrain_totals, city_totals, law_totals, job_totals, unit_totals, prestige_modifiers, title_modifiers]:
         for key, value in d.items():
             overall_total_modifiers[key] = overall_total_modifiers.get(key, 0) + value
     
@@ -110,7 +114,7 @@ def calculate_all_fields(target, schema, target_data_type):
         for key, value in d.items():
             overall_total_modifiers[key] = overall_total_modifiers.get(key, 0) + value
     
-    #print(overall_total_modifiers)
+    print(overall_total_modifiers)
 
     for field, field_schema in schema_properties.items():
         if isinstance(field_schema, dict) and field_schema.get("calculated") and field not in calculated_values.keys():
@@ -141,7 +145,7 @@ def calculate_all_fields(target, schema, target_data_type):
 
         if excess_food < -food_consumption / 2:
             #Nation is Starving
-            #print("Nation is Starving")
+            print("Nation is Starving")
             overall_total_modifiers["strength"] = overall_total_modifiers.get("strength", 0) - 2
             modifier_totals["stability_loss_chance"] = modifier_totals.get("stability_loss_chance", 0) + 0.25
             modifier_totals["job_resource_production"] = modifier_totals.get("job_resource_production", 0) - 1
@@ -153,7 +157,7 @@ def calculate_all_fields(target, schema, target_data_type):
 
         elif excess_food < 0:
             #Nation is Underfed
-            #print("Nation is Underfed")
+            print("Nation is Underfed")
             overall_total_modifiers["strength"] = overall_total_modifiers.get("strength", 0) - 1
             modifier_totals["stability_loss_chance"] = modifier_totals.get("stability_loss_chance", 0) + 0.1
             modifier_totals["job_resource_production"] = modifier_totals.get("job_resource_production", 0) - 1
@@ -162,14 +166,13 @@ def calculate_all_fields(target, schema, target_data_type):
             modifier_totals["farmer_food_production"] = modifier_totals.get("farmer_food_production", 0) + 1
             modifier_totals["fisherman_food_production"] = modifier_totals.get("fisherman_food_production", 0) + 1
 
-        if excess_food < food_consumption:
-            #print("Nation excess food is less than food consumption")
+        if excess_food < 0:
+            print("Nation excess food is less than 0")
             job_details = calculate_job_details(target, district_details, modifier_totals, district_totals, tech_totals, city_totals, law_totals, external_modifiers_total)
             job_totals = sum_job_totals(target, target.get("jobs", {}), job_details)
             calculated_values["job_details"] = job_details
 
-            overall_total_modifiers = {}
-            for d in [external_modifiers_total, modifier_totals, district_totals, territory_terrain_totals, city_totals, law_totals, job_totals, unit_totals, prestige_modifiers, title_modifiers]:
+            for d in [external_modifiers_total, modifier_totals, district_totals, tech_totals, loose_node_totals, territory_terrain_totals, city_totals, law_totals, job_totals, unit_totals, prestige_modifiers, title_modifiers]:
                 for key, value in d.items():
                     overall_total_modifiers[key] = overall_total_modifiers.get(key, 0) + value
                         
@@ -434,6 +437,32 @@ def sum_tech_totals(technologies):
             for key, value in modifiers.items():
                 tech_totals[key] = tech_totals.get(key, 0) + value
     return tech_totals
+
+def sum_loose_node_totals(loose_nodes, modifier_totals, external_modifiers_total, law_totals, tech_totals):
+    node_totals = {}
+    loose_node_value = 0
+    production_of_available_nodes = 0
+    nomadic = False
+    if law_totals.get("nomadic", 0) > 0:
+        nomadic = True
+    
+    loose_node_value += modifier_totals.get("loose_node_value", 0) + law_totals.get("loose_node_value", 0) + external_modifiers_total.get("loose_node_value", 0) + tech_totals.get("loose_node_value", 0)
+    if nomadic:
+        loose_node_value += modifier_totals.get("nomad_loose_node_value", 0) + law_totals.get("nomad_loose_node_value", 0) + external_modifiers_total.get("nomad_loose_node_value", 0) + tech_totals.get("nomad_loose_node_value", 0)
+    
+    production_of_available_nodes += modifier_totals.get("production_of_available_nodes", 0) + law_totals.get("production_of_available_nodes", 0) + external_modifiers_total.get("production_of_available_nodes", 0) + tech_totals.get("production_of_available_nodes", 0)
+    if nomadic:
+        production_of_available_nodes += modifier_totals.get("nomad_production_of_available_nodes", 0) + law_totals.get("nomad_production_of_available_nodes", 0) + external_modifiers_total.get("nomad_production_of_available_nodes", 0) + tech_totals.get("nomad_production_of_available_nodes", 0)
+
+    for node, value in loose_nodes.items():
+        node_totals[node + "_production"] = value * loose_node_value
+        if value > 0:
+            node_totals[node + "_production"] += production_of_available_nodes
+    
+    print(node_totals)
+    
+    return node_totals
+
 
 def collect_territory_terrain(target, modifier_totals, external_modifier_totals):
     territory_types = target.get("territory_types", {})

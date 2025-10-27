@@ -318,7 +318,7 @@
 		"type": "Industry",
 		"cost": 5,
 		"modifiers": {
-			"nomad_node_utilization": 1
+			"nomad_loose_node_value": 2
 		},
 		"prerequisites_all": ["penitent_faith"],
 		"prerequisites_one": []

@@ -123,6 +123,57 @@ class TerritoryTerrainDict(Form):
                         
                         field.data = field_value
 
+class NodeDict(Form):
+    """Form for handling nodes as a dictionary"""
+    
+    class Meta:
+        csrf = False
+    
+    @classmethod
+    def create_form_class(cls):
+        nodes = json_data.get("general_resources", []) + json_data.get("unique_resources", [])
+        for node in nodes:
+            field = IntegerField(node["name"], validators=[NumberRange(min=0)], default=0)
+            setattr(cls, node["key"], field)
+        
+        return cls
+
+    def load_form_from_item(self, item, schema):
+        """Loads form data from a database item"""
+        if not item:
+            return
+        for field_name, field in self._fields.items():
+                if isinstance(field, SelectField) and field.data:
+                    field.data = str(field.data)
+                    
+                # Handle nested data structures
+                if field_name in item:
+                    field_value = item[field_name]
+                    
+                    if isinstance(field_value, ObjectId):
+                        field.data = str(field_value)
+                    elif isinstance(field, FieldList):
+                        # Clear existing entries
+                        while len(field.entries) > 0:
+                            field.pop_entry()
+                            
+                        # Add new entries from the data
+                        for value in field_value:
+                            if isinstance(value, dict):
+                                # For object arrays
+                                field.append_entry(value)
+                            elif isinstance(value, ObjectId):
+                                # For linked object arrays
+                                field.append_entry(str(value))
+                            else:
+                                # For simple value arrays
+                                field.append_entry(value)
+                    elif isinstance(field, FormField):
+                        field.load_form_from_item(field_value, schema)
+                    else:
+                        
+                        field.data = field_value
+
 class JobAssignmentDict(Form):
     """Form for handling job assignment as a dictionary"""
     
@@ -1093,6 +1144,9 @@ class NationForm(BaseSchemaForm):
 
         TerritoryTerrainDict.create_form_class()
         cls.territory_types = FormField(TerritoryTerrainDict)
+
+        NodeDict.create_form_class()
+        cls.nodes = FormField(NodeDict)
 
         JobAssignmentDict.create_form_class(job_details)
         cls.jobs = FormField(JobAssignmentDict)
