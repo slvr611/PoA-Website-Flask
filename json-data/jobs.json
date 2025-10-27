@@ -183,8 +183,10 @@
 		"production": {
 			"vampirism_chance": 0.1,
 			"stability_loss_chance": 0.1,
-			"food": 1,
 			"magic": 1
+		},
+		"upkeep": {
+			"food": 1
 		}
 	},
 	"full_vampire": {
@@ -204,7 +206,9 @@
 		"display_name": "Undead",
 		"production": {
 			"stability_loss_chance": 0.05,
-			"undead_chance": 0.05,
+			"undead_chance": 0.05
+		},
+		"upkeep": {
 			"food": 1
 		}
 	}
