@@ -1163,6 +1163,8 @@ def adjust_stability(old_nation, new_nation, schema, amounts=[-1], reasons=[""])
             result += f"{old_nation.get('name', 'Unknown')} has experienced a civil war due to negative stability from {worst_reason}.\n"
         else:
             stability_index = 0
+    elif stability_index >= len(stability_enum):
+        stability_index = len(stability_enum) - 1
     
     new_nation["stability"] = stability_enum[stability_index]
     return result
