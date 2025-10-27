@@ -5,7 +5,10 @@
 			"district": ["artifactory"]
 		},
 		"production": {
-			"artifact_rolls": 2
+			"ruler_artifact_slots": 2
+		},
+		"upkeep": {
+			"bronze": 2
 		}
 	},
 	"apprentice": {

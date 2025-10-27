@@ -147,12 +147,12 @@
 		},
 		"modifiers": {
 			"prestige_gain": -1,
-			"artifact_death_loss_chance": -0.1
+			"ruler_artifact_slots": 12
 		},
 		"synergy_requirement": "any",
 		"synergy_node_active": false,
 		"synergy_modifiers": {
-			"artifact_death_loss_chance": -0.1
+			"ruler_artifact_slots": 12
 		},
 		"count": 1
 	},
