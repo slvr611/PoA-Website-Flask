@@ -1027,7 +1027,7 @@ def library_tick(old_nation, new_nation, schema):
                     if modifier["value"] % required_turns == 0:
                         for modifier_2 in modifiers:
                             if modifier_2.get("field", "") == "research_production" and modifier_2.get("source", "") == "Library District":
-                                modifier_2["value"] = min(modifier_2["value"] + 1, max_research)
+                                modifier_2["value"] = min(modifier["value"] / required_turns, max_research)
                                 new_nation["modifiers"] = modifiers
                                 return f"{old_nation.get('name', 'Unknown')} has had their research production increased by 1 because the library district has been active for {modifier['value']} turns.\n" and modifier_2.get("source", "") == "Library District"
                             
