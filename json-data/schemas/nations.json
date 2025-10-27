@@ -225,6 +225,13 @@
         "calculated": true,
         "format": "percentage"
       },
+      "undead_chance": {
+        "bsonType": "number",
+        "label": "Undead Chance",
+        "description": "The nation's percentage chance of an undead rising each tick",
+        "calculated": true,
+        "format": "percentage"
+      },
       "pop_loss_chance": {
         "bsonType": "number",
         "label": "Pop Loss Chance",

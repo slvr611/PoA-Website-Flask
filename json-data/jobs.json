@@ -199,5 +199,13 @@
 		"upkeep": {
 			"food": 1
 		}
+	},
+	"partial_undead": {
+		"display_name": "Undead",
+		"production": {
+			"stability_loss_chance": 0.05,
+			"undead_chance": 0.05,
+			"food": 1
+		}
 	}
 }

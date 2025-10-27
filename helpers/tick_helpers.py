@@ -891,6 +891,22 @@ def vampirism_tick(old_nation, new_nation, schema):
         result += f"{old_nation.get('name', 'Unknown')} has gained a vampire.\n"
     return result
 
+def undead_tick(old_nation, new_nation, schema):
+    if old_nation.get("undead_chance", 0) <= 0:
+        return ""
+    result = ""
+    undead_roll = random.random()
+    new_nation["undead_roll"] = undead_roll
+    new_nation["undead_chance_at_tick"] = old_nation.get("undead_chance", 0)
+    if undead_roll <= old_nation.get("undead_chance", 0):
+        new_nation["jobs"]["partial_undead"] = old_nation.get("jobs", {}).get("partial_undead", 0) + 1
+        result += f"{old_nation.get('name', 'Unknown')} has gained an undead.\n"
+        double_undead_roll = random.random()
+        new_nation["double_undead_roll"] = double_undead_roll
+        if double_undead_roll <= 0.25:
+            result += f"{old_nation.get('name', 'Unknown')} spread an undead to a nearby nation.\n"
+    return result
+
 def pop_loss_tick(old_nation, new_nation, schema):
     result = ""
     if old_nation.get("pop_loss_chance", 0) <= 0:
