@@ -1050,8 +1050,9 @@ def library_tick(old_nation, new_nation, schema):
     districts = new_nation.get("districts", [])
     for district in districts:
         if "library" in district.get("type", ""):
-            required_turns = old_nation.get("research_production_per_turns_with_library", 0)
-            max_research = old_nation.get("max_research_production_per_turns_with_library", 0)
+            library_details = json_data["nation_districts"].get(district.get("type", ""), {})
+            required_turns = library_details.get("modifiers", {}).get("research_production_per_turns_with_library", 0)
+            max_research = library_details.get("modifiers", {}).get("max_research_production_per_turns_with_library", 0)
             modifiers = new_nation.get("modifiers", [])
             for modifier in modifiers:
                 if modifier.get("field", "") == "Turns with Library" and modifier.get("source", "") == "Library District":
