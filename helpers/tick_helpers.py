@@ -635,6 +635,7 @@ def isolated_diplo_stance_tick(old_nation, new_nation, schema):
                 new_nation["modifiers"] = modifiers
                 old_nation["stability_gain_chance"] -= removed_stab_gain #Remove the stab gain chance because if the nation swapped off Isolated, they should not keep the stab gain chance
                 return f"{old_nation.get('name', 'Unknown')} has had the stability gain chance modifier from their Isolated diplomatic stance removed because they are no longer Isolated.\n"
+        return ""
     else:
         gain_rate = old_nation.get("isolated_stab_gain_rate", 0)
         cap = old_nation.get("isolated_stab_gain_max", 0)
