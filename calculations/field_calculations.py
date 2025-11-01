@@ -753,9 +753,13 @@ def calculate_unit_details(target, unit_type, unit_json_files, modifier_totals, 
                             all_resource_upkeep = all_resource_upkeep + value
                         elif modifier.endswith("resource_upkeep_mult"):
                             all_resource_upkeep_multiplier = all_resource_upkeep_multiplier * value
+            
+            original_details = copy.deepcopy(new_details)
 
-            for resource in new_details.get("upkeep", {}):
-                if resource in general_resources or resource in unique_resources:
+            for resource in original_details.get("upkeep", {}):
+                if (resource in general_resources or resource in unique_resources) and new_details.get("upkeep", {}).get(resource, 0) <= 0:
+                    del new_details["upkeep"][resource]
+                elif resource in general_resources or resource in unique_resources:
                     new_upkeep = new_details["upkeep"][resource]
                     new_upkeep += all_resource_upkeep
                     new_upkeep = new_upkeep * all_resource_upkeep_multiplier

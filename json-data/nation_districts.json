@@ -645,7 +645,7 @@
 			"stone_consumption": 1,
 			"bronze_production": 2,
 			"iron_production": 1,
-			"metallurgist_iron_production": 1
+			"metallurgist_bronze_production": 1
 		},
 		"synergy_requirement": "bronze",
 		"synergy_node_active": true,

@@ -680,7 +680,7 @@
           "stone_consumption": 1,
           "strength": 1,
           "unit_morale": 1,
-          "unit_mount_consumption": -1,
+          "unit_mounts_upkeep": -1,
           "chance_to_lose_stability": 0.2,
           "chance_to_lose_stability_while_at_war": -0.1
         },
