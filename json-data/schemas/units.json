@@ -1,0 +1,238 @@
+{
+  "$jsonSchema": {
+    "bsonType": "object",
+    "required": ["name"],
+    "properties": {
+      "name": {
+        "bsonType": "string",
+        "label": "Name",
+        "description": "The name of the war"
+      },
+      "image": {
+        "bsonType": "string",
+        "label": "Image",
+        "description": "The image of the unit",
+        "image": true
+      },
+      "era": {
+        "bsonType": "enum",
+        "label": "Era",
+        "description": "The era the unit was created in",
+        "enum": ["Tribal", "Ancient", "Classical", "Medieval", "Industrial", "Modern", "Crisis"]
+      },
+      "unit_type": {
+        "bsonType": "enum",
+        "label": "Unit Type",
+        "description": "The type of unit",
+        "enum": ["Land", "Naval"]
+      },
+      "melee": {
+        "bsonType": "boolean",
+        "label": "Melee",
+        "description": "Whether the unit is a melee unit"
+      },
+      "ranged": {
+        "bsonType": "boolean",
+        "label": "Ranged",
+        "description": "Whether the unit is a ranged unit"
+      },
+      "cavalry": {
+        "bsonType": "boolean",
+        "label": "Cavalry",
+        "description": "Whether the unit is a cavalry unit"
+      },
+      "support": {
+        "bsonType": "boolean",
+        "label": "Support",
+        "description": "Whether the unit is a support unit"
+      },
+      "prerequisites": {
+        "bsonType": "array",
+        "label": "Prerequisites",
+        "description": "The prerequisites for the unit",
+        "items": {
+          "bsonType": "object",
+          "properties": {
+            "type": {
+              "bsonType": "enum",
+              "label": "Type",
+              "description": "The type of prerequisite",
+              "enum": ["district", "name", "defensive_pact", "military_alliance"]
+            },
+            "value": {
+              "bsonType": "string",
+              "label": "Value",
+              "description": "The value of the prerequisite"
+            }
+          }
+        }
+      },
+      "has_hp": {
+        "bsonType": "boolean",
+        "label": "Has HP",
+        "description": "Whether the unit has HP",
+        "hidden": true
+      },
+      "hp": {
+        "bsonType": "number",
+        "label": "HP",
+        "description": "The HP of the unit",
+        "hideIfNone": "has_hp"
+      },
+      "has_morale": {
+        "bsonType": "boolean",
+        "label": "Has Morale",
+        "description": "Whether the unit has morale",
+        "hidden": true
+      },
+      "morale": {
+        "bsonType": "number",
+        "label": "Morale",
+        "description": "The morale of the unit",
+        "hideIfNone": "has_morale"
+      },
+      "has_damage": {
+        "bsonType": "boolean",
+        "label": "Has Damage",
+        "description": "Whether the unit has damage",
+        "hidden": true
+      },
+      "damage": {
+        "bsonType": "number",
+        "label": "Damage",
+        "description": "The damage of the unit",
+        "hideIfNone": "has_damage"
+      },
+      "has_retaliation_damage": {
+        "bsonType": "boolean",
+        "label": "Has Retaliation Damage",
+        "description": "Whether the unit has retaliation damage",
+        "hidden": true
+      },
+      "retaliation_damage": {
+        "bsonType": "number",
+        "label": "Retaliation Damage",
+        "description": "The retaliation damage of the unit",
+        "hideIfNone": "has_retaliation_damage"
+      },
+      "has_range": {
+        "bsonType": "boolean",
+        "label": "Has Range",
+        "description": "Whether the unit has a range",
+        "hidden": true
+      },
+      "minimum_range": {
+        "bsonType": "number",
+        "label": "Minimum Range",
+        "description": "The minimum range of the unit",
+        "hideIfNone": "has_range"
+      },
+      "maximum_range": {
+        "bsonType": "number",
+        "label": "Maximum Range",
+        "description": "The maximum range of the unit",
+        "hideIfNone": "has_range"
+      },
+      "has_speed": {
+        "bsonType": "boolean",
+        "label": "Has Speed",
+        "description": "Whether the unit has a speed",
+        "hidden": true
+      },
+      "speed": {
+        "bsonType": "number",
+        "label": "Speed",
+        "description": "The speed of the unit",
+        "hideIfNone": "has_speed"
+      },
+      "has_armor": {
+        "bsonType": "boolean",
+        "label": "Has Armor",
+        "description": "Whether the unit has armor",
+        "hidden": true
+      },
+      "armor": {
+        "bsonType": "number",
+        "label": "Armor",
+        "description": "The armor of the unit",
+        "hideIfNone": "has_armor"
+      },
+      "special_abilities": {
+        "bsonType": "array",
+        "label": "Special Abilities",
+        "description": "The special abilities of the unit",
+        "items": {
+          "bsonType": "string",
+          "label": "Special Ability",
+          "description": "A special ability of the unit"
+        }
+      },
+      "has_upkeep": {
+        "bsonType": "boolean",
+        "label": "Has Upkeep",
+        "description": "Whether the unit has upkeep",
+        "hidden": true
+      },
+      "upkeep": {
+        "bsonType": "array",
+        "label": "Upkeep",
+        "description": "The upkeep of the unit",
+        "hideIfNone": "has_upkeep",
+        "items": {
+          "bsonType": "object",
+          "properties": {
+            "resource": {
+              "bsonType": "string",
+              "label": "Resource",
+              "description": "The resource the upkeep is in"
+            },
+            "cost": {
+              "bsonType": "number",
+              "label": "Cost",
+              "description": "The cost of the upkeep"
+            }
+          }
+        }
+      },
+      "has_recruitment_cost": {
+        "bsonType": "boolean",
+        "label": "Has Recruitment Cost",
+        "description": "Whether the unit has a recruitment cost",
+        "hidden": true
+      },
+      "recruitment_cost": {
+        "bsonType": "number",
+        "label": "Recruitment Cost",
+        "description": "The recruitment cost of the unit",
+        "hideIfNone": "has_recruitment_cost"
+      },
+      "has_summoning_cost": {
+        "bsonType": "boolean",
+        "label": "Has Summoning Cost",
+        "description": "Whether the unit has a summoning cost",
+        "hidden": true
+      },
+      "summoning_cost": {
+        "bsonType": "array",
+        "label": "Summoning Cost",
+        "description": "The summoning cost of the unit",
+        "hideIfNone": "has_summoning_cost",
+        "items": {
+          "bsonType": "object",
+          "properties": {
+            "resource": {
+              "bsonType": "string",
+              "label": "Resource",
+              "description": "The resource the summoning cost is in"
+            },
+            "cost": {
+              "bsonType": "number",
+              "label": "Cost",
+              "description": "The cost of the summoning"
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -68,7 +68,8 @@ category_data = {
     "trades": {"pluralName": "Trades", "singularName": "Trade", "database": mongo.db.trades},
     "events": {"pluralName": "Events", "singularName": "Event", "database": mongo.db.events},
     "changes": {"pluralName": "Changes", "singularName": "Change", "database": mongo.db.changes},
-    "global_modifiers": {"pluralName": "Global Modifiers", "singularName": "Global Modifiers", "database": mongo.db.global_modifiers}
+    "global_modifiers": {"pluralName": "Global Modifiers", "singularName": "Global Modifiers", "database": mongo.db.global_modifiers},
+    "units": {"pluralName": "Units", "singularName": "Unit", "database": mongo.db.units}
 }
 
 rarity_rankings = {"Mythical": 0, "Legendary": 1, "Great": 2, "Good": 3, "Mundane": 4}

@@ -1,0 +1,160 @@
+{% extends 'layout.html' %}
+
+{% block title %}{{ item['name'] }}{% endblock %}
+
+{% block content %}
+<style>
+  /* Scoped styles for the unit detail card */
+  .unit-detail-wrapper { max-width: 500px; margin: 1.5rem auto; }
+  .unit-card { background: #f7f7f7; color: #111; border-radius: 14px; overflow: hidden; border: 6px solid #111; }
+  .unit-card header { background: #111; color: #fff; padding: 0.75rem 1.25rem; display: flex; align-items: center; justify-content: space-between; }
+  .unit-title { font-size: 1.8rem; font-weight: 800; letter-spacing: 1px; margin: 0; }
+  .unit-icon { width: 40px; height: 40px; border-radius: 6px; object-fit: cover; border: 2px solid #fff; margin-left: 0.75rem; }
+  .unit-body { padding: 1.25rem 1.25rem 0.25rem 1.25rem; }
+  .unit-subline { font-style: italic; color: #222; margin: 0.25rem 0 0.75rem 0; }
+  .badge { display: inline-block; background: #e6e6e6; color: #222; border: 1px solid #bbb; border-radius: 999px; padding: 0.15rem 0.6rem; font-size: 0.8rem; margin-left: 0.5rem; }
+  .unit-stat-grid { display: grid; grid-template-columns: repeat(1, 1fr); gap: 0.35rem 1.25rem; margin: 0.6rem 0 0.75rem 0; font-size: 0.98rem; }
+  .stat-label { font-weight: 700; }
+  .rule { height: 2px; background: #111; margin: 0.75rem 0; opacity: 0.8; }
+  .section { margin: 0.75rem 0 1rem 0; }
+  .section h3 { margin: 0 0 0.25rem 0; font-size: 1.05rem; }
+  .section p { margin: 0.25rem 0 0.5rem 0; line-height: 1.35rem; }
+  .unit-footer { padding: 0.85rem 1.25rem; border-top: 2px solid #111; background: #f0f0f0; border-radius: 0 0 8px 8px; }
+  .footer-heading { letter-spacing: 2px; font-variant: small-caps; color: #333; margin-bottom: 0.4rem; font-weight: 700; }
+  .muted { color: #666; }
+  .unit-detail-wrapper a { color: inherit; }
+  @media (max-width: 640px) { .unit-stat-grid { grid-template-columns: 1fr; } }
+</style>
+
+<div class='unit-detail-wrapper'>
+  <div class='unit-card'>
+    <header>
+      <h1 class='unit-title'>{{ item.name }}</h1>
+      {% if item.image %}
+        <img class='unit-icon' src='{{ item.image }}' alt='{{ item.name }}'>
+      {% endif %}
+    </header>
+
+    <div class='unit-body'>
+      {# Era and roles line, e.g., "Ancient - Support" #}
+      {% set roles = [] %}
+      {% if item.get('melee') %}{% set _ = roles.append('Melee') %}{% endif %}
+      {% if item.get('ranged') %}{% set _ = roles.append('Ranged') %}{% endif %}
+      {% if item.get('cavalry') %}{% set _ = roles.append('Cavalry') %}{% endif %}
+      {% if item.get('support') %}{% set _ = roles.append('Support') %}{% endif %}
+      <div class='unit-subline'>
+        {{ item.get('era', 'Unknown Era') }}{% if roles %} - {{ roles | join(', ') }}{% endif %}
+        {% if item.get('unit_type') %}
+          <span class='badge'>{{ item.unit_type }}</span>
+        {% endif %}
+      </div>
+
+      {# Prerequisites line #}
+      {% if item.get('prerequisites') %}
+        <div class='unit-subline'><strong>Prerequisites:</strong>
+          {% for pre in item.prerequisites %}
+            {{ pre.get('value', pre.get('type', 'Unknown')) }}{% if not loop.last %}, {% endif %}
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      {# Core stats #}
+      {% macro dash_if_missing(flag_key, value) -%}
+        {%- if flag_key and not item.get(flag_key) -%}-
+        {%- elif value is not none and value != '' -%}{{ value }}
+        {%- else -%}-
+        {%- endif -%}
+      {%- endmacro %}
+
+      <div class='unit-stat-grid'>
+        <div><span class='stat-label'>HP:</span> {{ dash_if_missing('has_hp', item.get('hp')) }}</div>
+        <div><span class='stat-label'>Morale:</span> {{ dash_if_missing('has_morale', item.get('morale')) }}</div>
+        <div><span class='stat-label'>Damage:</span> {{ dash_if_missing('has_damage', item.get('damage')) }}</div>
+        <div><span class='stat-label'>Retaliation Damage:</span> {{ dash_if_missing('has_retaliation_damage', item.get('retaliation_damage')) }}</div>
+        <div>
+          <span class='stat-label'>Range:</span>
+          {% if item.get('has_range') %}
+            {% if item.get('minimum_range') is not none and item.get('maximum_range') is not none %}
+              {{ item.minimum_range }}-{{ item.maximum_range }}
+            {% elif item.get('maximum_range') is not none %}
+              {{ item.maximum_range }}
+            {% else %}-{% endif %}
+          {% else %}-{% endif %}
+        </div>
+        <div><span class='stat-label'>Speed:</span> {{ dash_if_missing('has_speed', item.get('speed')) }}</div>
+        <div><span class='stat-label'>Armor:</span> {{ dash_if_missing('has_armor', item.get('armor')) }}</div>
+      </div>
+
+      <div class='rule'></div>
+
+      {# Special Abilities #}
+      {% if item.get('special_abilities') %}
+        {% for desc in item.special_abilities %}
+          <div class='section'>
+            {# Heuristic: if text looks like "Title: description" or "Title - description" split it #}
+            {% set parts = desc.split(':', 1) %}
+            {% if parts|length == 2 and parts[0]|length < 60 %}
+              <h3><strong>Special - {{ parts[0].strip() }}</strong></h3>
+              <p>{{ parts[1].strip() }}</p>
+            {% else %}
+              {% set parts_dash = desc.split(' - ', 1) %}
+              {% if parts_dash|length == 2 and parts_dash[0]|length < 60 %}
+                <h3><strong>Special - {{ parts_dash[0].strip() }}</strong></h3>
+                <p>{{ parts_dash[1].strip() }}</p>
+              {% else %}
+                <h3><strong>Special</strong></h3>
+                <p>{{ desc }}</p>
+              {% endif %}
+            {% endif %}
+          </div>
+        {% endfor %}
+      {% else %}
+        <div class='section muted'><em>No special abilities.</em></div>
+      {% endif %}
+
+    </div>
+
+    <div class='unit-footer'>
+      <div class='footer-heading'>Maintenance / Recruitment Cost:</div>
+      <div>
+        {# Upkeep list #}
+        {% set upkeep_parts = [] %}
+        {% if item.get('has_upkeep') and item.get('upkeep') %}
+          {% for u in item.upkeep %}
+            {% set _ = upkeep_parts.append((u.get('cost', 0) | string) ~ ' ' ~ (u.get('resource',''))) %}
+          {% endfor %}
+        {% endif %}
+
+        {# Summoning cost list (optional) #}
+        {% set summon_parts = [] %}
+        {% if item.get('has_summoning_cost') and item.get('summoning_cost') %}
+          {% for s in item.summoning_cost %}
+            {% set _ = summon_parts.append((s.get('cost', 0) | string) ~ ' ' ~ (s.get('resource',''))) %}
+          {% endfor %}
+        {% endif %}
+
+        {# Compose display #}
+        <span>
+          {% if upkeep_parts %}{{ upkeep_parts | join(' / ') }}{% endif %}
+          {% if item.get('has_recruitment_cost') and item.get('recruitment_cost') is not none %}
+            {% if upkeep_parts %} / {% endif %}&#36;{{ item.recruitment_cost | int if item.recruitment_cost == item.recruitment_cost|int else item.recruitment_cost }}
+          {% endif %}
+          {% if summon_parts %}
+            {% if upkeep_parts or item.get('has_recruitment_cost') %} / {% endif %}Summon: {{ summon_parts | join(' + ') }}
+          {% endif %}
+          {% if not upkeep_parts and not summon_parts and not item.get('has_recruitment_cost') %}
+            <span class='muted'>None</span>
+          {% endif %}
+        </span>
+      </div>
+    </div>
+  </div>
+
+  {% if g.user is not none %}
+    <div style='margin-top: .75rem; text-align: right;'>
+      <a class='badge' href='{{ request.path.replace('item', 'edit') }}'>Edit</a>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}
+

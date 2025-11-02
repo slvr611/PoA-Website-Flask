@@ -57,8 +57,11 @@ def data_item(data_type, item_ref):
     schema, db, item = get_data_on_item(data_type, item_ref)
     linked_objects = get_linked_objects(schema, item)
 
+    # Use a custom template for units to render a card-style layout
+    template_name = "units_item.html" if data_type == "units" else "dataItem.html"
+
     return render_template(
-        "dataItem.html",
+        template_name,
         title=item.get("name", str(item.get("_id", ""))),
         schema=schema,
         item=item,
