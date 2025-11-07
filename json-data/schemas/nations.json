@@ -7,7 +7,7 @@
       "magic_stance", "centralization_law", "citizenship_stance", "foreign_acceptance", "subject_stance", "land_doctrine", "naval_doctrine",
       "diplomatic_stance", "scientific_stance", "economy_type", "expansion_stance", "mercenary_law", "consumption_stance", "tax_stance", "justice_stance",
       "vassal_type"],
-    "preview": ["region"],
+    "preview": ["region", "pop_count"],
     "external_calculation_requirements": {
       "overlord": {
         "fields": ["subject_stance"],

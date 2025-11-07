@@ -1,9 +1,8 @@
 from flask import Blueprint, render_template, redirect, request, flash, url_for, send_file
 from helpers.auth_helpers import admin_required
-from helpers.data_helpers import get_data_on_category, generate_id_to_name_dict, compute_demographics
+from helpers.data_helpers import get_data_on_category
 from helpers.admin_tool_helpers import grow_all_population_async, roll_events_async, recalculate_all_items_async
-from helpers.change_helpers import request_change, approve_change
-from app_core import category_data, rarity_rankings, mongo, json_data, temperament_enum
+from app_core import category_data, mongo, json_data, temperament_enum
 from pymongo import ASCENDING
 from app_core import restore_mongodb
 from forms import form_generator
@@ -17,25 +16,6 @@ admin_tool_routes = Blueprint('admin_tool_routes', __name__)
 @admin_required
 def admin_tools():
     return render_template("admin_tools.html")
-
-@admin_tool_routes.route("/demographics_overview")
-@admin_required
-def demographics_overview():
-    nations = list(mongo.db.nations.find().sort("name", ASCENDING))
-
-    race_id_to_name = generate_id_to_name_dict("races")
-    culture_id_to_name = generate_id_to_name_dict("cultures")
-    religion_id_to_name = generate_id_to_name_dict("religions")
-
-    demographics_list = []
-    for nation in nations:
-        demo = compute_demographics(nation.get("_id", None), race_id_to_name, culture_id_to_name, religion_id_to_name)
-        demographics_list.append({
-            "name": nation["name"],
-            "demographics": demo
-        })
-
-    return render_template("demographics_overview.html", demographics_list=demographics_list)
 
 @admin_tool_routes.route("/elected_candidates_generator")
 @admin_required

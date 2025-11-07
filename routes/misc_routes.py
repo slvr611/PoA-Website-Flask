@@ -1,6 +1,7 @@
 from flask import Blueprint, render_template, session, redirect, url_for, g, request, jsonify
 from pymongo import ASCENDING
 from app_core import mongo, json_data, unit_json_files, unit_json_file_titles
+from helpers.data_helpers import generate_id_to_name_dict, compute_demographics
 
 
 misc_routes = Blueprint('misc_routes', __name__)
@@ -21,7 +22,7 @@ def get_available_slots():
         from forms import NationForm
         form = NationForm()
         available_slots = form.get_available_slots(nation_data, schema)
-        
+
         return jsonify(available_slots)
     except Exception as e:
         return jsonify([("no_slot", "No Slot")]), 500
@@ -59,3 +60,21 @@ def units():
         "units.html",
         categorized_units=categorized_units
     )
+
+@misc_routes.route("/demographics_overview")
+def demographics_overview():
+    nations = list(mongo.db.nations.find().sort("name", ASCENDING))
+
+    race_id_to_name = generate_id_to_name_dict("races")
+    culture_id_to_name = generate_id_to_name_dict("cultures")
+    religion_id_to_name = generate_id_to_name_dict("religions")
+
+    demographics_list = []
+    for nation in nations:
+        demo = compute_demographics(nation.get("_id", None), race_id_to_name, culture_id_to_name, religion_id_to_name)
+        demographics_list.append({
+            "name": nation["name"],
+            "demographics": demo
+        })
+
+    return render_template("demographics_overview.html", demographics_list=demographics_list)

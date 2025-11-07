@@ -1,9 +1,6 @@
 {
 	"artificer": {
 		"display_name": "Artificer",
-		"requirements":{
-			"district": ["artifactory"]
-		},
 		"production": {
 			"ruler_artifact_slots": 4
 		},
