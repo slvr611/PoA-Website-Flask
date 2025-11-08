@@ -114,7 +114,9 @@ def calculate_all_fields(target, schema, target_data_type):
         for key, value in d.items():
             overall_total_modifiers[key] = overall_total_modifiers.get(key, 0) + value
     
-    print(overall_total_modifiers)
+    overall_total_modifiers = parse_meta_modifiers(target, overall_total_modifiers)
+
+    #print(overall_total_modifiers)
 
     for field, field_schema in schema_properties.items():
         if isinstance(field_schema, dict) and field_schema.get("calculated") and field not in calculated_values.keys():
@@ -395,9 +397,13 @@ def collect_mercenary_districts(target, district_details):
 
 def calculate_title_modifiers(target, target_data_type, schema_properties):
     title_modifiers = {}
-    titles = target.get("titles", [])
+    titles = target.get("positive_titles", [])
+    titles.extend(target.get("negative_titles", []))
+    title_data = json_data["positive_titles"]
+    title_data.update(json_data["negative_titles"])
+    print(titles)
     for title in titles:
-        title_data = json_data["titles"].get(title, {})
+        title_data = title_data.get(title, {})
         for key, value in title_data.get("modifiers", {}).items():
             if key.startswith(target_data_type + "_"):
                 temp_key = key.replace(target_data_type + "_", "")
@@ -1204,9 +1210,19 @@ def sum_external_modifier_totals(external_modifiers):
     return totals
 
 def calculate_karma_from_negative_stockpiles(target, modifier_totals):
+    if target.get("temperament", "None") != "Player": #Only apply to player nations
+        return
     for resource in json_data["general_resources"]:
-        if target.get("resource_storage", {}).get(resource["key"], 0) < 0:
+        if target.get("resource_storage", {}).get(resource["key"], 0) < 0 and resource["key"] != "research":
             modifier_totals["karma"] = modifier_totals.get("karma", 0) + target.get("resource_storage", {}).get(resource["key"], 0)
     for resource in json_data["unique_resources"]:
         if target.get("resource_storage", {}).get(resource["key"], 0) < 0:
             modifier_totals["karma"] = modifier_totals.get("karma", 0) + target.get("resource_storage", {}).get(resource["key"], 0)
+
+def parse_meta_modifiers(target, overall_total_modifiers):
+    meta_mods = json_data["meta_mods"]
+    for mod_key, mod_details in meta_mods.items():
+        if overall_total_modifiers.get(mod_key, 0) > 0:
+            for field, value in mod_details.get("modifiers", {}).items():
+                overall_total_modifiers[field] = overall_total_modifiers.get(field, 0) + value
+    return overall_total_modifiers

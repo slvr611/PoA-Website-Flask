@@ -229,22 +229,22 @@
 			"bsonType": "linked_object"
         }
       },
-      "title_slots": {
+      "positive_title_slots": {
         "bsonType": "number",
-		"label": "Title Slots",
+		"label": "Positive Title Slots",
         "description": "The number of title slots the character has available",
 		"calculated": true,
         "base_value": 3
       },
-      "titles": {
+      "positive_titles": {
         "bsonType": "array",
-		"label": "Titles",
-        "description": "The titles the character currently holds",
+		"label": "Positive Titles",
+        "description": "The positive titles the character currently holds",
 		"static": true,
-        "max_length": "title_slots",
+        "max_length": "positive_title_slots",
         "items":{
             "bsonType": "json_district_enum",
-            "json_data": "titles"
+            "json_data": "positive_titles"
         }
       },
 	  "age": {

@@ -92,19 +92,23 @@
 		    "laws":{
           "Small": {
             "budget": 450,
-            "max_units": 2
+            "max_units": 2,
+            "mech_rp_hiring_cost": 450
           },
           "Medium": {
             "budget": 750,
-            "max_units": 3
+            "max_units": 3,
+            "mech_rp_hiring_cost": 525
           },
           "Large": {
             "budget": 1050,
-            "max_units": 4
+            "max_units": 4,
+            "mech_rp_hiring_cost": 600
           },
           "Massive": {
             "budget": 1500,
-            "max_units": 5
+            "max_units": 5,
+            "mech_rp_hiring_cost": 675
           }
         }
       },
@@ -172,6 +176,12 @@
         "bsonType": "number",
 		    "label": "Hiring Cost",
         "description": "The minimum amount of money the mercenary company charges to hire",
+		    "calculated": true
+      },
+      "mech_rp_hiring_cost": {
+        "bsonType": "number",
+		    "label": "Mechanical RP Hiring Cost",
+        "description": "The amount of RP the mercenary company charges to hire to perform a mech RP on your behalf",
 		    "calculated": true
       },
       "max_units": {

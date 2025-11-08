@@ -76,8 +76,15 @@ def grow_population(nation, foreign_nation):
 
     pacted_allies = [ally.get("nation_1", "") or ally.get("nation_2", "") for ally in pacted_allies]
 
+    roll_modifier += len(pacted_allies)
+
+    if nation.get("citizenship_stance", "None") == "Free":
+        roll_modifier = 4
+    elif roll_modifier > 4:
+        roll_modifier = 4
+
     pops = []
-    if pop_roll + roll_modifier + len(pacted_allies) >= 9 and pop_roll + roll_modifier < 9:
+    if pop_roll + roll_modifier >= 9 and pop_roll + roll_modifier - len(pacted_allies) < 9:
         pacted_ally = random.choice(pacted_allies)
         print(pacted_ally)
         try:
@@ -104,6 +111,9 @@ def grow_population(nation, foreign_nation):
     new_pop = random.choice(pops).copy()
     new_pop["nation"] = str(nation["_id"])
     new_pop.pop("_id", None)
+
+    if nation.get("citizenship_stance", "None") == "Closed":
+        new_pop["race"] = nation.get("primary_race", None)
 
     change_id = system_request_change(
         data_type="pops",

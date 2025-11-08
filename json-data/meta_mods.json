@@ -1,0 +1,22 @@
+{
+    "immortal": {
+        "name": "Immortal",
+        "description": "The target cannot die of old age or be considered elderly",
+        "modifiers": {
+            "elderly_age": 1000,
+            "heal_chance": -0.5,
+            "heal_chance_per_prowess": -0.05,
+            "stat_gain_chance_per_cunning": -0.08,
+            "positive_title_slots": -1
+        }
+    },
+    "slow_aging": {
+        "name": "Slow Aging",
+        "description": "The target ages slower than normal",
+        "modifiers": {
+            "ignore_elderly": 1,
+            "death_chance_per_elderly_age": -0.1,
+            "stat_gain_chance_per_cunning": -0.05
+        }
+    }
+}

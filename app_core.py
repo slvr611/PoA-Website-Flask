@@ -75,7 +75,8 @@ category_data = {
 rarity_rankings = {"Mythical": 0, "Legendary": 1, "Great": 2, "Good": 3, "Mundane": 4}
 
 json_files = ["jobs", "tech", "nation_districts", "nation_imperial_districts", "mercenary_districts",
-                "merchant_production_districts", "merchant_specialty_districts", "merchant_luxury_districts", "cities", "terrains", "walls", "titles"]
+                "merchant_production_districts", "merchant_specialty_districts", "merchant_luxury_districts",
+                "cities", "terrains", "walls", "positive_titles", "negative_titles", "meta_mods"]
 land_unit_json_files = ["ancient_magical_land_units", "ancient_mundane_land_units", "ancient_unique_land_units",
                          "classical_magical_land_units", "classical_mundane_land_units", "classical_unique_land_units",
                          "imperial_generic_units", "imperial_unique_units"]

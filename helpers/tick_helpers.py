@@ -407,7 +407,7 @@ def give_tick_summary(player_tick_summary, full_tick_summary):
 
 def modifier_decay_tick(old_target, new_target, schema):
     new_modifiers = []
-    for modifier in old_target.get("modifiers", []):
+    for modifier in new_target.get("modifiers", []):
         new_modifier = deepcopy(modifier)
         if int(new_modifier["duration"]) > 0:
             new_modifier["duration"] = int(new_modifier["duration"]) - 1
@@ -1152,7 +1152,8 @@ def adjust_stability(old_nation, new_nation, schema, amounts=[-1], reasons=[""])
     stability_index = stability_enum.index(old_nation.get("stability", "Balanced"))
     for i in range(min(len(amounts), len(reasons))):
         stability_index += amounts[i]
-        result += f"{old_nation.get('name', 'Unknown')} has lost {amounts[i]} level(s) of stability due to {reasons[i]}.\n"
+        gain_or_loss = "gained" if amounts[i] > 0 else "lost"
+        result += f"{old_nation.get('name', 'Unknown')} has {gain_or_loss} {abs(amounts[i])} level(s) of stability due to {reasons[i]}.\n"
     if stability_index < 0:
         civil_war_chance = 0.5
         civil_war_roll = random.random()

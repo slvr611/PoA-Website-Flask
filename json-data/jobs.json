@@ -35,7 +35,7 @@
 			"food": 1
 		},
 		"production": {
-			"stability_gain_chance": 0.1
+			"stability_gain_chance": 0.15
 		}
 	},
 	"bureaucrat": {

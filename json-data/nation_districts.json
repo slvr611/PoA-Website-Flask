@@ -495,12 +495,12 @@
 		},
 		"modifiers": {
 			"food_consumption": 1,
-			"stability_gain_chance": 0.15
+			"stability_gain_chance": 0.20
 		},
 		"synergy_requirement": "narcotics",
 		"synergy_node_active": false,
 		"synergy_modifiers": {
-			"stability_gain_chance": 0.10
+			"stability_gain_chance": 0.15
 		},
 		"count": 1
 	},

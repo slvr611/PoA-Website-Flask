@@ -732,8 +732,8 @@ class BaseSchemaForm(FlaskForm):
         if field_name == "districts":
             choices += [(district, json_data["mercenary_districts"][district]["display_name"]) for district in json_data["mercenary_districts"]]
         
-        elif field_name == "titles":
-            choices += [(title, json_data["titles"][title]["display_name"]) for title in json_data["titles"]]
+        elif field_name == "positive_titles":
+            choices += [(title, json_data["positive_titles"][title]["display_name"]) for title in json_data["positive_titles"]]
         
         elif field_name == "land_units" or field_name == "naval_units":
             combined_data = {}
@@ -843,8 +843,8 @@ class BaseSchemaForm(FlaskForm):
                     for cities in cities:
                         field.append_entry(cities)
                 
-                elif field_name == "titles":
-                    titles = item.get("titles", [])
+                elif field_name == "positive_titles":
+                    titles = item.get("positive_titles", [])
                     max_titles = schema.get("properties", {}).get(field_name, {}).get("max_length", 0)
                     if isinstance(max_titles, str):
                         max_titles = int(item.get(max_titles, 0))
@@ -1332,7 +1332,7 @@ class NewCharacterForm(BaseSchemaForm):
 
     random_stats = IntegerField("Random Stats", validators=[NumberRange(min=0)], default=0)
 
-    titles = FieldList(SelectField("Titles", choices=[]), min_entries=3)
+    positive_titles = FieldList(SelectField("Positive Titles", choices=[]), min_entries=3)
 
     positive_quirk = SelectField("Positive Quirk", choices=[])
     negative_quirk = SelectField("Negative Quirk", choices=[])
