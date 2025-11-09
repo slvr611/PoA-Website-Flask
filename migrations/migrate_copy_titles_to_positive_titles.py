@@ -28,13 +28,14 @@ def migrate():
     updated = 0
     skipped = 0
     with app.app_context():
-        cursor = mongo.db.characters.find({}, {"_id": 1, "titles": 1})
+        cursor = mongo.db.characters.find({}, {"_id": 1, "titles": 1, "max_titles": 1})
         for doc in cursor:
             titles = normalize_titles(doc.get("titles"))
+            max_titles = doc.get("max_titles", 3)
             try:
                 mongo.db.characters.update_one(
                     {"_id": doc["_id"]},
-                    {"$set": {"positive_titles": titles}},
+                    {"$set": {"positive_titles": titles, "positive_title_slots": max_titles}},
                 )
                 updated += 1
             except Exception:

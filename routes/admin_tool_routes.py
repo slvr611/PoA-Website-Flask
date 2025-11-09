@@ -52,8 +52,8 @@ def elected_candidates_generator():
     
     tier_1_positive_titles = []
 
-    for title_key, title_details in json_data["titles"].items():
-        if title_details["tier"] == 1 and title_details["type"] == "positive":
+    for title_key, title_details in json_data["positive_titles"].items():
+        if title_details["tier"] == 1:
             tier_1_positive_titles.append(title_details["display_name"])
 
     candidate_1_title = random.choice(tier_1_positive_titles)
