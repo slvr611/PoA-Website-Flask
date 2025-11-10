@@ -56,8 +56,6 @@ def elected_candidates_generator():
         if title_details["tier"] == 1:
             tier_1_positive_titles.append(title_details["display_name"])
     
-    print(tier_1_positive_titles)
-
     candidate_1_title = random.choice(tier_1_positive_titles)
     candidate_2_title = random.choice(tier_1_positive_titles)
     while candidate_1_title == candidate_2_title:

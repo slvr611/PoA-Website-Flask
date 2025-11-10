@@ -1,5 +1,6 @@
 import math
 import copy
+from copy import deepcopy
 from app_core import mongo, json_data, category_data, land_unit_json_files, naval_unit_json_files
 from calculations.compute_functions import CUSTOM_COMPUTE_FUNCTIONS, compute_pop_count
 from bson.objectid import ObjectId
@@ -399,7 +400,7 @@ def calculate_title_modifiers(target, target_data_type, schema_properties):
     title_modifiers = {}
     titles = target.get("positive_titles", [])
     titles.extend(target.get("negative_titles", []))
-    title_data = json_data["positive_titles"]
+    title_data = deepcopy(json_data["positive_titles"])
     title_data.update(json_data["negative_titles"])
     print(titles)
     for title in titles:
