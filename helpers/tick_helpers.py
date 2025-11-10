@@ -53,7 +53,7 @@ def tick(form_data):
                 print(tick_function_label)
                 for i in range(len(old_characters)):
                     result = tick_function(old_characters[i], new_characters[i], character_schema)
-                    if old_characters[i].get("player", "None") != "None":
+                    if old_characters[i].get("player", None) is not None:
                         player_tick_summary += result
                     full_tick_summary += result
 
@@ -85,7 +85,7 @@ def tick(form_data):
                     if character != "None":
                         try:
                             character = character_db.find_one({"_id": ObjectId(character)})
-                            if character.get("player", "None") != "None":
+                            if character.get("player", "None") is not None:
                                 player_tick_summary += result
                         except:
                             pass
@@ -118,7 +118,7 @@ def tick(form_data):
                     for leader in leaders:
                         try:
                             character = character_db.find_one({"_id": ObjectId(leader)})
-                            if character.get("player", "None") != "None":
+                            if character.get("player", "None") is not None:
                                 player_tick_summary += result
                                 break
                         except:
@@ -153,7 +153,7 @@ def tick(form_data):
                     for leader in leaders:
                         try:
                             character = character_db.find_one({"_id": ObjectId(leader)})
-                            if character.get("player", "None") != "None":
+                            if character.get("player", "None") is not None:
                                 player_tick_summary += result
                                 break
                         except:
@@ -188,7 +188,7 @@ def tick(form_data):
                     for leader in leaders:
                         try:
                             character = character_db.find_one({"_id": ObjectId(leader)})
-                            if character.get("player", "None") != "None":
+                            if character.get("player", "None") is not None:
                                 player_tick_summary += result
                                 break
                         except:
@@ -248,7 +248,7 @@ def tick(form_data):
                     for ruler in rulers:
                         try:
                             character = character_db.find_one({"_id": ObjectId(ruler)})
-                            if character.get("player", "None") != "None":
+                            if character.get("player", "None") is not None:
                                 player_tick_summary += result
                                 break
                         except:
