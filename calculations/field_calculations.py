@@ -169,7 +169,7 @@ def calculate_all_fields(target, schema, target_data_type):
             modifier_totals["fisherman_food_production"] = modifier_totals.get("fisherman_food_production", 0) + 1
 
         if excess_food < 0:
-            print("Nation excess food is less than 0")
+            #print("Nation excess food is less than 0")
             job_details = calculate_job_details(target, district_details, modifier_totals, district_totals, tech_totals, city_totals, law_totals, external_modifiers_total)
             job_totals = sum_job_totals(target, target.get("jobs", {}), job_details)
             calculated_values["job_details"] = job_details
@@ -180,7 +180,7 @@ def calculate_all_fields(target, schema, target_data_type):
                 for key, value in d.items():
                     overall_total_modifiers[key] = overall_total_modifiers.get(key, 0) + value
             
-            print(overall_total_modifiers)
+            #print(overall_total_modifiers)
                         
             calculated_values["stability_loss_chance"] = compute_field(
                 "stability_loss_chance", target, schema_properties.get("stability_loss_chance", {}).get("base_value", 0), schema_properties.get("stability_loss_chance", {}),
