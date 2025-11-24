@@ -875,7 +875,7 @@ def nation_rebellion_tick(old_nation, new_nation, schema):
 def nation_passive_expansion_tick(old_nation, new_nation, schema):
     result = ""
     expansion_rolls = 1
-    if old_nation.temperament != "Player":
+    if old_nation.get("temperament", "None") != "Player":
         global_modifiers = mongo.db["global_modifiers"].find_one({"name": "global_modifiers"})
         current_session = global_modifiers.get("session_counter", 1)
         if current_session % 5 == 0:
