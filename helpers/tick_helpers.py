@@ -246,7 +246,6 @@ def tick(form_data):
                     result = tick_function(old_nations[i], new_nations[i], nation_schema)
                     if old_nations[i].get("temperament", "None") == "Player":
                         player_tick_summary += result
-                        break
                     full_tick_summary += result
 
 
