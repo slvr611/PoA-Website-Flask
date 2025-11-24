@@ -597,12 +597,14 @@
         "Untamed Lords": {
           "effective_territory": 6,
           "nomadic": 1,
-          "hunter_food_production": 1
+          "hunter_food_production": 1,
+          "max_passive_expansion_chance": 0
         },
         "Far Travelers": {
           "effective_territory": 3,
           "nomadic": 1,
-          "hunter_food_production": 1
+          "hunter_food_production": 1,
+          "max_passive_expansion_chance": 0
         },
         "Iron-Fisted Dictatorship": {
           "resource_production": 1,
@@ -625,13 +627,15 @@
           "morale": 2,
           "effective_territory_per_tributary": 6,
           "nomadic": 1,
-          "hunter_food_production": 1
+          "hunter_food_production": 1,
+          "max_passive_expansion_chance": 0
         },
         "World Warden": {
           "migration_distance": 6,
           "effective_territory": 3,
           "nomadic": 1,
-          "hunter_food_production": 1
+          "hunter_food_production": 1,
+          "max_passive_expansion_chance": 0
         }
       }
         },
@@ -1010,17 +1014,21 @@
       "default": "Free",
       "laws": {
         "Limitless": {
-          "passive_expansion_chance": 0.6
+          "passive_expansion_chance": 0.6,
+          "passive_expansion_chance_above_effective_territory": -0.3
         },
         "Free": {
-          "passive_expansion_chance": 0.4
+          "passive_expansion_chance": 0.4,
+          "passive_expansion_chance_above_effective_territory": -0.2
         },
         "Restricted": {
           "passive_expansion_chance": 0.3,
+          "passive_expansion_chance_above_effective_territory": -0.15,
           "stability_loss_chance": 0.1
         },
         "Controlled": {
           "passive_expansion_chance": 0.2,
+          "passive_expansion_chance_above_effective_territory": -0.1,
           "stability_loss_chance": 0.2
         }
       }

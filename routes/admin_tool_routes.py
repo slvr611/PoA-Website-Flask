@@ -6,6 +6,7 @@ from app_core import category_data, mongo, json_data, temperament_enum
 from pymongo import ASCENDING
 from app_core import restore_mongodb
 from forms import form_generator
+from io import BytesIO
 import random
 import os
 import datetime
@@ -214,31 +215,86 @@ def restore_database_route():
 @admin_required
 def admin_tick_summaries():
     """View available tick summaries"""
-    summary_dir = os.path.join(os.getcwd(), 'summaries')
-    os.makedirs(summary_dir, exist_ok=True)
-    
-    # Get all summary files
     summaries = []
-    for filename in os.listdir(summary_dir):
-        if filename.startswith('tick_summary_') and filename.endswith('.txt'):
-            file_path = os.path.join(summary_dir, filename)
-            file_stats = os.stat(file_path)
+    s3_bucket = os.getenv("S3_BUCKET_NAME")
+    aws_access_key = os.getenv("AWS_ACCESS_KEY_ID")
+    aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+    
+    if s3_bucket and aws_access_key and aws_secret_key:
+        try:
+            import boto3
+            s3_client = boto3.client(
+                's3',
+                aws_access_key_id=aws_access_key,
+                aws_secret_access_key=aws_secret_key
+            )
             
-            # Extract timestamp from filename
-            timestamp_str = filename.replace('tick_summary_', '').replace('.txt', '')
-            try:
-                timestamp = datetime.datetime.strptime(timestamp_str, '%Y%m%d_%H%M%S')
-                formatted_date = timestamp.strftime('%Y-%m-%d %H:%M:%S')
-            except:
-                formatted_date = "Unknown"
+            response = s3_client.list_objects_v2(
+                Bucket=s3_bucket,
+                Prefix='tick_summaries/'
+            )
             
-            summaries.append({
-                'filename': filename,
-                'path': file_path,
-                'size': file_stats.st_size,
-                'date': formatted_date,
-                'timestamp': timestamp_str
-            })
+            for item in response.get('Contents', []):
+                key = item.get('Key', '')
+                if key.endswith('/') or not key.endswith('.txt'):
+                    continue
+                
+                filename = os.path.basename(key)
+                if 'tick_summary_' not in filename:
+                    continue
+                
+                timestamp_str = (
+                    filename.replace('player_tick_summary_', '')
+                           .replace('full_tick_summary_', '')
+                           .replace('.txt', '')
+                )
+                try:
+                    timestamp = datetime.datetime.strptime(timestamp_str, '%Y%m%d_%H%M%S')
+                    formatted_date = timestamp.strftime('%Y-%m-%d %H:%M:%S')
+                except Exception:
+                    formatted_date = "Unknown"
+                
+                summaries.append({
+                    'filename': filename,
+                    'path': key,
+                    'size': item.get('Size', 0),
+                    'date': formatted_date,
+                    'timestamp': timestamp_str,
+                    'location': 's3'
+                })
+        except Exception as e:
+            flash(f"Error retrieving S3 tick summaries: {str(e)}", "error")
+    
+    # Fallback to local summaries if S3 is unavailable or empty
+    if not summaries:
+        summary_dir = os.path.join(os.getcwd(), 'summaries')
+        os.makedirs(summary_dir, exist_ok=True)
+        
+        for filename in os.listdir(summary_dir):
+            if filename.endswith('.txt') and 'tick_summary_' in filename:
+                file_path = os.path.join(summary_dir, filename)
+                file_stats = os.stat(file_path)
+                
+                timestamp_str = (
+                    filename.replace('player_tick_summary_', '')
+                           .replace('full_tick_summary_', '')
+                           .replace('tick_summary_', '')
+                           .replace('.txt', '')
+                )
+                try:
+                    timestamp = datetime.datetime.strptime(timestamp_str, '%Y%m%d_%H%M%S')
+                    formatted_date = timestamp.strftime('%Y-%m-%d %H:%M:%S')
+                except Exception:
+                    formatted_date = "Unknown"
+                
+                summaries.append({
+                    'filename': filename,
+                    'path': file_path,
+                    'size': file_stats.st_size,
+                    'date': formatted_date,
+                    'timestamp': timestamp_str,
+                    'location': 'local'
+                })
     
     # Sort by date (newest first)
     summaries.sort(key=lambda x: x['timestamp'], reverse=True)
@@ -252,19 +308,45 @@ def download_tick_summary(filename):
     summary_dir = os.path.join(os.getcwd(), 'summaries')
     file_path = os.path.join(summary_dir, filename)
     
-    if not os.path.exists(file_path):
-        flash("Summary file not found", "error")
-        return redirect(url_for('admin_tick_summaries'))
+    if os.path.exists(file_path):
+        with open(file_path, 'r') as f:
+            content = f.read()
+        
+        if request.args.get('download') == 'true':
+            return send_file(file_path, as_attachment=True)
+        
+        return render_template('admin/view_tick_summary.html', content=content, filename=filename)
     
-    # Read file content
-    with open(file_path, 'r') as f:
-        content = f.read()
+    s3_bucket = os.getenv("S3_BUCKET_NAME")
+    aws_access_key = os.getenv("AWS_ACCESS_KEY_ID")
+    aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
     
-    # Option to download or view
-    if request.args.get('download') == 'true':
-        return send_file(file_path, as_attachment=True)
+    if s3_bucket and aws_access_key and aws_secret_key:
+        try:
+            import boto3
+            s3_client = boto3.client(
+                's3',
+                aws_access_key_id=aws_access_key,
+                aws_secret_access_key=aws_secret_key
+            )
+            
+            s3_key = f"tick_summaries/{filename}"
+            obj = s3_client.get_object(Bucket=s3_bucket, Key=s3_key)
+            file_bytes = obj['Body'].read()
+            content = file_bytes.decode('utf-8', errors='replace')
+            
+            if request.args.get('download') == 'true':
+                file_stream = BytesIO(file_bytes)
+                file_stream.seek(0)
+                return send_file(file_stream, as_attachment=True, download_name=filename)
+            
+            return render_template('admin/view_tick_summary.html', content=content, filename=filename)
+        except Exception as e:
+            flash(f"Error retrieving summary from S3: {str(e)}", "error")
+    else:
+        flash("Summary file not found locally and S3 is not configured.", "error")
     
-    return render_template('admin/view_tick_summary.html', content=content, filename=filename)
+    return redirect(url_for('admin_tool_routes.admin_tick_summaries'))
 
 @admin_tool_routes.route('/global_modifiers/item/global_modifiers')
 @admin_required

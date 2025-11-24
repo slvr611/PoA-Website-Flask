@@ -325,6 +325,17 @@ def compute_stability_loss_chance(field, target, base_value, field_schema, overa
 
     return value
 
+def compute_passive_expansion_chance(field, target, base_value, field_schema, overall_total_modifiers):
+    current_territory = target.get("current_territory", 0)
+    effective_territory = target.get("effective_territory", 0)
+    value = base_value + overall_total_modifiers.get(field, 0)
+    if current_territory > effective_territory:
+        value += overall_total_modifiers.get("passive_expansion_chance_above_effective_territory", 0)
+    value = min(value, overall_total_modifiers.get("max_passive_expansion_chance", 1))
+    value = round(max(value, 0), 2)
+
+    return value
+
 def compute_district_slots(field, target, base_value, field_schema, overall_total_modifiers):
     pop_count = target.get("pop_count", 0)
 
@@ -845,6 +856,7 @@ CUSTOM_COMPUTE_FUNCTIONS = {
     "unique_minority_count": compute_minority_count,
     "stability_gain_chance": compute_stability_gain_chance,
     "stability_loss_chance": compute_stability_loss_chance,
+    "passive_expansion_chance": compute_passive_expansion_chance,
     "district_slots": compute_district_slots,
     "land_unit_count": compute_unit_count,
     "naval_unit_count": compute_unit_count,

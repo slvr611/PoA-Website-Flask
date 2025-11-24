@@ -105,7 +105,7 @@ def calculate_all_fields(target, schema, target_data_type):
         )
         target[field] = calculated_values[field]
 
-    effective_territory_modifiers = calculate_effective_territory_modifiers(target)
+    effective_territory_modifiers = calculate_effective_territory_modifiers(target, schema_properties)
 
     road_capacity_modifiers = calculate_road_capacity_modifiers(target)
 
@@ -962,13 +962,19 @@ def collect_external_modifiers_from_object(object, required_fields, linked_objec
 
     return collected_modifiers
 
-def calculate_effective_territory_modifiers(target):
+def calculate_effective_territory_modifiers(target, schema_properties):
     effective_territory = int(target.get("effective_territory", 0))
     current_territory = int(target.get("current_territory", 0))
 
     over_capacity = current_territory - effective_territory
 
     modifiers = {}
+
+    gov_type = target.get("government_type", "Unknown")
+    nomadic = schema_properties.get("government_type", {}).get("laws", {}).get(gov_type, {}).get("nomadic", 0)
+
+    if nomadic > 0:
+        return modifiers
 
     if over_capacity >= 30:
         modifiers["karma"] = -8

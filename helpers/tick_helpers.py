@@ -244,15 +244,9 @@ def tick(form_data):
                 print(tick_function_label)
                 for i in range(len(old_nations)):
                     result = tick_function(old_nations[i], new_nations[i], nation_schema)
-                    rulers = old_nations[i].get("rulers", [])
-                    for ruler in rulers:
-                        try:
-                            character = character_db.find_one({"_id": ObjectId(ruler)})
-                            if character.get("player", "None") is not None:
-                                player_tick_summary += result
-                                break
-                        except:
-                            pass
+                    if old_nations[i].get("temperament", "None") == "Player":
+                        player_tick_summary += result
+                        break
                     full_tick_summary += result
 
 
@@ -880,11 +874,21 @@ def nation_rebellion_tick(old_nation, new_nation, schema):
 
 def nation_passive_expansion_tick(old_nation, new_nation, schema):
     result = ""
-    expansion_roll = random.random()
-    new_nation["expansion_roll"] = expansion_roll
-    new_nation["expansion_chance_at_tick"] = old_nation.get("passive_expansion_chance", 0)
-    if expansion_roll <= old_nation.get("passive_expansion_chance", 0):
-        result += f"{old_nation.get('name', 'Unknown')} has expanded into adjacent territory.\n"
+    expansion_rolls = 1
+    if old_nation.temperament != "Player":
+        global_modifiers = mongo.db["global_modifiers"].find_one({"name": "global_modifiers"})
+        current_session = global_modifiers.get("session_counter", 1)
+        if current_session % 5 == 0:
+            expansion_rolls = 5
+        else:
+            expansion_rolls = 0
+    while expansion_rolls > 0:
+        expansion_roll = random.random()
+        new_nation["expansion_roll"] = expansion_roll
+        new_nation["expansion_chance_at_tick"] = old_nation.get("passive_expansion_chance", 0)
+        if expansion_roll <= old_nation.get("passive_expansion_chance", 0):
+            result += f"{old_nation.get('name', 'Unknown')} has expanded into adjacent territory.\n"
+        expansion_rolls -= 1
     return result
 
 def nation_job_cleanup_tick(old_nation, new_nation, schema):
