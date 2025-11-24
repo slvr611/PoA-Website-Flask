@@ -335,6 +335,9 @@ def tick(form_data):
             system_approve_change(change_id)
 
     if collect_nation_data:
+        print(len(old_nations))
+        print(len(new_nations))
+        print(new_nations)
         for i in range(len(old_nations)):
             change_id = system_request_change(
                 data_type="nations",
