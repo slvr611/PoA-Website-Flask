@@ -402,7 +402,6 @@ def calculate_title_modifiers(target, target_data_type, schema_properties):
     titles.extend(target.get("negative_titles", []))
     title_data = deepcopy(json_data["positive_titles"])
     title_data.update(json_data["negative_titles"])
-    print(titles)
     for title in titles:
         title_data = title_data.get(title, {})
         for key, value in title_data.get("modifiers", {}).items():
