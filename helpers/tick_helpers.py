@@ -246,6 +246,15 @@ def tick(form_data):
                     result = tick_function(old_nations[i], new_nations[i], nation_schema)
                     if old_nations[i].get("temperament", "None") == "Player":
                         player_tick_summary += result
+                    elif old_nations[i].get("overlord", "None") != "None":
+                        overlord = old_nations[i].get("overlord", "None")
+                        try:
+                            overlord = nation_db.find_one({"_id": ObjectId(overlord)})
+                            if overlord.get("temperament", "None") == "Player":
+                                player_tick_summary += result
+                                break
+                        except:
+                            pass
                     full_tick_summary += result
 
 
@@ -1122,6 +1131,11 @@ FACTION_TICK_FUNCTIONS = {
 MARKET_TICK_FUNCTIONS = {
     "Market Income Tick": market_income_tick,
 }
+
+VASSAL_SPECIFIC_NATION_TICK_FUNCTIONS = [
+    "Nation Concessions Tick",
+    "Nation Rebellion Tick",
+]
 
 NATION_TICK_FUNCTIONS = {
     "Nation Isolated Diplo Stance Tick": isolated_diplo_stance_tick,

@@ -711,14 +711,6 @@ class BaseSchemaForm(FlaskForm):
     def populate_select_field(self, field_name, field, schema, dropdown_options):
         """Populates a select field with options"""
 
-        if isinstance(field, FieldList):
-            for entry in field.entries:
-                self.populate_select_field(field_name, entry, schema, dropdown_options)
-            return
-
-        if not isinstance(field, SelectField):
-            return
-
         field_schema = schema.get("properties", {}).get(field_name, {})
         none_result = field_schema.get("noneResult", "None")
         default_options = deepcopy(field_schema.get("default_options", []))
@@ -734,6 +726,9 @@ class BaseSchemaForm(FlaskForm):
         
         elif field_name == "positive_titles":
             choices += [(title, json_data["positive_titles"][title]["display_name"]) for title in json_data["positive_titles"]]
+        
+        elif field_name == "negative_titles":
+            choices += [(title, json_data["negative_titles"][title]["display_name"]) for title in json_data["negative_titles"]]
         
         elif field_name == "land_units" or field_name == "naval_units":
             combined_data = {}
@@ -758,6 +753,20 @@ class BaseSchemaForm(FlaskForm):
                     name = option["_id"]
                 choices += [(str(option["_id"]), name)]
         
+        if isinstance(field, FieldList):
+            if hasattr(field, "unbound_field"):
+                if hasattr(field.unbound_field, "kwargs"):
+                    field.unbound_field.kwargs["choices"] = choices
+                if hasattr(field.unbound_field, "choices"):
+                    field.unbound_field.choices = choices
+            for entry in field.entries:
+                if hasattr(entry, "choices"):
+                    entry.choices = choices
+            return
+
+        if not isinstance(field, SelectField):
+            return
+
         field.choices = choices
 
     def populate_linked_fields(self, schema, dropdown_options):
@@ -769,8 +778,11 @@ class BaseSchemaForm(FlaskForm):
                     self.populate_select_field(field_name, self[field_name], schema, dropdown_options)
             elif field_schema.get("bsonType") == "array" and (field_schema.get("items", {}).get("bsonType") == "json_district_enum" or field_schema.get("items", {}).get("bsonType") == "json_unit_enum"):
                 field = getattr(self, field_name)
-                for entry in field.entries:
-                    self.populate_select_field(field_name, entry, schema, dropdown_options)
+                if field.entries:
+                    for entry in field.entries:
+                        self.populate_select_field(field_name, entry, schema, dropdown_options)
+                else:
+                    self.populate_select_field(field_name, field, schema, dropdown_options)
             elif field_schema.get("bsonType") == "json_resource_enum":
                 resources = json_data.get("general_resources", []) + json_data.get("unique_resources", [])
                 node_choices = [("", "None"), ("luxury", "Luxury")]
@@ -855,6 +867,11 @@ class BaseSchemaForm(FlaskForm):
                     if len(titles) > max_titles:
                         titles = titles[:max_titles]
                     
+                    for title in titles:
+                        field.append_entry(title)
+                
+                elif field_name == "negative_titles":
+                    titles = item.get("negative_titles", [])
                     for title in titles:
                         field.append_entry(title)
                     
@@ -1333,6 +1350,8 @@ class NewCharacterForm(BaseSchemaForm):
     random_stats = IntegerField("Random Stats", validators=[NumberRange(min=0)], default=0)
 
     positive_titles = FieldList(SelectField("Positive Titles", choices=[]), min_entries=3)
+
+    negative_titles = FieldList(SelectField("Negative Titles", choices=[]), min_entries=0)
 
     positive_quirk = SelectField("Positive Quirk", choices=[])
     negative_quirk = SelectField("Negative Quirk", choices=[])

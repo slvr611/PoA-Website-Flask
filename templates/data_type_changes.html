@@ -21,7 +21,7 @@
         {% endif %}
 
 
-        {{ render_changes_table(changes, preview_references, target_schemas, show_actions=(change_type == "pending")) }}
+        {{ render_changes_table(changes, preview_references, target_schemas, view_access_level, show_actions=(change_type == "pending")) }}
         
         <!-- Pagination -->
         {% if total_pages > 1 %}

@@ -16,7 +16,7 @@
         {% set default_action = request.path ~ '/request' %}
     {% endif %}
     
-    <form method="POST" action="{{ default_action }}">
+    <form method="POST" action="{{ default_action }}" data-prevent-enter-submit="true">
         {{ form.csrf_token }}
         
         <div class="expandable-sections">
@@ -278,7 +278,7 @@
                                             None
                                         {% endif %}
                                         </td>
-                                        <form method="POST" action="{{ pop['link'].replace('item', 'clone') }}/save" style="display: inline;">
+                                        <form method="POST" action="{{ pop['link'].replace('item', 'clone') }}/save" style="display: inline;" data-prevent-enter-submit="true">
                                             <td>
                                                 <input type="text" id="pop_reason" name="pop_reason" value="">
                                             </td>

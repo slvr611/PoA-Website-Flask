@@ -10,7 +10,7 @@
 	{% else %}
 		{% set default_action = request.path.replace('edit', 'clone') ~ '/request' %}
 	{% endif %}
-	<form method="POST" action="{{ default_action }}">
+	<form method="POST" action="{{ default_action }}" data-prevent-enter-submit="true">
 		<label for="reason">Reason</label>
 		<input type="text" id="reason" name="reason" value="" required >
 		{% if g.user.is_admin %}
@@ -24,7 +24,7 @@
 	{% else %}
 		{% set default_action = request.path ~ '/request' %}
 	{% endif %}
-	<form method="POST" action="{{ default_action }}">
+	<form method="POST" action="{{ default_action }}" data-prevent-enter-submit="true">
 		{{ form.csrf_token }}
 		<div class="table-wrapper">
 			<table class="info-table">
@@ -115,6 +115,26 @@
 									</tbody>
 								</table>
 								<button type="button" class="btn btn-primary" onclick="addToArray('{{ field.name }}')">Add Quest</button>
+							{% elif field.type == 'FieldList' and field.name == 'negative_titles' %}
+								<table class="modifiers-table">
+									<thead>
+										<tr>
+											<th>Negative Title</th>
+											<th>Actions</th>
+										</tr>
+									</thead>
+									<tbody id="{{ field.name }}-tbody">
+										{% for negative_title_field in field %}
+											<tr>
+												<td>{{ negative_title_field(class="form-control") }}</td>
+												<td>
+													<button type="button" class="btn btn-danger" onclick="removeFromArray(this, '{{ field.name }}')">Remove</button>
+												</td>
+											</tr>
+										{% endfor %}
+									</tbody>
+								</table>
+								<button type="button" class="btn btn-primary" onclick="addToArray('{{ field.name }}')">Add Negative Title</button>
 							{% else %}
 								{{ field(class="form-control") }}
 							{% endif %}
@@ -148,6 +168,8 @@
 
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 <script>
+	const negativeTitleOptions = {{ (form.negative_titles.unbound_field.choices if form.negative_titles is defined else []) | tojson | safe }};
+
     // Initialize sortable for progress quests
     document.addEventListener('DOMContentLoaded', function() {
         const progressQuestsTbody = document.getElementById('progress_quests-tbody');
@@ -215,6 +237,19 @@
 		});
 	}
 
+	function reindexNegativeTitles() {
+		const tbody = document.getElementById('negative_titles-tbody');
+		if (!tbody) {
+			return;
+		}
+		Array.from(tbody.children).forEach((row, index) => {
+			row.querySelectorAll('select').forEach(input => {
+				input.name = `negative_titles-${index}`;
+				input.id = `negative_titles-${index}`;
+			});
+		});
+	}
+
 	function addToArray(fieldName) {
 		const tbody = document.getElementById(`${fieldName}-tbody`);
 		const currentCount = tbody.children.length;
@@ -241,7 +276,7 @@
 				<td><input type="float" class="form-control" name="${fieldName}-${currentCount}-value" id="${fieldName}-${currentCount}-value" required></td>
 				<td>
 					<span class="drag-handle">⋮⋮</span>
-					<button type="button" class="btn btn-danger" onclick="removeFromArray(this, 'progress_quests')">Remove</button>
+					<button type="button" class="btn btn-danger" onclick="removeFromArray(this, '${fieldName}')">Remove</button>
 				</td>
 			`;
 		} else if (fieldName === "modifiers") {
@@ -252,7 +287,7 @@
 				<td><input type="text" class="form-control" name="${fieldName}-${currentCount}-source" id="${fieldName}-${currentCount}-source" required></td>
 				<td>
 					<span class="drag-handle">⋮⋮</span>
-					<button type="button" class="btn btn-danger" onclick="removeFromArray(this, 'progress_quests')">Remove</button>
+					<button type="button" class="btn btn-danger" onclick="removeFromArray(this, '${fieldName}')">Remove</button>
 				</td>
 			`;
 		} else if (fieldName === "progress_quests") {
@@ -275,6 +310,19 @@
 					<button type="button" class="btn btn-danger" onclick="removeFromArray(this, '${fieldName}')">Remove</button>
 				</td>
 			`;
+		} else if (fieldName === "negative_titles") {
+			const options = (negativeTitleOptions || []).map(
+				([value, label]) => `<option value="${value}">${label}</option>`
+			).join('');
+
+			newRow.innerHTML = `
+				<td>
+					<select class="form-control" name="${fieldName}-${currentCount}" id="${fieldName}-${currentCount}">
+						${options}
+					</select>
+				</td>
+				<td><button type="button" class="btn btn-danger" onclick="removeFromArray(this, '${fieldName}')">Remove</button></td>
+			`;
 		}
 
         tbody.appendChild(newRow);
@@ -282,7 +330,10 @@
 		if (fieldName === "progress_quests") {
 			updateProgressQuestSlots();
 		}
-    }
+		if (fieldName === "negative_titles") {
+			reindexNegativeTitles();
+		}
+	}
 
     function removeFromArray(button, categoryName) {
         const row = button.closest('tr');
@@ -290,6 +341,8 @@
         
         if (categoryName === 'progress_quests') {
             reindexProgressQuests();
+        } else if (categoryName === 'negative_titles') {
+            reindexNegativeTitles();
         } else {
             // Reindex remaining modifiers
             const tbody = document.getElementById(`${categoryName}-tbody`);

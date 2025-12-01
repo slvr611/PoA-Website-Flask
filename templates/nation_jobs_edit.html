@@ -7,7 +7,7 @@
     <a href="{{ request.path.replace('edit_jobs', 'item') }}">Back to View</a>
     <h1>Edit Jobs: {{ nation.name }}</h1>
         
-    <form method="POST" action="{{ request.path ~ '/save' }}">
+    <form method="POST" action="{{ request.path ~ '/save' }}" data-prevent-enter-submit="true">
         {{ form.csrf_token }}
         
         <section class="jobs-section">

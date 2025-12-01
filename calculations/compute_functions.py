@@ -827,7 +827,7 @@ def compute_progress_per_session(field, target, base_value, field_schema, overal
         # Get progress from slot type using json_data
         slot_progress = json_data.get("slot_types", {}).get(slot, {}).get("progress_per_tick", 0)
         
-        if slot_progress > 0:
+        if slot != "no_slot":
             # Calculate total progress per session
             total_progress = slot_progress + bonus_progress
         else:

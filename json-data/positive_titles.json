@@ -600,5 +600,13 @@
 		"tier": 3,
 		"type": "unique",
 		"modifiers": {}
+	},
+	"the_angel_of_raleigh": {
+		"display_name": "the Angel of Raleigh",
+		"tier": 3,
+		"type": "unique",
+		"modifiers": {
+			"magic_cap": 2
+		}
 	}
 }

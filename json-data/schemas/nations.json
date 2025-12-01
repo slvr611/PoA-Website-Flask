@@ -923,7 +923,7 @@
         "bsonType": "enum",
         "label": "Diplomatic Stance",
         "description": "The nation's default stance towards interacting with its neighbors",
-        "enum": ["Expansionist", "Cooperative", "Belligerent", "Isolated"],
+        "enum": ["Expansionist", "Cooperative", "Belligerent", "Isolated", "Extermination"],
         "laws": {
           "Cooperative": {
             "defensive_pact_slots": 1
@@ -940,6 +940,9 @@
             "military_alliance_slots": -1,
             "isolated_stab_gain_rate": 0.1,
             "isolated_stab_gain_max": 0.5
+          },
+          "Extermination": {
+            "stability_loss_chance_from_infamy_mult": 0.5
           }
         }
       },

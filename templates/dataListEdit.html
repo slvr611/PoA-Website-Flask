@@ -29,7 +29,7 @@
 							{% set default_action = request.path.replace('edit', 'delete') ~ '/' ~ item._id ~ '/request' %}
 						{% endif %}
 					{% endif %}
-	            	<form method="POST" action="{{ default_action }}">
+	            	<form method="POST" action="{{ default_action }}" data-prevent-enter-submit="true">
 	            		<label for="reason">Reason</label>
 						<input type="text" id="reason" name="reason" value="" required >
 						{% if g.user.is_admin %}

@@ -247,6 +247,16 @@
             "json_data": "positive_titles"
         }
       },
+      "negative_titles": {
+        "bsonType": "array",
+        "label": "Negative Titles",
+        "description": "The negative titles the character currently holds",
+		"static": true,
+        "items":{
+            "bsonType": "json_district_enum",
+            "json_data": "negative_titles"
+        }
+      },
 	  "age": {
         "bsonType": "number",
 		"label": "Age",
