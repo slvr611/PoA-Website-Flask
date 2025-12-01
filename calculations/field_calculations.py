@@ -945,7 +945,7 @@ def collect_external_modifiers_from_object(object, required_fields, linked_objec
                             field = modifier["field"].replace(target_data_type + "_", "")
                             collected_modifiers.append({field: modifier["value"]})
                 
-                elif field_type == "array" and req_field == "titles":
+                elif field_type == "array" and (req_field == "positive_titles" or req_field == "negative_titles"):
                     calculated_title_modifiers = calculate_title_modifiers(object, target_data_type, linked_object_schema["properties"])
                     for key, value in calculated_title_modifiers.items():
                         #calculate_title_modifers already filters based on the prefix
