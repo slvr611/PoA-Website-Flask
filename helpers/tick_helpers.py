@@ -252,7 +252,6 @@ def tick(form_data):
                             overlord = nation_db.find_one({"_id": ObjectId(overlord)})
                             if overlord.get("temperament", "None") == "Player":
                                 player_tick_summary += result
-                                break
                         except:
                             pass
                     full_tick_summary += result
