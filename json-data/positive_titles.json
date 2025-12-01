@@ -430,7 +430,7 @@
 		"tier": 1,
 		"type": "positive",
 		"modifiers": {
-			"non_aggression_pact_slots": 2
+			"nation_non_aggression_pact_slots": 2
 		}
 	},
 	"the_ally": {
@@ -438,8 +438,8 @@
 		"tier": 2,
 		"type": "positive",
 		"modifiers": {
-			"non_aggression_pact_slots": 2,
-			"defensive_pact_slots": 1
+			"nation_non_aggression_pact_slots": 2,
+			"nation_defensive_pact_slots": 1
 		}
 	},
 	"the_uniter": {
@@ -447,8 +447,8 @@
 		"tier": 3,
 		"type": "positive",
 		"modifiers": {
-			"non_aggression_pact_slots": 3,
-			"military_pact_slots": 1
+			"nation_non_aggression_pact_slots": 3,
+			"nation_military_pact_slots": 1
 		}
 	},
 	"the_confident": {
@@ -528,7 +528,7 @@
 		"tier": 1,
 		"type": "positive",
 		"modifiers": {
-			"ignore_elderly_strengths": true
+			"character_ignore_elderly_strengths": true
 		}
 	},
 	"the_energetic": {
@@ -536,7 +536,7 @@
 		"tier": 2,
 		"type": "positive",
 		"modifiers": {
-			"ignore_elderly": true
+			"character_ignore_elderly": true
 		}
 	},
 	"the_vigorous_elder": {
@@ -544,7 +544,7 @@
 		"tier": 3,
 		"type": "positive",
 		"modifiers": {
-			"ignore_elderly": true,
+			"character_ignore_elderly": true,
 			"elderly_mechrp_bonus": 1
 		}
 	},
@@ -606,7 +606,7 @@
 		"tier": 3,
 		"type": "unique",
 		"modifiers": {
-			"magic_cap": 2
+			"character_magic_cap": 2
 		}
 	}
 }

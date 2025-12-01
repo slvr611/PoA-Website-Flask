@@ -246,7 +246,7 @@ def tick(form_data):
                     result = tick_function(old_nations[i], new_nations[i], nation_schema)
                     if old_nations[i].get("temperament", "None") == "Player":
                         player_tick_summary += result
-                    elif old_nations[i].get("overlord", "None") != "None":
+                    elif tick_function_label in VASSAL_SPECIFIC_NATION_TICK_FUNCTIONS and old_nations[i].get("overlord", "None") != "None":
                         overlord = old_nations[i].get("overlord", "None")
                         try:
                             overlord = nation_db.find_one({"_id": ObjectId(overlord)})
