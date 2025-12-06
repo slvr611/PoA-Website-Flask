@@ -58,11 +58,27 @@
 						</tr>
 						<tr>
 							<th>{{ schema.properties.stability_gain_chance.label }}:</th>
-							<td>{{ (nation.stability_gain_chance * 100)|int }}%</td>
+							<td>
+								<span
+									class="context-tooltip"
+									data-tooltip-title="Stability Gain Chance"
+									data-breakdown='{{ breakdowns["stability_gain_chance"]|tojson }}'
+								>
+									{{ (nation.stability_gain_chance * 100)|int }}%
+								</span>
+							</td>
 						</tr>
 						<tr>
 							<th>{{ schema.properties.stability_loss_chance.label }}:</th>
-							<td>{{ (nation.stability_loss_chance * 100)|int }}%</td>
+							<td>
+								<span
+									class="context-tooltip"
+									data-tooltip-title="Stability Loss Chance"
+									data-breakdown='{{ breakdowns["stability_loss_chance"]|tojson }}'
+								>
+									{{ (nation.stability_loss_chance * 100)|int }}%
+								</span>
+							</td>
 						</tr>
 						<tr>
 							<th>{{ schema.properties.stability_loss_chance_on_leader_death.label }}:</th>
@@ -119,7 +135,15 @@
 						</tr>
 						<tr>
 							<th>{{ schema.properties.money_income.label }}:</th>
-							<td>{{ nation.money_income }}</td>
+							<td>
+								<span
+									class="context-tooltip"
+									data-tooltip-title="Money Income"
+									data-breakdown='{{ breakdowns["money_income"]|tojson }}'
+								>
+									{{ nation.money_income }}
+								</span>
+							</td>
 						</tr>
 						<tr>
 							<th>{{ schema.properties.remaining_import_slots.label }}:</th>
@@ -767,8 +791,24 @@
 							{% for resource in json_data["general_resources"] %}
 								<tr>
 									<td>{{ resource.name }}</td>
-									<td>{{ nation.get("resource_production", {}).get(resource["key"], 0) }}</td>
-									<td>{{ nation.get("resource_consumption", {}).get(resource["key"], 0) }}</td>
+									<td>
+										<span
+											class="context-tooltip"
+											data-tooltip-title="{{ resource.name }} Production"
+											data-breakdown='{{ breakdowns["resource_production"][resource["key"]]|tojson }}'
+										>
+											{{ nation.get("resource_production", {}).get(resource["key"], 0) }}
+										</span>
+									</td>
+									<td>
+										<span
+											class="context-tooltip"
+											data-tooltip-title="{{ resource.name }} Consumption"
+											data-breakdown='{{ breakdowns["resource_consumption"][resource["key"]]|tojson }}'
+										>
+											{{ nation.get("resource_consumption", {}).get(resource["key"], 0) }}
+										</span>
+									</td>
 									{% set excess_value = nation.get("resource_excess", {}).get(resource["key"], 0) %}
 									{% set storage = nation.get("resource_storage", {}).get(resource["key"], 0) %}
 									{% set capacity = nation.get("nation_resource_capacity", {}).get(resource["key"], 0) %}
@@ -805,8 +845,24 @@
 							{% for resource in json_data["unique_resources"] %}
 								<tr>
 									<td>{{ resource.name }}</td>
-									<td>{{ nation.get("resource_production", {}).get(resource["key"], 0) }}</td>
-									<td>{{ nation.get("resource_consumption", {}).get(resource["key"], 0) }}</td>
+									<td>
+										<span
+											class="context-tooltip"
+											data-tooltip-title="{{ resource.name }} Production"
+											data-breakdown='{{ breakdowns["resource_production"][resource["key"]]|tojson }}'
+										>
+											{{ nation.get("resource_production", {}).get(resource["key"], 0) }}
+										</span>
+									</td>
+									<td>
+										<span
+											class="context-tooltip"
+											data-tooltip-title="{{ resource.name }} Consumption"
+											data-breakdown='{{ breakdowns["resource_consumption"][resource["key"]]|tojson }}'
+										>
+											{{ nation.get("resource_consumption", {}).get(resource["key"], 0) }}
+										</span>
+									</td>
 									{% set excess_value = nation.get("resource_excess", {}).get(resource["key"], 0) %}
 									{% set storage = nation.get("resource_storage", {}).get(resource["key"], 0) %}
 									{% set capacity = nation.get("nation_resource_capacity", {}).get(resource["key"], 0) %}

@@ -1,4 +1,5 @@
 from flask import Blueprint, render_template, request, redirect, flash, g
+from copy import deepcopy
 from helpers.data_helpers import get_data_on_category, get_data_on_item, get_dropdown_options
 from helpers.render_helpers import get_linked_objects
 from helpers.change_helpers import request_change, approve_change, system_approve_change
@@ -9,6 +10,7 @@ from helpers.auth_helpers import admin_required
 from pymongo import ASCENDING
 from forms import form_generator, wtform_to_json
 import json
+from calculations.field_calculations import calculate_all_fields
 
 nation_routes = Blueprint("nation_routes", __name__)
 
@@ -32,6 +34,9 @@ def nation_item(item_ref):
     
     if "jobs" not in nation:
         nation["jobs"] = {}
+
+    calculated_values, breakdowns = calculate_all_fields(deepcopy(nation), schema, "nation", return_breakdowns=True)
+    nation.update(calculated_values)
     
     return render_template(
         "nation_owner.html",
@@ -42,7 +47,8 @@ def nation_item(item_ref):
         json_data=json_data,
         cities_config=json_data["cities"],
         user_is_owner=user_is_owner,
-        find_dict_in_list=find_dict_in_list
+        find_dict_in_list=find_dict_in_list,
+        breakdowns=breakdowns
     )
 
 @nation_routes.route("/nations/edit/<item_ref>", methods=["GET"])

@@ -6,7 +6,7 @@ from calculations.compute_functions import CUSTOM_COMPUTE_FUNCTIONS, compute_pop
 from bson.objectid import ObjectId
 from app_core import json_data
 
-def calculate_all_fields(target, schema, target_data_type):
+def calculate_all_fields(target, schema, target_data_type, return_breakdowns=False):
     schema_properties = schema.get("properties", {})
 
     external_modifiers = collect_external_requirements(target, schema, target_data_type)
@@ -217,6 +217,31 @@ def calculate_all_fields(target, schema, target_data_type):
             #Nation is Sated
             pass
     
+    if return_breakdowns and target_data_type == "nation":
+        component_sources = {
+            "base": {},
+            "modifiers": modifier_totals,
+            "districts": district_totals,
+            "cities": city_totals,
+            "laws": law_totals,
+            "tech": tech_totals,
+            "jobs": job_totals,
+            "units": unit_totals,
+            "terrain": territory_terrain_totals,
+            "loose_nodes": loose_node_totals,
+            "external": external_modifiers_total,
+            "prestige": prestige_modifiers,
+            "titles": title_modifiers,
+        }
+        breakdowns = compute_nation_breakdowns(
+            target,
+            schema_properties,
+            component_sources,
+            overall_total_modifiers,
+            calculated_values,
+        )
+        return calculated_values, breakdowns
+
     return calculated_values
 
 def compute_field(field, target, base_value, field_schema, overall_total_modifiers):
@@ -1232,3 +1257,232 @@ def parse_meta_modifiers(target, overall_total_modifiers):
             for field, value in mod_details.get("modifiers", {}).items():
                 overall_total_modifiers[field] = overall_total_modifiers.get(field, 0) + value
     return overall_total_modifiers
+
+
+def compute_nation_breakdowns(target, schema_properties, component_sources, overall_total_modifiers, calculated_values):
+    """
+    Build tooltip-friendly breakdowns for a nation's key fields.
+    """
+    pop_count = int(calculated_values.get("pop_count", target.get("pop_count", 0)) or 0)
+    road_usage = int(target.get("road_usage", 0) or 0)
+    karma = int(calculated_values.get("karma", target.get("karma", 0)) or 0)
+    unique_minority_count = int(calculated_values.get("unique_minority_count", target.get("unique_minority_count", 0)) or 0)
+    territory_types = target.get("territory_types", {})
+    rolling_consumption = {
+        "pop_count": pop_count,
+        "road_usage": road_usage,
+        "karma": karma,
+        "unique_minority_count": unique_minority_count,
+    }
+
+    breakdowns = {
+        "stability_gain_chance": [],
+        "stability_loss_chance": [],
+        "resource_production": {},
+        "resource_consumption": {},
+        "money_income": [],
+    }
+
+    # Stability Gain Chance
+    stability_gain_base = schema_properties.get("stability_gain_chance", {}).get("base_value", 0)
+    stability_gain_mods = collect_field_contributions("stability_gain_chance", component_sources, overall_total_modifiers)
+    stability_gain_extra = stability_gain_extras(calculated_values, overall_total_modifiers, target, territory_types)
+    breakdowns["stability_gain_chance"].append({"label": "Base", "value": stability_gain_base * 100})
+    breakdowns["stability_gain_chance"].extend(convert_percentage_contribs(stability_gain_mods))
+    breakdowns["stability_gain_chance"].extend(convert_percentage_contribs(stability_gain_extra))
+    breakdowns["stability_gain_chance"].append({"label": "Total", "value": round(calculated_values.get("stability_gain_chance", 0) * 100, 2)})
+
+    # Stability Loss Chance
+    stability_loss_base = schema_properties.get("stability_loss_chance", {}).get("base_value", 0)
+    stability_loss_mods = collect_field_contributions("stability_loss_chance", component_sources, overall_total_modifiers)
+    stability_loss_extra = stability_loss_extras(calculated_values, overall_total_modifiers, target, territory_types)
+    breakdowns["stability_loss_chance"].append({"label": "Base", "value": stability_loss_base * 100})
+    breakdowns["stability_loss_chance"].extend(convert_percentage_contribs(stability_loss_mods))
+    breakdowns["stability_loss_chance"].extend(convert_percentage_contribs(stability_loss_extra))
+    breakdowns["stability_loss_chance"].append({"label": "Total", "value": round(calculated_values.get("stability_loss_chance", 0) * 100, 2)})
+
+    # Resource Production
+    for resource in json_data["general_resources"] + json_data["unique_resources"]:
+        key = resource["key"]
+        breakdowns["resource_production"][key] = build_resource_production_breakdown(
+            key, component_sources, overall_total_modifiers, calculated_values, target
+        )
+
+    # Resource Consumption
+    for resource in json_data["general_resources"] + json_data["unique_resources"]:
+        key = resource["key"]
+        breakdowns["resource_consumption"][key] = build_resource_consumption_breakdown(
+            key, component_sources, overall_total_modifiers, calculated_values, target, rolling_consumption
+        )
+
+    # Money Income
+    breakdowns["money_income"] = build_money_income_breakdown(
+        component_sources, overall_total_modifiers, schema_properties, calculated_values, target
+    )
+
+    return breakdowns
+
+
+def collect_field_contributions(field_key, component_sources, overall_totals):
+    contributions = []
+    for label, source in component_sources.items():
+        if not source:
+            continue
+        if field_key in source:
+            contributions.append({"label": label.title(), "value": source.get(field_key, 0) * 100})
+    return contributions
+
+
+def convert_percentage_contribs(items):
+    converted = []
+    for item in items:
+        converted.append({"label": item["label"], "value": round(item["value"], 4)})
+    return converted
+
+
+def stability_gain_extras(calculated_values, overall_total_modifiers, target, territory_types):
+    extras = []
+    karma = target.get("karma", 0)
+    unique_minority_count = target.get("unique_minority_count", 0)
+    minority_impact = 1 + overall_total_modifiers.get("minority_impact", 0)
+    pop_count = calculated_values.get("pop_count", 0)
+    road_usage = target.get("road_usage", 0)
+
+    total_production = sum(calculated_values.get("resource_production", {}).values())
+
+    extras.append({"label": "Karma", "value": max(min(karma * overall_total_modifiers.get("stability_gain_chance_per_positive_karma", 0), overall_total_modifiers.get("max_stability_gain_chance_per_positive_karma", 0)), 0) * 100})
+    extras.append({"label": "Minorities", "value": max(min(unique_minority_count * minority_impact * overall_total_modifiers.get("stability_gain_chance_per_unique_minority", 0), overall_total_modifiers.get("max_stability_gain_chance_per_unique_minority", 0)), 0) * 100})
+    extras.append({"label": "Population", "value": pop_count * overall_total_modifiers.get("stability_gain_chance_per_pop", 0) * 100})
+    extras.append({"label": "Road Usage", "value": int(road_usage) * overall_total_modifiers.get("stability_gain_chance_per_road_usage", 0) * 100})
+    extras.append({"label": "Production", "value": overall_total_modifiers.get("stability_gain_chance_per_resource_production", 0) * total_production * 100})
+
+    terrain_stability_gain = 0
+    if overall_total_modifiers.get("stability_gain_chance_per_tile", 0) != 0:
+        terrain_stability_gain += overall_total_modifiers.get("stability_gain_chance_per_tile", 0) * sum(territory_types.values())
+    for terrain, terrain_count in territory_types.items():
+        if overall_total_modifiers.get("stability_gain_chance_per_" + terrain, 0) != 0:
+            terrain_stability_gain += overall_total_modifiers.get("stability_gain_chance_per_" + terrain, 0) * terrain_count
+    if terrain_stability_gain != 0:
+        extras.append({"label": "Territory", "value": terrain_stability_gain * 100})
+    return extras
+
+
+def stability_loss_extras(calculated_values, overall_total_modifiers, target, territory_types):
+    extras = []
+    karma = target.get("karma", 0)
+    unique_minority_count = target.get("unique_minority_count", 0)
+    minority_impact = 1 + overall_total_modifiers.get("minority_impact", 0)
+    pop_count = calculated_values.get("pop_count", 0)
+    road_usage = target.get("road_usage", 0)
+    stability = target.get("stability", "Unknown")
+
+    extras.append({"label": "Karma", "value": max(min(-karma * overall_total_modifiers.get("stability_loss_chance_per_negative_karma", 0), overall_total_modifiers.get("max_stability_loss_chance_per_negative_karma", 0)), 0) * 100})
+    extras.append({"label": "Minorities", "value": max(min(unique_minority_count * minority_impact * overall_total_modifiers.get("stability_loss_chance_per_unique_minority", 0), overall_total_modifiers.get("max_stability_loss_chance_per_unique_minority", 0)), 0) * 100})
+    extras.append({"label": "Population", "value": pop_count * overall_total_modifiers.get("stability_loss_chance_per_pop", 0) * 100})
+    extras.append({"label": "Road Usage", "value": int(road_usage) * overall_total_modifiers.get("stability_loss_chance_per_road_usage", 0) * 100})
+
+    if stability == "United":
+        extras.append({"label": "Stability Level", "value": overall_total_modifiers.get("stability_loss_chance_at_united", 0) * 100})
+    elif stability == "Stable":
+        extras.append({"label": "Stability Level", "value": overall_total_modifiers.get("stability_loss_chance_at_stable", 0) * 100})
+
+    terrain_loss = 0
+    for terrain, terrain_count in territory_types.items():
+        if overall_total_modifiers.get("stability_loss_chance_per_" + terrain, 0) != 0:
+            terrain_loss += overall_total_modifiers.get("stability_loss_chance_per_" + terrain, 0) * terrain_count
+    if terrain_loss != 0:
+        extras.append({"label": "Territory", "value": terrain_loss * 100})
+    return extras
+
+
+def build_resource_production_breakdown(resource_key, component_sources, overall_totals, calculated_values, target):
+    entries = []
+    total_value = calculated_values.get("resource_production", {}).get(resource_key, 0)
+
+    for label, source in component_sources.items():
+        if not source:
+            continue
+        value = source.get(resource_key + "_production", 0) + source.get("resource_production", 0)
+        if value:
+            entries.append({"label": label.title(), "value": value})
+
+    # Nodes
+    nodes = overall_totals.get(resource_key + "_nodes", 0)
+    if nodes:
+        node_value = 2 + overall_totals.get("resource_node_value", 0) + overall_totals.get(resource_key + "_node_value", 0)
+        entries.append({"label": "Nodes", "value": nodes * node_value})
+
+    # Naval unit modifier
+    naval_units = target.get("naval_unit_count", calculated_values.get("naval_unit_count", 0))
+    per_naval = overall_totals.get(resource_key + "_production_per_naval_unit", 0)
+    if naval_units and per_naval:
+        entries.append({"label": "Naval Units", "value": int(math.floor(naval_units * per_naval))})
+
+    # Religious homogeneity for research
+    if resource_key == "research":
+        homogeneity_bonus = overall_totals.get("research_production_if_religously_homogeneous", 0)
+        if homogeneity_bonus:
+            entries.append({"label": "Religious Homogeneity", "value": homogeneity_bonus})
+
+    # Locks
+    if overall_totals.get("locks_" + resource_key + "_production", 0) > 0:
+        entries.append({"label": "Production Locked", "value": -sum(e["value"] for e in entries)})
+
+    entries.append({"label": "Total", "value": total_value})
+    return entries
+
+
+def build_resource_consumption_breakdown(resource_key, component_sources, overall_totals, calculated_values, target, rolling_consumption):
+    entries = []
+    total_value = calculated_values.get("resource_consumption", {}).get(resource_key, 0)
+
+    for label, source in component_sources.items():
+        if not source:
+            continue
+        value = source.get(resource_key + "_consumption", 0) + source.get("resource_consumption", 0)
+        if value:
+            entries.append({"label": label.title(), "value": value})
+
+    if resource_key == "food":
+        food_consumption_per_pop = 1 + overall_totals.get("food_consumption_per_pop", 0)
+        consumption = rolling_consumption["pop_count"] * food_consumption_per_pop
+        if food_consumption_per_pop < 1:
+            consumption = math.ceil(consumption)
+        else:
+            consumption = math.floor(consumption)
+        entries.append({"label": "Population", "value": consumption})
+    elif resource_key == "research":
+        tech_invest = 0
+        for _, details in target.get("technologies", {}).items():
+            tech_invest += details.get("investing", 0)
+        if tech_invest:
+            entries.append({"label": "Tech Investment", "value": tech_invest})
+
+    entries.append({"label": "Total", "value": total_value})
+    return entries
+
+
+def build_money_income_breakdown(component_sources, overall_totals, schema_properties, calculated_values, target):
+    entries = []
+    base_value = schema_properties.get("money_income", {}).get("base_value", 0)
+    entries.append({"label": "Base", "value": base_value})
+
+    for label, source in component_sources.items():
+        if not source:
+            continue
+        value = source.get("money_income", 0)
+        if value:
+            entries.append({"label": label.title(), "value": value})
+
+    money_income_per_pop_total = overall_totals.get("money_income_per_pop", 0)
+    if money_income_per_pop_total:
+        entries.append({"label": "Per Pop", "value": money_income_per_pop_total * calculated_values.get("pop_count", target.get("pop_count", 0))})
+
+    stockpile = target.get("money", 0)
+    per_storage = overall_totals.get("money_income_per_money_storage", 0)
+    max_stockpile = overall_totals.get("max_money_income_per_money_storage", 0)
+    if per_storage > 0:
+        entries.append({"label": "Stockpile", "value": min((stockpile // per_storage) * 100, max_stockpile)})
+
+    entries.append({"label": "Total", "value": calculated_values.get("money_income", target.get("money_income", 0))})
+    return entries
