@@ -563,31 +563,33 @@ def artifact_loss_tick(old_character, new_character, schema):
         artifact_schema, artifact_db = get_data_on_category("artifacts")
         unequipped_artifacts = list(artifact_db.find({"owner": str(old_character.get("_id", "")), "equipped": False}))
         if unequipped_artifacts:
-            lost_artifact = random.choice(unequipped_artifacts)
-            lost_artifact["owner"] = "Lost"
-            result = f"{old_character.get('name', 'Unknown')} has lost {lost_artifact.get('name', 'Unknown')}.\n"
+            old_artifact = random.choice(unequipped_artifacts)
+            new_artifact = deepcopy(old_artifact)
+            new_artifact["owner"] = "Lost"
+            result = f"{old_character.get('name', 'Unknown')} has lost {old_artifact.get('name', 'Unknown')}.\n"
             change_id = system_request_change(
                 data_type="artifacts",
-                item_id=lost_artifact["_id"],
+                item_id=old_artifact["_id"],
                 change_type="Update",
-                before_data=lost_artifact,
-                after_data=lost_artifact,
-                reason="Loss of " + old_character.get('name', 'Unknown') + " has caused " + lost_artifact.get('name', 'Unknown') + " to be lost"
+                before_data=old_artifact,
+                after_data=new_artifact,
+                reason=old_artifact.get('name', 'Unknown') + " has been lost due to passive loss chance"
             )
             system_approve_change(change_id)
         else:
             equipped_artifacts = list(artifact_db.find({"owner": str(old_character.get("_id", "")), "equipped": True}))
             if equipped_artifacts:
-                lost_artifact = random.choice(equipped_artifacts)
-                lost_artifact["owner"] = "Lost"
-                result = f"{old_character.get('name', 'Unknown')} has lost {lost_artifact.get('name', 'Unknown')}.\n"
+                old_artifact = random.choice(equipped_artifacts)
+                new_artifact = deepcopy(old_artifact)
+                new_artifact["owner"] = "Lost"
+                result = f"{old_character.get('name', 'Unknown')} has lost {old_artifact.get('name', 'Unknown')}.\n"
                 change_id = system_request_change(
                     data_type="artifacts",
-                    item_id=lost_artifact["_id"],
+                    item_id=old_artifact["_id"],
                     change_type="Update",
-                    before_data=lost_artifact,
-                    after_data=lost_artifact,
-                    reason="Loss of " + old_character.get('name', 'Unknown') + " has caused " + lost_artifact.get('name', 'Unknown') + " to be lost"
+                    before_data=old_artifact,
+                    after_data=new_artifact,
+                    reason="Loss of " + old_character.get('name', 'Unknown') + " has caused " + old_artifact.get('name', 'Unknown') + " to be lost"
                 )
                 system_approve_change(change_id)
     return result
