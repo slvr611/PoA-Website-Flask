@@ -659,12 +659,14 @@ def isolated_diplo_stance_tick(old_nation, new_nation, schema):
         modifiers = new_nation.get("modifiers", [])
         for modifier in modifiers:
             if modifier.get("field", "") == "stability_gain_chance" and modifier.get("source", "") == "Isolated Diplomatic Stance":
-                modifier["value"] = min(modifier["value"] + gain_rate, cap)
+                old_value = modifier["value"]
+                new_value = min(modifier["value"] + gain_rate, cap)
+                modifier["value"] = new_value
                 new_nation["modifiers"] = modifiers
-                return f"{old_nation.get('name', 'Unknown')} has had the stability gain chance modifier from their Isolated diplomatic stance increased by 0.1.\n"
+                return f"{old_nation.get('name', 'Unknown')} has had the stability gain chance modifier from their Isolated diplomatic stance increased from {old_value} to {new_value}.\n"
         modifiers.append({"field": "stability_gain_chance", "value": max(gain_rate, cap), "duration": -1, "source": "Isolated Diplomatic Stance"})
         new_nation["modifiers"] = modifiers
-        return f"{old_nation.get('name', 'Unknown')} has had the stability gain chance modifier from their Isolated diplomatic stance increased by 0.1.\n"
+        return f"{old_nation.get('name', 'Unknown')} has had the stability gain chance modifier from their Isolated diplomatic stance increased from 0 to {max(gain_rate, cap)}.\n"
 
 def ai_resource_desire_tick(old_nation, new_nation, schema):
     if old_nation.get("temperament", "None") == "Player":
@@ -901,7 +903,7 @@ def nation_passive_expansion_tick(old_nation, new_nation, schema):
 def nation_job_cleanup_tick(old_nation, new_nation, schema):
     new_jobs = {}
     for job in old_nation.get("jobs", {}).keys():
-        if job != "vampire":
+        if job != "vampire" and job != "undead":
             new_jobs[job] = 0
     new_nation["jobs"] = new_jobs
     return ""
