@@ -297,7 +297,16 @@ def admin_tick_summaries():
                 })
     
     # Sort by date (newest first)
-    summaries.sort(key=lambda x: x['timestamp'], reverse=True)
+    def summary_sort_key(summary):
+        """Ensure entries with unknown timestamps are sorted last."""
+        ts_str = summary.get('timestamp', '')
+        try:
+            ts = datetime.datetime.strptime(ts_str, '%Y%m%d_%H%M%S')
+            return (1, ts)
+        except Exception:
+            return (0, datetime.datetime.min)
+
+    summaries.sort(key=summary_sort_key, reverse=True)
     
     return render_template('admin/tick_summaries.html', summaries=summaries)
 
