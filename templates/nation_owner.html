@@ -514,6 +514,7 @@
 								</tr>
 								<tr>
 									<th>Nation</th>
+									<th>Vassal Type</th>
 									<th>Compliance</th>
 									<th>Chance to Disobey</th>
 									<th>Rebellion Chance</th>
@@ -526,6 +527,8 @@
 								{% for vassal in linked_objects["vassals"] %}
 									<tr>
 										<td><a href="{{ vassal['link'] }}">{{ vassal["name"] }}</a></td>
+
+										<td>{{ vassal["vassal_type"] }}</td>
 										
 										<td>{{ vassal["compliance"] }}</td>
 										
