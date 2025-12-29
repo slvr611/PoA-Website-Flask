@@ -367,6 +367,15 @@ def calculate_district_details(target, schema_properties, modifier_totals, law_t
 def collect_nation_districts(target, law_totals, district_details):
     nation_districts = target.get("districts", [])
     collected_modifiers = []
+
+    def synergy_matches(node, requirement):
+        if not node:
+            return False
+        if isinstance(requirement, list):
+            return "any" in requirement or node in requirement
+        if requirement == "any":
+            return True
+        return node == requirement
     
     for district in nation_districts:
         if isinstance(district, dict):
@@ -374,7 +383,7 @@ def collect_nation_districts(target, law_totals, district_details):
             district_node = district.get("node", "")
             district_modifiers = district_details.get(district_type, {}).get("modifiers", {})
             collected_modifiers.append(district_modifiers)
-            if district_node == district_details.get(district_type, {}).get("synergy_requirement", ""):
+            if synergy_matches(district_node, district_details.get(district_type, {}).get("synergy_requirement", "")):
                 collected_modifiers.append(district_details.get(district_type, {}).get("synergy_modifiers", {}))
                 if district_details.get(district_type, {}).get("synergy_node_active", True):
                     collected_modifiers.append({district_node + "_nodes": 1})
@@ -391,7 +400,7 @@ def collect_nation_districts(target, law_totals, district_details):
         imperial_district_synergy_node_active = imperial_district_json_data.get(imperial_district_type, {}).get("synergy_node_active", True)
         imperial_district_modifiers = imperial_district_json_data.get(imperial_district_type, {}).get("modifiers", {})
         collected_modifiers.append(imperial_district_modifiers)
-        if imperial_district_node == imperial_district_synergy_node or (imperial_district_synergy_node == "any" and imperial_district_node != ""):
+        if synergy_matches(imperial_district_node, imperial_district_synergy_node):
             collected_modifiers.append(imperial_district_json_data.get(imperial_district_type, {}).get("synergy_modifiers", {}))
             if imperial_district_synergy_node_active:
                 collected_modifiers.append({district_node + "_nodes": 1})

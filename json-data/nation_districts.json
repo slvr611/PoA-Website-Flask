@@ -14,7 +14,7 @@
 			"ruler_artifact_slots": 10,
 			"artificer_bronze_upkeep": -1
 		},
-		"synergy_requirement": "magic",
+		"synergy_requirement": ["magic", "stone"],
 		"synergy_node_active": true,
 		"synergy_modifiers": {
 			"ruler_artifact_slots": 4
@@ -34,7 +34,7 @@
 			"nation_spell_cost": -1,
 			"nation_spell_cost_minimum": 2
 		},
-		"synergy_requirement": "magic",
+		"synergy_requirement": ["magic"],
 		"synergy_node_active": true,
 		"synergy_modifiers": {
 			"ignore_magic_cost": true
@@ -56,7 +56,7 @@
 			"mounts_storage_capacity": 5,
 			"bronze_storage_capacity": 5
 		},
-		"synergy_requirement": "stone",
+		"synergy_requirement": ["stone"],
 		"synergy_node_active": true,
 		"synergy_modifiers": {
 			"wood_storage_capacity": 5,
@@ -80,7 +80,7 @@
 			"administration": 1,
 			"bureaucrat_wood_upkeep": -1
 		},
-		"synergy_requirement": "wood",
+		"synergy_requirement": ["wood"],
 		"synergy_node_active": true,
 		"synergy_modifiers": {
 			"administration": 1
@@ -98,7 +98,7 @@
 		},
 		"modifiers": {
 		},
-		"synergy_requirement": "wood",
+		"synergy_requirement": ["wood"],
 		"synergy_node_active": true,
 		"synergy_modifiers": {
 		},
@@ -117,7 +117,7 @@
 			"wood_consumption": 1,
 			"food_production": 1
 		},
-		"synergy_requirement": "food",
+		"synergy_requirement": ["food"],
 		"synergy_node_active": true,
 		"synergy_modifiers": {
 			"food_production": 1
@@ -138,7 +138,7 @@
 			"bronze_production": 1,
 			"metallurgist_bronze_production": 1
 		},
-		"synergy_requirement": "bronze",
+		"synergy_requirement": ["bronze"],
 		"synergy_node_active": true,
 		"synergy_modifiers": {
 			"mundane_unit_defense": 1
@@ -160,7 +160,7 @@
 		"modifiers": {
 			"stone_consumption": 1
 		},
-		"synergy_requirement": "stone",
+		"synergy_requirement": ["stone"],
 		"synergy_node_active": true,
 		"synergy_modifiers": {
 			"ignore_stone_cost": true
@@ -178,7 +178,7 @@
 		"modifiers": {
 			"food_storage_capacity": 5
 		},
-		"synergy_requirement": "food",
+		"synergy_requirement": ["food"],
 		"synergy_node_active": true,
 		"synergy_modifiers": {
 			"food_storage_capacity": 5
@@ -198,7 +198,7 @@
 			"wood_consumption": 1,
 			"effective_pop_capacity": 2
 		},
-		"synergy_requirement": "food",
+		"synergy_requirement": ["food"],
 		"synergy_node_active": true,
 		"synergy_modifiers": {
 			"effective_pop_capacity": 1
@@ -218,7 +218,7 @@
 		"modifiers": {
 			"food_consumption": 1
 		},
-		"synergy_requirement": "food",
+		"synergy_requirement": ["food"],
 		"synergy_node_active": true,
 		"synergy_modifiers": {
 		},
@@ -237,7 +237,7 @@
 			"wood_consumption": 1,
 			"food_production": 2
 		},
-		"synergy_requirement": "food",
+		"synergy_requirement": ["food"],
 		"synergy_node_active": true,
 		"synergy_modifiers": {
 			"food_production": 1
@@ -257,7 +257,7 @@
 			"fisherman_food_production": 1,
 			"food_production": 1
 		},
-		"synergy_requirement": "food",
+		"synergy_requirement": ["food"],
 		"synergy_node_active": true,
 		"synergy_modifiers": {
 			"food_production": 1
@@ -276,7 +276,7 @@
 			"stone_consumption": 1,
 			"magic_production": 1
 		},
-		"synergy_requirement": "magic",
+		"synergy_requirement": ["magic"],
 		"synergy_node_active": true,
 		"synergy_modifiers": {
 			"magic_production": 1
@@ -298,7 +298,7 @@
 			"trade_slots": 1,
 			"money_income": 100
 		},
-		"synergy_requirement": "luxury",
+		"synergy_requirement": ["luxury"],
 		"synergy_node_active": false,
 		"synergy_modifiers": {
 			"money_income": 150
@@ -319,7 +319,7 @@
 			"food_production_per_stockpiled_food": 5,
 			"max_food_production_per_stockpiled_food": 5
 		},
-		"synergy_requirement": "food",
+		"synergy_requirement": ["food"],
 		"synergy_node_active": true,
 		"synergy_modifiers": {
 			"food_storage_capacity": 5
@@ -337,7 +337,7 @@
 		"modifiers": {
 			"miner_stone_production": 0.5
 		},
-		"synergy_requirement": "stone",
+		"synergy_requirement": ["stone"],
 		"synergy_node_active": true,
 		"synergy_modifiers": {
 			"district_stone_discount": 0.2,
@@ -358,7 +358,7 @@
 			"mounts_production": 2,
 			"food_production": 1
 		},
-		"synergy_requirement": "mounts",
+		"synergy_requirement": ["mounts"],
 		"synergy_node_active": true,
 		"synergy_modifiers": {
 			"mounts_production": 1
@@ -376,7 +376,7 @@
 		"modifiers": {
 			"harvester_wood_production": 0.5
 		},
-		"synergy_requirement": "wood",
+		"synergy_requirement": ["wood"],
 		"synergy_node_active": true,
 		"synergy_modifiers": {
 			"district_wood_discount": 0.2,
@@ -397,7 +397,7 @@
 			"wood_consumption": 1,
 			"research_production": 1
 		},
-		"synergy_requirement": "research",
+		"synergy_requirement": ["research"],
 		"synergy_node_active": true,
 		"synergy_modifiers": {
 		},
@@ -416,7 +416,7 @@
 		"modifiers": {
 			"wood_consumption": 1
 		},
-		"synergy_requirement": "research",
+		"synergy_requirement": ["research"],
 		"synergy_node_active": true,
 		"synergy_modifiers": {
 			"mundane_unit_attack": 1
@@ -452,7 +452,7 @@
 			"ruler_artifact_slots": 16,
 			"artificer_bronze_upkeep": -1
 		},
-		"synergy_requirement": "magic",
+		"synergy_requirement": ["magic", "stone"],
 		"synergy_node_active": true,
 		"synergy_modifiers": {
 			"ruler_artifact_slots": 6
@@ -472,7 +472,7 @@
 			"nation_spell_cost": -2,
 			"nation_spell_cost_minimum": 2
 		},
-		"synergy_requirement": "magic",
+		"synergy_requirement": ["magic"],
 		"synergy_node_active": true,
 		"synergy_modifiers": {
 			"ignore_magic_cost": true
@@ -497,7 +497,7 @@
 			"food_consumption": 1,
 			"stability_gain_chance": 0.20
 		},
-		"synergy_requirement": "narcotics",
+		"synergy_requirement": ["narcotics"],
 		"synergy_node_active": false,
 		"synergy_modifiers": {
 			"stability_gain_chance": 0.15
@@ -520,7 +520,7 @@
 			"mounts_storage_capacity": 10,
 			"bronze_storage_capacity": 10
 		},
-		"synergy_requirement": "stone",
+		"synergy_requirement": ["stone"],
 		"synergy_node_active": true,
 		"synergy_modifiers": {},
 		"count": 1
@@ -539,7 +539,7 @@
 			"administration": 2,
 			"bureaucrat_wood_upkeep": -1
 		},
-		"synergy_requirement": "wood",
+		"synergy_requirement": ["wood"],
 		"synergy_node_active": true,
 		"synergy_modifiers": {
 			"1_progress_slots": 1
@@ -556,7 +556,7 @@
 			"bronze": 1
 		},
 		"modifiers": {},
-		"synergy_requirement": "wood",
+		"synergy_requirement": ["wood"],
 		"synergy_node_active": true,
 		"synergy_modifiers": {},
 		"count": 1
@@ -582,7 +582,7 @@
 			"food_production": 2,
 			"trade_distance_over_water": 3
 		},
-		"synergy_requirement": "food",
+		"synergy_requirement": ["food"],
 		"synergy_node_active": true,
 		"synergy_modifiers": {
 			"food_production": 1
@@ -602,7 +602,7 @@
 			"mount_consumption": 1,
 			"food_production": 4
 		},
-		"synergy_requirement": "food",
+		"synergy_requirement": ["food"],
 		"synergy_node_active": true,
 		"synergy_modifiers": {
 			"food_production": 2
@@ -624,7 +624,7 @@
 			"food_production": 2,
 			"food_production_per_naval_unit": 0.5
 		},
-		"synergy_requirement": "food",
+		"synergy_requirement": ["food"],
 		"synergy_node_active": true,
 		"synergy_modifiers": {
 			"food_production": 2
@@ -647,7 +647,7 @@
 			"iron_production": 1,
 			"metallurgist_bronze_production": 1
 		},
-		"synergy_requirement": "bronze",
+		"synergy_requirement": ["bronze", "iron"],
 		"synergy_node_active": true,
 		"synergy_modifiers": {},
 		"count": 1
@@ -667,7 +667,7 @@
 		"modifiers": {
 			"bronze_consumption": 1
 		},
-		"synergy_requirement": "bronze",
+		"synergy_requirement": ["bronze", "iron"],
 		"synergy_node_active": true,
 		"synergy_modifiers": {},
 		"count": 2
@@ -686,7 +686,7 @@
 			"food_storage_capacity": 10,
 			"farmer_food_production": 1
 		},
-		"synergy_requirement": "food",
+		"synergy_requirement": ["food"],
 		"synergy_node_active": true,
 		"synergy_modifiers": {
 			"food_storage_capacity": 5
@@ -711,7 +711,7 @@
 			"iron_consumption": 1,
 			"stability_loss_chance": -0.1
 		},
-		"synergy_requirement": "bronze",
+		"synergy_requirement": ["bronze", "iron"],
 		"synergy_node_active": true,
 		"synergy_modifiers": {},
 		"count": 1
@@ -729,7 +729,7 @@
 			"wood_consumption": 1,
 			"effective_pop_capacity": 3
 		},
-		"synergy_requirement": "food",
+		"synergy_requirement": ["food"],
 		"synergy_node_active": true,
 		"synergy_modifiers": {
 			"effective_pop_capacity": 1
@@ -750,7 +750,7 @@
 			"food_consumption": 1,
 			"ruler_elderly_age": 1
 		},
-		"synergy_requirement": "food",
+		"synergy_requirement": ["food"],
 		"synergy_node_active": true,
 		"synergy_modifiers": {},
 		"count": 1
@@ -768,7 +768,7 @@
 			"research_production_per_turns_with_library": 5,
 			"max_research_production_per_turns_with_library": 4
 		},
-		"synergy_requirement": "wood",
+		"synergy_requirement": ["wood"],
 		"synergy_node_active": true,
 		"synergy_modifiers": {},
 		"count": 1
@@ -791,7 +791,7 @@
 			"stone_consumption": 1,
 			"magic_production": 1
 		},
-		"synergy_requirement": "magic",
+		"synergy_requirement": ["magic"],
 		"synergy_node_active": true,
 		"synergy_modifiers": {
 			"magic_production": 1
@@ -814,7 +814,7 @@
 			"merchant_money_production": 50,
 			"money_income": 100
 		},
-		"synergy_requirement": "luxury",
+		"synergy_requirement": ["luxury"],
 		"synergy_node_active": false,
 		"synergy_modifiers": {
 			"trade_distance": 6,
@@ -839,7 +839,7 @@
 			"max_food_production_per_stockpiled_food": 10,
 			"farmer_food_production": 0.5
 		},
-		"synergy_requirement": "food",
+		"synergy_requirement": ["food"],
 		"synergy_node_active": true,
 		"synergy_modifiers": {
 			"food_storage_capacity": 5
@@ -866,7 +866,7 @@
 			"iron_production": 1,
 			"metallurgist_iron_production": 1
 		},
-		"synergy_requirement": "iron",
+		"synergy_requirement": ["iron"],
 		"synergy_node_active": true,
 		"synergy_modifiers": {
 			"iron_production": 1
@@ -892,7 +892,7 @@
 			"money_income_per_money_storage": 500,
 			"max_money_income_per_money_storage": 400
 		},
-		"synergy_requirement": "luxury",
+		"synergy_requirement": ["luxury"],
 		"synergy_node_active": false,
 		"synergy_modifiers": {
 			"max_money_income_per_money_storage": 400
@@ -917,7 +917,7 @@
 			"mounts_consumption": 1,
 			"miner_stone_production": 1
 		},
-		"synergy_requirement": "stone",
+		"synergy_requirement": ["stone"],
 		"synergy_node_active": true,
 		"synergy_modifiers": {
 			"district_stone_discount": 0.25,
@@ -947,7 +947,7 @@
 			"food_production": 1,
 			"miner_stone_production": 1
 		},
-		"synergy_requirement": "mounts",
+		"synergy_requirement": ["mounts"],
 		"synergy_node_active": true,
 		"synergy_modifiers": {
 			"mounts_production": 1,
@@ -973,7 +973,7 @@
 			"mounts_consumption": 1,
 			"harvester_wood_production": 1
 		},
-		"synergy_requirement": "wood",
+		"synergy_requirement": ["wood"],
 		"synergy_node_active": true,
 		"synergy_modifiers": {
 			"district_wood_discount": 0.25,
@@ -998,7 +998,7 @@
 			"ruler_stat_gain_chance": 0.25,
 			"ruler_immortal_stat_gain_chance": -0.2
 		},
-		"synergy_requirement": "research",
+		"synergy_requirement": ["research"],
 		"synergy_node_active": true,
 		"synergy_modifiers": {},
 		"count": 1
@@ -1018,7 +1018,7 @@
 			"iron_consumption": 1,
 			"mystic_magic_production": 1
 		},
-		"synergy_requirement": "magic",
+		"synergy_requirement": ["magic", "stone"],
 		"synergy_node_active": true,
 		"synergy_modifiers": {},
 		"count": 1
@@ -1042,7 +1042,7 @@
 		"modifiers": {
 			"bronze_consumption": 1
 		},
-		"synergy_requirement": "bronze",
+		"synergy_requirement": ["bronze", "iron"],
 		"synergy_node_active": true,
 		"synergy_modifiers": {
 			"mundane_unit_attack": 1

@@ -667,8 +667,6 @@ def compute_age_status(field, target, base_value, field_schema, overall_total_mo
 def compute_stat_cap(field, target, base_value, field_schema, overall_total_modifiers):
     value = base_value + overall_total_modifiers.get(field, 0) + overall_total_modifiers.get("stat_cap", 0)
 
-    value = min(value, 8)
-
     return int(value)
 
 def compute_stat(field, target, base_value, field_schema, overall_total_modifiers):
@@ -728,6 +726,9 @@ def compute_stat_gain_chance(field, target, base_value, field_schema, overall_to
 
     cunning = compute_stat("cunning", target, 0, {}, overall_total_modifiers)
     value += cunning * (BASE_STAT_GAIN_CHANCE_PER_CUNNING + overall_total_modifiers.get("stat_gain_chance_per_cunning", 0))
+
+    if target.get("elderly_age", 0) > 500:
+        value += target.get("immortal_stat_gain_chance", 0)
 
     value = round(max(min(value, 1), 0), 2)
 
