@@ -4,6 +4,16 @@ from bson.objectid import ObjectId
 import copy
 from bisect import bisect_right
 
+def compute_field(field, target, base_value, field_schema, overall_total_modifiers):
+    compute_func = CUSTOM_COMPUTE_FUNCTIONS.get(field, compute_field_default)
+    return compute_func(field, target, base_value, field_schema, overall_total_modifiers)
+
+def compute_field_default(field, target, base_value, field_schema, overall_total_modifiers):
+    value = base_value + overall_total_modifiers.get(field, 0)
+    if field_schema.get("format", None) != "percentage":
+        value = int(value)
+    return value
+
 def compute_prestige_gain(field, target, base_value, field_schema, overall_total_modifiers):
     value = base_value
 
@@ -727,8 +737,8 @@ def compute_stat_gain_chance(field, target, base_value, field_schema, overall_to
     cunning = compute_stat("cunning", target, 0, {}, overall_total_modifiers)
     value += cunning * (BASE_STAT_GAIN_CHANCE_PER_CUNNING + overall_total_modifiers.get("stat_gain_chance_per_cunning", 0))
 
-    if target.get("elderly_age", 0) > 500:
-        value += target.get("immortal_stat_gain_chance", 0)
+    if compute_field_default("elderly_age", target, 3, {}, overall_total_modifiers) > 500:
+        value += overall_total_modifiers.get("immortal_stat_gain_chance", 0)
 
     value = round(max(min(value, 1), 0), 2)
 

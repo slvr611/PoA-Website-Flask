@@ -2,7 +2,7 @@ import math
 import copy
 from copy import deepcopy
 from app_core import mongo, json_data, category_data, land_unit_json_files, naval_unit_json_files
-from calculations.compute_functions import CUSTOM_COMPUTE_FUNCTIONS, compute_pop_count
+from calculations.compute_functions import compute_pop_count, compute_field
 from bson.objectid import ObjectId
 from app_core import json_data
 
@@ -243,16 +243,6 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
         return calculated_values, breakdowns
 
     return calculated_values
-
-def compute_field(field, target, base_value, field_schema, overall_total_modifiers):
-    compute_func = CUSTOM_COMPUTE_FUNCTIONS.get(field, compute_field_default)
-    return compute_func(field, target, base_value, field_schema, overall_total_modifiers)
-
-def compute_field_default(field, target, base_value, field_schema, overall_total_modifiers):
-    value = base_value + overall_total_modifiers.get(field, 0)
-    if field_schema.get("format", None) != "percentage":
-        value = int(value)
-    return value
 
 def calculate_prestige_modifiers(target, schema_properties):
     prestige = int(target.get("prestige", 50))
