@@ -15,6 +15,7 @@ from email.mime.text import MIMEText
 from email.utils import formatdate
 from email import encoders
 import boto3
+from threading import Thread
 
 load_dotenv(override=True)
 
@@ -203,6 +204,7 @@ def upload_to_s3(file_path, s3_key):
         aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
         
         if not s3_bucket or not aws_access_key or not aws_secret_key:
+            print("S3 upload skipped: missing S3 configuration.")
             return False, "S3 configuration missing"
         
         # Create S3 client
@@ -215,8 +217,10 @@ def upload_to_s3(file_path, s3_key):
         # Upload file
         s3_client.upload_file(file_path, s3_bucket, s3_key)
         
+        print(f"S3 upload success: {s3_bucket}/{s3_key}")
         return True, f"File uploaded to S3: {s3_bucket}/{s3_key}"
     except Exception as e:
+        print(f"S3 upload failed: {str(e)}")
         return False, f"S3 upload failed: {str(e)}"
 
 def backup_mongodb():
@@ -336,6 +340,24 @@ def backup_mongodb():
 
     except Exception as e:
         return False, f"Backup failed: {str(e)}"
+
+def backup_mongodb_async():
+    """
+    Starts a MongoDB backup in a background thread.
+    Returns a tuple of (success, message).
+    """
+    try:
+        def _run_backup_and_log():
+            success, message = backup_mongodb()
+            status = "success" if success else "failure"
+            print(f"Backup completed with {status}: {message}")
+
+        thread = Thread(target=_run_backup_and_log)
+        thread.daemon = True
+        thread.start()
+        return True, "Backup process started in background. Check logs for results."
+    except Exception as e:
+        return False, f"Failed to start backup thread: {str(e)}"
 
 def send_backup_email(attachment_path, db_name, timestamp):
     """

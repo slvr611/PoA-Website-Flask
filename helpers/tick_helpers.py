@@ -5,7 +5,7 @@ from pymongo import ASCENDING
 from helpers.change_helpers import system_request_change, system_approve_change
 from app_core import mongo, json_data, upload_to_s3, character_stats
 from flask import flash
-from app_core import backup_mongodb, category_data, temperament_enum, base_temperament_odds, cultural_trait_temperament_modifiers
+from app_core import backup_mongodb_async, category_data, temperament_enum, base_temperament_odds, cultural_trait_temperament_modifiers
 from copy import deepcopy
 import random
 import os
@@ -371,7 +371,7 @@ def run_tick_async(form_data):
 ###########################################################
 
 def backup_database():
-    success, message = backup_mongodb()
+    success, message = backup_mongodb_async()
     return success, message
 
 def give_tick_summary(player_tick_summary, full_tick_summary):
@@ -726,6 +726,8 @@ def ai_resource_desire_tick(old_nation, new_nation, schema):
 
 def nation_income_tick(old_nation, new_nation, schema):
     new_nation["money"] = int(old_nation.get("money", 0)) + old_nation.get("money_income", 0)
+    if new_nation["money"] > new_nation.get("money_capacity", 0):
+        new_nation["money"] = new_nation.get("money_capacity", 0)
     new_nation["resource_storage"] = {}
     new_nation["production_at_tick"] = old_nation.get("resource_excess", {})
     for resource, amount in old_nation.get("resource_excess", {}).items():

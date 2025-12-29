@@ -167,9 +167,9 @@ def database_management():
 @admin_required
 def backup_database_route():
     """Create a database backup"""
-    from app_core import backup_mongodb
+    from app_core import backup_mongodb_async
     
-    success, message = backup_mongodb()
+    success, message = backup_mongodb_async()
     if success:
         flash(f"Database backup successful: {message}", "success")
     else:

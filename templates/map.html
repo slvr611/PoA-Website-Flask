@@ -123,8 +123,10 @@ document.addEventListener('DOMContentLoaded', function () {
             return basePath + "PoA_Terrain_Map_Classical_Session_54.dzi";
         } else if (sessionNum == 55) {
             return basePath + "PoA_Terrain_Map_Classical_Session_55.dzi";
-        } else {
+        } else if (sessionNum <= 63) {
             return basePath + "PoA_Terrain_Map_Classical_Session_56.dzi";
+        } else {
+            return basePath + "PoA_Terrain_Map_Classical_Session_64.dzi";
         }
     }
 
