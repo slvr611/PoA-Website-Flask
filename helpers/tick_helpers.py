@@ -800,8 +800,12 @@ def nation_stability_tick(old_nation, new_nation, schema):
     new_nation["stability_gain_roll"] = stability_gain_roll
     new_nation["stability_gain_chance_at_tick"] = old_nation.get("stability_gain_chance", 0)
 
+    while old_nation.get("stability_gain_chance", 0) > 1:
+        stability_gained += 1
+        old_nation["stability_gain_chance"] -= 1
+
     if stability_gain_roll <= old_nation.get("stability_gain_chance", 0):
-        stability_gained = 1
+        stability_gained += 1
 
     stab_loss_chance = old_nation.get("stability_loss_chance", 0)
     stability_loss_roll = random.random()
@@ -814,7 +818,7 @@ def nation_stability_tick(old_nation, new_nation, schema):
 
     if stability_loss_roll <= stab_loss_chance:
         stability_lost += 1
-    
+
     amounts = []
     reasons = []
 
