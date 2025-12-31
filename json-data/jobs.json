@@ -163,6 +163,15 @@
 			"research": 1
 		}
 	},
+	"revolutionary": {
+		"display_name": "Revolutionary",
+		"requirements":{
+			"empire": "on"
+		},
+		"production": {
+			"stability_loss_chance": 0.5
+		}
+	},
 	"stone_speaker": {
 		"display_name": "Stone Speaker",
 		"requirements":{

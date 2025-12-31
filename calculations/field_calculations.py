@@ -656,6 +656,9 @@ def check_job_requirements(target, job_details, overall_total_modifiers):
                 wonder = wonderdb.find_one({"name": wonder})
                 if str(target.get("_id", "")) != wonder.get("owner_nation", ""):
                     meets_requirements = False
+        elif requirement == "empire":
+            if target.get("empire", False) != value:
+                meets_requirements = False
     
     return meets_requirements
 

@@ -911,7 +911,7 @@ def nation_passive_expansion_tick(old_nation, new_nation, schema):
 def nation_job_cleanup_tick(old_nation, new_nation, schema):
     new_jobs = {}
     for job in old_nation.get("jobs", {}).keys():
-        if job != "vampire" and job != "undead":
+        if job != "undead" and job != "partial_vampire" and job != "revolutionary":
             new_jobs[job] = 0
     new_nation["jobs"] = new_jobs
     return ""
