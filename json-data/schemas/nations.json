@@ -17,7 +17,7 @@
       "primary_religion": ["external_modifiers"],
       "wonders": ["external_modifiers", "node"],
       "region": ["external_modifiers"],
-      "rulers": ["titles", "modifiers", {"artifacts": ["external_modifiers"]}],
+      "rulers": ["positive_titles", "negative_titles", "modifiers", {"artifacts": ["external_modifiers"]}],
       "pops": [],
       "vassals": {
         "fields": ["vassal_type"],

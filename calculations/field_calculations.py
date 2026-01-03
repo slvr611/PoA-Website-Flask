@@ -80,7 +80,11 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
     elif target_data_type == "nation_jobs":
         job_details = calculate_job_details(target, district_details, modifier_totals, district_totals, tech_totals, city_totals, law_totals, external_modifiers_total)
     elif target_data_type == "character":
-        title_modifiers = calculate_title_modifiers(target, target_data_type, schema_properties)
+        positive_title_modifiers = calculate_title_modifiers(target.get("positive_titles", []), target_data_type, schema_properties)
+        negative_title_modifiers = calculate_title_modifiers(target.get("negative_titles", []), target_data_type, schema_properties)
+        title_modifiers = positive_title_modifiers.copy()
+        for key, value in negative_title_modifiers.items():
+            title_modifiers[key] = title_modifiers.get(key, 0) + value
     elif target_data_type == "market":
         primary_resource = target.get("primary_resource", "")
         secondary_resource_one = target.get("secondary_resource_one", "")
@@ -420,15 +424,14 @@ def collect_mercenary_districts(target, district_details):
     
     return collected_modifiers
 
-def calculate_title_modifiers(target, target_data_type, schema_properties):
+def calculate_title_modifiers(titles, target_data_type, schema_properties):
     title_modifiers = {}
-    titles = target.get("positive_titles", [])
-    titles.extend(target.get("negative_titles", []))
     title_data = deepcopy(json_data["positive_titles"])
     title_data.update(json_data["negative_titles"])
     for title in titles:
-        title_data = title_data.get(title, {})
-        for key, value in title_data.get("modifiers", {}).items():
+        specific_title_data = copy.deepcopy(title_data.get(title, {}))
+        print(specific_title_data)
+        for key, value in specific_title_data.get("modifiers", {}).items():
             if key.startswith(target_data_type + "_"):
                 temp_key = key.replace(target_data_type + "_", "")
                 if "_per_" in temp_key:
@@ -973,7 +976,7 @@ def collect_external_modifiers_from_object(object, required_fields, linked_objec
                             collected_modifiers.append({field: modifier["value"]})
                 
                 elif field_type == "array" and (req_field == "positive_titles" or req_field == "negative_titles"):
-                    calculated_title_modifiers = calculate_title_modifiers(object, target_data_type, linked_object_schema["properties"])
+                    calculated_title_modifiers = calculate_title_modifiers(object[req_field], target_data_type, linked_object_schema["properties"])
                     for key, value in calculated_title_modifiers.items():
                         #calculate_title_modifers already filters based on the prefix
                         collected_modifiers.append({key: value})
