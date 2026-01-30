@@ -454,6 +454,165 @@ def player_law_analysis():
                          law_stats=law_stats, 
                          total_players=total_players)
 
+@admin_tool_routes.route("/player_district_analysis")
+@admin_required
+def player_district_analysis():
+    schema, db = get_data_on_category("nations")
+    player_nations = list(db.find({"temperament": "Player"}).sort("name", ASCENDING))
+
+    if not player_nations:
+        return render_template(
+            "player_district_analysis.html",
+            district_stats={},
+            total_players=0,
+            total_districts=0,
+        )
+
+    def synergy_matches(node, requirement):
+        if not node:
+            return False
+        if isinstance(requirement, list):
+            return "any" in requirement or node in requirement
+        if requirement == "any":
+            return True
+        return node == requirement
+
+    district_stats = {}
+    category_stats = {}
+    total_districts = 0
+    district_data = json_data["nation_districts"]
+    imperial_data = json_data["nation_imperial_districts"]
+
+    for nation in player_nations:
+        for district in nation.get("districts", []):
+            if isinstance(district, dict):
+                district_type = district.get("type", "")
+                district_node = district.get("node", "")
+            else:
+                district_type = district
+                district_node = ""
+
+            if not district_type:
+                continue
+
+            requirement = district_data.get(district_type, {}).get("synergy_requirement", "")
+            synergy_active = synergy_matches(district_node, requirement)
+            label = district_data.get(district_type, {}).get("name", district_type)
+            stats = district_stats.setdefault(
+                district_type,
+                {"label": label, "active": 0, "inactive": 0},
+            )
+            if synergy_active:
+                stats["active"] += 1
+            else:
+                stats["inactive"] += 1
+            total_districts += 1
+
+            category_label = label
+            tier_label = ""
+            for prefix, tier in (("Ancient ", "Ancient"), ("Classical ", "Classical"), ("ancient_", "Ancient"), ("classical_", "Classical")):
+                if category_label.startswith(prefix):
+                    category_label = category_label[len(prefix):]
+                    tier_label = tier
+                    break
+            category_label = category_label.lower()
+            category_entry = category_stats.setdefault(
+                category_label,
+                {
+                    "label": category_label,
+                    "active": 0,
+                    "inactive": 0,
+                    "ancient": 0,
+                    "classical": 0,
+                },
+            )
+            if synergy_active:
+                category_entry["active"] += 1
+            else:
+                category_entry["inactive"] += 1
+            if tier_label == "Ancient":
+                category_entry["ancient"] += 1
+            elif tier_label == "Classical":
+                category_entry["classical"] += 1
+
+        if nation.get("empire", False):
+            imperial = nation.get("imperial_district", {})
+            imperial_type = imperial.get("type", "")
+            imperial_node = imperial.get("node", "")
+            if imperial_type:
+                requirement = imperial_data.get(imperial_type, {}).get("synergy_requirement", "")
+                synergy_active = synergy_matches(imperial_node, requirement)
+                key = f"Imperial: {imperial_type}"
+                label = imperial_data.get(imperial_type, {}).get("name", key)
+                stats = district_stats.setdefault(
+                    key,
+                    {"label": label, "active": 0, "inactive": 0},
+                )
+                if synergy_active:
+                    stats["active"] += 1
+                else:
+                    stats["inactive"] += 1
+                total_districts += 1
+
+                category_label = label
+                tier_label = ""
+                for prefix, tier in (("Ancient ", "Ancient"), ("Classical ", "Classical"), ("ancient_", "Ancient"), ("classical_", "Classical")):
+                    if category_label.startswith(prefix):
+                        category_label = category_label[len(prefix):]
+                        tier_label = tier
+                        break
+                category_label = category_label.lower()
+                category_entry = category_stats.setdefault(
+                    category_label,
+                    {
+                        "label": category_label,
+                        "active": 0,
+                        "inactive": 0,
+                        "ancient": 0,
+                        "classical": 0,
+                    },
+                )
+                if synergy_active:
+                    category_entry["active"] += 1
+                else:
+                    category_entry["inactive"] += 1
+                if tier_label == "Ancient":
+                    category_entry["ancient"] += 1
+                elif tier_label == "Classical":
+                    category_entry["classical"] += 1
+
+    for stats in district_stats.values():
+        total = stats["active"] + stats["inactive"]
+        stats["total"] = total
+        stats["active_pct"] = round((stats["active"] / total) * 100, 1) if total else 0
+    for stats in category_stats.values():
+        total = stats["active"] + stats["inactive"]
+        stats["total"] = total
+        stats["active_pct"] = round((stats["active"] / total) * 100, 1) if total else 0
+        stats["ancient_pct"] = round((stats["ancient"] / total) * 100, 1) if total else 0
+        stats["classical_pct"] = round((stats["classical"] / total) * 100, 1) if total else 0
+
+    category_list = sorted(
+        category_stats.values(),
+        key=lambda item: (item.get("total", 0), item.get("label", "")),
+        reverse=True,
+    )
+    district_list = sorted(
+        district_stats.values(),
+        key=lambda item: (item.get("total", 0), item.get("label", "")),
+        reverse=True,
+    )
+
+    return render_template(
+        "player_district_analysis.html",
+        district_stats=district_stats,
+        category_stats=category_stats,
+        category_list=category_list,
+        district_list=district_list,
+        total_players=len(player_nations),
+        total_districts=total_districts,
+    )
+
 @admin_tool_routes.route("/recalculate_all_objects")
 @admin_required
 def recalculate_all_objects_route():

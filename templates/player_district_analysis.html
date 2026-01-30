@@ -1,0 +1,76 @@
+{% extends "layout.html" %}
+
+{% block title %}Player District Analysis{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1>Player District Analysis</h1>
+
+    <div class="summary-section">
+        <h2>Summary</h2>
+        <p><strong>Total Player Nations:</strong> {{ total_players }}</p>
+        <p><strong>Total Districts:</strong> {{ total_districts }}</p>
+    </div>
+
+    {% if total_players > 0 %}
+        <div class="law-section">
+            <h2>Districts by Category</h2>
+            <table class="info-table">
+                <thead>
+                    <tr>
+                        <th>Category</th>
+                        <th>Total</th>
+                        <th>Synergy Active</th>
+                        <th>Synergy Inactive</th>
+                        <th>Active %</th>
+                        <th>Ancient %</th>
+                        <th>Classical %</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for stats in category_list %}
+                        <tr>
+                            <td>{{ stats.label }}</td>
+                            <td>{{ stats.total }}</td>
+                            <td>{{ stats.active }}</td>
+                            <td>{{ stats.inactive }}</td>
+                            <td>{{ stats.active_pct }}%</td>
+                            <td>{{ stats.ancient_pct }}%</td>
+                            <td>{{ stats.classical_pct }}%</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="law-section">
+            <h2>Districts</h2>
+            <table class="info-table">
+                <thead>
+                    <tr>
+                        <th>District</th>
+                        <th>Total</th>
+                        <th>Synergy Active</th>
+                        <th>Synergy Inactive</th>
+                        <th>Active %</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for stats in district_list %}
+                        <tr>
+                            <td>{{ stats.label }}</td>
+                            <td>{{ stats.total }}</td>
+                            <td>{{ stats.active }}</td>
+                            <td>{{ stats.inactive }}</td>
+                            <td>{{ stats.active_pct }}%</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <p>No player nations found.</p>
+    {% endif %}
+</div>
+
+{% endblock %}
