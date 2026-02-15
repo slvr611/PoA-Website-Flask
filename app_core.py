@@ -16,6 +16,7 @@ from email.utils import formatdate
 from email import encoders
 import boto3
 from threading import Thread
+from pymongo import ASCENDING
 
 load_dotenv(override=True)
 
@@ -72,6 +73,24 @@ category_data = {
     "global_modifiers": {"pluralName": "Global Modifiers", "singularName": "Global Modifiers", "database": mongo.db.global_modifiers},
     "units": {"pluralName": "Units", "singularName": "Unit", "database": mongo.db.units}
 }
+
+def ensure_mongo_indexes():
+    index_specs = {
+        "nations": [[("name", ASCENDING)]],
+        "pops": [[("nation", ASCENDING)]],
+        "characters": [[("ruling_nation_org", ASCENDING)], [("player", ASCENDING)]],
+        "diplo_relations": [[("nation_1", ASCENDING)], [("nation_2", ASCENDING)]],
+        "trades": [[("exporting_nation", ASCENDING)], [("importing_nation", ASCENDING)]],
+        "wonders": [[("owner_nation", ASCENDING)]],
+    }
+
+    for collection_name, specs in index_specs.items():
+        collection = mongo.db[collection_name]
+        for spec in specs:
+            try:
+                collection.create_index(spec)
+            except Exception as e:
+                print(f"Index creation failed for {collection_name} {spec}: {e}")
 
 rarity_rankings = {"Mythical": 0, "Legendary": 1, "Great": 2, "Good": 3, "Mundane": 4}
 
@@ -193,6 +212,8 @@ for file in json_files:
 
 for file in unit_json_files:
     json_data[file] = load_json("json-data/units/" + file + ".json")
+
+ensure_mongo_indexes()
 
 def upload_to_s3(file_path, s3_key):
     """Upload a file to S3 bucket"""

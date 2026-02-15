@@ -207,8 +207,12 @@ def compute_working_pop_count(field, target, base_value, field_schema, overall_t
 def compute_pop_count(field, target, base_value, field_schema, overall_total_modifiers):
     pop_database = category_data["pops"]["database"]
     target_id = str(target.get("_id", ""))
-    
-    pop_count = int(pop_database.count_documents({"nation": target_id}) + overall_total_modifiers.get(field, 0))
+    calc_cache = target.get("_calc_cache", {})
+
+    if "pop_count" in calc_cache:
+        pop_count = int(calc_cache.get("pop_count", 0) + overall_total_modifiers.get(field, 0))
+    else:
+        pop_count = int(pop_database.count_documents({"nation": target_id}) + overall_total_modifiers.get(field, 0))
     
     return int(pop_count)
 
@@ -220,8 +224,12 @@ def compute_minority_count(field, target, base_value, field_schema, overall_tota
     
     known_cultures = [target.get("primary_culture", "")]
     known_religions = [target.get("primary_religion", "")]
-    
-    relevant_pops = list(pop_database.find({"nation": target_id}))
+    calc_cache = target.get("_calc_cache", {})
+
+    if "pops" in calc_cache:
+        relevant_pops = calc_cache.get("pops", [])
+    else:
+        relevant_pops = list(pop_database.find({"nation": target_id}, {"culture": 1, "religion": 1}))
     
     for pop in relevant_pops:
         if not pop.get("culture", "") in known_cultures:
@@ -317,19 +325,28 @@ def compute_stability_loss_chance(field, target, base_value, field_schema, overa
     
     stability_loss_chance_per_bloodthirsty_pop = overall_total_modifiers.get("stability_loss_chance_per_bloodthirsty_pop", 0)
     if stability_loss_chance_per_bloodthirsty_pop > 0:
-        pop_database = category_data["pops"]["database"]
-        target_id = str(target.get("_id", ""))
-        
-        pops = pop_database.find({"nation": target_id})
-        pop_races = [pop.get("race", "") for pop in pops]
-        bloodthirsty_pop_count = 0
-        pop_races_set = list(set(copy.deepcopy(pop_races)))
-        pop_race_ids = [ObjectId(race) for race in pop_races_set]
-        races = category_data["races"]["database"].find({"_id": {"$in": pop_race_ids}}, {"_id": 1, "negative_trait": 1})
-        race_dict = {str(race["_id"]): race["negative_trait"] for race in races}
-        for race in pop_races:
-            if race_dict.get(race, "") == "Bloodthirsty":
-                bloodthirsty_pop_count += 1
+        calc_cache = target.get("_calc_cache", {})
+        if "bloodthirsty_pop_count" in calc_cache:
+            bloodthirsty_pop_count = calc_cache.get("bloodthirsty_pop_count", 0)
+        else:
+            pop_database = category_data["pops"]["database"]
+            target_id = str(target.get("_id", ""))
+
+            pops = pop_database.find({"nation": target_id}, {"race": 1})
+            pop_races = [pop.get("race", "") for pop in pops if pop.get("race")]
+            bloodthirsty_pop_count = 0
+            pop_races_set = list(set(copy.deepcopy(pop_races)))
+            pop_race_ids = []
+            for race in pop_races_set:
+                try:
+                    pop_race_ids.append(ObjectId(race))
+                except Exception:
+                    continue
+            races = category_data["races"]["database"].find({"_id": {"$in": pop_race_ids}}, {"_id": 1, "negative_trait": 1})
+            race_dict = {str(race["_id"]): race.get("negative_trait", "") for race in races}
+            for race in pop_races:
+                if race_dict.get(race, "") == "Bloodthirsty":
+                    bloodthirsty_pop_count += 1
         
         pop_stability_loss += bloodthirsty_pop_count * stability_loss_chance_per_bloodthirsty_pop
 

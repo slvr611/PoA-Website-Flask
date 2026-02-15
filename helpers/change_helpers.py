@@ -5,6 +5,26 @@ from calculations.field_calculations import calculate_all_fields
 from copy import deepcopy
 from bson import ObjectId
 
+def _calculate_and_attach_fields(data_type, target):
+    schema = category_data[data_type]["schema"]
+    target_data_type = category_data[data_type]["singularName"].lower()
+
+    if data_type == "nations":
+        calculated_fields, breakdowns = calculate_all_fields(
+            target,
+            schema,
+            target_data_type,
+            return_breakdowns=True
+        )
+        target.update(calculated_fields)
+        target["breakdowns"] = breakdowns
+    else:
+        calculated_fields = calculate_all_fields(target, schema, target_data_type)
+        target.update(calculated_fields)
+
+    target.pop("_calc_cache", None)
+    return target
+
 def request_change(data_type, item_id, change_type, before_data, after_data, reason):
     requester = mongo.db.players.find_one({"id": g.user.get("id", None)})["_id"]
     if requester is None:
@@ -82,8 +102,7 @@ def approve_change(change_id):
 
     if change["change_type"] == "Add":
         after_data = change["after_requested_data"]
-        calculated_fields = calculate_all_fields(after_data, category_data[change["target_collection"]]["schema"], category_data[change["target_collection"]]["singularName"].lower())
-        after_data.update(calculated_fields)
+        after_data = _calculate_and_attach_fields(change["target_collection"], after_data)
         inserted_item_id = target_collection.insert_one(after_data).inserted_id
         changes_collection.update_one({"_id": change_id}, {"$set": {
             "target": inserted_item_id,
@@ -112,8 +131,7 @@ def approve_change(change_id):
             if change["change_type"] == "Update":
                 existing = target_collection.find_one({"_id": change["target"]})
                 merged = deep_merge(existing, after_data)
-                calculated_fields = calculate_all_fields(merged, category_data[change["target_collection"]]["schema"], category_data[change["target_collection"]]["singularName"].lower())
-                merged.update(calculated_fields)
+                merged = _calculate_and_attach_fields(change["target_collection"], merged)
                 target_collection.update_one({"_id": change["target"]}, {"$set": merged})
             else:
                 target_collection.delete_one({"_id": change["target"]})
@@ -156,8 +174,7 @@ def system_approve_change(change_id):
 
     if change["change_type"] == "Add":
         after_data = change["after_requested_data"]
-        calculated_fields = calculate_all_fields(after_data, category_data[change["target_collection"]]["schema"], category_data[change["target_collection"]]["singularName"].lower())
-        after_data.update(calculated_fields)
+        after_data = _calculate_and_attach_fields(change["target_collection"], after_data)
 
         inserted_item_id = target_collection.insert_one(after_data).inserted_id
         changes_collection.update_one({"_id": change_id}, {"$set": {
@@ -186,8 +203,7 @@ def system_approve_change(change_id):
             if change["change_type"] == "Update":
                 existing = target_collection.find_one({"_id": change["target"]})
                 merged = deep_merge(existing, after_data)
-                calculated_fields = calculate_all_fields(merged, category_data[change["target_collection"]]["schema"], category_data[change["target_collection"]]["singularName"].lower())
-                merged.update(calculated_fields)
+                merged = _calculate_and_attach_fields(change["target_collection"], merged)
                 target_collection.update_one({"_id": change["target"]}, {"$set": merged})
             else:
                 target_collection.delete_one({"_id": change["target"]})
@@ -452,11 +468,9 @@ def _find_referencing_objects_array(db, target_field, id):
 def recalculate_all_objects(data_type):
     """Recalculate all fields for all objects of a given type"""
     db = mongo.db[data_type]
-    schema = category_data[data_type]["schema"]
     objects = list(db.find())
     for object in objects:
-        calculated_fields = calculate_all_fields(object, schema, category_data[data_type]["singularName"].lower())
-        object.update(calculated_fields)
+        object = _calculate_and_attach_fields(data_type, object)
         db.update_one({"_id": object["_id"]}, {"$set": object})
 
 def recalculate_object(data_type, object_ref):
@@ -472,9 +486,7 @@ def recalculate_object(data_type, object_ref):
         object = db.find_one({"name": object_id})
     if not object:
         return
-    schema = category_data[data_type]["schema"]
-    calculated_fields = calculate_all_fields(object, schema, category_data[data_type]["singularName"].lower())
-    object.update(calculated_fields)
+    object = _calculate_and_attach_fields(data_type, object)
     search_dict = {}
     if object_id == object_ref:
         search_dict = {"name": object_id}

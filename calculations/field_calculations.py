@@ -1,23 +1,81 @@
 import math
 import copy
 from copy import deepcopy
+from time import perf_counter
 from app_core import mongo, json_data, category_data, land_unit_json_files, naval_unit_json_files
 from calculations.compute_functions import compute_pop_count, compute_field
 from bson.objectid import ObjectId
 from app_core import json_data
 
-def calculate_all_fields(target, schema, target_data_type, return_breakdowns=False):
+def _build_nation_calc_cache(target):
+    target_id = str(target.get("_id", ""))
+    if not target_id:
+        return {}
+
+    pops = list(category_data["pops"]["database"].find({"nation": target_id}, {"race": 1, "culture": 1, "religion": 1}))
+    race_ids = list({pop.get("race", "") for pop in pops if pop.get("race")})
+
+    race_object_ids = []
+    for race_id in race_ids:
+        try:
+            race_object_ids.append(ObjectId(race_id))
+        except Exception:
+            continue
+
+    bloodthirsty_races = set()
+    if race_object_ids:
+        races = category_data["races"]["database"].find(
+            {"_id": {"$in": race_object_ids}},
+            {"_id": 1, "negative_trait": 1}
+        )
+        for race in races:
+            if race.get("negative_trait", "") == "Bloodthirsty":
+                bloodthirsty_races.add(str(race.get("_id")))
+
+    bloodthirsty_pop_count = 0
+    for pop in pops:
+        if pop.get("race", "") in bloodthirsty_races:
+            bloodthirsty_pop_count += 1
+
+    return {
+        "pops": pops,
+        "pop_count": len(pops),
+        "bloodthirsty_pop_count": bloodthirsty_pop_count,
+    }
+
+def calculate_all_fields(target, schema, target_data_type, return_breakdowns=False, instrumentation=None):
+    local_timings = {}
+
+    def record_timing(name, start_time):
+        local_timings[name] = round((perf_counter() - start_time) * 1000, 2)
+
+    calc_start = perf_counter()
     schema_properties = schema.get("properties", {})
 
-    external_modifiers = collect_external_requirements(target, schema, target_data_type)
-    external_modifiers_total = sum_external_modifier_totals(external_modifiers)
+    phase_start = perf_counter()
+    if target_data_type == "nation":
+        target["_calc_cache"] = _build_nation_calc_cache(target)
+    record_timing("build_calc_cache_ms", phase_start)
 
+    phase_start = perf_counter()
+    external_modifiers = collect_external_requirements(target, schema, target_data_type)
+    record_timing("collect_external_requirements_ms", phase_start)
+
+    phase_start = perf_counter()
+    external_modifiers_total = sum_external_modifier_totals(external_modifiers)
+    record_timing("sum_external_modifiers_ms", phase_start)
+
+    phase_start = perf_counter()
     modifiers = collect_modifiers(target)
     modifier_totals = sum_modifier_totals(modifiers)
+    record_timing("collect_and_sum_modifiers_ms", phase_start)
 
+    phase_start = perf_counter()
     laws = collect_laws(target, schema)
     law_totals = sum_law_totals(laws)
+    record_timing("collect_and_sum_laws_ms", phase_start)
 
+    phase_start = perf_counter()
     district_details = {}
     districts = []
     if target_data_type == "nation":
@@ -35,6 +93,7 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
         district_details = json_data["mercenary_districts"]
         districts = collect_mercenary_districts(target, district_details)
     district_totals = sum_district_totals(districts)
+    record_timing("district_calculations_ms", phase_start)
 
     city_totals = {}
     tech_totals = {}
@@ -48,6 +107,7 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
     prestige_modifiers = {}
     title_modifiers = {}
 
+    phase_start = perf_counter()
     if target_data_type == "nation":
         cities = collect_cities(target)
         city_totals = sum_city_totals(cities)
@@ -92,15 +152,19 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
         law_totals[primary_resource + "_production"] = law_totals.get("primary_resource_production", 0)
         law_totals[secondary_resource_one + "_production"] = law_totals.get("secondary_resource_production", 0)
         law_totals[secondary_resource_two + "_production"] = law_totals.get("secondary_resource_production", 0)
+    record_timing("target_specific_calculations_ms", phase_start)
 
     attributes_to_precalculate = ["administration", "effective_territory", "current_territory", "road_capacity", "effective_pop_capacity", "pop_count"]
 
+    phase_start = perf_counter()
     overall_total_modifiers = {}
     calculated_values = {"district_details": district_details, "job_details": job_details, "land_unit_details": land_unit_details, "naval_unit_details": naval_unit_details}
     for d in [external_modifiers_total, modifier_totals, district_totals, tech_totals, loose_node_totals, territory_terrain_totals, city_totals, law_totals, job_totals, unit_totals, prestige_modifiers, title_modifiers]:
         for key, value in d.items():
             overall_total_modifiers[key] = overall_total_modifiers.get(key, 0) + value
+    record_timing("build_overall_modifiers_ms", phase_start)
     
+    phase_start = perf_counter()
     for field in attributes_to_precalculate:
         base_value = schema_properties.get(field, {}).get("base_value", 0)
         calculated_values[field] = compute_field(
@@ -108,7 +172,9 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
             overall_total_modifiers
         )
         target[field] = calculated_values[field]
+    record_timing("precalculate_core_fields_ms", phase_start)
 
+    phase_start = perf_counter()
     effective_territory_modifiers = calculate_effective_territory_modifiers(target, schema_properties)
 
     road_capacity_modifiers = calculate_road_capacity_modifiers(target)
@@ -120,9 +186,11 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
             overall_total_modifiers[key] = overall_total_modifiers.get(key, 0) + value
     
     overall_total_modifiers = parse_meta_modifiers(target, overall_total_modifiers)
+    record_timing("capacity_and_meta_modifiers_ms", phase_start)
 
     #print(overall_total_modifiers)
 
+    phase_start = perf_counter()
     for field, field_schema in schema_properties.items():
         if isinstance(field_schema, dict) and field_schema.get("calculated") and field not in calculated_values.keys():
             base_value = field_schema.get("base_value", 0)
@@ -131,15 +199,19 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
                 overall_total_modifiers
             )
             target[field] = calculated_values[field]
+    record_timing("calculate_remaining_fields_ms", phase_start)
     
     # Calculate progress per session for progress quests
+    phase_start = perf_counter()
     if "progress_quests" in target:
         target["progress_quests"] = compute_field(
             "progress_quests", target, 0, {},
             overall_total_modifiers
         )
         calculated_values["progress_quests"] = target["progress_quests"]
+    record_timing("progress_quest_calc_ms", phase_start)
         
+    phase_start = perf_counter()
     if target_data_type == "nation":
         food_consumption_per_pop = 1 + overall_total_modifiers.get("food_consumption_per_pop", 0)
         food_consumption = calculated_values.get("pop_count", 0) * food_consumption_per_pop
@@ -220,7 +292,9 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
         else:
             #Nation is Sated
             pass
+    record_timing("food_state_adjustments_ms", phase_start)
     
+    phase_start = perf_counter()
     if return_breakdowns and target_data_type == "nation":
         component_sources = {
             "base": {},
@@ -244,8 +318,19 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
             overall_total_modifiers,
             calculated_values,
         )
+        record_timing("compute_breakdowns_ms", phase_start)
+        local_timings["total_calculate_all_fields_ms"] = round((perf_counter() - calc_start) * 1000, 2)
+        if instrumentation is not None:
+            instrumentation.update(local_timings)
+        target.pop("_calc_cache", None)
         return calculated_values, breakdowns
 
+    record_timing("compute_breakdowns_ms", phase_start)
+    local_timings["total_calculate_all_fields_ms"] = round((perf_counter() - calc_start) * 1000, 2)
+    if instrumentation is not None:
+        instrumentation.update(local_timings)
+
+    target.pop("_calc_cache", None)
     return calculated_values
 
 def calculate_prestige_modifiers(target, schema_properties):
@@ -822,7 +907,6 @@ def collect_external_requirements(target, schema, target_data_type):
                 collected_modifiers.append({modifier.get("modifier", ""): modifier.get("value", 0)})
     
     for field, required_fields in external_reqs.items():
-
         field_schema = schema["properties"].get(field, {})
 
         collections = field_schema.get("collections")
@@ -836,6 +920,15 @@ def collect_external_requirements(target, schema, target_data_type):
             modifier_prefix = required_fields.get("modifier_prefix")
             fields_as_modifiers = required_fields.get("fields_as_modifiers", [])
             required_fields = required_fields.get("fields", [])
+
+        if required_fields is None:
+            required_fields = []
+        elif not isinstance(required_fields, list):
+            required_fields = [required_fields]
+
+        # Skip expensive linked-object scans when no fields are requested.
+        if not required_fields and not fields_as_modifiers:
+            continue
 
         for collection in collections:
             linked_object_schema = category_data.get(collection, {}).get("schema", {})

@@ -2,11 +2,14 @@ from app_core import category_data, mongo
 from bson import ObjectId
 from pymongo import ASCENDING
 
-def get_linked_objects(schema, item, preview_items=None):
+def get_linked_objects(schema, item, preview_items=None, exclude_fields=None):
     properties = schema.get("properties", {})
     linked_objects = {}
+    excluded = set(exclude_fields or [])
 
     for field, attributes in properties.items():
+        if field in excluded:
+            continue
         if preview_items is None or field in preview_items:
             if attributes.get("collections"):
                 related_collections = attributes["collections"]
@@ -57,7 +60,7 @@ def get_linked_objects(schema, item, preview_items=None):
                                                 
                                                 if field_preview:
                                                     preview_schema = category_data[related_collection]["schema"]
-                                                    target_obj["linked_objects"] = get_linked_objects(preview_schema, target_obj, preview_items=field_preview)
+                                                    target_obj["linked_objects"] = get_linked_objects(preview_schema, target_obj, preview_items=field_preview, exclude_fields=excluded)
                                                 
                                                 linked_objects[field].append(target_obj)
                                                 break
@@ -91,7 +94,7 @@ def get_linked_objects(schema, item, preview_items=None):
 
                             if field_preview:
                                 preview_schema = category_data[related_collection]["schema"]
-                                obj["linked_objects"] = get_linked_objects(preview_schema, obj, preview_items=field_preview)
+                                obj["linked_objects"] = get_linked_objects(preview_schema, obj, preview_items=field_preview, exclude_fields=excluded)
 
                             linked_objects[field].append(obj)
                 
@@ -111,7 +114,7 @@ def get_linked_objects(schema, item, preview_items=None):
 
                                 if field_preview:
                                     preview_schema = category_data[related_collection]["schema"]
-                                    linked_object["linked_objects"] = get_linked_objects(preview_schema, linked_object, preview_items=field_preview)
+                                    linked_object["linked_objects"] = get_linked_objects(preview_schema, linked_object, preview_items=field_preview, exclude_fields=excluded)
 
                                 linked_objects[field] = linked_object
                                 break

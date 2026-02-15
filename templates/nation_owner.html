@@ -286,6 +286,12 @@
 								<th colspan="4" class="resources-header">Population Details</th>
 							</tr>
 							<tr>
+								<th colspan="4">
+									Showing {{ linked_objects["pops"]|length }} of {{ pop_pagination.total_items }} pops
+									(page {{ pop_pagination.page }} of {{ pop_pagination.total_pages }})
+								</th>
+							</tr>
+							<tr>
 								<th>#</th>
 								<th>Race</th>
 								<th>Culture</th>
@@ -328,6 +334,17 @@
 							{% endfor %}
 						</tbody>
 					</table>
+					<div class="pagination-controls" style="margin-top: 8px;">
+						{% if pop_pagination.has_prev %}
+							<a href="{{ url_for('nation_routes.nation_item', item_ref=nation.name, pop_page=pop_pagination.prev_page) }}">Previous</a>
+						{% endif %}
+						{% if pop_pagination.has_prev and pop_pagination.has_next %}
+							<span> | </span>
+						{% endif %}
+						{% if pop_pagination.has_next %}
+							<a href="{{ url_for('nation_routes.nation_item', item_ref=nation.name, pop_page=pop_pagination.next_page) }}">Next</a>
+						{% endif %}
+					</div>
 				</div>
 			</div>
 		</div>

@@ -19,6 +19,15 @@ PRICES = {
     "iron": 150,
 }
 
+NON_RESEARCH_RESOURCE_VALUES = [
+    value for key, value in PRICES.items() if key != "research"
+]
+AVERAGE_NON_RESEARCH_RESOURCE_VALUE = (
+    sum(NON_RESEARCH_RESOURCE_VALUES) / len(NON_RESEARCH_RESOURCE_VALUES)
+    if NON_RESEARCH_RESOURCE_VALUES
+    else 0.0
+)
+
 def value_and_update_stock(
     resources: Dict[str, float],
     stock: Dict[str, float],
@@ -90,6 +99,7 @@ def compute_base_net_value(
     int,
     int,
     Dict[str, Dict[str, Dict[str, float]]],
+    int,
     Dict[str, float],
     Dict[str, float],
     Dict[str, float],
@@ -104,7 +114,11 @@ def compute_base_net_value(
     Returns (base_value, pop_count, job_details, capacity, stock).
     """
     nation_copy = deepcopy(nation)
-    nation_copy["jobs"] = {}
+    locked_jobs = {"partial_undead", "undead", "partial_vampire", "revolutionary"}
+    nation_jobs = nation_copy.get("jobs", {}) or {}
+    nation_copy["jobs"] = {
+        job: count for job, count in nation_jobs.items() if job in locked_jobs
+    }
     modifiers = nation_copy.get("modifiers", [])
     if isinstance(modifiers, list):
         nation_copy["modifiers"] = [
@@ -143,6 +157,10 @@ def compute_base_net_value(
     pop_count = int(calculated.get("pop_count", nation_copy.get("pop_count", 0)) or 0)
     administration = int(calculated.get("administration", nation_copy.get("administration", 0)) or 0)
     job_details = calculated.get("job_details", {}) or {}
+    locked_job_count = 0
+    for job in locked_jobs:
+        locked_job_count += int(nation_jobs.get(job, 0) or 0)
+    job_details = {job: details for job, details in job_details.items() if job not in locked_jobs}
     job_stock = {}
     land_attack = float(calculated.get("land_attack", nation_copy.get("land_attack", 0)) or 0)
     land_defense = float(calculated.get("land_defense", nation_copy.get("land_defense", 0)) or 0)
@@ -153,6 +171,7 @@ def compute_base_net_value(
         pop_count,
         administration,
         job_details,
+        locked_job_count,
         capacity,
         stock,
         job_stock,
@@ -207,6 +226,7 @@ def simulate_optimal_assignments(
     stock: Dict[str, float],
     vassal_rate_total: int,
     base_administration: int,
+    locked_job_count: int = 0,
 ) -> Tuple[float, Dict[str, int]]:
     """
     Greedy simulation: repeatedly pick the best job given current stock/capacity,
@@ -216,6 +236,15 @@ def simulate_optimal_assignments(
     total_value = 0.0
     assignments: Dict[str, int] = {}
     current_stock = deepcopy(stock)
+
+    if locked_job_count:
+        original_pop_count = pop_count
+        pop_count = max(pop_count - locked_job_count, 0)
+        print(
+            f"Locked jobs preserved: {locked_job_count} pops "
+            f"(undead/partial_vampire/revolutionary). "
+            f"Remaining pops to assign: {pop_count} (was {original_pop_count})."
+        )
 
     for _ in range(pop_count):
         best_job = None
@@ -301,6 +330,24 @@ def sum_vassal_military_bonus(nation: Dict[str, Any]) -> int:
     return total
 
 
+def sum_vassal_concessions_cost(nation: Dict[str, Any]) -> float:
+    db = category_data["nations"]["database"]
+    overlord_id = nation.get("_id")
+    overlord_id_str = str(overlord_id or "")
+    if not overlord_id_str:
+        return 0.0
+    vassals = db.find(
+        {"overlord": {"$in": [overlord_id, overlord_id_str]}},
+        {"concessions_chance": 1},
+    )
+    base_cost = AVERAGE_NON_RESEARCH_RESOURCE_VALUE * 4
+    total = 0.0
+    for vassal in vassals:
+        chance = float(vassal.get("concessions_chance", 0) or 0)
+        total += base_cost * chance
+    return total
+
+
 def apply_admin_diminishing_returns(administration: int) -> float:
     if administration <= 10:
         return float(administration)
@@ -332,6 +379,7 @@ def main():
             pop_count,
             administration,
             job_details,
+            locked_job_count,
             capacity,
             _stock,
             job_stock,
@@ -343,7 +391,13 @@ def main():
         ) = compute_base_net_value(nation)
         vassal_rate_total = sum_vassal_type_rates(nation)
         marginal_value, _assignments = simulate_optimal_assignments(
-            pop_count, job_details, capacity, job_stock, vassal_rate_total, administration
+            pop_count,
+            job_details,
+            capacity,
+            job_stock,
+            vassal_rate_total,
+            administration,
+            locked_job_count,
         )
 
         ndp = base_value + marginal_value
@@ -351,9 +405,12 @@ def main():
         effective_admin = apply_admin_diminishing_returns(administration)
         admin_bonus = effective_admin * vassal_rate_total
         ndp += admin_bonus
+        vassal_concessions_cost = sum_vassal_concessions_cost(nation)
+        ndp -= vassal_concessions_cost
         print(
             f"Breakdown {name}: base={base_value:.2f}, marginal={marginal_value:.2f}, "
-            f"admin_bonus={admin_bonus:.2f}, total={ndp:.2f}"
+            f"admin_bonus={admin_bonus:.2f}, vassal_concessions={vassal_concessions_cost:.2f}, "
+            f"total={ndp:.2f}"
         )
         if base_resource_breakdown:
             resource_parts = ", ".join(

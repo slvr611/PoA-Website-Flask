@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, flash, g
+from flask import Blueprint, render_template, request, redirect, flash, g, current_app
 from copy import deepcopy
 from helpers.data_helpers import get_data_on_category, get_data_on_item, get_dropdown_options
 from helpers.render_helpers import get_linked_objects
@@ -10,18 +10,102 @@ from helpers.auth_helpers import admin_required
 from pymongo import ASCENDING
 from forms import form_generator, wtform_to_json
 import json
+from time import perf_counter
 from calculations.field_calculations import calculate_all_fields
+from bson import ObjectId
 
 nation_routes = Blueprint("nation_routes", __name__)
+
+POP_PAGE_SIZE = 100
+
+def _to_object_ids(id_list):
+    object_ids = []
+    for item_id in id_list:
+        try:
+            object_ids.append(ObjectId(item_id))
+        except Exception:
+            continue
+    return object_ids
+
+def _fetch_nation_pops_page(nation_id, page, page_size, pops_schema):
+    nation_id_str = str(nation_id)
+    pop_query = {"nation": nation_id_str}
+    total_pops = mongo.db.pops.count_documents(pop_query)
+
+    total_pages = max(1, (total_pops + page_size - 1) // page_size)
+    page = max(1, min(page, total_pages))
+    skip = (page - 1) * page_size
+
+    sort_by = pops_schema.get("sort_by", ["race", "culture", "religion"])
+    sort_tuples = [(field, ASCENDING) for field in sort_by] if isinstance(sort_by, list) else [(sort_by, ASCENDING)]
+
+    pops = list(
+        mongo.db.pops.find(pop_query, {"_id": 1, "race": 1, "culture": 1, "religion": 1})
+        .sort(sort_tuples)
+        .skip(skip)
+        .limit(page_size)
+    )
+
+    race_ids = list({pop.get("race", "") for pop in pops if pop.get("race")})
+    culture_ids = list({pop.get("culture", "") for pop in pops if pop.get("culture")})
+    religion_ids = list({pop.get("religion", "") for pop in pops if pop.get("religion")})
+
+    races = list(mongo.db.races.find({"_id": {"$in": _to_object_ids(race_ids)}}, {"_id": 1, "name": 1}))
+    cultures = list(mongo.db.cultures.find({"_id": {"$in": _to_object_ids(culture_ids)}}, {"_id": 1, "name": 1}))
+    religions = list(mongo.db.religions.find({"_id": {"$in": _to_object_ids(religion_ids)}}, {"_id": 1, "name": 1}))
+
+    race_lookup = {str(item["_id"]): {"name": item.get("name", "Unknown"), "link": f"/races/item/{item.get('name', item['_id'])}"} for item in races}
+    culture_lookup = {str(item["_id"]): {"name": item.get("name", "Unknown"), "link": f"/cultures/item/{item.get('name', item['_id'])}"} for item in cultures}
+    religion_lookup = {str(item["_id"]): {"name": item.get("name", "Unknown"), "link": f"/religions/item/{item.get('name', item['_id'])}"} for item in religions}
+
+    for pop in pops:
+        pop["link"] = f"/pops/item/{pop.get('_id')}"
+        pop["linked_objects"] = {
+            "race": race_lookup.get(pop.get("race", ""), None),
+            "culture": culture_lookup.get(pop.get("culture", ""), None),
+            "religion": religion_lookup.get(pop.get("religion", ""), None),
+        }
+
+    return pops, {
+        "page": page,
+        "page_size": page_size,
+        "total_items": total_pops,
+        "total_pages": total_pages,
+        "has_prev": page > 1,
+        "has_next": page < total_pages,
+        "prev_page": page - 1,
+        "next_page": page + 1,
+    }
 
 
 
 @nation_routes.route("/nations/item/<item_ref>")
 def nation_item(item_ref):
     """Display a nation's details"""
-    schema, db, nation = get_data_on_item("nations", item_ref)
-    linked_objects = get_linked_objects(schema, nation)
+    request_start = perf_counter()
+    timings = {}
 
+    phase_start = perf_counter()
+    schema, db, nation = get_data_on_item("nations", item_ref)
+    timings["get_data_on_item_ms"] = round((perf_counter() - phase_start) * 1000, 2)
+
+    phase_start = perf_counter()
+    linked_objects = get_linked_objects(schema, nation, exclude_fields={"pops"})
+    timings["get_linked_objects_ms"] = round((perf_counter() - phase_start) * 1000, 2)
+
+    phase_start = perf_counter()
+    pop_page = request.args.get("pop_page", default=1, type=int)
+    pop_page = pop_page if pop_page and pop_page > 0 else 1
+    pops, pop_pagination = _fetch_nation_pops_page(
+        nation.get("_id"),
+        pop_page,
+        POP_PAGE_SIZE,
+        schema.get("properties", {}).get("pops", {})
+    )
+    linked_objects["pops"] = pops
+    timings["load_pops_page_ms"] = round((perf_counter() - phase_start) * 1000, 2)
+
+    phase_start = perf_counter()
     user_is_owner = False
     if g.user:
         user = mongo.db.players.find_one({"id": g.user.get("id")})
@@ -31,14 +115,48 @@ def nation_item(item_ref):
                 if str(character.get("ruling_nation_org", "")) == str(nation["_id"]):
                     user_is_owner = True
                     break
+    timings["ownership_check_ms"] = round((perf_counter() - phase_start) * 1000, 2)
     
     if "jobs" not in nation:
         nation["jobs"] = {}
 
-    calculated_values, breakdowns = calculate_all_fields(deepcopy(nation), schema, "nation", return_breakdowns=True)
-    nation.update(calculated_values)
+    calc_timings = {}
+    breakdowns = nation.get("breakdowns", None)
+    required_breakdown_keys = {"stability_gain_chance", "stability_loss_chance", "resource_production", "resource_consumption", "money_income"}
+    has_cached_breakdowns = isinstance(breakdowns, dict) and required_breakdown_keys.issubset(set(breakdowns.keys()))
+
+    timings["calculate_all_fields_ms"] = 0.0
+    timings["used_cached_calculations"] = True
+
+    # Fallback path for older nations missing cached calculations or breakdowns.
+    if not has_cached_breakdowns:
+        timings["used_cached_calculations"] = False
+        phase_start = perf_counter()
+        calculated_values, breakdowns = calculate_all_fields(
+            deepcopy(nation),
+            schema,
+            "nation",
+            return_breakdowns=True,
+            instrumentation=calc_timings
+        )
+        timings["calculate_all_fields_ms"] = round((perf_counter() - phase_start) * 1000, 2)
+        nation.update(calculated_values)
+        nation["breakdowns"] = breakdowns
+
+        phase_start = perf_counter()
+        mongo.db.nations.update_one(
+            {"_id": nation["_id"]},
+            {
+                "$set": {**calculated_values, "breakdowns": breakdowns},
+                "$unset": {"_calc_cache": ""}
+            }
+        )
+        timings["cache_backfill_ms"] = round((perf_counter() - phase_start) * 1000, 2)
+    else:
+        timings["cache_backfill_ms"] = 0.0
     
-    return render_template(
+    phase_start = perf_counter()
+    rendered = render_template(
         "nation_owner.html",
         title=item_ref,
         schema=schema,
@@ -48,8 +166,20 @@ def nation_item(item_ref):
         cities_config=json_data["cities"],
         user_is_owner=user_is_owner,
         find_dict_in_list=find_dict_in_list,
-        breakdowns=breakdowns
+        breakdowns=breakdowns,
+        pop_pagination=pop_pagination
     )
+    timings["render_template_ms"] = round((perf_counter() - phase_start) * 1000, 2)
+    timings["total_request_ms"] = round((perf_counter() - request_start) * 1000, 2)
+
+    current_app.logger.info(
+        "Nation page timing: nation=%s timings=%s calc_timings=%s",
+        item_ref,
+        timings,
+        calc_timings
+    )
+
+    return rendered
 
 @nation_routes.route("/nations/edit/<item_ref>", methods=["GET"])
 def edit_nation(item_ref):
