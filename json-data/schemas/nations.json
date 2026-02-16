@@ -783,7 +783,7 @@
         "enum": ["Bureaucracy", "Creation", "Military", "Persecution", "Manifest"],
         "laws": {
           "Bureaucracy": {
-            "administrator_magic_production": 0.3333333333333334
+            "bureaucrat_magic_production": 0.3333333333333334
           },
           "Creation": {},
           "Military": {},

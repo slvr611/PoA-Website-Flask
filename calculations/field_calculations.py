@@ -645,14 +645,14 @@ def calculate_job_details(target, district_details, modifier_totals, district_to
         meets_job_requirements = check_job_requirements(target, details, external_modifiers_total)
         if not locked and meets_job_requirements:
             new_details = copy.deepcopy(details)
+            original_job_production = details.get("production", {})
             all_resource_production = 0
             all_resource_upkeep = 0
             all_resource_production_multiplier = 1
             all_resource_upkeep_multiplier = 1
-            all_resource_minimum_production = 1
-            all_resource_minimum_production += modifier_totals.get("minimum_" + job + "_resource_production", 0) + district_totals.get("minimum_" + job + "_resource_production", 0) + city_totals.get("minimum_" + job + "_resource_production", 0) + law_totals.get("minimum_" + job + "_resource_production", 0) + external_modifiers_total.get("minimum_" + job + "_resource_production", 0)
-            all_resource_minimum_production += modifier_totals.get("minimum_job_resource_production", 0) + district_totals.get("minimum_job_resource_production", 0) + city_totals.get("minimum_job_resource_production", 0) + law_totals.get("minimum_job_resource_production", 0) + external_modifiers_total.get("minimum_job_resource_production", 0)
-            all_resource_minimum_production = max(all_resource_minimum_production, 0)
+            minimum_production_bonus = 0
+            minimum_production_bonus += modifier_totals.get("minimum_" + job + "_resource_production", 0) + district_totals.get("minimum_" + job + "_resource_production", 0) + city_totals.get("minimum_" + job + "_resource_production", 0) + law_totals.get("minimum_" + job + "_resource_production", 0) + external_modifiers_total.get("minimum_" + job + "_resource_production", 0)
+            minimum_production_bonus += modifier_totals.get("minimum_job_resource_production", 0) + district_totals.get("minimum_job_resource_production", 0) + city_totals.get("minimum_job_resource_production", 0) + law_totals.get("minimum_job_resource_production", 0) + external_modifiers_total.get("minimum_job_resource_production", 0)
             for source in modifier_sources:
                 for modifier, value in source.items():
                     if modifier.startswith("imperial_") and target.get("empire", False):
@@ -682,12 +682,18 @@ def calculate_job_details(target, district_details, modifier_totals, district_to
                     new_production += all_resource_production
                     new_production = new_production * all_resource_production_multiplier
                     if all_resource_production_multiplier < 1:
-                        new_production = int(math.ceil(new_production))
+                        new_production = math.ceil(new_production)
                     elif all_resource_production_multiplier > 1:
-                        new_production = int(math.floor(new_production))
+                        new_production = math.floor(new_production)
                     else:
-                        new_production = int(round(new_production))
-                    new_production = max(new_production, all_resource_minimum_production)
+                        # Keep fractional values (e.g. 1/3) so rounding happens after
+                        # multiplying by assigned worker count in sum_job_totals.
+                        pass
+                    # Preserve fractional modifier-added production (e.g. Bureaucracy's 1/3 magic).
+                    # Baseline minimum of 1 only applies to resources a job natively produces.
+                    base_resource_minimum = 1 if original_job_production.get(resource, 0) > 0 else 0
+                    resource_minimum = max(base_resource_minimum + minimum_production_bonus, 0)
+                    new_production = max(new_production, resource_minimum)
                     new_details["production"][resource] = new_production
 
             for resource in new_details.get("upkeep", {}):

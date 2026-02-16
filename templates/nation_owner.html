@@ -930,7 +930,8 @@
 									<td>
 										{% if "production" in job %}
 											{% for resource, prod in job.production.items() %}
-												{{ resource }}: {{ prod }}<br>
+												{% set prod_val = (prod|float)|round(2) %}
+												{{ resource }}: {{ prod_val|int if prod_val == (prod_val|int) else "%.2f"|format(prod_val) }}<br>
 											{% endfor %}
 										{% endif %}
 									</td>
