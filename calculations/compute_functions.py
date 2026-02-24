@@ -866,7 +866,7 @@ def compute_progress_per_session(field, target, base_value, field_schema, overal
             total_progress = 0
         
         # Store the calculated value in the quest
-        quest["total_progress_per_tick"] = max(int(total_progress), 0)
+        quest["total_progress_per_tick"] = min(max(int(total_progress), 0), 5)
     
     return progress_quests
 
