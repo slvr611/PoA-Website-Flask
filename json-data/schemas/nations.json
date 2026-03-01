@@ -1059,13 +1059,17 @@
           "Some Mercenaries": {
             "mercenary_limit_mult": 0.5
           },
-          "Mercenary Reliance": {
+          "Mercenary Presence": {
             "mercenary_limit_mult": 0.75,
             "strength": -1
           },
+          "Mercenary Reliance": {
+            "mercenary_limit_mult": 0.75,
+            "strength": -2
+          },
           "Mercenary Military": {
             "mercenary_limit_mult": 1.25,
-            "strength": -2,
+            "strength": -4,
             "mercenary_strength": 1
           }
         }
