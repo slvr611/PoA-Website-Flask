@@ -1050,7 +1050,7 @@
         "bsonType": "enum",
         "label": "Mercenary Law",
         "description": "The degree to which the nation's military is geared to employ mercenaries",
-        "enum": ["No Mercenaries", "Some Mercenaries", "Mercenary Reliance", "Mercenary Military"],
+        "enum": ["No Mercenaries", "Some Mercenaries", "Mercenary Presence", "Mercenary Reliance", "Mercenary Military"],
         "default": "Some Mercenaries",
         "laws": {
           "No Mercenaries": {
