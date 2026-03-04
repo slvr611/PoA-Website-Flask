@@ -6,7 +6,7 @@
             <a href="{{ base_url }}/page/1" class="pagination-btn">First</a>
             <a href="{{ base_url }}/page/{{ current_page - 1 }}" class="pagination-btn">&laquo; Previous</a>
         {% endif %}
-        
+
         {% set start_page = current_page - 2 if current_page - 2 > 0 else 1 %}
         {% set end_page = current_page + 3 if current_page + 3 <= total_pages else total_pages + 1 %}
         {% for p in range(start_page, end_page) %}
@@ -16,7 +16,7 @@
                 <a href="{{ base_url }}/page/{{ p }}" class="pagination-btn">{{ p }}</a>
             {% endif %}
         {% endfor %}
-        
+
         {% if current_page < total_pages %}
             <a href="{{ base_url }}/page/{{ current_page + 1 }}" class="pagination-btn">Next &raquo;</a>
             <a href="{{ base_url }}/page/{{ total_pages }}" class="pagination-btn">Last</a>
@@ -25,351 +25,395 @@
 </div>
 {% endmacro %}
 
-{% macro render_field_change(before_value, after_value, view_access_level, field_schema=None, collection_name=None, preview_references=None) %}
-    {% if field_schema and field_schema.get("view_access_level", 0) > view_access_level %}
-        <span class="restricted-field">Restricted content</span>
-    {% elif before_value is mapping and after_value is mapping %}
-        {# Handle dictionaries - only show changed keys #}
-        {% set changed_keys = [] %}
-        {% set all_keys = (before_value.keys()|list + after_value.keys()|list)|unique|list %}
-        {% for dict_key in all_keys %}
-            {% if before_value.get(dict_key) != after_value.get(dict_key) %}
-                {% set _ = changed_keys.append(dict_key) %}
-            {% endif %}
-        {% endfor %}
-        
-        {% if changed_keys|length > 0 %}
-            <div class="dict-changes">
-                {% for dict_key in changed_keys %}
-                    <div class="dict-change-item">
-                        <span class="dict-key">{{ dict_key }}:</span> 
-                        {{ render_field_change(before_value.get(dict_key), after_value.get(dict_key), view_access_level, field_schema, collection_name, preview_references) }}
-                    </div>
-                {% endfor %}
-            </div>
-        {% else %}
-            <span class="no-changes">No changes</span>
+
+{# ===========================================================
+   Private helpers — not intended for direct use outside this file
+   =========================================================== #}
+
+{# Display a scalar value, handling None / "" / 0 explicitly #}
+{% macro _val(v) %}{% if v is none %}None{% elif v == "" %}""{% elif v == 0 %}0{% else %}{{ v }}{% endif %}{% endmacro %}
+
+{# Return a human-readable label for a dict item.
+   Tries common "name" fields in priority order. #}
+{% macro _item_label(item) %}
+    {% set ns = namespace(found='') %}
+    {% for k in ['name', 'quest_name', 'source', 'field', 'key', 'type', 'modifier'] %}
+        {% if ns.found == '' and item.get(k) %}
+            {% set ns.found = item.get(k) | string %}
         {% endif %}
-    {% elif before_value is sequence and before_value is not string and after_value is sequence and after_value is not string %}
-        <div class="array-changes">
-            {% if (before_value and before_value[0] is mapping) or (after_value and after_value[0] is mapping) %}
-                {# Show modified items #}
-                {% for i in range([before_value|length, after_value|length]|min) %}
-                    {% set before_item = before_value[i] if i < before_value|length else {} %}
-                    {% set after_item = after_value[i] if i < after_value|length else {} %}
-                    {% set item_changed = false %}
-                    
-                    {% if before_item is mapping and after_item is mapping %}
-                        {% for item_key in (before_item.keys()|list + after_item.keys()|list)|unique|list %}
-                            {% if before_item.get(item_key) != after_item.get(item_key) %}
-                                {% set item_changed = true %}
-                            {% endif %}
-                        {% endfor %}
-                        
-                        {% if item_changed %}
-                            <div class="array-item-changed">
-                                <div class="array-index">Item {{ i+1 }}:</div>
-                                {{ render_field_change(before_item, after_item, view_access_level, field_schema, collection_name, preview_references) }}
-                            </div>
-                        {% endif %}
-                    {% elif before_item != after_item %}
-                        <div class="array-item-changed">
-                            <div class="array-index">Item {{ i+1 }}:</div>
-                            <span class="simple-change">
-                                {% if before_item is none %}None{% elif before_item == "" %}""{% elif before_item == 0 %}0{% else %}{{ before_item }}{% endif %} → 
-                                {% if after_item is none %}None{% elif after_item == "" %}""{% elif after_item == 0 %}0{% else %}{{ after_item }}{% endif %}
-                            </span>
+    {% endfor %}
+    {% if ns.found %}{{ ns.found }}{% elif item._id is defined %}{{ item._id }}{% else %}item{% endif %}
+{% endmacro %}
+
+{# Render all key:value pairs of a dict, skipping _id #}
+{% macro _item_fields(item) %}
+    {% for k, v in item.items() %}
+        {% if k != '_id' %}
+            <div class="dict-change-item">
+                <span class="dict-key">{{ k }}:</span>
+                <span class="dict-value">{% if v is mapping %}<em>(nested dict)</em>{% elif v is sequence and v is not string %}[{{ v | join(', ') }}]{% else %}{{ _val(v) }}{% endif %}</span>
+            </div>
+        {% endif %}
+    {% endfor %}
+{% endmacro %}
+
+{# Render fields that differ between two versions of the same item.
+   Handles nested dicts and simple values. #}
+{% macro _item_diff(before_item, after_item) %}
+    {% set all_keys = (before_item.keys()|list + after_item.keys()|list)|unique|list %}
+    {% set ns = namespace(any_change=false) %}
+    {% for k in all_keys %}
+        {% if k != '_id' %}
+            {% set bv = before_item.get(k) %}
+            {% set av = after_item.get(k) %}
+            {% if bv != av %}
+                {% set ns.any_change = true %}
+                <div class="dict-change-item">
+                    <span class="dict-key">{{ k }}:</span>
+                    {% if bv is mapping and av is mapping %}
+                        {# Recurse for nested dicts (e.g. nodes/walls in cities) #}
+                        <div class="nested-dict-change">
+                            {% set nested_keys = (bv.keys()|list + av.keys()|list)|unique|list %}
+                            {% for nk in nested_keys %}
+                                {% if bv.get(nk) != av.get(nk) %}
+                                    <div class="dict-change-item">
+                                        <span class="dict-key">{{ nk }}:</span>
+                                        <span class="simple-change">{{ _val(bv.get(nk)) }} → {{ _val(av.get(nk)) }}</span>
+                                    </div>
+                                {% endif %}
+                            {% endfor %}
                         </div>
+                    {% elif bv is sequence and bv is not string and av is sequence and av is not string %}
+                        <span class="simple-change">
+                            [{{ bv | join(', ') }}] → [{{ av | join(', ') }}]
+                        </span>
+                    {% else %}
+                        <span class="simple-change">{{ _val(bv) }} → {{ _val(av) }}</span>
                     {% endif %}
-                {% endfor %}
-                
-                {# Show added items #}
-                {% if after_value|length > before_value|length %}
-                    <div class="array-items-added">
-                        <span class="array-action">Added:</span>
-                        {% for i in range(before_value|length, after_value|length) %}
-                            <div class="array-item-added">
-                                <div class="array-index">Item {{ i+1 }}:</div>
-                                {% if after_value[i] is mapping %}
-                                    {% for dict_key, dict_value in after_value[i].items() %}
-                                        <div class="dict-change-item">
-                                            <span class="dict-key">{{ dict_key }}:</span> 
-                                            <span class="dict-value">
-                                                {% if dict_value is none %}None{% elif dict_value == "" %}""{% elif dict_value == 0 %}0{% else %}{{ dict_value }}{% endif %}
-                                            </span>
-                                        </div>
-                                    {% endfor %}
-                                {% else %}
-                                    <span class="dict-value">
-                                        {% if after_value[i] is none %}None{% elif after_value[i] == "" %}""{% elif after_value[i] == 0 %}0{% else %}{{ after_value[i] }}{% endif %}
-                                    </span>
-                                {% endif %}
-                            </div>
-                        {% endfor %}
-                    </div>
-                {% endif %}
-                
-                {# Show removed items #}
-                {% if before_value|length > after_value|length %}
-                    <div class="array-items-removed">
-                        <span class="array-action">Removed:</span>
-                        {% for i in range(after_value|length, before_value|length) %}
-                            <div class="array-item-removed">
-                                <div class="array-index">Item {{ i+1 }}:</div>
-                                {% if before_value[i] is mapping %}
-                                    {% for dict_key, dict_value in before_value[i].items() %}
-                                        <div class="dict-change-item">
-                                            <span class="dict-key">{{ dict_key }}:</span> 
-                                            <span class="dict-value">
-                                                {% if dict_value is none %}None{% elif dict_value == "" %}""{% elif dict_value == 0 %}0{% else %}{{ dict_value }}{% endif %}
-                                            </span>
-                                        </div>
-                                    {% endfor %}
-                                {% else %}
-                                    <span class="dict-value">
-                                        {% if before_value[i] is none %}None{% elif before_value[i] == "" %}""{% elif before_value[i] == 0 %}0{% else %}{{ before_value[i] }}{% endif %}
-                                    </span>
-                                {% endif %}
-                            </div>
-                        {% endfor %}
-                    </div>
-                {% endif %}
-            {% else %}
-                {# Handle simple arrays #}
-                {% if before_value|length != after_value|length or before_value != after_value %}
-                    <div class="array-before">
-                        <span class="array-label">Before:</span> 
-                        {% if before_value %}
-                            [{% for item in before_value %}{% if item is none %}None{% elif item == "" %}""{% elif item == 0 %}0{% else %}{{ item }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}]
-                        {% else %}
-                            []
-                        {% endif %}
-                    </div>
-                    <div class="array-after">
-                        <span class="array-label">After:</span> 
-                        {% if after_value %}
-                            [{% for item in after_value %}{% if item is none %}None{% elif item == "" %}""{% elif item == 0 %}0{% else %}{{ item }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}]
-                        {% else %}
-                            []
-                        {% endif %}
-                    </div>
-                {% else %}
-                    <span class="no-changes">No changes</span>
-                {% endif %}
+                </div>
             {% endif %}
-        </div>
-    {% elif field_schema and field_schema.bsonType == "linked_object" and collection_name and preview_references %}
-        {# Handle linked objects with references #}
-        {% set before_id = before_value|string if before_value else None %}
-        {% set after_id = after_value|string if after_value else None %}
-        
-        <span class="linked-object-change">
-            {% if before_id and before_id in preview_references[collection_name] %}
-                <a href="{{ preview_references[collection_name][before_id]['link'] }}">{{ preview_references[collection_name][before_id]['name'] }}</a>
-            {% else %}
-                None
-            {% endif %}
-            →
-            {% if after_id and after_id in preview_references[collection_name] %}
-                <a href="{{ preview_references[collection_name][after_id]['link'] }}">{{ preview_references[collection_name][after_id]['name'] }}</a>
-            {% else %}
-                None
-            {% endif %}
-        </span>
-    {% else %}
-        {# Simple value change #}
-        <span class="simple-change">
-            {% if before_value is none %}None{% elif before_value == "" %}""{% elif before_value == 0 %}0{% else %}{{ before_value }}{% endif %} → 
-            {% if after_value is none %}None{% elif after_value == "" %}""{% elif after_value == 0 %}0{% else %}{{ after_value }}{% endif %}
-        </span>
+        {% endif %}
+    {% endfor %}
+    {% if not ns.any_change %}
+        <span class="no-changes">No field changes</span>
     {% endif %}
 {% endmacro %}
 
+{# Render a diff for an array whose dict items carry stable ``_id`` values.
+   Classifies each item as ADDED, REMOVED, MODIFIED, or (if order changed)
+   shows a REORDERED summary.  Items with identical content in both snapshots
+   at the same relative position are silently skipped. #}
+{% macro _id_array_diff(before_value, after_value) %}
+    {# --- ADDED (present in after, absent from before by _id) --- #}
+    {% set ns = namespace(count=0) %}
+    {% for after_item in after_value %}
+        {% if after_item is mapping and after_item._id is defined %}
+            {% set matches = before_value | selectattr('_id', 'equalto', after_item._id) | list %}
+            {% if not matches %}
+                {% if ns.count == 0 %}<div class="array-section array-items-added"><div class="array-section-header">Added:</div>{% endif %}
+                {% set ns.count = ns.count + 1 %}
+                <div class="array-item-added">
+                    <div class="array-item-header">+ {{ _item_label(after_item) }}</div>
+                    <div class="array-item-body">{{ _item_fields(after_item) }}</div>
+                </div>
+            {% endif %}
+        {% endif %}
+    {% endfor %}
+    {% if ns.count > 0 %}</div>{% endif %}
+
+    {# --- REMOVED (present in before, absent from after by _id) --- #}
+    {% set ns = namespace(count=0) %}
+    {% for before_item in before_value %}
+        {% if before_item is mapping and before_item._id is defined %}
+            {% set matches = after_value | selectattr('_id', 'equalto', before_item._id) | list %}
+            {% if not matches %}
+                {% if ns.count == 0 %}<div class="array-section array-items-removed"><div class="array-section-header">Removed:</div>{% endif %}
+                {% set ns.count = ns.count + 1 %}
+                <div class="array-item-removed">
+                    <div class="array-item-header">- {{ _item_label(before_item) }}</div>
+                    <div class="array-item-body">{{ _item_fields(before_item) }}</div>
+                </div>
+            {% endif %}
+        {% endif %}
+    {% endfor %}
+    {% if ns.count > 0 %}</div>{% endif %}
+
+    {# --- MODIFIED (present in both, content changed) --- #}
+    {% set ns = namespace(count=0) %}
+    {% for after_item in after_value %}
+        {% if after_item is mapping and after_item._id is defined %}
+            {% set before_matches = before_value | selectattr('_id', 'equalto', after_item._id) | list %}
+            {% if before_matches %}
+                {% set before_item = before_matches[0] %}
+                {% set all_keys = (before_item.keys()|list + after_item.keys()|list)|unique|list %}
+                {% set ns2 = namespace(changed=false) %}
+                {% for k in all_keys %}
+                    {% if k != '_id' and before_item.get(k) != after_item.get(k) %}
+                        {% set ns2.changed = true %}
+                    {% endif %}
+                {% endfor %}
+                {% if ns2.changed %}
+                    {% if ns.count == 0 %}<div class="array-section array-items-modified"><div class="array-section-header">Modified:</div>{% endif %}
+                    {% set ns.count = ns.count + 1 %}
+                    <div class="array-item-changed">
+                        <div class="array-item-header">~ {{ _item_label(after_item) }}</div>
+                        <div class="array-item-body">{{ _item_diff(before_item, after_item) }}</div>
+                    </div>
+                {% endif %}
+            {% endif %}
+        {% endif %}
+    {% endfor %}
+    {% if ns.count > 0 %}</div>{% endif %}
+
+    {# --- REORDERED (same items, different sequence among surviving items) --- #}
+    {% set before_common = [] %}
+    {% set after_common  = [] %}
+    {% for item in before_value %}
+        {% if item is mapping and item._id is defined %}
+            {% set fwd = after_value | selectattr('_id', 'equalto', item._id) | list %}
+            {% if fwd %}{% set _ = before_common.append(item._id) %}{% endif %}
+        {% endif %}
+    {% endfor %}
+    {% for item in after_value %}
+        {% if item is mapping and item._id is defined %}
+            {% set bwd = before_value | selectattr('_id', 'equalto', item._id) | list %}
+            {% if bwd %}{% set _ = after_common.append(item._id) %}{% endif %}
+        {% endif %}
+    {% endfor %}
+    {% if before_common != after_common and before_common|length > 1 %}
+        <div class="array-section array-items-reordered">
+            <div class="array-section-header">Reordered:</div>
+            <div class="reorder-detail">
+                <div class="reorder-row">
+                    <span class="reorder-label">Before:</span>
+                    {% for item_id in before_common %}
+                        {% set items = before_value | selectattr('_id', 'equalto', item_id) | list %}
+                        {% if items %}<span class="reorder-item">{{ _item_label(items[0]) }}</span>{% if not loop.last %} <span class="reorder-arrow">→</span> {% endif %}{% endif %}
+                    {% endfor %}
+                </div>
+                <div class="reorder-row">
+                    <span class="reorder-label">After:</span>
+                    {% for item_id in after_common %}
+                        {% set items = after_value | selectattr('_id', 'equalto', item_id) | list %}
+                        {% if items %}<span class="reorder-item">{{ _item_label(items[0]) }}</span>{% if not loop.last %} <span class="reorder-arrow">→</span> {% endif %}{% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    {% endif %}
+{% endmacro %}
+
+{# Render a diff for an array whose items do NOT have stable IDs (legacy data).
+   Uses positional matching. #}
+{% macro _positional_array_diff(before_value, after_value) %}
+    {% if (before_value and before_value[0] is mapping) or (after_value and after_value[0] is mapping) %}
+        {# Dict-item arrays — match by position #}
+        {% for i in range([before_value|length, after_value|length]|min) %}
+            {% set before_item = before_value[i] if i < before_value|length else {} %}
+            {% set after_item  = after_value[i]  if i < after_value|length  else {} %}
+            {% if before_item is mapping and after_item is mapping %}
+                {% set all_keys = (before_item.keys()|list + after_item.keys()|list)|unique|list %}
+                {% set ns = namespace(changed=false) %}
+                {% for k in all_keys %}
+                    {% if before_item.get(k) != after_item.get(k) %}{% set ns.changed = true %}{% endif %}
+                {% endfor %}
+                {% if ns.changed %}
+                    <div class="array-item-changed">
+                        <div class="array-index">Item {{ i+1 }}:</div>
+                        <div class="array-item-body">{{ _item_diff(before_item, after_item) }}</div>
+                    </div>
+                {% endif %}
+            {% elif before_item != after_item %}
+                <div class="array-item-changed">
+                    <div class="array-index">Item {{ i+1 }}:</div>
+                    <span class="simple-change">{{ _val(before_item) }} → {{ _val(after_item) }}</span>
+                </div>
+            {% endif %}
+        {% endfor %}
+
+        {% if after_value|length > before_value|length %}
+            <div class="array-section array-items-added">
+                <div class="array-section-header">Added:</div>
+                {% for i in range(before_value|length, after_value|length) %}
+                    <div class="array-item-added">
+                        <div class="array-index">Item {{ i+1 }}:</div>
+                        {% if after_value[i] is mapping %}{{ _item_fields(after_value[i]) }}{% else %}<span class="dict-value">{{ _val(after_value[i]) }}</span>{% endif %}
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        {% if before_value|length > after_value|length %}
+            <div class="array-section array-items-removed">
+                <div class="array-section-header">Removed:</div>
+                {% for i in range(after_value|length, before_value|length) %}
+                    <div class="array-item-removed">
+                        <div class="array-index">Item {{ i+1 }}:</div>
+                        {% if before_value[i] is mapping %}{{ _item_fields(before_value[i]) }}{% else %}<span class="dict-value">{{ _val(before_value[i]) }}</span>{% endif %}
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% else %}
+        {# Simple scalar arrays #}
+        <div class="array-before">
+            <span class="array-label">Before:</span>
+            [{% for item in before_value %}{{ _val(item) }}{% if not loop.last %}, {% endif %}{% endfor %}]
+        </div>
+        <div class="array-after">
+            <span class="array-label">After:</span>
+            [{% for item in after_value %}{{ _val(item) }}{% if not loop.last %}, {% endif %}{% endfor %}]
+        </div>
+    {% endif %}
+{% endmacro %}
+
+{# Detect whether an array contains dict items with stable ``_id`` fields. #}
+{% macro _has_ids(lst) %}
+    {# Returns the string "true" or "false" — compare with == "true" at call site #}
+    {% set ns = namespace(found=false) %}
+    {% for item in lst %}
+        {% if item is mapping and item._id is defined %}{% set ns.found = true %}{% endif %}
+    {% endfor %}
+    {{ ns.found }}
+{% endmacro %}
+
+
+{# ===========================================================
+   Public macros
+   =========================================================== #}
+
+{# Render a single field's before/after difference.
+   Handles: nested dicts, arrays (ID-aware or positional),
+            linked objects, and plain scalars. #}
+{% macro render_field_change(before_value, after_value, view_access_level, field_schema=None, collection_name=None, preview_references=None) %}
+    {% if field_schema and field_schema.get("view_access_level", 0) > view_access_level %}
+        <span class="restricted-field">Restricted content</span>
+
+    {% elif before_value is mapping and after_value is mapping %}
+        {# Nested dict — recurse into changed keys only #}
+        {% set all_keys = (before_value.keys()|list + after_value.keys()|list)|unique|list %}
+        {% set ns = namespace(any=false) %}
+        {% for dict_key in all_keys %}
+            {% if before_value.get(dict_key) != after_value.get(dict_key) %}
+                {% set ns.any = true %}
+                <div class="dict-changes">
+                    <div class="dict-change-item">
+                        <span class="dict-key">{{ dict_key }}:</span>
+                        {{ render_field_change(before_value.get(dict_key), after_value.get(dict_key), view_access_level, field_schema, collection_name, preview_references) }}
+                    </div>
+                </div>
+            {% endif %}
+        {% endfor %}
+        {% if not ns.any %}<span class="no-changes">No changes</span>{% endif %}
+
+    {% elif before_value is sequence and before_value is not string
+          and after_value is sequence and after_value is not string %}
+        {# Array field #}
+        <div class="array-changes">
+            {# Use ID-aware diff when at least one list has items with _id #}
+            {% set combined = before_value | list + after_value | list %}
+            {% set ns = namespace(has_ids=false) %}
+            {% for item in combined %}
+                {% if item is mapping and item._id is defined %}{% set ns.has_ids = true %}{% endif %}
+            {% endfor %}
+
+            {% if ns.has_ids %}
+                {{ _id_array_diff(before_value, after_value) }}
+            {% else %}
+                {{ _positional_array_diff(before_value, after_value) }}
+            {% endif %}
+        </div>
+
+    {% elif field_schema and field_schema.bsonType == "linked_object" and collection_name and preview_references %}
+        {# Linked object reference #}
+        {% set before_id = before_value|string if before_value else None %}
+        {% set after_id  = after_value|string  if after_value  else None %}
+        <span class="linked-object-change">
+            {% if before_id and before_id in preview_references[collection_name] %}
+                <a href="{{ preview_references[collection_name][before_id]['link'] }}">{{ preview_references[collection_name][before_id]['name'] }}</a>
+            {% else %}None{% endif %}
+            →
+            {% if after_id and after_id in preview_references[collection_name] %}
+                <a href="{{ preview_references[collection_name][after_id]['link'] }}">{{ preview_references[collection_name][after_id]['name'] }}</a>
+            {% else %}None{% endif %}
+        </span>
+
+    {% else %}
+        {# Plain scalar #}
+        <span class="simple-change">{{ _val(before_value) }} → {{ _val(after_value) }}</span>
+    {% endif %}
+{% endmacro %}
+
+
+{# Render a full change preview for a document.
+   Shows each changed field with its label and a diff of before vs after. #}
 {% macro render_changes_preview(before_data, after_data, target_schema, preview_references, view_access_level) %}
     <div class="changes-preview">
         {% if before_data is mapping and after_data is mapping %}
             {% set all_keys = (before_data.keys()|list + after_data.keys()|list)|unique|list %}
+            {% set ns = namespace(any=false) %}
             {% for key in all_keys %}
                 {% set before_value = before_data.get(key) %}
-                {% set after_value = after_data.get(key) %}
+                {% set after_value  = after_data.get(key) %}
                 {% set field_schema = target_schema.properties.get(key, {}) %}
                 {% set required_view_level = field_schema.get("view_access_level", 0) %}
-                
+
                 {% if before_value != after_value or (key in before_data) != (key in after_data) %}
+                    {% set ns.any = true %}
                     <div class="field-change">
                         <div class="field-label">{{ field_schema.get("label", key) }}:</div>
                         <div class="field-value">
                             {% if required_view_level > view_access_level %}
                                 <span class="restricted-field">Restricted content</span>
-                            {% elif (key == "districts" or key == "cities") and before_value is sequence and after_value is sequence %}
-                                {% if after_value|length > before_value|length %}
-                                    <span>Added: {{ after_value|length - before_value|length }} new {{ key }}</span>
-                                {% endif %}
-                                
-                                {# Show modified items #}
-                                {% for i in range([before_value|length, after_value|length]|min) %}
-                                    {% set before_item = before_value[i] if i < before_value|length else {} %}
-                                    {% set after_item = after_value[i] if i < after_value|length else {} %}
-                                    
-                                    {# Direct comparison of items #}
-                                    {% if before_item != after_item %}
-                                        <div class="array-item-changed">
-                                            <div class="array-index">{{ key|capitalize }} {{ i+1 }}:</div>
-                                            <div class="dict-changes">
-                                                {% if before_item is mapping and after_item is mapping %}
-                                                    {% for item_key in (before_item.keys()|list + after_item.keys()|list)|unique|list %}
-                                                        {% if before_item.get(item_key) != after_item.get(item_key) %}
-                                                            <div class="dict-change-item">
-                                                                <span class="dict-key">{{ item_key }}:</span>
-                                                                <span class="dict-value">
-                                                                    {% if before_item.get(item_key) is none %}None{% elif before_item.get(item_key) == "" %}""{% elif before_item.get(item_key) == 0 %}0{% else %}{{ before_item.get(item_key) }}{% endif %} → 
-                                                                    {% if after_item.get(item_key) is none %}None{% elif after_item.get(item_key) == "" %}""{% elif after_item.get(item_key) == 0 %}0{% else %}{{ after_item.get(item_key) }}{% endif %}
-                                                                </span>
-                                                            </div>
-                                                        {% endif %}
-                                                    {% endfor %}
-                                                {% else %}
-                                                    <div class="dict-change-item">
-                                                        <span class="dict-value">
-                                                            {% if before_item is none %}None{% elif before_item == "" %}""{% elif before_item == 0 %}0{% else %}{{ before_item }}{% endif %} → 
-                                                            {% if after_item is none %}None{% elif after_item == "" %}""{% elif after_item == 0 %}0{% else %}{{ after_item }}{% endif %}
-                                                        </span>
-                                                    </div>
-                                                {% endif %}
-                                            </div>
-                                        </div>
-                                    {% endif %}
-                                {% endfor %}
-                                
-                                {# Show added items #}
-                                {% if after_value|length > before_value|length %}
-                                    <div class="array-items-added">
-                                        <span class="array-action">Added:</span>
-                                        {% for i in range(before_value|length, after_value|length) %}
-                                            <div class="array-item-added">
-                                                <div class="array-index">{{ key|capitalize }} {{ i+1 }}:</div>
-                                                {% if after_value[i] is mapping %}
-                                                    {% for dict_key, dict_value in after_value[i].items() %}
-                                                        <div class="dict-change-item">
-                                                            <span class="dict-key">{{ dict_key }}:</span> 
-                                                            <span class="dict-value">
-                                                                {% if dict_value is none %}None{% elif dict_value == "" %}""{% elif dict_value == 0 %}0{% else %}{{ dict_value }}{% endif %}
-                                                            </span>
-                                                        </div>
-                                                    {% endfor %}
-                                                {% else %}
-                                                    <span class="dict-value">
-                                                        {% if after_value[i] is none %}None{% elif after_value[i] == "" %}""{% elif after_value[i] == 0 %}0{% else %}{{ after_value[i] }}{% endif %}
-                                                    </span>
-                                                {% endif %}
-                                            </div>
-                                        {% endfor %}
-                                    </div>
-                                {% endif %}
-                                
-                                {# Show removed items #}
-                                {% if before_value|length > after_value|length %}
-                                    <div class="array-items-removed">
-                                        <span class="array-action">Removed:</span>
-                                        {% for i in range(after_value|length, before_value|length) %}
-                                            <div class="array-item-removed">
-                                                <div class="array-index">{{ key|capitalize }} {{ i+1 }}:</div>
-                                                {% if before_value[i] is mapping %}
-                                                    {% for dict_key, dict_value in before_value[i].items() %}
-                                                        <div class="dict-change-item">
-                                                            <span class="dict-key">{{ dict_key }}:</span> 
-                                                            <span class="dict-value">
-                                                                {% if dict_value is none %}None{% elif dict_value == "" %}""{% elif dict_value == 0 %}0{% else %}{{ dict_value }}{% endif %}
-                                                            </span>
-                                                        </div>
-                                                    {% endfor %}
-                                                {% else %}
-                                                    <span class="dict-value">
-                                                        {% if before_value[i] is none %}None{% elif before_value[i] == "" %}""{% elif before_value[i] == 0 %}0{% else %}{{ before_value[i] }}{% endif %}
-                                                    </span>
-                                                {% endif %}
-                                            </div>
-                                        {% endfor %}
-                                    </div>
-                                {% endif %}
+
                             {% elif key not in before_data %}
-                                {# Field was added #}
-                                <span class="field-added">Added: 
+                                {# Entirely new field #}
+                                <span class="field-added">Added:
                                     {% if after_value is mapping %}
-                                        <div class="dict-added">
-                                            {% for dict_key, dict_value in after_value.items() %}
-                                                <div class="dict-change-item">
-                                                    <span class="dict-key">{{ dict_key }}:</span> 
-                                                    <span class="dict-value">
-                                                        {% if dict_value is none %}None{% elif dict_value == "" %}""{% elif dict_value == 0 %}0{% else %}{{ dict_value }}{% endif %}
-                                                    </span>
-                                                </div>
-                                            {% endfor %}
-                                        </div>
+                                        <div class="dict-added">{{ _item_fields(after_value) }}</div>
                                     {% elif after_value is sequence and after_value is not string %}
                                         <div class="array-added">
                                             {% if after_value and after_value[0] is mapping %}
                                                 {% for item in after_value %}
                                                     <div class="array-item-added">
                                                         <div class="array-index">Item {{ loop.index }}:</div>
-                                                        {% for dict_key, dict_value in item.items() %}
-                                                            <div class="dict-change-item">
-                                                                <span class="dict-key">{{ dict_key }}:</span> 
-                                                                <span class="dict-value">
-                                                                    {% if dict_value is none %}None{% elif dict_value == "" %}""{% elif dict_value == 0 %}0{% else %}{{ dict_value }}{% endif %}
-                                                                </span>
-                                                            </div>
-                                                        {% endfor %}
+                                                        {{ _item_fields(item) }}
                                                     </div>
                                                 {% endfor %}
                                             {% else %}
-                                                [{% for item in after_value %}{% if item is none %}None{% elif item == "" %}""{% elif item == 0 %}0{% else %}{{ item }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}]
+                                                [{% for item in after_value %}{{ _val(item) }}{% if not loop.last %}, {% endif %}{% endfor %}]
                                             {% endif %}
                                         </div>
                                     {% else %}
-                                        {% if after_value is none %}None{% elif after_value == "" %}""{% elif after_value == 0 %}0{% else %}{{ after_value }}{% endif %}
+                                        {{ _val(after_value) }}
                                     {% endif %}
                                 </span>
+
                             {% elif key not in after_data %}
-                                {# Field was removed #}
-                                <span class="field-removed">Removed: 
+                                {# Field entirely removed #}
+                                <span class="field-removed">Removed:
                                     {% if before_value is mapping %}
-                                        <div class="dict-removed">
-                                            {% for dict_key, dict_value in before_value.items() %}
-                                                <div class="dict-change-item">
-                                                    <span class="dict-key">{{ dict_key }}:</span> 
-                                                    <span class="dict-value">
-                                                        {% if dict_value is none %}None{% elif dict_value == "" %}""{% elif dict_value == 0 %}0{% else %}{{ dict_value }}{% endif %}
-                                                    </span>
-                                                </div>
-                                            {% endfor %}
-                                        </div>
+                                        <div class="dict-removed">{{ _item_fields(before_value) }}</div>
                                     {% elif before_value is sequence and before_value is not string %}
                                         <div class="array-removed">
                                             {% if before_value and before_value[0] is mapping %}
                                                 {% for item in before_value %}
                                                     <div class="array-item-removed">
                                                         <div class="array-index">Item {{ loop.index }}:</div>
-                                                        {% for dict_key, dict_value in item.items() %}
-                                                            <div class="dict-change-item">
-                                                                <span class="dict-key">{{ dict_key }}:</span> 
-                                                                <span class="dict-value">
-                                                                    {% if dict_value is none %}None{% elif dict_value == "" %}""{% elif dict_value == 0 %}0{% else %}{{ dict_value }}{% endif %}
-                                                                </span>
-                                                            </div>
-                                                        {% endfor %}
+                                                        {{ _item_fields(item) }}
                                                     </div>
                                                 {% endfor %}
                                             {% else %}
-                                                [{% for item in before_value %}{% if item is none %}None{% elif item == "" %}""{% elif item == 0 %}0{% else %}{{ item }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}]
+                                                [{% for item in before_value %}{{ _val(item) }}{% if not loop.last %}, {% endif %}{% endfor %}]
                                             {% endif %}
                                         </div>
                                     {% else %}
-                                        {% if before_value is none %}None{% elif before_value == "" %}""{% elif before_value == 0 %}0{% else %}{{ before_value }}{% endif %}
+                                        {{ _val(before_value) }}
                                     {% endif %}
                                 </span>
+
                             {% else %}
-                                {% set field_schema = target_schema.properties.get(key, {}) %}
+                                {# Field exists in both — render diff #}
                                 {% set collection_name = field_schema.collections[0] if field_schema.get('bsonType') == "linked_object" and field_schema.get('collections') else None %}
                                 {{ render_field_change(before_value, after_value, view_access_level, field_schema, collection_name, preview_references) }}
                             {% endif %}
@@ -377,11 +421,15 @@
                     </div>
                 {% endif %}
             {% endfor %}
+            {% if not ns.any %}
+                <div class="no-changes">No changes</div>
+            {% endif %}
         {% else %}
             <div class="no-changes">No changes</div>
         {% endif %}
     </div>
 {% endmacro %}
+
 
 {% macro render_changes_table(changes, preview_references, target_schemas, view_access_level, show_actions=false) %}
 <table class="info-table">
@@ -520,21 +568,3 @@
 })();
 </script>
 {% endmacro %}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

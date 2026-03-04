@@ -1,9 +1,17 @@
 {
   "$jsonSchema": {
     "bsonType": "object",
-    "required": ["name", "effect_description"],
-    "preview": ["rarity", "owner"],
-    "laws": ["rarity"],
+    "required": [
+      "name",
+      "effect_description"
+    ],
+    "preview": [
+      "rarity",
+      "owner"
+    ],
+    "laws": [
+      "rarity"
+    ],
     "sort": "rarity",
     "properties": {
       "name": {
@@ -11,11 +19,17 @@
         "label": "Name",
         "description": "The name of the artifact"
       },
-	    "rarity": {
+      "rarity": {
         "bsonType": "enum",
         "label": "Rarity",
         "description": "The Rarity of the artifact",
-		    "enum": ["Mundane", "Good", "Great", "Legendary", "Mythical"],
+        "enum": [
+          "Mundane",
+          "Good",
+          "Great",
+          "Legendary",
+          "Mythical"
+        ],
         "laws": {
           "Mundane": {
             "artifact_slot_usage": 1
@@ -55,15 +69,21 @@
         "bsonType": "linked_object",
         "label": "Owner",
         "description": "The artifact's owner",
-        "default_options": ["Unknown"],
-		    "collections": ["characters"]
+        "default_options": [
+          "Unknown"
+        ],
+        "collections": [
+          "characters"
+        ]
       },
       "creator": {
         "bsonType": "linked_object",
         "label": "Creator",
         "description": "The artifact's creator",
         "noneResult": "Unknown",
-        "collections": ["characters"],
+        "collections": [
+          "characters"
+        ],
         "static": true
       },
       "artifact_slot_usage": {
@@ -77,14 +97,22 @@
         "label": "Mechanical Modifiers",
         "description": "The mechanical modifiers that affect the owner",
         "hidden": true,
-        "items":{
+        "items": {
           "bsonType": "object",
           "properties": {
+            "_id": {
+              "bsonType": "string",
+              "label": "Item ID",
+              "description": "Stable identifier for change tracking across reorders"
+            },
             "type": {
               "bsonType": "enum",
               "label": "Type",
               "description": "The type of entity the modifier affects",
-              "enum": ["nation", "character"]
+              "enum": [
+                "nation",
+                "character"
+              ]
             },
             "modifier": {
               "bsonType": "string",

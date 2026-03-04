@@ -1,26 +1,41 @@
 {
   "$jsonSchema": {
     "bsonType": "object",
-    "required": ["name", "renown"],
-	  "laws": ["renown", "size"],
-    "preview": ["region", "size", "patron"],
+    "required": [
+      "name",
+      "renown"
+    ],
+    "laws": [
+      "renown",
+      "size"
+    ],
+    "preview": [
+      "region",
+      "size",
+      "patron"
+    ],
     "sort": "region",
     "properties": {
       "name": {
         "bsonType": "string",
-		    "label": "Name",
+        "label": "Name",
         "description": "The name of the merchant company"
       },
-	    "leaders": {
+      "leaders": {
         "bsonType": "array",
-		    "label": "Leaders",
+        "label": "Leaders",
         "description": "The list of leaders of the merchant company",
-		    "collections": ["characters"],
-		    "queryTargetAttribute": "ruling_nation_org",
-        "items":{
+        "collections": [
+          "characters"
+        ],
+        "queryTargetAttribute": "ruling_nation_org",
+        "items": {
           "bsonType": "linked_object"
         },
-        "preview": ["name", "character_type"]
+        "preview": [
+          "name",
+          "character_type"
+        ]
       },
       "ruler_artifact_slots": {
         "bsonType": "number",
@@ -28,23 +43,35 @@
         "description": "The number of artifact slots the mercenary company's rulers have available",
         "calculated": true
       },
-	    "region": {
+      "region": {
         "bsonType": "linked_object",
-		    "label": "Region",
+        "label": "Region",
         "description": "The region the mercenary company is currently stationed in",
-		    "collections": ["regions"]
+        "collections": [
+          "regions"
+        ]
       },
       "patron": {
         "bsonType": "linked_object",
-		    "label": "Patron",
+        "label": "Patron",
         "description": "The nation that currently employs the mercenary company",
-		    "collections": ["nations"]
+        "collections": [
+          "nations"
+        ]
       },
       "land_doctrine": {
         "bsonType": "enum",
-		    "label": "Land Doctrine",
+        "label": "Land Doctrine",
         "description": "The nation's general approach to land based warfare",
-        "enum": ["Standard", "Nomadic", "Shock", "Volley", "Safeguard", "Militia", "Ambush"],
+        "enum": [
+          "Standard",
+          "Nomadic",
+          "Shock",
+          "Volley",
+          "Safeguard",
+          "Militia",
+          "Ambush"
+        ],
         "laws": {
           "Standard": {},
           "Nomadic": {
@@ -72,11 +99,16 @@
           }
         }
       },
-	    "naval_doctrine": {
+      "naval_doctrine": {
         "bsonType": "enum",
-		    "label": "Naval Doctrine",
+        "label": "Naval Doctrine",
         "description": "The nation's general approach to aquatic warfare",
-        "enum": ["Standard", "Skirmish", "Fleet", "Transport"],
+        "enum": [
+          "Standard",
+          "Skirmish",
+          "Fleet",
+          "Transport"
+        ],
         "laws": {
           "Standard": {},
           "Skirmish": {},
@@ -86,10 +118,15 @@
       },
       "size": {
         "bsonType": "enum",
-		    "label": "Size",
+        "label": "Size",
         "description": "The size of the mercenary company",
-		    "enum": ["Small", "Medium", "Large", "Massive"],
-		    "laws":{
+        "enum": [
+          "Small",
+          "Medium",
+          "Large",
+          "Massive"
+        ],
+        "laws": {
           "Small": {
             "budget": 450,
             "max_units": 2,
@@ -114,11 +151,16 @@
       },
       "renown": {
         "bsonType": "enum",
-		    "label": "Renown",
+        "label": "Renown",
         "description": "The mercenary company's reputation",
-		    "enum": ["Scoundrels", "Unscrupulous", "Standard", "Honorable"],
+        "enum": [
+          "Scoundrels",
+          "Unscrupulous",
+          "Standard",
+          "Honorable"
+        ],
         "default": "Standard",
-		    "laws":{
+        "laws": {
           "Scoundrels": {
             "attack": 2,
             "hiring_cost_mult": -0.25
@@ -138,99 +180,119 @@
       },
       "upkeep": {
         "bsonType": "number",
-		    "label": "Upkeep",
+        "label": "Upkeep",
         "description": "The amount of money the mercenary company has to pay each session in upkeep",
-		    "calculated": true
+        "calculated": true
       },
-	    "treasury": {
+      "treasury": {
         "bsonType": "number",
-		    "label": "Treasury",
+        "label": "Treasury",
         "description": "The amount of money the mercenary company has in its coffers",
         "view_access_level": 5
       },
       "land_budget": {
         "bsonType": "number",
-		    "label": "Land Budget",
+        "label": "Land Budget",
         "description": "The amount of money the mercenary company has to recruit land units with",
-		    "calculated": true
+        "calculated": true
       },
       "land_budget_spent": {
         "bsonType": "number",
-		    "label": "Land Budget Spent",
+        "label": "Land Budget Spent",
         "description": "The amount of money the mercenary company has spent to recruit land units",
-		    "calculated": true
+        "calculated": true
       },
       "naval_budget": {
         "bsonType": "number",
-		    "label": "Naval Budget",
+        "label": "Naval Budget",
         "description": "The amount of money the mercenary company has to recruit naval units with",
-		    "calculated": true
+        "calculated": true
       },
       "naval_budget_spent": {
         "bsonType": "number",
-		    "label": "Naval Budget Spent",
+        "label": "Naval Budget Spent",
         "description": "The amount of money the mercenary company has spent to recruit naval units",
-		    "calculated": true
+        "calculated": true
       },
       "hiring_cost": {
         "bsonType": "number",
-		    "label": "Hiring Cost",
+        "label": "Hiring Cost",
         "description": "The minimum amount of money the mercenary company charges to hire",
-		    "calculated": true
+        "calculated": true
       },
       "mech_rp_hiring_cost": {
         "bsonType": "number",
-		    "label": "Mechanical RP Hiring Cost",
+        "label": "Mechanical RP Hiring Cost",
         "description": "The amount of RP the mercenary company charges to hire to perform a mech RP on your behalf",
-		    "calculated": true
+        "calculated": true
       },
       "max_units": {
         "bsonType": "number",
-		    "label": "Max Units",
+        "label": "Max Units",
         "description": "The maximum number of units the mercenary company can field",
-		    "calculated": true
+        "calculated": true
       },
       "districts": {
         "bsonType": "array",
-		    "label": "Districts",
+        "label": "Districts",
         "description": "The districts the mercenary company owns",
         "max_length": 3,
-        "items":{
+        "items": {
           "bsonType": "json_district_enum",
-		      "json_data": "mercenary_districts"
+          "json_data": "mercenary_districts",
+          "properties": {
+            "_id": {
+              "bsonType": "string",
+              "label": "Item ID",
+              "description": "Stable identifier for change tracking across reorders"
+            }
+          }
         }
       },
       "land_units": {
         "bsonType": "array",
-		    "label": "Land Units",
+        "label": "Land Units",
         "description": "The units the mercenary company owns",
         "max_length": "max_units",
-        "items":{
+        "items": {
           "bsonType": "json_unit_enum",
-          "json_data": ["ancient_magical_land_units", "ancient_mundane_land_units",
-                         "classical_magical_land_units", "classical_mundane_land_units",
-                        "ancient_unique_land_units", "classical_unique_land_units"]
+          "json_data": [
+            "ancient_magical_land_units",
+            "ancient_mundane_land_units",
+            "classical_magical_land_units",
+            "classical_mundane_land_units",
+            "ancient_unique_land_units",
+            "classical_unique_land_units"
+          ]
         }
       },
       "naval_units": {
         "bsonType": "array",
-		    "label": "Naval Units",
+        "label": "Naval Units",
         "description": "The units the mercenary company owns",
         "max_length": "max_units",
-        "items":{
+        "items": {
           "bsonType": "json_unit_enum",
-          "json_data": ["ancient_mundane_naval_units", "classical_magical_naval_units",
-                         "classical_mundane_naval_units"]
+          "json_data": [
+            "ancient_mundane_naval_units",
+            "classical_magical_naval_units",
+            "classical_mundane_naval_units"
+          ]
         }
       },
       "progress_quests": {
         "bsonType": "array",
-		    "label": "Progress Quests",
+        "label": "Progress Quests",
         "description": "The ongoing quests the mercenary company is currently working on",
         "view_access_level": 5,
-        "items":{
+        "items": {
           "bsonType": "object",
           "properties": {
+            "_id": {
+              "bsonType": "string",
+              "label": "Item ID",
+              "description": "Stable identifier for change tracking across reorders"
+            },
             "quest_name": {
               "bsonType": "string",
               "label": "Quest Name",

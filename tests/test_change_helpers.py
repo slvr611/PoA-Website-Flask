@@ -861,3 +861,212 @@ class TestDenyChange:
 
         nation = db_with_players["nations"].find_one({"_id": nation_id})
         assert nation["name"] == "TestNation"   # unchanged
+
+
+# ============================================================================
+# Section 3 — ID-based array tracking tests
+# ============================================================================
+
+class TestEnsureItemIds:
+    """helpers.change_helpers._ensure_item_ids"""
+
+    def test_assigns_id_to_list_item_without_one(self):
+        data = {"modifiers": [{"field": "hp", "value": 1}]}
+        ch._ensure_item_ids(data)
+        assert "_id" in data["modifiers"][0]
+        assert isinstance(data["modifiers"][0]["_id"], str)
+
+    def test_does_not_overwrite_existing_id(self):
+        data = {"modifiers": [{"_id": "abc12345", "field": "hp"}]}
+        ch._ensure_item_ids(data)
+        assert data["modifiers"][0]["_id"] == "abc12345"
+
+    def test_assigns_ids_to_multiple_items(self):
+        data = {"modifiers": [{"field": "a"}, {"field": "b"}, {"field": "c"}]}
+        ch._ensure_item_ids(data)
+        ids = [item["_id"] for item in data["modifiers"]]
+        assert len(ids) == 3
+        assert len(set(ids)) == 3   # all unique
+
+    def test_handles_nested_list_in_item(self):
+        """Items inside nested lists also get IDs."""
+        data = {"cities": [{"name": "Testopolis", "districts": [{"type": "port"}]}]}
+        ch._ensure_item_ids(data)
+        assert "_id" in data["cities"][0]
+        assert "_id" in data["cities"][0]["districts"][0]
+
+    def test_ignores_non_dict_list_items(self):
+        data = {"tags": ["alpha", "beta"]}
+        ch._ensure_item_ids(data)   # should not raise
+        assert data["tags"] == ["alpha", "beta"]
+
+    def test_handles_empty_list(self):
+        data = {"modifiers": []}
+        ch._ensure_item_ids(data)
+        assert data["modifiers"] == []
+
+
+class TestAllHaveIds:
+    """helpers.change_helpers._all_have_ids"""
+
+    def test_empty_list_returns_false(self):
+        assert ch._all_have_ids([]) is False
+
+    def test_list_with_no_ids_returns_false(self):
+        assert ch._all_have_ids([{"field": "hp"}, {"field": "mp"}]) is False
+
+    def test_partial_ids_returns_false(self):
+        assert ch._all_have_ids([{"_id": "x", "field": "hp"}, {"field": "mp"}]) is False
+
+    def test_all_with_ids_returns_true(self):
+        assert ch._all_have_ids([{"_id": "x", "field": "hp"}, {"_id": "y", "field": "mp"}]) is True
+
+    def test_non_dict_items_ignored(self):
+        # A list of scalars — no dict items → False
+        assert ch._all_have_ids(["alpha", "beta"]) is False
+
+    def test_mixed_dict_and_scalar_returns_false(self):
+        # Non-dict entries in the list cause the whole check to fail
+        assert ch._all_have_ids([{"_id": "x"}, "scalar"]) is False
+
+
+class TestKeepOnlyDifferencesListIdBased:
+    """keep_only_differences_list uses ID-based matching when all items have _id."""
+
+    def test_reorder_only_produces_different_lists(self):
+        """A pure reorder yields the full lists (non-equal), capturing the reorder."""
+        before = [{"_id": "x", "v": 1}, {"_id": "y", "v": 2}]
+        after  = [{"_id": "y", "v": 2}, {"_id": "x", "v": 1}]
+        rb, ra = ch.keep_only_differences_list(before, after)
+        # The full lists are returned unchanged — they differ positionally
+        assert rb == before
+        assert ra == after
+
+    def test_identical_lists_produce_equal_output(self):
+        items = [{"_id": "x", "v": 1}, {"_id": "y", "v": 2}]
+        rb, ra = ch.keep_only_differences_list(items, deepcopy(items))
+        assert rb == ra   # deep_compare(rb, ra) will be True → field excluded
+
+    def test_no_ids_falls_back_to_positional(self):
+        before = [{"v": 1}, {"v": 2}]
+        after  = [{"v": 1}, {"v": 99}]
+        rb, ra = ch.keep_only_differences_list(before, after)
+        # Positional: item 0 diff = ({}, {}), item 1 diff = ({v:2}, {v:99})
+        assert rb[0] == {}
+        assert ra[0] == {}
+        assert rb[1] == {"v": 2}
+        assert ra[1] == {"v": 99}
+
+
+class TestDeepMergeIdBased:
+    """deep_merge uses ID-based list replacement when items carry _id."""
+
+    def test_merge_replaces_list_by_id_when_ids_present(self):
+        original = {"mods": [{"_id": "x", "v": 1}, {"_id": "y", "v": 2}]}
+        # after_data has the full reordered + modified list
+        updates  = {"mods": [{"_id": "y", "v": 2}, {"_id": "x", "v": 99}]}
+        result = ch.deep_merge(original, updates)
+        assert result["mods"] == [{"_id": "y", "v": 2}, {"_id": "x", "v": 99}]
+
+    def test_merge_reorder_only(self):
+        original = {"mods": [{"_id": "a", "v": 10}, {"_id": "b", "v": 20}]}
+        updates  = {"mods": [{"_id": "b", "v": 20}, {"_id": "a", "v": 10}]}
+        result = ch.deep_merge(original, updates)
+        assert result["mods"][0]["_id"] == "b"
+        assert result["mods"][1]["_id"] == "a"
+
+    def test_merge_positional_when_no_ids(self):
+        original = {"mods": [{"v": 1}, {"v": 2}]}
+        updates  = {"mods": [{"v": 99}]}
+        result = ch.deep_merge(original, updates)
+        # Positional: update list is shorter, so result is truncated to update length
+        assert len(result["mods"]) == 1
+        assert result["mods"][0]["v"] == 99
+
+
+class TestCheckNoOtherChangesIdBased:
+    """check_no_other_changes uses ID-based comparison for lists with _ids."""
+
+    def _ids(self, *items):
+        """Build a list of dicts each with an _id and the provided extra fields."""
+        return list(items)
+
+    def test_reorder_alone_returns_true(self):
+        """A pure reorder of existing items is NOT an external change."""
+        b = [{"_id": "x", "v": 1}, {"_id": "y", "v": 2}]
+        a = [{"_id": "y", "v": 2}, {"_id": "x", "v": 1}]   # reordered
+        c = [{"_id": "x", "v": 1}, {"_id": "y", "v": 2}]   # current = before order
+        assert ch.check_no_other_changes({"mods": b}, {"mods": a}, {"mods": c}) is True
+
+    def test_current_matches_after_order_returns_true(self):
+        b = [{"_id": "x", "v": 1}, {"_id": "y", "v": 2}]
+        a = [{"_id": "y", "v": 2}, {"_id": "x", "v": 1}]
+        c = [{"_id": "y", "v": 2}, {"_id": "x", "v": 1}]   # current = after (already applied)
+        assert ch.check_no_other_changes({"mods": b}, {"mods": a}, {"mods": c}) is True
+
+    def test_external_content_change_returns_false(self):
+        b = [{"_id": "x", "v": 1}]
+        a = [{"_id": "x", "v": 5}]   # change intends v 1→5
+        c = [{"_id": "x", "v": 99}]  # someone else set v=99
+        assert ch.check_no_other_changes({"mods": b}, {"mods": a}, {"mods": c}) is False
+
+    def test_externally_added_item_returns_false(self):
+        b = [{"_id": "x", "v": 1}]
+        a = [{"_id": "x", "v": 5}]
+        c = [{"_id": "x", "v": 1}, {"_id": "z", "v": 7}]  # z added externally
+        assert ch.check_no_other_changes({"mods": b}, {"mods": a}, {"mods": c}) is False
+
+    def test_item_removed_externally_when_should_be_updated_returns_false(self):
+        """If an item exists in both before and after (being modified) but is
+        missing from current, someone removed it externally."""
+        b = [{"_id": "x", "v": 1}, {"_id": "y", "v": 2}]
+        a = [{"_id": "x", "v": 5}, {"_id": "y", "v": 2}]
+        c = [{"_id": "y", "v": 2}]   # x is gone — external removal of modified item
+        assert ch.check_no_other_changes({"mods": b}, {"mods": a}, {"mods": c}) is False
+
+    def test_no_ids_falls_back_to_positional(self):
+        """Without IDs, the existing positional logic is used."""
+        b = {"mods": [{"v": 1}]}
+        a = {"mods": [{"v": 5}]}
+        c = {"mods": [{"v": 1}]}   # current matches before → OK
+        assert ch.check_no_other_changes(b, a, c) is True
+
+
+class TestIdsAutoAssignedOnRequest:
+    """_ensure_item_ids is called inside request_change so new list items get IDs."""
+
+    def test_new_modifier_item_gets_id_on_request(
+        self, fake_category_data, mock_mongo, flask_app
+    ):
+        """After request_change, after_requested_data modifier items have _id."""
+        player_id = ObjectId()
+        # Insert a real player into the mongomock database so find_one works
+        mock_mongo.db.players.insert_one({"_id": player_id, "id": "12345"})
+
+        with (
+            patch("helpers.change_helpers.mongo", mock_mongo),
+            patch("helpers.change_helpers.category_data", fake_category_data),
+            patch("helpers.change_helpers._calculate_and_attach_fields",
+                  side_effect=lambda dt, obj: obj),
+            patch("helpers.change_helpers.propagate_updates", return_value=None),
+        ):
+            with flask_app.test_request_context("/"):
+                from flask import g
+                g.user = {"id": "12345"}
+
+                before = {"modifiers": [{"_id": "existing", "field": "hp", "value": 1}]}
+                after  = {"modifiers": [
+                    {"_id": "existing", "field": "hp", "value": 1},
+                    {"field": "mp", "value": 2},   # new item — no _id yet
+                ]}
+                change_id = ch.request_change(
+                    "nations", ObjectId(), "Update", before, after, "test reason"
+                )
+
+        assert change_id is not None
+        stored = mock_mongo.db.changes.find_one({"_id": change_id})
+        after_mods = stored["after_requested_data"]["modifiers"]
+        # New item must have received an _id
+        new_item = next(m for m in after_mods if m.get("field") == "mp")
+        assert "_id" in new_item
+        assert len(new_item["_id"]) == 8

@@ -1,3 +1,4 @@
+import uuid
 from bson import ObjectId
 from helpers.data_helpers import get_data_on_category
 from calculations.field_calculations import calculate_all_fields
@@ -545,7 +546,7 @@ def character_stat_gain_tick(old_character, new_character, schema):
         if possible_stats and len(possible_stats) > 0:
             stat = random.choice(possible_stats)
             modifiers = new_character.get("modifiers", [])
-            modifiers.append({"field": stat, "value": 1, "duration": -1, "source": "Stat gain tick"})
+            modifiers.append({"_id": uuid.uuid4().hex[:8], "field": stat, "value": 1, "duration": -1, "source": "Stat gain tick"})
             new_character["modifiers"] = modifiers
             result = f"{old_character.get('name', 'Unknown')} has gained a level of {stat}.\n"
     return result
@@ -666,7 +667,7 @@ def isolated_diplo_stance_tick(old_nation, new_nation, schema):
                 modifier["value"] = new_value
                 new_nation["modifiers"] = modifiers
                 return f"{old_nation.get('name', 'Unknown')} has had the stability gain chance modifier from their Isolated diplomatic stance increased from {old_value} to {new_value}.\n"
-        modifiers.append({"field": "stability_gain_chance", "value": max(gain_rate, cap), "duration": -1, "source": "Isolated Diplomatic Stance"})
+        modifiers.append({"_id": uuid.uuid4().hex[:8], "field": "stability_gain_chance", "value": max(gain_rate, cap), "duration": -1, "source": "Isolated Diplomatic Stance"})
         new_nation["modifiers"] = modifiers
         return f"{old_nation.get('name', 'Unknown')} has had the stability gain chance modifier from their Isolated diplomatic stance increased from 0 to {max(gain_rate, cap)}.\n"
 
