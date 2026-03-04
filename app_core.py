@@ -626,7 +626,20 @@ def restore_mongodb(backup_path=None, backup_date=None, s3_key=None, s3_bucket=N
                                 # Can't decode and no more data
                                 raise
                             ensure(chunk_size)
-        
+
+        def restore_objectids(obj):
+            """Recursively convert 24-char hex strings back to ObjectId throughout a document."""
+            if isinstance(obj, dict):
+                return {k: restore_objectids(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [restore_objectids(item) for item in obj]
+            elif isinstance(obj, str) and len(obj) == 24:
+                try:
+                    return ObjectId(obj)
+                except Exception:
+                    return obj
+            return obj
+
         for collection_file in collection_files:
             collection_name = collection_file.replace('.json', '')
 
@@ -639,13 +652,7 @@ def restore_mongodb(backup_path=None, backup_date=None, s3_key=None, s3_bucket=N
             batch_size = 1000
 
             for doc in iter_json_array(file_path):
-                # Convert string IDs back to ObjectId where appropriate
-                _id = doc.get('_id')
-                if isinstance(_id, str):
-                    try:
-                        doc['_id'] = ObjectId(_id)
-                    except Exception:
-                        pass  # leave as string if not valid ObjectId
+                doc = restore_objectids(doc)
                 batch.append(doc)
                 if len(batch) >= batch_size:
                     db[collection_name].insert_many(batch, ordered=False)
