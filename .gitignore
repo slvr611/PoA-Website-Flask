@@ -6,3 +6,4 @@ PoA-Website-Flask.code-workspace
 *.pyc
 /backups
 /summaries
+/.claude/worktrees
