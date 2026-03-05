@@ -1,43 +1,68 @@
 {
   "$jsonSchema": {
     "bsonType": "object",
-    "required": ["name", "control"],
-    "preview": ["nation"],
-    "laws": ["control"],
+    "required": [
+      "name",
+      "control"
+    ],
+    "preview": [
+      "nation"
+    ],
+    "laws": [
+      "control"
+    ],
     "properties": {
       "name": {
         "bsonType": "string",
-		    "label": "Name",
+        "label": "Name",
         "description": "The name of the faction"
       },
-	    "leaders": {
+      "leaders": {
         "bsonType": "array",
-		    "label": "Leaders",
+        "label": "Leaders",
         "description": "The list of leaders of the merchant company",
-		    "collections": ["characters"],
-		    "queryTargetAttribute": "ruling_nation_org",
-        "items":{
+        "collections": [
+          "characters"
+        ],
+        "queryTargetAttribute": "ruling_nation_org",
+        "items": {
           "bsonType": "linked_object"
         }
       },
-	    "nation": {
+      "nation": {
         "bsonType": "linked_object",
-		    "label": "Nation",
+        "label": "Nation",
         "description": "The nation the faction is based in",
-		    "collections": ["nations"]
+        "collections": [
+          "nations"
+        ]
       },
       "faction_type": {
         "bsonType": "enum",
-		    "label": "Faction Type",
+        "label": "Faction Type",
         "description": "The type of faction",
-		    "enum": ["Adventurer", "Criminal", "Cult", "Cultural", "Dissident", "Military", "Political"]
+        "enum": [
+          "Adventurer",
+          "Criminal",
+          "Cult",
+          "Cultural",
+          "Dissident",
+          "Military",
+          "Political"
+        ]
       },
       "control": {
         "bsonType": "enum",
-		    "label": "Control",
+        "label": "Control",
         "description": "The amount of control the faction has",
-		    "enum": ["Insignificant", "Minor", "Moderate", "Strong", "Absolute"],
-        "laws":{
+        "enum": [
+          "Insignificant",
+          "Minor",
+          "Moderate",
+          "Strong",
+          "Absolute"
+        ],
+        "laws": {
           "Insignificant": {
             "influence_income": 1
           },
@@ -57,22 +82,27 @@
       },
       "influence_income": {
         "bsonType": "number",
-		    "label": "Influence Income",
+        "label": "Influence Income",
         "description": "The amount of influence the faction earns each session",
-		    "calculated": true
+        "calculated": true
       },
-	    "influence": {
+      "influence": {
         "bsonType": "number",
-		    "label": "Influence",
+        "label": "Influence",
         "description": "The amount of influence the faction has"
       },
       "progress_quests": {
         "bsonType": "array",
-		    "label": "Progress Quests",
+        "label": "Progress Quests",
         "description": "The ongoing quests the faction is currently working on",
-        "items":{
+        "items": {
           "bsonType": "object",
           "properties": {
+            "_id": {
+              "bsonType": "string",
+              "label": "Item ID",
+              "description": "Stable identifier for change tracking across reorders"
+            },
             "quest_name": {
               "bsonType": "string",
               "label": "Quest Name",

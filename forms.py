@@ -278,7 +278,8 @@ class NavalUnitAssignmentDict(Form):
 
 class ModifierForm(Form):
     """Form for handling nation/character modifiers as a dictionary"""
-    
+
+    _id = HiddenField('_id')
     field = StringField("Field", validators=[DataRequired()])
     value = FloatField("Value", default=1)
     duration = IntegerField("Duration", validators=[NumberRange()], default=-1)
@@ -326,7 +327,8 @@ class ModifierForm(Form):
 
 class ProgressQuestForm(Form):
     """Form for handling progress quests as a dictionary"""
-    
+
+    _id = HiddenField('_id')
     quest_name = StringField("Quest Name", validators=[DataRequired()])
     bonus_progress_per_tick = IntegerField("Bonus Progress Per Tick", validators=[NumberRange()], default=0)
     current_progress = IntegerField("Current Progress", validators=[NumberRange()], default=0)
@@ -376,7 +378,8 @@ class ProgressQuestForm(Form):
 
 class DistrictDict(Form):
     """Form for handling each district as a dictionary"""
-    
+
+    _id = HiddenField('_id')
     type = SelectField("District Type", choices=[("", "None")], default="")
     node = SelectField("Node Type", choices=[("", "None")], default="")
 
@@ -431,7 +434,8 @@ class DistrictDict(Form):
 
 class CityDict(Form):
     """Form for handling each City as a dictionary"""
-    
+
+    _id = HiddenField('_id')
     name = StringField("City Name")
     type = SelectField("City Type")
     node = SelectField("Node Type")
@@ -494,6 +498,7 @@ class ExternalModifierForm(Form):
     class Meta:
         csrf = False
 
+    _id = HiddenField('_id')
     type = SelectField("Type", choices=[("nation", "nation"), ("character", "character")])
     modifier = StringField("Modifier", validators=[])
     value = FloatField("Value")

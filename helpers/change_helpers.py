@@ -1,9 +1,37 @@
+import uuid
 from datetime import datetime, timezone
 from app_core import mongo, category_data
 from flask import g, flash
 from calculations.field_calculations import calculate_all_fields
 from copy import deepcopy
 from bson import ObjectId
+
+def _ensure_item_ids(data):
+    """Recursively assign a _id to any dict item inside a list that lacks one.
+
+    Call this on ``after_data`` before computing diffs so that newly added
+    sub-document items receive a stable identity at request time.
+    """
+    if isinstance(data, dict):
+        for value in data.values():
+            _ensure_item_ids(value)
+    elif isinstance(data, list):
+        for item in data:
+            if isinstance(item, dict):
+                if '_id' not in item:
+                    item['_id'] = uuid.uuid4().hex[:8]
+                _ensure_item_ids(item)
+
+
+def _all_have_ids(lst):
+    """Return True if *every* item in ``lst`` is a dict that carries a ``_id`` field.
+
+    Used to decide whether ID-based or positional list matching applies.
+    Returns False for empty lists, lists with non-dict items, or lists where
+    any dict is missing the ``_id`` field.
+    """
+    return bool(lst) and all(isinstance(item, dict) and '_id' in item for item in lst)
+
 
 def _calculate_and_attach_fields(data_type, target):
     schema = category_data[data_type]["schema"]
@@ -38,6 +66,10 @@ def request_change(data_type, item_id, change_type, before_data, after_data, rea
     before_data.pop("_id", None)
     after_data.pop("_id", None)
 
+    # Stamp IDs on any new sub-document list items in after_data so reorders
+    # can be detected later via ID-based matching.
+    _ensure_item_ids(after_data)
+
     before_data, after_data = keep_only_differences(before_data, after_data, change_type)
     differential = calculate_int_changes(before_data, after_data)
 
@@ -68,6 +100,8 @@ def system_request_change(data_type, item_id, change_type, before_data, after_da
     after_data.pop("reason", None)
     before_data.pop("_id", None)
     after_data.pop("_id", None)
+
+    _ensure_item_ids(after_data)
 
     before_data, after_data = keep_only_differences(before_data, after_data, change_type)
     differential = calculate_int_changes(before_data, after_data)
@@ -260,15 +294,20 @@ def deep_merge(original, updates):
             else:
                 merged[key] = deep_merge(merged[key], value)
         elif key in merged and isinstance(merged[key], list) and isinstance(value, list):
-            new_list = []
-            for i, item in enumerate(value):
-                if i < len(merged[key]) and isinstance(merged[key][i], dict) and isinstance(item, dict):
-                    new_list.append(deep_merge(merged[key][i], item))
-                elif i < len(merged[key]):
-                    new_list.append(item)
-                else:
-                    new_list.append(item)
-            merged[key] = new_list
+            if _all_have_ids(merged[key]) or _all_have_ids(value):
+                # ID-based: after_data carries the full intended list, so replace entirely.
+                merged[key] = deepcopy(value)
+            else:
+                # Positional merge (legacy / non-ID data)
+                new_list = []
+                for i, item in enumerate(value):
+                    if i < len(merged[key]) and isinstance(merged[key][i], dict) and isinstance(item, dict):
+                        new_list.append(deep_merge(merged[key][i], item))
+                    elif i < len(merged[key]):
+                        new_list.append(item)
+                    else:
+                        new_list.append(item)
+                merged[key] = new_list
         else:
             merged[key] = value
     return merged
@@ -326,6 +365,14 @@ def keep_only_differences_dict(before_data, after_data):
     return new_before, new_after
 
 def keep_only_differences_list(before_data, after_data):
+    # When all dict items in both lists carry a stable _id, store the full
+    # lists verbatim.  deep_compare will detect whether anything changed
+    # (including pure reorders), and deep_merge / check_no_other_changes will
+    # use ID-based matching at approval time.
+    if _all_have_ids(before_data) and _all_have_ids(after_data):
+        return list(before_data), list(after_data)
+
+    # Positional fallback for legacy data without IDs.
     new_before = []
     new_after = []
     for i in range(max(len(before_data), len(after_data))):
@@ -376,27 +423,50 @@ def check_no_other_changes(before_data, after_data, current_data):
             
         # Handle lists
         if isinstance(b_val, list) and isinstance(a_val, list) and isinstance(c_val, list):
-            # If lengths differ, check if current matches either before or after
-            if len(c_val) != len(b_val) and len(c_val) != len(a_val):
-                return False
-                
-            # Check each item in the list
-            for i in range(len(c_val)):
-                # Skip if index is out of range for before or after
-                if i >= len(b_val) and i >= len(a_val):
+            if _all_have_ids(b_val) and _all_have_ids(a_val):
+                # ID-based comparison: reordering alone does not cause a conflict.
+                b_map = {item['_id']: item for item in b_val if isinstance(item, dict) and '_id' in item}
+                a_map = {item['_id']: item for item in a_val if isinstance(item, dict) and '_id' in item}
+                c_map = {item['_id']: item for item in c_val if isinstance(item, dict) and '_id' in item}
+
+                # Every item currently present must match its before or after version.
+                for item_id, c_item in c_map.items():
+                    if item_id not in b_map and item_id not in a_map:
+                        return False  # Externally added item
+                    b_item = b_map.get(item_id, {})
+                    a_item = a_map.get(item_id, {})
+                    if not (deep_compare(c_item, b_item) or deep_compare(c_item, a_item)):
+                        return False  # Content changed externally
+
+                # Items that were in before AND after (i.e. being modified, not removed)
+                # must still be present in current.
+                for item_id in b_map:
+                    if item_id in a_map and item_id not in c_map:
+                        return False  # Expected item removed externally
+
+            else:
+                # Positional fallback for legacy / non-ID lists.
+                # If lengths differ, check if current matches either before or after
+                if len(c_val) != len(b_val) and len(c_val) != len(a_val):
                     return False
-                    
-                c_item = c_val[i]
-                b_item = b_val[i] if i < len(b_val) else None
-                a_item = a_val[i] if i < len(a_val) else None
-                
-                # Recursively check dict items
-                if isinstance(c_item, dict) and isinstance(b_item, dict) and isinstance(a_item, dict):
-                    if not check_no_other_changes(b_item, a_item, c_item):
+
+                # Check each item in the list
+                for i in range(len(c_val)):
+                    # Skip if index is out of range for before or after
+                    if i >= len(b_val) and i >= len(a_val):
                         return False
-                # For non-dict items, check if current matches either before or after
-                elif c_item != b_item and c_item != a_item:
-                    return False
+
+                    c_item = c_val[i]
+                    b_item = b_val[i] if i < len(b_val) else None
+                    a_item = a_val[i] if i < len(a_val) else None
+
+                    # Recursively check dict items
+                    if isinstance(c_item, dict) and isinstance(b_item, dict) and isinstance(a_item, dict):
+                        if not check_no_other_changes(b_item, a_item, c_item):
+                            return False
+                    # For non-dict items, check if current matches either before or after
+                    elif c_item != b_item and c_item != a_item:
+                        return False
                     
         # Handle dictionaries
         elif isinstance(b_val, dict) and isinstance(a_val, dict) and isinstance(c_val, dict):

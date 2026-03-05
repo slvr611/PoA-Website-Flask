@@ -1,458 +1,570 @@
 {
   "$jsonSchema": {
     "bsonType": "object",
-    "required": ["name"],
-    "preview": ["ruling_nation_org", "player", "region"],
-    "laws": ["character_type", "health_status"],
+    "required": [
+      "name"
+    ],
+    "preview": [
+      "ruling_nation_org",
+      "player",
+      "region"
+    ],
+    "laws": [
+      "character_type",
+      "health_status"
+    ],
     "external_calculation_requirements": {
-		"race": ["positive_trait", "negative_trait"],
-        "religion": ["external_modifiers"],
-        "artifacts": ["external_modifiers"],
-        "region": ["external_modifiers"],
-        "ruling_nation_org": {
-            "modifier_prefix": "ruler",
-            "fields_as_modifiers": ["artifact_slots", "stat_gain_chance", "immortal_stat_gain_chance", "elderly_age"]
-        }
-	},
+      "race": [
+        "positive_trait",
+        "negative_trait"
+      ],
+      "religion": [
+        "external_modifiers"
+      ],
+      "artifacts": [
+        "external_modifiers"
+      ],
+      "region": [
+        "external_modifiers"
+      ],
+      "ruling_nation_org": {
+        "modifier_prefix": "ruler",
+        "fields_as_modifiers": [
+          "artifact_slots",
+          "stat_gain_chance",
+          "immortal_stat_gain_chance",
+          "elderly_age"
+        ]
+      }
+    },
     "properties": {
       "name": {
         "bsonType": "string",
-		"label": "Name",
+        "label": "Name",
         "description": "Name of the Character"
       },
-	  "player": {
+      "player": {
         "bsonType": "linked_object",
-		"label": "Player",
+        "label": "Player",
         "description": "Who is playing the Character",
-		"noneResult": "AI",
-		"collections": ["players"]
+        "noneResult": "AI",
+        "collections": [
+          "players"
+        ]
       },
-	  "creator": {
+      "creator": {
         "bsonType": "linked_object",
-		"label": "Creator",
+        "label": "Creator",
         "description": "Who made the Character",
-		"noneResult": "Admin",
-		"collections": ["players"],
-		"static": true
+        "noneResult": "Admin",
+        "collections": [
+          "players"
+        ],
+        "static": true
       },
-	  "ruling_nation_org": {
+      "ruling_nation_org": {
         "bsonType": "linked_object",
-		"label": "Ruling Nation/Organization",
+        "label": "Ruling Nation/Organization",
         "description": "The nation or organization the character is currently ruling",
-		"noneResult": "None",
-		"collections": ["nations", "merchants", "mercenaries", "factions"]
+        "noneResult": "None",
+        "collections": [
+          "nations",
+          "merchants",
+          "mercenaries",
+          "factions"
+        ]
       },
-	  "region": {
+      "region": {
         "bsonType": "linked_object",
-		"label": "Region",
+        "label": "Region",
         "description": "The region the character is currently in",
-		"noneResult": "Unknown",
-		"collections": ["regions"]
+        "noneResult": "Unknown",
+        "collections": [
+          "regions"
+        ]
       },
-	  "race": {
+      "race": {
         "bsonType": "linked_object",
-		"label": "Race",
+        "label": "Race",
         "description": "The race of the character",
-		"noneResult": "Unknown",
-		"collections": ["races"]
+        "noneResult": "Unknown",
+        "collections": [
+          "races"
+        ]
       },
-	  "culture": {
+      "culture": {
         "bsonType": "linked_object",
-		"label": "Culture",
+        "label": "Culture",
         "description": "The culture of the character",
-		"noneResult": "Unknown",
-		"collections": ["cultures"]
+        "noneResult": "Unknown",
+        "collections": [
+          "cultures"
+        ]
       },
-	  "religion": {
+      "religion": {
         "bsonType": "linked_object",
-		"label": "Religion",
+        "label": "Religion",
         "description": "The religion of the character",
-		"noneResult": "Unknown",
-		"collections": ["religions"]
+        "noneResult": "Unknown",
+        "collections": [
+          "religions"
+        ]
       },
-	  "character_type": {
+      "character_type": {
         "bsonType": "enum",
-		"label": "Character Type",
+        "label": "Character Type",
         "description": "The type of the character",
-		"enum": ["Steward", "Religious Leader", "Conqueror", "Populist", "Archmage", "Mage", "Warrior", "General", "Merchant", "Rogue"],
-		"static": true,
-		"laws": {
-			"Steward": {
-				"rulership": 2,
-				"cunning": 1,
-                "charisma": 0,
-                "prowess": -1,
-                "magic": 0,
-                "strategy": 0
-			},
-            "Religious Leader": {
-				"rulership": 1,
-				"cunning": 1,
-                "charisma": 1,
-                "prowess": -1,
-                "magic": 1,
-                "strategy": -1
-			},
-            "Conqueror": {
-				"rulership": 0,
-				"cunning": 0,
-                "charisma": -1,
-                "prowess": 2,
-                "magic": 0,
-                "strategy": 1
-			},
-            "Populist": {
-				"rulership": -1,
-				"cunning": 2,
-                "charisma": 2,
-                "prowess": -1,
-                "magic": 0,
-                "strategy": -1
-			},
-            "Archmage": {
-				"rulership": 0,
-				"cunning": 2,
-                "charisma": -1,
-                "prowess": -2,
-                "magic": 2,
-                "strategy": 0
-			},
-            "Mage": {
-				"rulership": 0,
-				"cunning": 2,
-                "charisma": -1,
-                "prowess": 0,
-                "magic": 2,
-                "strategy": -1
-			},
-            "Warrior": {
-				"rulership": -1,
-				"cunning": 1,
-                "charisma": -1,
-                "prowess": 2,
-                "magic": 0,
-                "strategy": 1
-			},
-            "General": {
-				"rulership": 1,
-				"cunning": 0,
-                "charisma": -1,
-                "prowess": 0,
-                "magic": -1,
-                "strategy": 3
-			},
-            "Merchant": {
-				"rulership": 1,
-				"cunning": 1,
-                "charisma": 2,
-                "prowess": -1,
-                "magic": 0,
-                "strategy": -1
-			},
-            "Rogue": {
-				"rulership": -1,
-				"cunning": 2,
-                "charisma": 1,
-                "prowess": 1,
-                "magic": 0,
-                "strategy": -1
-			}
-		}
-      },
-	  "character_subtype": {
-        "bsonType": "enum",
-		"label": "Character Subtype",
-        "description": "The subtype of the character",
-		"enum": ["None", "Artificer", "Diplomat", "Duelist", "Orator", "Prophet", "Proselytizer", "Quartermaster", "Scholar", "Statesman", "Tyrant"],
-		"static": true
-      },
-	  "strengths": {
-        "bsonType": "array",
-		"label": "Strengths",
-        "description": "The strengths of the character",
-		"static": true,
-        "items":{
-			"bsonType": "string"
+        "enum": [
+          "Steward",
+          "Religious Leader",
+          "Conqueror",
+          "Populist",
+          "Archmage",
+          "Mage",
+          "Warrior",
+          "General",
+          "Merchant",
+          "Rogue"
+        ],
+        "static": true,
+        "laws": {
+          "Steward": {
+            "rulership": 2,
+            "cunning": 1,
+            "charisma": 0,
+            "prowess": -1,
+            "magic": 0,
+            "strategy": 0
+          },
+          "Religious Leader": {
+            "rulership": 1,
+            "cunning": 1,
+            "charisma": 1,
+            "prowess": -1,
+            "magic": 1,
+            "strategy": -1
+          },
+          "Conqueror": {
+            "rulership": 0,
+            "cunning": 0,
+            "charisma": -1,
+            "prowess": 2,
+            "magic": 0,
+            "strategy": 1
+          },
+          "Populist": {
+            "rulership": -1,
+            "cunning": 2,
+            "charisma": 2,
+            "prowess": -1,
+            "magic": 0,
+            "strategy": -1
+          },
+          "Archmage": {
+            "rulership": 0,
+            "cunning": 2,
+            "charisma": -1,
+            "prowess": -2,
+            "magic": 2,
+            "strategy": 0
+          },
+          "Mage": {
+            "rulership": 0,
+            "cunning": 2,
+            "charisma": -1,
+            "prowess": 0,
+            "magic": 2,
+            "strategy": -1
+          },
+          "Warrior": {
+            "rulership": -1,
+            "cunning": 1,
+            "charisma": -1,
+            "prowess": 2,
+            "magic": 0,
+            "strategy": 1
+          },
+          "General": {
+            "rulership": 1,
+            "cunning": 0,
+            "charisma": -1,
+            "prowess": 0,
+            "magic": -1,
+            "strategy": 3
+          },
+          "Merchant": {
+            "rulership": 1,
+            "cunning": 1,
+            "charisma": 2,
+            "prowess": -1,
+            "magic": 0,
+            "strategy": -1
+          },
+          "Rogue": {
+            "rulership": -1,
+            "cunning": 2,
+            "charisma": 1,
+            "prowess": 1,
+            "magic": 0,
+            "strategy": -1
+          }
         }
       },
-	  "weaknesses": {
+      "character_subtype": {
+        "bsonType": "enum",
+        "label": "Character Subtype",
+        "description": "The subtype of the character",
+        "enum": [
+          "None",
+          "Artificer",
+          "Diplomat",
+          "Duelist",
+          "Orator",
+          "Prophet",
+          "Proselytizer",
+          "Quartermaster",
+          "Scholar",
+          "Statesman",
+          "Tyrant"
+        ],
+        "static": true
+      },
+      "strengths": {
         "bsonType": "array",
-		"label": "Weaknesses",
+        "label": "Strengths",
+        "description": "The strengths of the character",
+        "static": true,
+        "items": {
+          "bsonType": "string"
+        }
+      },
+      "weaknesses": {
+        "bsonType": "array",
+        "label": "Weaknesses",
         "description": "The weaknesses of the character",
-		"static": true,
-        "items":{
-			"bsonType": "string"
+        "static": true,
+        "items": {
+          "bsonType": "string"
         }
       },
       "artifact_slots": {
         "bsonType": "number",
-		"label": "Artifact Slots",
+        "label": "Artifact Slots",
         "description": "The number of artifact slots the character has available",
-		"calculated": true,
+        "calculated": true,
         "base_value": 12
       },
       "used_artifact_slots": {
         "bsonType": "number",
-		"label": "Used Artifact Slots",
+        "label": "Used Artifact Slots",
         "description": "The number of artifact slots the character is currently using",
-		"calculated": true,
+        "calculated": true,
         "base_value": 0
       },
       "artifact_loss_chance_per_slot": {
         "bsonType": "number",
-		"label": "Artifact Loss Chance Per Slot",
+        "label": "Artifact Loss Chance Per Slot",
         "description": "The percentage chance of the character losing an artifact each tick per slot used",
-		"calculated": true,
+        "calculated": true,
         "base_value": 0.02,
         "format": "percentage",
         "hidden": true
       },
       "artifact_loss_chance": {
         "bsonType": "number",
-		"label": "Artifact Loss Chance",
+        "label": "Artifact Loss Chance",
         "description": "The percentage chance of the character losing an artifact each tick",
-		"calculated": true,
+        "calculated": true,
         "format": "percentage"
       },
-	  "artifacts": {
+      "artifacts": {
         "bsonType": "array",
-		"label": "Artifacts",
+        "label": "Artifacts",
         "description": "The list of artifacts that currently belong to this character",
-		"collections": ["artifacts"],
-		"queryTargetAttribute": "owner",
-        "preview": ["rarity", "equipped"],
+        "collections": [
+          "artifacts"
+        ],
+        "queryTargetAttribute": "owner",
+        "preview": [
+          "rarity",
+          "equipped"
+        ],
         "preview_formats": {
-			"rarity": "string",
-			"equipped": "boolean"
-		},
-        "items":{
-			"bsonType": "linked_object"
+          "rarity": "string",
+          "equipped": "boolean"
+        },
+        "items": {
+          "bsonType": "linked_object"
         }
       },
       "positive_title_slots": {
         "bsonType": "number",
-		"label": "Positive Title Slots",
+        "label": "Positive Title Slots",
         "description": "The number of title slots the character has available",
-		"calculated": true,
+        "calculated": true,
         "base_value": 3
       },
       "positive_titles": {
         "bsonType": "array",
-		"label": "Positive Titles",
+        "label": "Positive Titles",
         "description": "The positive titles the character currently holds",
-		"static": true,
+        "static": true,
         "max_length": "positive_title_slots",
-        "items":{
-            "bsonType": "json_district_enum",
-            "json_data": "positive_titles"
+        "items": {
+          "bsonType": "json_district_enum",
+          "json_data": "positive_titles"
         }
       },
       "negative_titles": {
         "bsonType": "array",
         "label": "Negative Titles",
         "description": "The negative titles the character currently holds",
-		"static": true,
-        "items":{
-            "bsonType": "json_district_enum",
-            "json_data": "negative_titles"
+        "static": true,
+        "items": {
+          "bsonType": "json_district_enum",
+          "json_data": "negative_titles"
         }
       },
-	  "age": {
+      "age": {
         "bsonType": "number",
-		"label": "Age",
+        "label": "Age",
         "description": "How old the Character is",
         "default": 1
       },
-	  "elderly_age": {
+      "elderly_age": {
         "bsonType": "number",
-		"label": "Elderly Age",
+        "label": "Elderly Age",
         "description": "The age at which the Character is considered elderly",
-		"calculated": true,
+        "calculated": true,
         "base_value": 3
       },
-	  "age_status": {
+      "age_status": {
         "bsonType": "enum",
-		"label": "Age Status",
+        "label": "Age Status",
         "description": "The current age status of the Character",
-		"enum": ["Child", "Adult", "Elderly"],
-		"calculated": true
+        "enum": [
+          "Child",
+          "Adult",
+          "Elderly"
+        ],
+        "calculated": true
       },
       "health_status": {
         "bsonType": "enum",
-		"label": "Health Status",
+        "label": "Health Status",
         "description": "The current health status of the Character",
-		"enum": ["Healthy", "Injured", "Maimed", "Bedridden", "Dead"],
+        "enum": [
+          "Healthy",
+          "Injured",
+          "Maimed",
+          "Bedridden",
+          "Dead"
+        ],
         "laws": {
-			"Healthy": {},
-			"Injured": {
-				"death_chance": 0.05,
-                "stats": -1
-			},
-			"Maimed": {
-				"death_chance": 0.1,
-                "stats": -2
-			},
-            "Bedridden": {
-				"death_chance": 0.15,
-                "stats": -3
-			},
-			"Dead": {
-                "death_chance_maximum": 0
-            }
-		}
+          "Healthy": {},
+          "Injured": {
+            "death_chance": 0.05,
+            "stats": -1
+          },
+          "Maimed": {
+            "death_chance": 0.1,
+            "stats": -2
+          },
+          "Bedridden": {
+            "death_chance": 0.15,
+            "stats": -3
+          },
+          "Dead": {
+            "death_chance_maximum": 0
+          }
+        }
       },
       "death_chance": {
         "bsonType": "number",
-		"label": "Death Chance",
+        "label": "Death Chance",
         "description": "The percentage chance of the Character dying each tick",
-		"calculated": true,
+        "calculated": true,
         "format": "percentage"
       },
       "heal_chance": {
         "bsonType": "number",
-		"label": "Heal Chance",
+        "label": "Heal Chance",
         "description": "The percentage chance of the Character healing each tick",
-		"calculated": true,
+        "calculated": true,
         "base_value": 0.05,
         "heal_chance_per_prowess": 0.05,
         "format": "percentage"
       },
       "stat_gain_chance": {
         "bsonType": "number",
-		"label": "Stat Gain Chance",
+        "label": "Stat Gain Chance",
         "description": "The percentage chance of the Character gaining a stat point each tick",
-		"calculated": true,
+        "calculated": true,
         "format": "percentage"
       },
       "rulership_cap": {
         "bsonType": "number",
-		"label": "Rulership Cap",
+        "label": "Rulership Cap",
         "description": "The maximum Rulership stat of the character",
-		"calculated": true,
+        "calculated": true,
         "hidden": true,
         "base_value": 6
       },
       "cunning_cap": {
         "bsonType": "number",
-		"label": "Cunning Cap",
+        "label": "Cunning Cap",
         "description": "The maximum Cunning stat of the character",
-		"calculated": true,
+        "calculated": true,
         "hidden": true,
         "base_value": 6
       },
       "charisma_cap": {
         "bsonType": "number",
-		"label": "Charisma Cap",
+        "label": "Charisma Cap",
         "description": "The maximum Charisma stat of the character",
-		"calculated": true,
+        "calculated": true,
         "hidden": true,
         "base_value": 6
       },
       "prowess_cap": {
         "bsonType": "number",
-		"label": "Prowess Cap",
+        "label": "Prowess Cap",
         "description": "The maximum Prowess stat of the character",
-		"calculated": true,
+        "calculated": true,
         "hidden": true,
         "base_value": 6
       },
       "magic_cap": {
         "bsonType": "number",
-		"label": "Magic Cap",
+        "label": "Magic Cap",
         "description": "The maximum Magic stat of the character",
-		"calculated": true,
+        "calculated": true,
         "hidden": true,
         "base_value": 6
       },
       "strategy_cap": {
         "bsonType": "number",
-		"label": "Strategy Cap",
+        "label": "Strategy Cap",
         "description": "The maximum Strategy stat of the character",
-		"calculated": true,
+        "calculated": true,
         "hidden": true,
         "base_value": 6
       },
-	  "rulership": {
+      "rulership": {
         "bsonType": "number",
-		"label": "Rulership",
+        "label": "Rulership",
         "description": "The Rulership stat of the character",
-		"calculated": true,
+        "calculated": true,
         "max": "rulership_cap"
       },
-	  "cunning": {
+      "cunning": {
         "bsonType": "number",
-		"label": "Cunning",
+        "label": "Cunning",
         "description": "The Cunning stat of the character",
-		"calculated": true,
+        "calculated": true,
         "max": "cunning_cap"
       },
-	  "charisma": {
+      "charisma": {
         "bsonType": "number",
-		"label": "Charisma",
+        "label": "Charisma",
         "description": "The Charisma stat of the character",
-		"calculated": true,
+        "calculated": true,
         "max": "charisma_cap"
       },
-	  "prowess": {
+      "prowess": {
         "bsonType": "number",
-		"label": "Prowess",
+        "label": "Prowess",
         "description": "The Prowess stat of the character",
-		"calculated": true,
+        "calculated": true,
         "max": "prowess_cap"
       },
-	  "magic": {
+      "magic": {
         "bsonType": "number",
-		"label": "Magic",
+        "label": "Magic",
         "description": "The Magic stat of the character",
-		"calculated": true,
+        "calculated": true,
         "max": "magic_cap"
       },
-	  "strategy": {
+      "strategy": {
         "bsonType": "number",
-		"label": "Strategy",
+        "label": "Strategy",
         "description": "The Strategy stat of the character",
-		"calculated": true,
+        "calculated": true,
         "max": "strategy_cap"
       },
       "positive_quirk": {
         "bsonType": "enum",
-		"label": "Positive Quirk",
+        "label": "Positive Quirk",
         "description": "The positive quirk of the character",
-		"static": true,
-        "enum": ["None", "Articulate", "Brave", "Determined", "Compassionate", "Generous", "Humble", "Imaginative", "Just", "Observant", "Optimistic", "Patient", "Wise"]
+        "static": true,
+        "enum": [
+          "None",
+          "Articulate",
+          "Brave",
+          "Determined",
+          "Compassionate",
+          "Generous",
+          "Humble",
+          "Imaginative",
+          "Just",
+          "Observant",
+          "Optimistic",
+          "Patient",
+          "Wise"
+        ]
       },
       "negative_quirk": {
         "bsonType": "enum",
-		"label": "Negative Quirk",
+        "label": "Negative Quirk",
         "description": "The negative quirk of the character",
-		"static": true,
-        "enum": ["None", "Aggressive", "Apathetic", "Arrogant", "Boring", "Careless", "Cowardly", "Deceitful", "Empathetic", "Fickle", "Greedy", "Lazy", "Pessimistic", "Repulsive"]
+        "static": true,
+        "enum": [
+          "None",
+          "Aggressive",
+          "Apathetic",
+          "Arrogant",
+          "Boring",
+          "Careless",
+          "Cowardly",
+          "Deceitful",
+          "Empathetic",
+          "Fickle",
+          "Greedy",
+          "Lazy",
+          "Pessimistic",
+          "Repulsive"
+        ]
       },
-	  "magic_points": {
+      "magic_points": {
         "bsonType": "number",
-		"label": "Magic Points",
+        "label": "Magic Points",
         "description": "The amount of magic points the Character currently has in storage"
       },
-	  "magic_point_income": {
+      "magic_point_income": {
         "bsonType": "number",
-		"label": "Magic Point Production",
+        "label": "Magic Point Production",
         "description": "The amount of magic points the Character produces each tick",
-		"calculated": true
+        "calculated": true
       },
       "magic_point_capacity": {
         "bsonType": "number",
-		"label": "Magic Point Capacity",
+        "label": "Magic Point Capacity",
         "description": "The amount of magic points the Character can hold",
         "magic_point_capacity_per_magic": 3,
-		"calculated": true
+        "calculated": true
       },
-      	  "progress_quests": {
+      "progress_quests": {
         "bsonType": "array",
-		    "label": "Progress Quests",
+        "label": "Progress Quests",
         "description": "The ongoing quests the merchant company is currently working on",
-        "items":{
+        "items": {
           "bsonType": "object",
           "properties": {
+            "_id": {
+              "bsonType": "string",
+              "label": "Item ID",
+              "description": "Stable identifier for change tracking across reorders"
+            },
             "quest_name": {
               "bsonType": "string",
               "label": "Quest Name",
@@ -481,35 +593,40 @@
           }
         }
       },
-	  "modifiers": {
+      "modifiers": {
         "bsonType": "array",
-		"label": "Ongoing Modifiers",
+        "label": "Ongoing Modifiers",
         "description": "The ongoing modifiers currently affecting this characterr",
-		"items":{
-			"bsonType": "object",
-			"properties": {
-				"field": {
-					"bsonType": "string",
-					"label": "Modifier Field",
-					"description": "The calculated field the modifier affects"
-				},
-				"value": {
-					"bsonType": "number",
-					"label": "Modifier Value",
-					"description": "The value of the modifier"
-				},
-				"duration": {
-					"bsonType": "number",
-					"label": "Modifier Duration",
-					"description": "The duration of the modifier"
-				},
-                "source": {
-					"bsonType": "string",
-					"label": "Modifier Source",
-					"description": "The source of the modifier"
-				}
-			}
-		}
+        "items": {
+          "bsonType": "object",
+          "properties": {
+            "_id": {
+              "bsonType": "string",
+              "label": "Item ID",
+              "description": "Stable identifier for change tracking across reorders"
+            },
+            "field": {
+              "bsonType": "string",
+              "label": "Modifier Field",
+              "description": "The calculated field the modifier affects"
+            },
+            "value": {
+              "bsonType": "number",
+              "label": "Modifier Value",
+              "description": "The value of the modifier"
+            },
+            "duration": {
+              "bsonType": "number",
+              "label": "Modifier Duration",
+              "description": "The duration of the modifier"
+            },
+            "source": {
+              "bsonType": "string",
+              "label": "Modifier Source",
+              "description": "The source of the modifier"
+            }
+          }
+        }
       },
       "notes": {
         "bsonType": "string",

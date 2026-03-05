@@ -2,33 +2,98 @@
   "$jsonSchema": {
     "title": "Nations",
     "bsonType": "object",
-    "required": ["name", "region", "primary_race", "primary_culture", "primary_religion", "government_type", "succession_type", "foreign_acceptance", "origin"],
-    "laws": ["stability", "government_type", "succession_type", "nomad_camp_type", "conscription_type", "military_funding",
-      "magic_stance", "centralization_law", "citizenship_stance", "foreign_acceptance", "subject_stance", "land_doctrine", "naval_doctrine",
-      "diplomatic_stance", "scientific_stance", "economy_type", "expansion_stance", "mercenary_law", "consumption_stance", "tax_stance", "justice_stance",
-      "vassal_type"],
-    "preview": ["region", "pop_count"],
+    "required": [
+      "name",
+      "region",
+      "primary_race",
+      "primary_culture",
+      "primary_religion",
+      "government_type",
+      "succession_type",
+      "foreign_acceptance",
+      "origin"
+    ],
+    "laws": [
+      "stability",
+      "government_type",
+      "succession_type",
+      "nomad_camp_type",
+      "conscription_type",
+      "military_funding",
+      "magic_stance",
+      "centralization_law",
+      "citizenship_stance",
+      "foreign_acceptance",
+      "subject_stance",
+      "land_doctrine",
+      "naval_doctrine",
+      "diplomatic_stance",
+      "scientific_stance",
+      "economy_type",
+      "expansion_stance",
+      "mercenary_law",
+      "consumption_stance",
+      "tax_stance",
+      "justice_stance",
+      "vassal_type"
+    ],
+    "preview": [
+      "region",
+      "pop_count"
+    ],
     "external_calculation_requirements": {
       "overlord": {
-        "fields": ["subject_stance"],
+        "fields": [
+          "subject_stance"
+        ],
         "modifier_prefix": "vassal"
       },
-      "primary_race": ["positive_trait", "negative_trait"],
-      "primary_religion": ["external_modifiers"],
-      "wonders": ["external_modifiers", "node"],
-      "region": ["external_modifiers"],
-      "rulers": ["positive_titles", "negative_titles", "modifiers", {"artifacts": ["external_modifiers"]}],
+      "primary_race": [
+        "positive_trait",
+        "negative_trait"
+      ],
+      "primary_religion": [
+        "external_modifiers"
+      ],
+      "wonders": [
+        "external_modifiers",
+        "node"
+      ],
+      "region": [
+        "external_modifiers"
+      ],
+      "rulers": [
+        "positive_titles",
+        "negative_titles",
+        "modifiers",
+        {
+          "artifacts": [
+            "external_modifiers"
+          ]
+        }
+      ],
       "pops": [],
       "vassals": {
-        "fields": ["vassal_type"],
+        "fields": [
+          "vassal_type"
+        ],
         "modifier_prefix": "overlord"
       },
       "markets": {
-        "fields": ["market_safety_stance", "tariff_stance", "market_type", "tier"],
+        "fields": [
+          "market_safety_stance",
+          "tariff_stance",
+          "market_type",
+          "tier"
+        ],
         "modifier_prefix": "member"
       },
       "owned_markets": {
-        "fields": ["tariff_stance", "market_type", "tier"],
+        "fields": [
+          "tariff_stance",
+          "market_type",
+          "tier"
+        ],
         "modifier_prefix": "owner"
       }
     },
@@ -37,12 +102,12 @@
         "bsonType": "string",
         "label": "Name",
         "description": "The nation's name"
-        },
+      },
       "empire": {
         "bsonType": "boolean",
         "label": "Empire",
         "description": "Whether the nation is an empire",
-        "hidden":true
+        "hidden": true
       },
       "prestige": {
         "bsonType": "number",
@@ -60,7 +125,9 @@
         "bsonType": "array",
         "label": "Rulers",
         "description": "The list of rulers of the nation",
-        "collections": ["characters"],
+        "collections": [
+          "characters"
+        ],
         "queryTargetAttribute": "ruling_nation_org"
       },
       "ruler_artifact_slots": {
@@ -94,7 +161,16 @@
         "label": "Temperament",
         "description": "The nation's level of stability",
         "default": "Neutral",
-        "enum": ["Player", "Neutral", "Friendly", "Hostile", "Withdrawn", "Curious", "Supremacist", "Zealous"],
+        "enum": [
+          "Player",
+          "Neutral",
+          "Friendly",
+          "Hostile",
+          "Withdrawn",
+          "Curious",
+          "Supremacist",
+          "Zealous"
+        ],
         "view_access_level": 10
       },
       "sessions_since_temperament_change": {
@@ -102,95 +178,103 @@
         "label": "Sessions Since Temperament Change",
         "description": "The number of sessions since the nation's temperament was last changed",
         "default": 1,
-        "hidden":true,
+        "hidden": true,
         "view_access_level": 10
       },
       "temperament_change_roll": {
         "bsonType": "number",
         "label": "Temperament Change Roll",
         "description": "The roll that determined if the nation's temperament changed",
-        "hidden":true,
+        "hidden": true,
         "view_access_level": 10
       },
       "temperament_change_chance_at_tick": {
         "bsonType": "number",
         "label": "Temperament Change Chance At Tick",
         "description": "The chance the nation's temperament changed at the last tick",
-        "hidden":true,
+        "hidden": true,
         "view_access_level": 10
       },
       "temperament_roll": {
         "bsonType": "number",
         "label": "Temperament Roll",
         "description": "The roll that determined the nation's temperament",
-        "hidden":true,
+        "hidden": true,
         "view_access_level": 10
       },
       "temperament_odds": {
         "bsonType": "object",
         "label": "Temperament Odds",
         "description": "The odds of each temperament at the last temperament change",
-        "hidden":true,
+        "hidden": true,
         "view_access_level": 10
       },
-        "region": {
-          "bsonType": "linked_object",
-      "label": "Region",
-          "description": "The region the nation is in",
-      "collections": ["regions"]
-        },
+      "region": {
+        "bsonType": "linked_object",
+        "label": "Region",
+        "description": "The region the nation is in",
+        "collections": [
+          "regions"
+        ]
+      },
       "administration": {
-          "bsonType": "number",
-      "label": "Administration",
-          "description": "The nation's level of administration",
-      "calculated": true,
-      "base_value": 1
-        },
+        "bsonType": "number",
+        "label": "Administration",
+        "description": "The nation's level of administration",
+        "calculated": true,
+        "base_value": 1
+      },
       "effective_territory": {
-          "bsonType": "number",
-      "label": "Effective Territory",
-          "description": "The nation's maximum territory they can hold before they start suffering penalties",
-      "calculated": true,
-      "effective_territory_per_admin": 5,
-      "base_value": 10
-        },
+        "bsonType": "number",
+        "label": "Effective Territory",
+        "description": "The nation's maximum territory they can hold before they start suffering penalties",
+        "calculated": true,
+        "effective_territory_per_admin": 5,
+        "base_value": 10
+      },
       "current_territory": {
-          "bsonType": "number",
-      "label": "Current Territory",
-          "description": "The amount of territory the nation currently holds",
-      "calculated": true
-        },
+        "bsonType": "number",
+        "label": "Current Territory",
+        "description": "The amount of territory the nation currently holds",
+        "calculated": true
+      },
       "territory_types": {
-      "bsonType": "object",
-      "label": "Territory Types",
-      "description": "The types of territory the nation currently holds"
+        "bsonType": "object",
+        "label": "Territory Types",
+        "description": "The types of territory the nation currently holds"
       },
       "road_capacity": {
-          "bsonType": "number",
-      "label": "Road Capacity",
-          "description": "The nation's maximum road capacity that can be used before they start suffering penalties",
-      "calculated": true,
-      "road_capacity_per_admin": 4,
-      "base_value": 6
-        },
+        "bsonType": "number",
+        "label": "Road Capacity",
+        "description": "The nation's maximum road capacity that can be used before they start suffering penalties",
+        "calculated": true,
+        "road_capacity_per_admin": 4,
+        "base_value": 6
+      },
       "road_usage": {
-          "bsonType": "number",
-      "label": "Road Usage",
-          "description": "The amount of road capacity the nation is currently using",
-      "default": 0
-        },
+        "bsonType": "number",
+        "label": "Road Usage",
+        "description": "The amount of road capacity the nation is currently using",
+        "default": 0
+      },
       "passive_expansion_chance": {
-          "bsonType": "number",
-      "label": "Passive Expansion Chance",
-          "description": "The nation's percentage chance of expanding into adjacent territory each tick",
-      "calculated": true,
-      "format": "percentage"
-        },
+        "bsonType": "number",
+        "label": "Passive Expansion Chance",
+        "description": "The nation's percentage chance of expanding into adjacent territory each tick",
+        "calculated": true,
+        "format": "percentage"
+      },
       "stability": {
         "bsonType": "enum",
         "label": "Stability",
         "description": "The nation's level of stability",
-        "enum": ["Fragile", "Unsettled", "Balanced", "Stable", "United"],
+        "enum": [
+          "Fragile",
+          "Unsettled",
+          "Balanced",
+          "Stable",
+          "United"
+        ],
         "default": "Balanced",
         "laws": {
           "Fragile": {
@@ -251,7 +335,9 @@
         "description": "The list of wars the nation is currently fighting, if any",
         "linkCollection": "war_links",
         "linkQueryTarget": "participant",
-        "collections": ["wars"],
+        "collections": [
+          "wars"
+        ],
         "queryTarget": "war"
       },
       "markets": {
@@ -260,54 +346,70 @@
         "description": "The list of markets the nation is currently a part of, if any",
         "linkCollection": "market_links",
         "linkQueryTarget": "member",
-        "collections": ["markets"],
+        "collections": [
+          "markets"
+        ],
         "queryTarget": "market",
-        "preview": ["primary_resource", "secondary_resource_one", "secondary_resource_two"],
+        "preview": [
+          "primary_resource",
+          "secondary_resource_one",
+          "secondary_resource_two"
+        ],
         "items": {}
       },
       "owned_markets": {
         "bsonType": "array",
         "label": "Owned Markets",
         "description": "The list of markets the nation currently owns, if any",
-        "collections": ["markets"],
+        "collections": [
+          "markets"
+        ],
         "queryTargetAttribute": "market_head",
-        "preview": ["primary_resource", "secondary_resource_one", "secondary_resource_two"],
+        "preview": [
+          "primary_resource",
+          "secondary_resource_one",
+          "secondary_resource_two"
+        ],
         "items": {}
       },
       "factions": {
         "bsonType": "array",
         "label": "Factions",
         "description": "The list of factions currently based in the nation, if any",
-        "collections": ["factions"],
+        "collections": [
+          "factions"
+        ],
         "queryTargetAttribute": "base"
       },
       "hired_mercenaries": {
         "bsonType": "array",
         "label": "Hired Mercenaries",
         "description": "The list of mercenaries the nation has currently employed",
-        "collections": ["mercenaries"],
+        "collections": [
+          "mercenaries"
+        ],
         "queryTargetAttribute": "patron"
       },
       "money": {
-          "bsonType": "number",
-      "label": "Money",
-          "description": "The amount of money the nation currently has",
-      "default": 0
-        },
+        "bsonType": "number",
+        "label": "Money",
+        "description": "The amount of money the nation currently has",
+        "default": 0
+      },
       "money_capacity": {
-          "bsonType": "number",
-      "label": "Money Capacity",
-          "description": "The amount of money the nation can hold",
-      "calculated": true,
-      "base_value": 6000
-        },
+        "bsonType": "number",
+        "label": "Money Capacity",
+        "description": "The amount of money the nation can hold",
+        "calculated": true,
+        "base_value": 6000
+      },
       "money_income": {
-          "bsonType": "number",
-      "label": "Money Income",
-          "description": "The amount of money the nation gains each tick",
-      "calculated": true,
-      "base_value": 150
-        },
+        "bsonType": "number",
+        "label": "Money Income",
+        "description": "The amount of money the nation gains each tick",
+        "calculated": true,
+        "base_value": 150
+      },
       "karma": {
         "bsonType": "number",
         "label": "Total Karma",
@@ -330,68 +432,84 @@
         "bsonType": "number",
         "label": "Raw Roll",
         "description": "The raw karma roll before modifiers",
-        "hidden":true,
+        "hidden": true,
         "view_access_level": 10
       },
       "event_roll": {
         "bsonType": "number",
         "label": "Event Roll",
         "description": "The roll that lead to the event's tier",
-        "hidden":true,
+        "hidden": true,
         "view_access_level": 10
       },
       "event_type": {
         "bsonType": "string",
         "label": "Event Type",
         "description": "The type of event that occurred",
-        "hidden":true,
+        "hidden": true,
         "view_access_level": 10
       },
       "migration_distance": {
-          "bsonType": "number",
-      "label": "Migration Distance",
-          "description": "The distance this nation can migrate each session",
-      "calculated": true,
-      "base_value": 6
-        },
+        "bsonType": "number",
+        "label": "Migration Distance",
+        "description": "The distance this nation can migrate each session",
+        "calculated": true,
+        "base_value": 6
+      },
       "stationary_delay": {
-          "bsonType": "number",
-      "label": "Stationary Delay",
-          "description": "The amount of sessions a nomadic nation can stay in once place before suffering penalties",
-      "calculated": true,
-      "base_value": 2
-        },
+        "bsonType": "number",
+        "label": "Stationary Delay",
+        "description": "The amount of sessions a nomadic nation can stay in once place before suffering penalties",
+        "calculated": true,
+        "base_value": 2
+      },
       "primary_race": {
-          "bsonType": "linked_object",
-      "label": "Primary Race",
-          "description": "The primary race of the nation",
-      "collections": ["races"]
-        },
+        "bsonType": "linked_object",
+        "label": "Primary Race",
+        "description": "The primary race of the nation",
+        "collections": [
+          "races"
+        ]
+      },
       "primary_culture": {
-          "bsonType": "linked_object",
-      "label": "Primary Culture",
-          "description": "The primary culture of the nation",
-      "collections": ["cultures"]
-        },
+        "bsonType": "linked_object",
+        "label": "Primary Culture",
+        "description": "The primary culture of the nation",
+        "collections": [
+          "cultures"
+        ]
+      },
       "primary_religion": {
-          "bsonType": "linked_object",
-      "label": "Primary Religion",
-          "description": "The primary religion of the nation",
-      "collections": ["religions"]
-        },
+        "bsonType": "linked_object",
+        "label": "Primary Religion",
+        "description": "The primary religion of the nation",
+        "collections": [
+          "religions"
+        ]
+      },
       "overlord": {
-          "bsonType": "linked_object",
-      "label": "Overlord",
-          "description": "The overlord of the nation",
-      "noneResult":"Independent",
-      "collections": ["nations"],
-      "hideIfNone": "overlord"
-        },
+        "bsonType": "linked_object",
+        "label": "Overlord",
+        "description": "The overlord of the nation",
+        "noneResult": "Independent",
+        "collections": [
+          "nations"
+        ],
+        "hideIfNone": "overlord"
+      },
       "vassal_type": {
         "bsonType": "enum",
         "label": "Vassal Type",
         "description": "The type of vassal of the nation",
-        "enum": ["None", "Enclave", "Martial", "Mercantile", "Protectorate", "Provincial", "Tributary"],
+        "enum": [
+          "None",
+          "Enclave",
+          "Martial",
+          "Mercantile",
+          "Protectorate",
+          "Provincial",
+          "Tributary"
+        ],
         "hideIfNone": "overlord",
         "laws": {
           "None": {},
@@ -430,101 +548,141 @@
         }
       },
       "compliance": {
-          "bsonType": "enum",
-      "label": "Compliance",
-          "description": "The vassal's current compliance",
-      "enum": ["None", "Rebellious", "Defiant", "Neutral", "Compliant", "Loyal"],
-      "hideIfNone": "overlord"
-        },
+        "bsonType": "enum",
+        "label": "Compliance",
+        "description": "The vassal's current compliance",
+        "enum": [
+          "None",
+          "Rebellious",
+          "Defiant",
+          "Neutral",
+          "Compliant",
+          "Loyal"
+        ],
+        "hideIfNone": "overlord"
+      },
       "disobey_chance": {
-          "bsonType": "number",
-      "label": "Chance to Disobey",
-          "description": "Percentage chance for this nation to disobey a vassal action from their overlord",
-      "calculated": true,
-      "hideIfNone": "overlord",
-      "format": "percentage"
-        },
+        "bsonType": "number",
+        "label": "Chance to Disobey",
+        "description": "Percentage chance for this nation to disobey a vassal action from their overlord",
+        "calculated": true,
+        "hideIfNone": "overlord",
+        "format": "percentage"
+      },
       "rebellion_chance": {
-          "bsonType": "number",
-      "label": "Chance to Rebel",
-          "description": "Percentage chance for this nation to Rebel against their overlord",
-      "calculated": true,
-      "hideIfNone": "overlord",
-      "format": "percentage"
-        },
+        "bsonType": "number",
+        "label": "Chance to Rebel",
+        "description": "Percentage chance for this nation to Rebel against their overlord",
+        "calculated": true,
+        "hideIfNone": "overlord",
+        "format": "percentage"
+      },
       "concessions_chance": {
-          "bsonType": "number",
-      "label": "Chance to Demand Concessions",
-          "description": "Percentage chance for this nation to demand concessions from their overlord",
-      "calculated": true,
-      "hideIfNone": "overlord",
-      "format": "percentage"
-        },
+        "bsonType": "number",
+        "label": "Chance to Demand Concessions",
+        "description": "Percentage chance for this nation to demand concessions from their overlord",
+        "calculated": true,
+        "hideIfNone": "overlord",
+        "format": "percentage"
+      },
       "concessions_qty": {
-          "bsonType": "number",
-      "label": "Concessions Amount",
-          "description": "Number of resources demanded each time concessions are demanded",
-      "calculated": true,
-      "base_value": 4,
-      "hideIfNone": "overlord"
-        },
+        "bsonType": "number",
+        "label": "Concessions Amount",
+        "description": "Number of resources demanded each time concessions are demanded",
+        "calculated": true,
+        "base_value": 4,
+        "hideIfNone": "overlord"
+      },
       "concessions": {
-          "bsonType": "object",
-      "label": "Concessions",
-          "description": "The amount of concessions currently demanded by the vassal",
-      "hideIfNone": "overlord"
-        },
+        "bsonType": "object",
+        "label": "Concessions",
+        "description": "The amount of concessions currently demanded by the vassal",
+        "hideIfNone": "overlord"
+      },
       "vassals": {
-          "bsonType": "array",
-      "label": "Vassals",
-          "description": "The list of vassals currently under the control of the nation",
-      "collections": ["nations"],
-      "queryTargetAttribute": "overlord",
-      "preview": ["name", "vassal_type", "compliance", "disobey_chance", "rebellion_chance", "concessions_chance", "concessions", "temperament"]
-        },
+        "bsonType": "array",
+        "label": "Vassals",
+        "description": "The list of vassals currently under the control of the nation",
+        "collections": [
+          "nations"
+        ],
+        "queryTargetAttribute": "overlord",
+        "preview": [
+          "name",
+          "vassal_type",
+          "compliance",
+          "disobey_chance",
+          "rebellion_chance",
+          "concessions_chance",
+          "concessions",
+          "temperament"
+        ]
+      },
       "diplomatic_relations_1": {
         "bsonType": "array",
         "label": "Diplomatic Relations",
         "description": "The list of relations this nation has with other nations",
-        "collections": ["diplo_relations"],
+        "collections": [
+          "diplo_relations"
+        ],
         "queryTargetAttribute": "nation_1",
-        "preview": ["nation_2", "relation", "pact_type"]
+        "preview": [
+          "nation_2",
+          "relation",
+          "pact_type"
+        ]
       },
       "diplomatic_relations_2": {
         "bsonType": "array",
         "label": "Diplomatic Relations",
         "description": "The list of relations this nation has with other nations",
-        "collections": ["diplo_relations"],
+        "collections": [
+          "diplo_relations"
+        ],
         "queryTargetAttribute": "nation_2",
-        "preview": ["nation_1", "relation", "pact_type"]
+        "preview": [
+          "nation_1",
+          "relation",
+          "pact_type"
+        ]
       },
       "working_pop_count": {
-          "bsonType": "number",
-      "label": "Working Pops Count",
-          "description": "The number of pops currently working jobs in the nation",
-      "calculated": true
-        },
+        "bsonType": "number",
+        "label": "Working Pops Count",
+        "description": "The number of pops currently working jobs in the nation",
+        "calculated": true
+      },
       "pop_count": {
-          "bsonType": "number",
-      "label": "Pop Count",
-          "description": "The amount of pops the nation has",
-      "calculated": true
-        },
+        "bsonType": "number",
+        "label": "Pop Count",
+        "description": "The amount of pops the nation has",
+        "calculated": true
+      },
       "effective_pop_capacity": {
-          "bsonType": "number",
-      "label": "Effective Pop Capacity",
-          "description": "The amount of pops the nation can effectively hold",
-      "calculated": true,
-      "base_value": 13
-        },
+        "bsonType": "number",
+        "label": "Effective Pop Capacity",
+        "description": "The amount of pops the nation can effectively hold",
+        "calculated": true,
+        "base_value": 13
+      },
       "pops": {
         "bsonType": "array",
         "label": "Pops",
         "description": "The list of pops in the nation",
-        "collections": ["pops"],
+        "collections": [
+          "pops"
+        ],
         "queryTargetAttribute": "nation",
-        "preview": ["race", "culture", "religion"],
-        "sort_by": ["race", "culture", "religion"]
+        "preview": [
+          "race",
+          "culture",
+          "religion"
+        ],
+        "sort_by": [
+          "race",
+          "culture",
+          "religion"
+        ]
       },
       "unique_minority_count": {
         "bsonType": "number",
@@ -574,9 +732,21 @@
         "bsonType": "enum",
         "label": "Government Type",
         "description": "The type of government of the nation",
-        "enum": ["Autocracy", "Representative Council", "City State", "Trade Federation", "Archivist State", "Untamed Lords", "Far Travelers",
-          "Iron-Fisted Dictatorship", "Imperial Council", "Sacred Vicar", "Great Khanate", "World Warden"],
-        "laws":{
+        "enum": [
+          "Autocracy",
+          "Representative Council",
+          "City State",
+          "Trade Federation",
+          "Archivist State",
+          "Untamed Lords",
+          "Far Travelers",
+          "Iron-Fisted Dictatorship",
+          "Imperial Council",
+          "Sacred Vicar",
+          "Great Khanate",
+          "World Warden"
+        ],
+        "laws": {
           "Autocracy": {
             "district_slots": 1,
             "city_slots": 3,
@@ -659,7 +829,11 @@
         "bsonType": "enum",
         "label": "Succession Type",
         "description": "The way the next leader of the nation is selected",
-        "enum": ["Strength", "Inherited", "Elected"],
+        "enum": [
+          "Strength",
+          "Inherited",
+          "Elected"
+        ],
         "laws": {
           "Strength": {
             "stability_loss_chance_on_leader_death": 1
@@ -676,7 +850,13 @@
         "bsonType": "enum",
         "label": "Nomad Camp Type",
         "description": "The type of camp a nomadic nation currently has",
-        "enum": ["None", "Caravan", "Canvass", "Encampment", "Hearth"],
+        "enum": [
+          "None",
+          "Caravan",
+          "Canvass",
+          "Encampment",
+          "Hearth"
+        ],
         "laws": {
           "None": {},
           "Caravan": {
@@ -713,7 +893,14 @@
         "bsonType": "enum",
         "label": "Conscription Type",
         "description": "How much of the nation's population can be mobilized during a war",
-        "enum": ["Low", "Moderate", "High", "Very High", "Total", "Rebellion"],
+        "enum": [
+          "Low",
+          "Moderate",
+          "High",
+          "Very High",
+          "Total",
+          "Rebellion"
+        ],
         "default": "Moderate",
         "laws": {
           "Moderate": {
@@ -747,7 +934,14 @@
         "bsonType": "enum",
         "label": "Military Funding",
         "description": "How well funded the nation's military is",
-        "enum": ["Minimal", "Substandard", "Standard", "Notable", "Substantial", "Extreme"],
+        "enum": [
+          "Minimal",
+          "Substandard",
+          "Standard",
+          "Notable",
+          "Substantial",
+          "Extreme"
+        ],
         "default": "Standard",
         "laws": {
           "Minimal": {
@@ -780,7 +974,13 @@
         "bsonType": "enum",
         "label": "Magic Stance",
         "description": "The nation's stance towards magic",
-        "enum": ["Bureaucracy", "Creation", "Military", "Persecution", "Manifest"],
+        "enum": [
+          "Bureaucracy",
+          "Creation",
+          "Military",
+          "Persecution",
+          "Manifest"
+        ],
         "laws": {
           "Bureaucracy": {
             "bureaucrat_magic_production": 0.3333333333333334
@@ -797,35 +997,47 @@
         }
       },
       "centralization_law": {
-          "bsonType": "enum",
-          "label": "Centralization Law",
-          "description": "The degree to which the nation is centralized",
-          "enum": ["Autonomous", "Decentralized", "Standard", "Focused", "Absolute"],
-          "default": "Standard",
-          "laws": {
-            "Autonomous": {
-              "0_progress_slots": 4
-            },
-            "Decentralized": {
-              "1_progress_slots": 3
-            },
-            "Standard": {
-              "2_progress_slots": 2
-            },
-            "Focused": {
-              "3_progress_slots": 1,
-              "1_progress_slots": 1
-            },
-            "Absolute": {
-              "4_progress_slots": 1
-            }
+        "bsonType": "enum",
+        "label": "Centralization Law",
+        "description": "The degree to which the nation is centralized",
+        "enum": [
+          "Autonomous",
+          "Decentralized",
+          "Standard",
+          "Focused",
+          "Absolute"
+        ],
+        "default": "Standard",
+        "laws": {
+          "Autonomous": {
+            "0_progress_slots": 4
+          },
+          "Decentralized": {
+            "1_progress_slots": 3
+          },
+          "Standard": {
+            "2_progress_slots": 2
+          },
+          "Focused": {
+            "3_progress_slots": 1,
+            "1_progress_slots": 1
+          },
+          "Absolute": {
+            "4_progress_slots": 1
           }
-        },
+        }
+      },
       "citizenship_stance": {
         "bsonType": "enum",
         "label": "Citizenship Stance",
         "description": "How easy it is to get citizenship in the nation",
-        "enum": ["None", "Free", "Open", "Restricted", "Closed"],
+        "enum": [
+          "None",
+          "Free",
+          "Open",
+          "Restricted",
+          "Closed"
+        ],
         "laws": {
           "None": {},
           "Free": {
@@ -846,7 +1058,12 @@
         "bsonType": "enum",
         "label": "Foreign Acceptance",
         "description": "How minority cultures and religions living in the nation are handled",
-        "enum": ["Oppression", "Integration", "Acceptance", "Harmony"],
+        "enum": [
+          "Oppression",
+          "Integration",
+          "Acceptance",
+          "Harmony"
+        ],
         "default": "Integration",
         "laws": {
           "Oppression": {
@@ -872,7 +1089,11 @@
         "bsonType": "enum",
         "label": "Subject Stance",
         "description": "The way the nation tends to interact with its vassals",
-        "enum": ["Suppression", "Balanced", "Benevolence"],
+        "enum": [
+          "Suppression",
+          "Balanced",
+          "Benevolence"
+        ],
         "default": "Balanced",
         "laws": {
           "Suppression": {
@@ -889,7 +1110,15 @@
         "bsonType": "enum",
         "label": "Land Doctrine",
         "description": "The nation's general approach to land based warfare",
-        "enum": ["Standard", "Nomadic", "Shock", "Volley", "Safeguard", "Militia", "Ambush"],
+        "enum": [
+          "Standard",
+          "Nomadic",
+          "Shock",
+          "Volley",
+          "Safeguard",
+          "Militia",
+          "Ambush"
+        ],
         "laws": {
           "Standard": {},
           "Nomadic": {
@@ -921,7 +1150,12 @@
         "bsonType": "enum",
         "label": "Naval Doctrine",
         "description": "The nation's general approach to aquatic warfare",
-        "enum": ["Standard", "Skirmish", "Fleet", "Transport"],
+        "enum": [
+          "Standard",
+          "Skirmish",
+          "Fleet",
+          "Transport"
+        ],
         "laws": {
           "Standard": {},
           "Skirmish": {},
@@ -933,7 +1167,13 @@
         "bsonType": "enum",
         "label": "Diplomatic Stance",
         "description": "The nation's default stance towards interacting with its neighbors",
-        "enum": ["Expansionist", "Cooperative", "Belligerent", "Isolated", "Extermination"],
+        "enum": [
+          "Expansionist",
+          "Cooperative",
+          "Belligerent",
+          "Isolated",
+          "Extermination"
+        ],
         "laws": {
           "Cooperative": {
             "defensive_pact_slots": 1
@@ -960,7 +1200,14 @@
         "bsonType": "enum",
         "label": "Scientific Stance",
         "description": "The degree to which the nation is geared towards technological development",
-        "enum": ["Puritanical", "Conservative", "Pragmatic", "Progressive", "Radical", "Revolutionary"],
+        "enum": [
+          "Puritanical",
+          "Conservative",
+          "Pragmatic",
+          "Progressive",
+          "Radical",
+          "Revolutionary"
+        ],
         "default": "Pragmatic",
         "laws": {
           "Puritanical": {
@@ -997,7 +1244,13 @@
         "bsonType": "enum",
         "label": "Economy Type",
         "description": "The direction the nation's economy is specialized in",
-        "enum": ["None", "Conquest", "Construction", "Production", "Commerce"],
+        "enum": [
+          "None",
+          "Conquest",
+          "Construction",
+          "Production",
+          "Commerce"
+        ],
         "laws": {
           "None": {},
           "Conquest": {
@@ -1023,7 +1276,12 @@
         "bsonType": "enum",
         "label": "Expansion Control Stance",
         "description": "The nation's default stance towards unregulated expansion",
-        "enum": ["Limitless", "Free", "Restricted", "Controlled"],
+        "enum": [
+          "Limitless",
+          "Free",
+          "Restricted",
+          "Controlled"
+        ],
         "default": "Free",
         "laws": {
           "Limitless": {
@@ -1050,7 +1308,13 @@
         "bsonType": "enum",
         "label": "Mercenary Law",
         "description": "The degree to which the nation's military is geared to employ mercenaries",
-        "enum": ["No Mercenaries", "Some Mercenaries", "Mercenary Presence", "Mercenary Reliance", "Mercenary Military"],
+        "enum": [
+          "No Mercenaries",
+          "Some Mercenaries",
+          "Mercenary Presence",
+          "Mercenary Reliance",
+          "Mercenary Military"
+        ],
         "default": "Some Mercenaries",
         "laws": {
           "No Mercenaries": {
@@ -1078,7 +1342,13 @@
         "bsonType": "enum",
         "label": "Consumption Stance",
         "description": "The nation's stance towards whether food should be distributed in abundance or rationed",
-        "enum": ["None", "Indulgence", "Comfort", "Standard", "Rationing"],
+        "enum": [
+          "None",
+          "Indulgence",
+          "Comfort",
+          "Standard",
+          "Rationing"
+        ],
         "laws": {
           "None": {},
           "Indulgence": {
@@ -1108,7 +1378,15 @@
         "bsonType": "enum",
         "label": "Tax Stance",
         "description": "The nation's tax rate",
-        "enum": ["None", "Subsidized", "No Taxes", "Low", "Moderate", "High", "Oppressive"],
+        "enum": [
+          "None",
+          "Subsidized",
+          "No Taxes",
+          "Low",
+          "Moderate",
+          "High",
+          "Oppressive"
+        ],
         "laws": {
           "None": {},
           "Subsidized": {
@@ -1140,7 +1418,12 @@
         "bsonType": "enum",
         "label": "Justice Stance",
         "description": "The nation's stance on handling criminals",
-        "enum": ["None", "Reformation", "Standard", "Punishment"],
+        "enum": [
+          "None",
+          "Reformation",
+          "Standard",
+          "Punishment"
+        ],
         "laws": {
           "None": {},
           "Reformation": {
@@ -1198,10 +1481,26 @@
         "bsonType": "enum",
         "label": "Origin",
         "description": "The origin the nation selected at creation",
-        "enum": ["Unknown",
-          "(T) Default", "(T) Fragile Unification", "(T) Fragmented", "(T) Strange Outsiders", "(T) Survivors", "(T) Fortunate",
-          "(A) Default", "(A) Conquest State", "(A) Protected Scion", "(A) Artificer State", "(A) Recent Subjugation",
-          "(C) Aspiring Allies", "(C) Shattered Dominion", "(C) Enlightened Defeat", "(C) Loyal Vassal", "(C) Fleeing Victims", "(C) Local Bully"]
+        "enum": [
+          "Unknown",
+          "(T) Default",
+          "(T) Fragile Unification",
+          "(T) Fragmented",
+          "(T) Strange Outsiders",
+          "(T) Survivors",
+          "(T) Fortunate",
+          "(A) Default",
+          "(A) Conquest State",
+          "(A) Protected Scion",
+          "(A) Artificer State",
+          "(A) Recent Subjugation",
+          "(C) Aspiring Allies",
+          "(C) Shattered Dominion",
+          "(C) Enlightened Defeat",
+          "(C) Loyal Vassal",
+          "(C) Fleeing Victims",
+          "(C) Local Bully"
+        ]
       },
       "jobs": {
         "bsonType": "array",
@@ -1271,13 +1570,13 @@
         "label": "Mercenary Land Attack Modifier",
         "description": "The mercenary land attack modifier of the nation",
         "calculated": true
-        },
+      },
       "mercenary_land_defense": {
         "bsonType": "number",
         "label": "Mercenary Land Defense Modifier",
         "description": "The mercenary land defense modifier of the nation",
         "calculated": true
-        },
+      },
       "mercenary_naval_attack": {
         "bsonType": "number",
         "label": "Mercenary Naval Attack Modifier",
@@ -1323,7 +1622,7 @@
         "bsonType": "array",
         "label": "Luxury Resources",
         "description": "The luxury resources the nation has in their lands",
-        "items":{
+        "items": {
           "bsonType": "string"
         }
       },
@@ -1331,7 +1630,7 @@
         "bsonType": "array",
         "label": "Technologies",
         "description": "The technologies the nation has access to",
-        "items":{
+        "items": {
           "bsonType": "object",
           "properties": {
             "invested": {
@@ -1374,9 +1673,14 @@
         "label": "Districts",
         "description": "The districts the nation owns",
         "max_length": "district_slots",
-        "items":{
+        "items": {
           "bsonType": "object",
           "properties": {
+            "_id": {
+              "bsonType": "string",
+              "label": "Item ID",
+              "description": "Stable identifier for change tracking across reorders"
+            },
             "type": {
               "bsonType": "json_district_enum",
               "label": "District Type",
@@ -1412,9 +1716,14 @@
         "label": "Cities",
         "description": "The cities the nation owns",
         "max_length": "city_slots",
-        "items":{
+        "items": {
           "bsonType": "object",
           "properties": {
+            "_id": {
+              "bsonType": "string",
+              "label": "Item ID",
+              "description": "Stable identifier for change tracking across reorders"
+            },
             "name": {
               "bsonType": "string",
               "label": "City Name",
@@ -1429,7 +1738,7 @@
               "bsonType": "array",
               "label": "City Nodes",
               "description": "The nodes under the city",
-              "items":{
+              "items": {
                 "bsonType": "string",
                 "label": "Node Type",
                 "description": "The type of the node"
@@ -1447,12 +1756,19 @@
         "bsonType": "array",
         "label": "Wonders",
         "description": "The list of wonders the nation currently owns",
-        "collections": ["wonders"],
+        "collections": [
+          "wonders"
+        ],
         "queryTargetAttribute": "owner_nation",
-        "items":{
+        "items": {
           "bsonType": "linked_object"
         },
-        "preview": ["name", "node", "era_created", "legacy_status"]
+        "preview": [
+          "name",
+          "node",
+          "era_created",
+          "legacy_status"
+        ]
       },
       "export_slots": {
         "bsonType": "number",
@@ -1491,9 +1807,11 @@
         "bsonType": "array",
         "label": "Outgoing Trades",
         "description": "The ongoing trades where the nation is currently exporting resources",
-        "collections": ["trades"],
+        "collections": [
+          "trades"
+        ],
         "queryTargetAttribute": "exporting_nation",
-        "items":{
+        "items": {
           "bsonType": "linked_object"
         }
       },
@@ -1501,9 +1819,11 @@
         "bsonType": "array",
         "label": "Incoming Trades",
         "description": "The ongoing trades where the nation is currently importing resources",
-        "collections": ["trades"],
+        "collections": [
+          "trades"
+        ],
         "queryTargetAttribute": "importing_nation",
-        "items":{
+        "items": {
           "bsonType": "linked_object"
         }
       },
@@ -1541,9 +1861,14 @@
         "bsonType": "array",
         "label": "Progress Quests",
         "description": "The ongoing quests the nation is currently working on",
-        "items":{
+        "items": {
           "bsonType": "object",
           "properties": {
+            "_id": {
+              "bsonType": "string",
+              "label": "Item ID",
+              "description": "Stable identifier for change tracking across reorders"
+            },
             "quest_name": {
               "bsonType": "string",
               "label": "Quest Name",
@@ -1576,9 +1901,14 @@
         "bsonType": "array",
         "label": "Ongoing Modifiers",
         "description": "The ongoing modifiers currently affecting this nation",
-        "items":{
+        "items": {
           "bsonType": "object",
           "properties": {
+            "_id": {
+              "bsonType": "string",
+              "label": "Item ID",
+              "description": "Stable identifier for change tracking across reorders"
+            },
             "key": {
               "bsonType": "string",
               "label": "Modifier Key",
