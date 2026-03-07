@@ -72,6 +72,15 @@
 			"food": 4
 		}
 	},
+	"firefather_priest": {
+		"display_name": "Firefather Priest",
+		"requirements":{
+			"name": ["Khanya"]
+		},
+		"upkeep": {
+			"magic": 4
+		}
+	},
 	"fisherman": {
 		"display_name": "Fisherman",
 		"requirements":{
