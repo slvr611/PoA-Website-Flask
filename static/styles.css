@@ -772,6 +772,140 @@ h1, h2 {
     margin-left: 15px;
 }
 
+/* ── Change diff: array section containers ──────────────────── */
+.array-changes {
+    margin-top: 4px;
+}
+
+.array-section {
+    margin-bottom: 6px;
+}
+
+.array-section-header {
+    font-weight: bold;
+    font-size: 0.85em;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+}
+
+.array-items-added    .array-section-header { color: #4CAF50; }
+.array-items-removed  .array-section-header { color: #f44336; }
+.array-items-modified .array-section-header { color: #e0a800; }
+.array-items-reordered .array-section-header { color: #64b5f6; }
+
+/* Individual diff items */
+.array-item-added,
+.array-item-removed,
+.array-item-changed {
+    padding: 3px 6px;
+    margin-bottom: 3px;
+    border-left: 2px solid transparent;
+    font-size: 0.9em;
+}
+
+.array-item-added   { border-left-color: #4CAF50; }
+.array-item-removed { border-left-color: #f44336; }
+.array-item-changed { border-left-color: #e0a800; }
+
+.array-item-header {
+    font-weight: bold;
+    margin-bottom: 2px;
+}
+
+.array-item-body {
+    padding-left: 8px;
+}
+
+.dict-change-item {
+    margin-bottom: 2px;
+}
+
+.dict-key {
+    color: #888;
+    margin-right: 4px;
+}
+
+.dict-value {
+    color: #ccc;
+}
+
+.simple-change {
+    color: #ccc;
+}
+
+.no-changes {
+    color: #555;
+    font-style: italic;
+    font-size: 0.85em;
+}
+
+.field-added   { color: #4CAF50; }
+.field-removed { color: #f44336; }
+
+.nested-dict-change {
+    padding-left: 10px;
+    border-left: 1px solid #444;
+}
+
+/* ── Reorder table ──────────────────────────────────────────── */
+/*  Shows the before/after ordering side-by-side, one row per
+    position.  Rows where the item is the same in both columns
+    are muted; rows where items differ are highlighted in amber.  */
+.reorder-table {
+    border-collapse: collapse;
+    font-size: 0.85em;
+    margin-top: 6px;
+    width: 100%;
+}
+
+.reorder-table th {
+    text-align: left;
+    padding: 3px 8px;
+    background-color: #2a2d3a;
+    color: #aaa;
+    font-weight: normal;
+    border-bottom: 1px solid #444;
+}
+
+.reorder-pos-header {
+    width: 2em;
+    text-align: right;
+    padding-right: 4px !important;
+}
+
+.reorder-table td {
+    padding: 2px 8px;
+    border-bottom: 1px solid #222;
+}
+
+.reorder-pos-num {
+    color: #555;
+    text-align: right;
+    width: 2em;
+    font-size: 0.8em;
+    padding-right: 4px !important;
+}
+
+/* Unchanged rows: heavily muted so the eye skips them */
+.reorder-row-same td {
+    color: #555;
+}
+
+.reorder-row-same .reorder-pos-num {
+    color: #3a3a3a;
+}
+
+/* Changed rows: amber highlight so the eye finds them immediately */
+.reorder-row-moved td {
+    color: #e0a800;
+    font-weight: 500;
+}
+
+.reorder-row-moved .reorder-pos-num {
+    color: #b07d00;
+}
+
 .action-buttons {
     display: flex;
     gap: 5px;

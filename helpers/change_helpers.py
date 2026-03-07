@@ -6,11 +6,101 @@ from calculations.field_calculations import calculate_all_fields
 from copy import deepcopy
 from bson import ObjectId
 
+_NATURAL_KEY_FIELDS = ['name', 'quest_name', 'source', 'field', 'key']
+
+
+def _get_natural_key(item):
+    """Return the first non-empty value from a priority list of identifying fields."""
+    for field in _NATURAL_KEY_FIELDS:
+        val = item.get(field)
+        if val:
+            return str(val)
+    return None
+
+
+def _reconcile_item_ids(before_data, after_data):
+    """Propagate stable _id values from before_data to matching after_data items.
+
+    When after_data items lack a valid _id (e.g. because a form did not include
+    the hidden _id input), this matches them to before_data items by natural key
+    (quest_name, name, etc.) and copies the original _id.  This preserves
+    identity across request/display so that the diff correctly shows only the
+    fields that actually changed rather than treating every item as removed and
+    re-added.
+
+    Call this BEFORE _ensure_item_ids so that truly new items (no match in
+    before) still get a fresh id from _ensure_item_ids.
+    """
+    if isinstance(before_data, dict) and isinstance(after_data, dict):
+        for key in after_data:
+            if key in before_data:
+                _reconcile_item_ids(before_data[key], after_data[key])
+    elif isinstance(before_data, list) and isinstance(after_data, list):
+        if not _all_have_ids(before_data):
+            return
+
+        before_ids = {item['_id'] for item in before_data if isinstance(item, dict) and '_id' in item}
+
+        # Index before items by natural key for O(1) lookup
+        before_by_key = {}
+        for item in before_data:
+            if isinstance(item, dict):
+                nk = _get_natural_key(item)
+                if nk and nk not in before_by_key:
+                    before_by_key[nk] = item
+
+        # Track which before IDs have already been claimed by an after item
+        claimed = set()
+        for after_item in after_data:
+            if isinstance(after_item, dict) and after_item.get('_id') in before_ids:
+                claimed.add(after_item['_id'])
+
+        for after_item in after_data:
+            if not isinstance(after_item, dict):
+                continue
+            # Already has a valid before ID — nothing to do
+            if after_item.get('_id') in before_ids:
+                continue
+            nk = _get_natural_key(after_item)
+            if nk and nk in before_by_key:
+                bid = before_by_key[nk].get('_id')
+                if bid and bid not in claimed:
+                    after_item['_id'] = bid
+                    claimed.add(bid)
+
+
+def _normalize_item_ids(data):
+    """Recursively rename ``item_id`` → ``_id`` in submitted form data.
+
+    WTForms cannot register field names that start with ``_``, so the stable
+    sub-document identity field is exposed to forms as ``item_id``.  This
+    function renames it back to ``_id`` before the data enters the change
+    pipeline so that _reconcile_item_ids can match submitted items against
+    the stored before_data by their original IDs.
+
+    Only call this on data that came from a form submission (i.e. in
+    ``request_change``), not on data generated internally (``system_request_change``).
+    """
+    if isinstance(data, dict):
+        for value in data.values():
+            _normalize_item_ids(value)
+    elif isinstance(data, list):
+        for item in data:
+            if isinstance(item, dict):
+                if 'item_id' in item:
+                    raw_id = item.pop('item_id')
+                    if raw_id:  # only promote non-empty values
+                        item['_id'] = raw_id
+                _normalize_item_ids(item)
+
+
 def _ensure_item_ids(data):
     """Recursively assign a _id to any dict item inside a list that lacks one.
 
     Call this on ``after_data`` before computing diffs so that newly added
     sub-document items receive a stable identity at request time.
+    Also replaces empty-string or None _id values (e.g. from unrendered form
+    hidden fields) with fresh ids.
     """
     if isinstance(data, dict):
         for value in data.values():
@@ -18,7 +108,7 @@ def _ensure_item_ids(data):
     elif isinstance(data, list):
         for item in data:
             if isinstance(item, dict):
-                if '_id' not in item:
+                if not item.get('_id'):
                     item['_id'] = uuid.uuid4().hex[:8]
                 _ensure_item_ids(item)
 
@@ -66,8 +156,12 @@ def request_change(data_type, item_id, change_type, before_data, after_data, rea
     before_data.pop("_id", None)
     after_data.pop("_id", None)
 
-    # Stamp IDs on any new sub-document list items in after_data so reorders
-    # can be detected later via ID-based matching.
+    # Rename item_id → _id in form-submitted data (WTForms cannot register
+    # field names starting with '_', so the hidden field is named item_id).
+    _normalize_item_ids(after_data)
+    # Propagate stable IDs from before to after where items match by natural key,
+    # then stamp fresh IDs on any remaining items that still lack one.
+    _reconcile_item_ids(before_data, after_data)
     _ensure_item_ids(after_data)
 
     before_data, after_data = keep_only_differences(before_data, after_data, change_type)
@@ -101,6 +195,7 @@ def system_request_change(data_type, item_id, change_type, before_data, after_da
     before_data.pop("_id", None)
     after_data.pop("_id", None)
 
+    _reconcile_item_ids(before_data, after_data)
     _ensure_item_ids(after_data)
 
     before_data, after_data = keep_only_differences(before_data, after_data, change_type)
@@ -344,8 +439,14 @@ def keep_only_differences(before_data, after_data, change_type):
 def keep_only_differences_dict(before_data, after_data):
     new_before = {}
     new_after = {}
-    if len(after_data) == 0 and not deep_compare(before_data, after_data):  # If after_data is empty and before_data is not, then we want to include it in the changes to clear the data 
-        return before_data, after_data
+    # Note: an empty after_data ({}) is treated as "nothing was submitted
+    # for this sub-document" rather than "the user intentionally cleared it".
+    # This prevents FormField sub-forms that have no registered fields
+    # (e.g. NavalUnitAssignmentDict when naval_unit_details is empty) from
+    # generating spurious "all values → None" diffs.  The normal key loop
+    # below handles all real changes correctly: if after_data has keys, they
+    # are compared against before_data; if after_data is empty, no keys are
+    # iterated and the function returns ({}, {}) — meaning no change.
 
     for key in after_data.keys():
         current_before = before_data.get(key)
@@ -365,12 +466,38 @@ def keep_only_differences_dict(before_data, after_data):
     return new_before, new_after
 
 def keep_only_differences_list(before_data, after_data):
-    # When all dict items in both lists carry a stable _id, store the full
-    # lists verbatim.  deep_compare will detect whether anything changed
-    # (including pure reorders), and deep_merge / check_no_other_changes will
-    # use ID-based matching at approval time.
+    # When all dict items in both lists carry a stable _id, preserve order
+    # information and use ID-based matching at approval / display time.
+    # Before returning, we restrict each before-item's keys to the set of
+    # keys present in its matching after-item.  This prevents calculated
+    # fields (e.g. total_progress_per_tick) that exist in the DB's before
+    # snapshot but are never submitted by forms from appearing as spurious
+    # "X → None" modifications in the change display.  Items that were
+    # removed (only in before) keep all their keys so the display can show
+    # what was there.
     if _all_have_ids(before_data) and _all_have_ids(after_data):
-        return list(before_data), list(after_data)
+        after_by_id = {
+            item['_id']: item
+            for item in after_data
+            if isinstance(item, dict) and '_id' in item
+        }
+        filtered_before = []
+        for item in before_data:
+            if not isinstance(item, dict) or '_id' not in item:
+                filtered_before.append(item)
+            elif item['_id'] in after_by_id:
+                # Item exists in both snapshots: only track keys the form
+                # submitted so that server-computed fields are not shown as
+                # going from a real value to None.
+                after_item = after_by_id[item['_id']]
+                filtered_before.append(
+                    {k: v for k, v in item.items() if k in after_item}
+                )
+            else:
+                # Item was removed — keep all keys so the display can show
+                # everything that was there before removal.
+                filtered_before.append(dict(item))
+        return filtered_before, list(after_data)
 
     # Positional fallback for legacy data without IDs.
     new_before = []
@@ -435,7 +562,14 @@ def check_no_other_changes(before_data, after_data, current_data):
                         return False  # Externally added item
                     b_item = b_map.get(item_id, {})
                     a_item = a_map.get(item_id, {})
-                    if not (deep_compare(c_item, b_item) or deep_compare(c_item, a_item)):
+                    # Project c_item onto only the keys tracked by b_item / a_item.
+                    # The live DB document may contain server-calculated fields (e.g.
+                    # total_progress_per_tick) that were stripped from the stored
+                    # before/after items by keep_only_differences_list.  Those extra
+                    # fields must not cause a false "target has changed" failure.
+                    c_proj_b = {k: c_item.get(k) for k in b_item}
+                    c_proj_a = {k: c_item.get(k) for k in a_item}
+                    if not (deep_compare(c_proj_b, b_item) or deep_compare(c_proj_a, a_item)):
                         return False  # Content changed externally
 
                 # Items that were in before AND after (i.e. being modified, not removed)

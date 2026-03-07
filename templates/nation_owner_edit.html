@@ -686,6 +686,7 @@
                 <div class="districts-grid">
                     {% for district_field in form.districts %}
                         <div class="district-slot">
+                            {{ district_field.item_id() }}
                             <label for="{{ district_field.id }}">Slot {{ loop.index }}</label></br></br>
                             {{ district_field.form.type.label }}: {{ district_field.form.type(class="form-control") }}
                             {{ district_field.form.node.label }}: {{ district_field.form.node(class="form-control") }}
@@ -708,8 +709,9 @@
                     <div class="districts-grid">
                         {% for city_field in form.cities %}
                             <div class="district-slot">
+                                {{ city_field.item_id() }}
                                 <label for="{{ city_field.id }}">Slot {{ loop.index }}</label></br></br>
-                                {{ city_field.form.name.label }}: {{ city_field.form.name(class="form-control") }}</br>                   
+                                {{ city_field.form.name.label }}: {{ city_field.form.name(class="form-control") }}</br>
                                 {{ city_field.form.type.label }}: {{ city_field.form.type(class="form-control") }}
                                 {{ city_field.form.node.label }}: {{ city_field.form.node(class="form-control") }}
                                 {{ city_field.form.wall.label }}: {{ city_field.form.wall(class="form-control") }}
@@ -851,7 +853,7 @@
                         <tbody id="progress_quests-tbody" class="sortable-tbody">
                             {% for quest_field in form.progress_quests %}
                                 <tr class="sortable-row">
-                                    <td>{{ quest_field.quest_name(class="form-control") }}</td>
+                                    <td>{{ quest_field.item_id() }}{{ quest_field.quest_name(class="form-control") }}</td>
                                     <td>{{ quest_field.slot(class="form-control") }}</td>
                                     <td>{{ quest_field.bonus_progress_per_tick(class="form-control") }}</td>
                                     <td>{{ quest_field.current_progress(class="form-control") }}</td>
@@ -890,7 +892,7 @@
                     <tbody id="modifiers-tbody">
                         {% for modifier_field in form.modifiers %}
                             <tr>
-                                <td>{{ modifier_field.field(class="form-control") }}</td>
+                                <td>{{ modifier_field.item_id() }}{{ modifier_field.field(class="form-control") }}</td>
                                 <td>{{ modifier_field.value(class="form-control") }}</td>
                                 <td>{{ modifier_field.duration(class="form-control") }}</td>
                                 <td>{{ modifier_field.source(class="form-control") }}</td>

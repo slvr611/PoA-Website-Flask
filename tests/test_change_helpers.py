@@ -197,13 +197,14 @@ class TestKeepOnlyDifferences:
         new_before, new_after = ch.keep_only_differences(before, after, "Add")
         assert new_after == {"name": "NewNation", "gold": 0}
 
-    def test_empty_after_dict_with_non_empty_before_preserves_both(self):
-        # When after_data is empty and before isn't, the whole before is returned
-        # (signals intent to clear the field)
+    def test_empty_after_dict_with_non_empty_before_returns_empty(self):
+        # When after_data is empty it means the form submitted nothing for this
+        # sub-dict (e.g. a NavalUnitAssignmentDict with no registered fields).
+        # There are no tracked keys to diff, so both sides return empty — no change.
         before = {"x": 1}
         after  = {}
         new_before, new_after = ch.keep_only_differences_dict(before, after)
-        assert new_before == {"x": 1}
+        assert new_before == {}
         assert new_after  == {}
 
 
@@ -1030,6 +1031,54 @@ class TestCheckNoOtherChangesIdBased:
         a = {"mods": [{"v": 5}]}
         c = {"mods": [{"v": 1}]}   # current matches before → OK
         assert ch.check_no_other_changes(b, a, c) is True
+
+    def test_reorder_with_server_calculated_fields_in_current_returns_true(self):
+        """Approval must succeed even when the live DB document has server-calculated
+        fields that were stripped from the stored before/after items by
+        keep_only_differences_list.
+
+        Scenario
+        --------
+        Two progress_quest items exist.  The user reorders them (A, B → B, A).
+        The stored change holds before/after items with only the fields the form
+        submitted — no ``total_progress_per_tick`` (a server-calculated field).
+        The live DB document includes ``total_progress_per_tick: 5`` on every item.
+
+        check_no_other_changes must return True (no external conflict exists —
+        the only difference between stored before and live DB is the extra
+        calculated field, which the form never tracked).
+        """
+        id_a = "aaaaaaaaaaaaaaaaaaaaaaaa"
+        id_b = "bbbbbbbbbbbbbbbbbbbbbbbb"
+
+        # Stored before: no calculated fields (stripped by keep_only_differences_list)
+        before = {"progress_quests": [
+            {"_id": id_a, "quest_name": "Alpha", "slot": 1, "current_progress": 0,
+             "required_progress": 10, "bonus_progress_per_tick": 1, "link": ""},
+            {"_id": id_b, "quest_name": "Beta",  "slot": 2, "current_progress": 3,
+             "required_progress": 10, "bonus_progress_per_tick": 2, "link": ""},
+        ]}
+
+        # Stored after: same items reordered (B now first), still no calculated fields
+        after = {"progress_quests": [
+            {"_id": id_b, "quest_name": "Beta",  "slot": 1, "current_progress": 3,
+             "required_progress": 10, "bonus_progress_per_tick": 2, "link": ""},
+            {"_id": id_a, "quest_name": "Alpha", "slot": 2, "current_progress": 0,
+             "required_progress": 10, "bonus_progress_per_tick": 1, "link": ""},
+        ]}
+
+        # Live DB: same content as before-order, but WITH server-calculated field.
+        # This extra field must NOT cause a false conflict.
+        current = {"progress_quests": [
+            {"_id": id_a, "quest_name": "Alpha", "slot": 1, "current_progress": 0,
+             "required_progress": 10, "bonus_progress_per_tick": 1, "link": "",
+             "total_progress_per_tick": 5},   # server-calculated — not in before/after
+            {"_id": id_b, "quest_name": "Beta",  "slot": 2, "current_progress": 3,
+             "required_progress": 10, "bonus_progress_per_tick": 2, "link": "",
+             "total_progress_per_tick": 5},   # server-calculated — not in before/after
+        ]}
+
+        assert ch.check_no_other_changes(before, after, current) is True
 
 
 class TestIdsAutoAssignedOnRequest:
