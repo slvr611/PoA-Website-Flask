@@ -279,7 +279,7 @@ class NavalUnitAssignmentDict(Form):
 class ModifierForm(Form):
     """Form for handling nation/character modifiers as a dictionary"""
 
-    _id = HiddenField('_id')
+    item_id = HiddenField('_id')
     field = StringField("Field", validators=[DataRequired()])
     value = FloatField("Value", default=1)
     duration = IntegerField("Duration", validators=[NumberRange()], default=-1)
@@ -287,7 +287,7 @@ class ModifierForm(Form):
 
     class Meta:
         csrf = False
-    
+
     def load_form_from_item(self, item, schema):
         """Loads form data from a database item"""
 
@@ -297,18 +297,18 @@ class ModifierForm(Form):
         for field_name, field in self._fields.items():
                 if isinstance(field, SelectField) and field.data:
                     field.data = str(field.data)
-                    
+
                 # Handle nested data structures
                 if field_name in item:
                     field_value = item[field_name]
-                    
+
                     if isinstance(field_value, ObjectId):
                         field.data = str(field_value)
                     elif isinstance(field, FieldList):
                         # Clear existing entries
                         while len(field.entries) > 0:
                             field.pop_entry()
-                            
+
                         # Add new entries from the data
                         for value in field_value:
                             if isinstance(value, dict):
@@ -325,10 +325,15 @@ class ModifierForm(Form):
                     else:
                         field.data = field_value
 
+        # Map _id from DB doc to item_id field (WTForms cannot register field
+        # names that start with '_', so we expose it as item_id instead).
+        if '_id' in item:
+            self._fields['item_id'].data = str(item['_id'])
+
 class ProgressQuestForm(Form):
     """Form for handling progress quests as a dictionary"""
 
-    _id = HiddenField('_id')
+    item_id = HiddenField('_id')
     quest_name = StringField("Quest Name", validators=[DataRequired()])
     bonus_progress_per_tick = IntegerField("Bonus Progress Per Tick", validators=[NumberRange()], default=0)
     current_progress = IntegerField("Current Progress", validators=[NumberRange()], default=0)
@@ -338,7 +343,7 @@ class ProgressQuestForm(Form):
 
     class Meta:
         csrf = False
-    
+
     def load_form_from_item(self, item, schema):
         """Loads form data from a database item"""
 
@@ -348,18 +353,18 @@ class ProgressQuestForm(Form):
         for field_name, field in self._fields.items():
                 if isinstance(field, SelectField) and field.data:
                     field.data = str(field.data)
-                    
+
                 # Handle nested data structures
                 if field_name in item:
                     field_value = item[field_name]
-                    
+
                     if isinstance(field_value, ObjectId):
                         field.data = str(field_value)
                     elif isinstance(field, FieldList):
                         # Clear existing entries
                         while len(field.entries) > 0:
                             field.pop_entry()
-                            
+
                         # Add new entries from the data
                         for value in field_value:
                             if isinstance(value, dict):
@@ -374,12 +379,18 @@ class ProgressQuestForm(Form):
                     elif isinstance(field, FormField):
                         field.load_form_from_item(field_value, schema)
                     else:
-                        field.data = field_value        
+                        field.data = field_value
+
+        # Map _id from DB doc to item_id field (WTForms cannot register field
+        # names that start with '_', so we expose it as item_id instead).
+        if '_id' in item:
+            self._fields['item_id'].data = str(item['_id'])
+
 
 class DistrictDict(Form):
     """Form for handling each district as a dictionary"""
 
-    _id = HiddenField('_id')
+    item_id = HiddenField('_id')
     type = SelectField("District Type", choices=[("", "None")], default="")
     node = SelectField("Node Type", choices=[("", "None")], default="")
 
@@ -404,18 +415,18 @@ class DistrictDict(Form):
         for field_name, field in self._fields.items():
                 if isinstance(field, SelectField) and field.data:
                     field.data = str(field.data)
-                    
+
                 # Handle nested data structures
                 if field_name in item:
                     field_value = item[field_name]
-                    
+
                     if isinstance(field_value, ObjectId):
                         field.data = str(field_value)
                     elif isinstance(field, FieldList):
                         # Clear existing entries
                         while len(field.entries) > 0:
                             field.pop_entry()
-                            
+
                         # Add new entries from the data
                         for value in field_value:
                             if isinstance(value, dict):
@@ -432,10 +443,15 @@ class DistrictDict(Form):
                     else:
                         field.data = field_value
 
+        # Map _id from DB doc to item_id field (WTForms cannot register field
+        # names that start with '_', so we expose it as item_id instead).
+        if '_id' in item:
+            self._fields['item_id'].data = str(item['_id'])
+
 class CityDict(Form):
     """Form for handling each City as a dictionary"""
 
-    _id = HiddenField('_id')
+    item_id = HiddenField('_id')
     name = StringField("City Name")
     type = SelectField("City Type")
     node = SelectField("Node Type")
@@ -465,18 +481,18 @@ class CityDict(Form):
         for field_name, field in self._fields.items():
                 if isinstance(field, SelectField) and field.data:
                     field.data = str(field.data)
-                    
+
                 # Handle nested data structures
                 if field_name in item:
                     field_value = item[field_name]
-                    
+
                     if isinstance(field_value, ObjectId):
                         field.data = str(field_value)
                     elif isinstance(field, FieldList):
                         # Clear existing entries
                         while len(field.entries) > 0:
                             field.pop_entry()
-                            
+
                         # Add new entries from the data
                         for value in field_value:
                             if isinstance(value, dict):
@@ -493,12 +509,17 @@ class CityDict(Form):
                     else:
                         field.data = field_value
 
+        # Map _id from DB doc to item_id field (WTForms cannot register field
+        # names that start with '_', so we expose it as item_id instead).
+        if '_id' in item:
+            self._fields['item_id'].data = str(item['_id'])
+
 class ExternalModifierForm(Form):
     """Generic form for handling non-nation modifiers based on schema"""
     class Meta:
         csrf = False
 
-    _id = HiddenField('_id')
+    item_id = HiddenField('_id')
     type = SelectField("Type", choices=[("nation", "nation"), ("character", "character")])
     modifier = StringField("Modifier", validators=[])
     value = FloatField("Value")
@@ -843,6 +864,9 @@ class BaseSchemaForm(FlaskForm):
                         districts = districts[:max_districts]
 
                     for district in districts:
+                        if isinstance(district, dict) and '_id' in district:
+                            district = dict(district)
+                            district['item_id'] = str(district['_id'])
                         field.append_entry(district)
                 
                 elif field_name == "cities":
@@ -858,6 +882,9 @@ class BaseSchemaForm(FlaskForm):
                         cities = cities[:max_cities]
                     
                     for cities in cities:
+                        if isinstance(cities, dict) and '_id' in cities:
+                            cities = dict(cities)
+                            cities['item_id'] = str(cities['_id'])
                         field.append_entry(cities)
                 
                 elif field_name == "positive_titles":
@@ -896,8 +923,13 @@ class BaseSchemaForm(FlaskForm):
                     # Add new entries from the data
                     for value in field_value:
                         if isinstance(value, dict):
-                            # For object arrays
-                            field.append_entry(value)
+                            # For object arrays — inject item_id from _id so that
+                            # sub-forms (which use item_id as WTForms can't register
+                            # underscore-prefixed field names) are populated correctly.
+                            entry_value = dict(value)
+                            if '_id' in entry_value:
+                                entry_value['item_id'] = str(entry_value['_id'])
+                            field.append_entry(entry_value)
                         elif isinstance(value, ObjectId):
                             # For linked object arrays
                             field.append_entry(str(value))

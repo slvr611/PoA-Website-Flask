@@ -45,6 +45,15 @@
     {% if ns.found %}{{ ns.found }}{% elif item._id is defined %}{{ item._id }}{% else %}item{% endif %}
 {% endmacro %}
 
+{# Same as _item_label but with whitespace stripped, safe for equality comparisons. #}
+{%- macro _label_for(item) -%}
+{%- set ns = namespace(found='') -%}
+{%- for k in ['name', 'quest_name', 'source', 'field', 'key', 'type', 'modifier'] -%}
+    {%- if ns.found == '' and item.get(k) -%}{%- set ns.found = item.get(k) | string -%}{%- endif -%}
+{%- endfor -%}
+{%- if ns.found -%}{{ ns.found }}{%- elif item._id is defined -%}{{ item._id }}{%- else -%}item{%- endif -%}
+{%- endmacro -%}
+
 {# Render all key:value pairs of a dict, skipping _id #}
 {% macro _item_fields(item) %}
     {% for k, v in item.items() %}
@@ -102,8 +111,25 @@
 {# Render a diff for an array whose dict items carry stable ``_id`` values.
    Classifies each item as ADDED, REMOVED, MODIFIED, or (if order changed)
    shows a REORDERED summary.  Items with identical content in both snapshots
-   at the same relative position are silently skipped. #}
+   at the same relative position are silently skipped.
+   Falls back to label-based matching when no _id values overlap (e.g. when
+   IDs were regenerated during form submission). #}
 {% macro _id_array_diff(before_value, after_value) %}
+    {# Check whether any _id values overlap between before and after. #}
+    {% set ns_chk = namespace(any_match=false) %}
+    {% for bi in before_value %}
+        {% if not ns_chk.any_match and bi is mapping and bi._id is defined %}
+            {% for ai in after_value %}
+                {% if not ns_chk.any_match and ai is mapping and ai._id is defined and ai._id == bi._id %}
+                    {% set ns_chk.any_match = true %}
+                {% endif %}
+            {% endfor %}
+        {% endif %}
+    {% endfor %}
+
+    {% if ns_chk.any_match %}
+    {# ===== Standard ID-based matching ===== #}
+
     {# --- ADDED (present in after, absent from before by _id) --- #}
     {% set ns = namespace(count=0) %}
     {% for after_item in after_value %}
@@ -183,23 +209,163 @@
     {% if before_common != after_common and before_common|length > 1 %}
         <div class="array-section array-items-reordered">
             <div class="array-section-header">Reordered:</div>
-            <div class="reorder-detail">
-                <div class="reorder-row">
-                    <span class="reorder-label">Before:</span>
-                    {% for item_id in before_common %}
-                        {% set items = before_value | selectattr('_id', 'equalto', item_id) | list %}
-                        {% if items %}<span class="reorder-item">{{ _item_label(items[0]) }}</span>{% if not loop.last %} <span class="reorder-arrow">→</span> {% endif %}{% endif %}
+            <table class="reorder-table">
+                <thead>
+                    <tr>
+                        <th class="reorder-pos-header">#</th>
+                        <th>Before</th>
+                        <th>After</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% set max_len = [before_common|length, after_common|length]|max %}
+                    {% for i in range(max_len) %}
+                        {% set b_id = before_common[i] if i < before_common|length else '' %}
+                        {% set a_id = after_common[i] if i < after_common|length else '' %}
+                        {% set row_moved = (b_id != a_id) %}
+                        <tr class="{{ 'reorder-row-moved' if row_moved else 'reorder-row-same' }}">
+                            <td class="reorder-pos-num">{{ i + 1 }}</td>
+                            <td class="reorder-cell">
+                                {%- if b_id -%}
+                                    {%- set b_items = before_value | selectattr('_id', 'equalto', b_id) | list -%}
+                                    {{ _item_label(b_items[0]) if b_items else b_id }}
+                                {%- endif -%}
+                            </td>
+                            <td class="reorder-cell">
+                                {%- if a_id -%}
+                                    {%- set a_items = after_value | selectattr('_id', 'equalto', a_id) | list -%}
+                                    {{ _item_label(a_items[0]) if a_items else a_id }}
+                                {%- endif -%}
+                            </td>
+                        </tr>
                     {% endfor %}
-                </div>
-                <div class="reorder-row">
-                    <span class="reorder-label">After:</span>
-                    {% for item_id in after_common %}
-                        {% set items = after_value | selectattr('_id', 'equalto', item_id) | list %}
-                        {% if items %}<span class="reorder-item">{{ _item_label(items[0]) }}</span>{% if not loop.last %} <span class="reorder-arrow">→</span> {% endif %}{% endif %}
-                    {% endfor %}
-                </div>
-            </div>
+                </tbody>
+            </table>
         </div>
+    {% endif %}
+
+    {% else %}
+    {# ===== Label-based fallback (IDs were regenerated, match by natural key) ===== #}
+
+    {# --- ADDED by label --- #}
+    {% set ns = namespace(count=0) %}
+    {% for ai in after_value %}
+        {% if ai is mapping %}
+            {% set ai_lbl = _label_for(ai) %}
+            {% set ns2 = namespace(found=false) %}
+            {% for bi in before_value %}
+                {% if bi is mapping and _label_for(bi) == ai_lbl %}{% set ns2.found = true %}{% endif %}
+            {% endfor %}
+            {% if not ns2.found %}
+                {% if ns.count == 0 %}<div class="array-section array-items-added"><div class="array-section-header">Added:</div>{% endif %}
+                {% set ns.count = ns.count + 1 %}
+                <div class="array-item-added">
+                    <div class="array-item-header">+ {{ ai_lbl }}</div>
+                    <div class="array-item-body">{{ _item_fields(ai) }}</div>
+                </div>
+            {% endif %}
+        {% endif %}
+    {% endfor %}
+    {% if ns.count > 0 %}</div>{% endif %}
+
+    {# --- REMOVED by label --- #}
+    {% set ns = namespace(count=0) %}
+    {% for bi in before_value %}
+        {% if bi is mapping %}
+            {% set bi_lbl = _label_for(bi) %}
+            {% set ns2 = namespace(found=false) %}
+            {% for ai in after_value %}
+                {% if ai is mapping and _label_for(ai) == bi_lbl %}{% set ns2.found = true %}{% endif %}
+            {% endfor %}
+            {% if not ns2.found %}
+                {% if ns.count == 0 %}<div class="array-section array-items-removed"><div class="array-section-header">Removed:</div>{% endif %}
+                {% set ns.count = ns.count + 1 %}
+                <div class="array-item-removed">
+                    <div class="array-item-header">- {{ bi_lbl }}</div>
+                    <div class="array-item-body">{{ _item_fields(bi) }}</div>
+                </div>
+            {% endif %}
+        {% endif %}
+    {% endfor %}
+    {% if ns.count > 0 %}</div>{% endif %}
+
+    {# --- MODIFIED by label (in both, content differs) --- #}
+    {% set ns = namespace(count=0) %}
+    {% for bi in before_value %}
+        {% if bi is mapping %}
+            {% set bi_lbl = _label_for(bi) %}
+            {% for ai in after_value %}
+                {% if ai is mapping and _label_for(ai) == bi_lbl %}
+                    {% set all_keys = (bi.keys()|list + ai.keys()|list)|unique|list %}
+                    {% set ns2 = namespace(changed=false) %}
+                    {% for k in all_keys %}
+                        {% if k != '_id' and bi.get(k) != ai.get(k) %}{% set ns2.changed = true %}{% endif %}
+                    {% endfor %}
+                    {% if ns2.changed %}
+                        {% if ns.count == 0 %}<div class="array-section array-items-modified"><div class="array-section-header">Modified:</div>{% endif %}
+                        {% set ns.count = ns.count + 1 %}
+                        <div class="array-item-changed">
+                            <div class="array-item-header">~ {{ bi_lbl }}</div>
+                            <div class="array-item-body">{{ _item_diff(bi, ai) }}</div>
+                        </div>
+                    {% endif %}
+                {% endif %}
+            {% endfor %}
+        {% endif %}
+    {% endfor %}
+    {% if ns.count > 0 %}</div>{% endif %}
+
+    {# --- REORDERED by label --- #}
+    {% set before_common = [] %}
+    {% set after_common  = [] %}
+    {% for bi in before_value %}
+        {% if bi is mapping %}
+            {% set bi_lbl = _label_for(bi) %}
+            {% set ns2 = namespace(found=false) %}
+            {% for ai in after_value %}
+                {% if ai is mapping and _label_for(ai) == bi_lbl %}{% set ns2.found = true %}{% endif %}
+            {% endfor %}
+            {% if ns2.found %}{% set _ = before_common.append(bi_lbl) %}{% endif %}
+        {% endif %}
+    {% endfor %}
+    {% for ai in after_value %}
+        {% if ai is mapping %}
+            {% set ai_lbl = _label_for(ai) %}
+            {% set ns2 = namespace(found=false) %}
+            {% for bi in before_value %}
+                {% if bi is mapping and _label_for(bi) == ai_lbl %}{% set ns2.found = true %}{% endif %}
+            {% endfor %}
+            {% if ns2.found %}{% set _ = after_common.append(ai_lbl) %}{% endif %}
+        {% endif %}
+    {% endfor %}
+    {% if before_common != after_common and before_common|length > 1 %}
+        <div class="array-section array-items-reordered">
+            <div class="array-section-header">Reordered:</div>
+            <table class="reorder-table">
+                <thead>
+                    <tr>
+                        <th class="reorder-pos-header">#</th>
+                        <th>Before</th>
+                        <th>After</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% set max_len = [before_common|length, after_common|length]|max %}
+                    {% for i in range(max_len) %}
+                        {% set b_lbl = before_common[i] if i < before_common|length else '' %}
+                        {% set a_lbl = after_common[i] if i < after_common|length else '' %}
+                        {% set row_moved = (b_lbl != a_lbl) %}
+                        <tr class="{{ 'reorder-row-moved' if row_moved else 'reorder-row-same' }}">
+                            <td class="reorder-pos-num">{{ i + 1 }}</td>
+                            <td class="reorder-cell">{{ b_lbl }}</td>
+                            <td class="reorder-cell">{{ a_lbl }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% endif %}
+
     {% endif %}
 {% endmacro %}
 

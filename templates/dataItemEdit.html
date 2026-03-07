@@ -45,7 +45,7 @@
 									<tbody id="{{ field.name }}-tbody">
 										{% for modifier_field in field %}
 											<tr>
-												<td>{{ modifier_field.form.type(class="form-control") }}</td>
+												<td>{{ modifier_field.form.item_id() }}{{ modifier_field.form.type(class="form-control") }}</td>
 												<td>{{ modifier_field.form.modifier(class="form-control") }}</td>
 												<td>{{ modifier_field.form.value(class="form-control") }}</td>
 												<td>
@@ -71,7 +71,7 @@
 									<tbody id="{{ field.name }}-tbody">
 										{% for modifier_field in field %}
 											<tr>
-												<td>{{ modifier_field.form.field(class="form-control") }}</td>
+												<td>{{ modifier_field.form.item_id() }}{{ modifier_field.form.field(class="form-control") }}</td>
 												<td>{{ modifier_field.form.value(class="form-control") }}</td>
 												<td>{{ modifier_field.form.duration(class="form-control") }}</td>
 												<td>{{ modifier_field.form.source(class="form-control") }}</td>
@@ -100,7 +100,7 @@
 									<tbody id="{{ field.name }}-tbody" class="sortable-tbody">
 										{% for quest_field in field %}
 											<tr class="sortable-row">
-												<td>{{ quest_field.form.quest_name(class="form-control") }}</td>
+												<td>{{ quest_field.form.item_id() }}{{ quest_field.form.quest_name(class="form-control") }}</td>
 												<td>{{ quest_field.form.slot(class="form-control") }}</td>
 												<td>{{ quest_field.form.bonus_progress_per_tick(class="form-control") }}</td>
 												<td>{{ quest_field.form.current_progress(class="form-control") }}</td>
