@@ -77,6 +77,9 @@
 		"requirements":{
 			"name": ["Khanya"]
 		},
+		"production": {
+			"progress": 1
+		},
 		"upkeep": {
 			"magic": 4
 		}
