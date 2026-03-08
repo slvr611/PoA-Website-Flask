@@ -1082,7 +1082,25 @@ def check_unit_requirements(target, unit_details):
         elif requirement == "mercenary":
             meets_requirements = False
         elif requirement == "race":
-            meets_requirements = False
+            nation_id = str(target.get("_id", ""))
+            if not nation_id:
+                meets_requirements = False
+            else:
+                has_race = False
+                for race_name in value:
+                    race_doc = category_data["races"]["database"].find_one(
+                        {"name": race_name}, {"_id": 1}
+                    )
+                    if race_doc:
+                        race_id = str(race_doc["_id"])
+                        pop = category_data["pops"]["database"].find_one(
+                            {"nation": nation_id, "race": race_id}, {"_id": 1}
+                        )
+                        if pop:
+                            has_race = True
+                            break
+                if not has_race:
+                    meets_requirements = False
     
     if check_name or check_defensive_pact or check_military_alliance:
         related = False
