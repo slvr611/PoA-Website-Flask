@@ -755,6 +755,32 @@
 							{% endfor %}
 						</tbody>
 					</table>
+					<h2>Support Units</h2>
+					<p>Support Units: {{ nation.support_unit_count }}/{{ nation.support_unit_capacity }}</p>
+					<table class="jobs-table">
+						<thead>
+							<tr>
+								<th>Unit</th>
+								<th>Unit Count</th>
+								<th>Upkeep</th>
+							</tr>
+						</thead>
+						<tbody>
+							{% for unit_key, unit in nation.support_unit_details.items() %}
+								<tr>
+									<td>{{ unit.display_name }}</td>
+									<td>{{ nation.get("support_units", {}).get(unit_key, 0) }}</td>
+									<td>
+										{% if "upkeep" in unit %}
+											{% for resource, cost in unit.upkeep.items() %}
+												{{ resource }}: {{ cost }}<br>
+											{% endfor %}
+										{% endif %}
+									</td>
+								</tr>
+							{% endfor %}
+						</tbody>
+					</table>
 					<h2>Naval Units</h2>
 					<p>Naval Units: {{ nation.naval_unit_count }}/{{ nation.naval_unit_capacity }}</p>
 					<table class="jobs-table">

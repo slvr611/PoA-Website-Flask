@@ -1,0 +1,46 @@
+{
+  "$jsonSchema": {
+    "bsonType": "object",
+    "required": ["name"],
+    "preview": ["cost"],
+    "sort": "name",
+    "properties": {
+      "name": {
+        "bsonType": "string",
+        "label": "Name",
+        "description": "The name of the trait"
+      },
+      "cost": {
+        "bsonType": "number",
+        "label": "Cost",
+        "description": "The point cost of the trait (can be negative)"
+      },
+      "description": {
+        "bsonType": "string",
+        "label": "Description",
+        "description": "The description of the trait",
+        "long_text": true
+      },
+      "modifiers": {
+        "bsonType": "array",
+        "label": "Modifiers",
+        "description": "Modifiers applied by this trait in the war calculator",
+        "items": {
+          "bsonType": "object",
+          "properties": {
+            "field": {
+              "bsonType": "string",
+              "label": "Field",
+              "description": "The stat field to modify"
+            },
+            "value": {
+              "bsonType": "number",
+              "label": "Value",
+              "description": "The modifier value"
+            }
+          }
+        }
+      }
+    }
+  }
+}

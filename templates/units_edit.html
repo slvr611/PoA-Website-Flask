@@ -1,0 +1,936 @@
+{% extends "layout.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<style>
+  .ue-layout { display: grid; grid-template-columns: 1fr 260px; gap: 1.5rem; align-items: start; max-width: 1100px; margin: 0 auto; }
+  .ue-form { min-width: 0; }
+  .ue-cost-panel { position: sticky; top: 1rem; background: #1e1e1e; border: 1px solid #444; border-radius: 8px; padding: 1rem; font-size: 0.88rem; }
+  .ue-section { background: #1a1a1a; border: 1px solid #333; border-radius: 6px; padding: 1rem 1.25rem; margin-bottom: 1rem; }
+  .ue-section h3 { margin: 0 0 0.75rem 0; font-size: 0.95rem; letter-spacing: 1px; text-transform: uppercase; color: #aaa; border-bottom: 1px solid #333; padding-bottom: 0.4rem; }
+  .ue-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; flex-wrap: wrap; }
+  .ue-row label { font-size: 0.82rem; color: #bbb; white-space: nowrap; min-width: 90px; }
+  .ue-row .form-control { flex: 1; min-width: 80px; max-width: 220px; }
+  .ue-row-inline { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
+  .ue-row-inline label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.88rem; cursor: pointer; }
+  .ue-stat-table { width: 100%; border-collapse: collapse; }
+  .ue-stat-table td { padding: 0.3rem 0.4rem; vertical-align: middle; }
+  .ue-stat-table td:first-child { font-size: 0.82rem; color: #bbb; width: 130px; white-space: nowrap; }
+  .ue-stat-table td.cost-cell { width: 50px; text-align: right; font-size: 0.8rem; color: #6af; font-family: monospace; }
+  .ue-stat-table input[type="number"] { width: 80px; }
+  .ue-stat-table input[type="checkbox"] { margin-right: 6px; }
+  .stat-has-wrap { display: flex; align-items: center; gap: 4px; }
+  .stat-value-group { display: flex; align-items: center; gap: 6px; }
+  /* Traits */
+  .trait-list { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.6rem; min-height: 2rem; }
+  .trait-badge { display: inline-flex; align-items: center; gap: 0.35rem; background: #2a2a3a; border: 1px solid #555; border-radius: 999px; padding: 0.2rem 0.55rem; font-size: 0.8rem; }
+  .trait-badge .trait-cost { color: #8af; font-size: 0.75rem; }
+  .trait-badge .trait-info { cursor: help; color: #888; font-size: 0.78rem; }
+  .trait-badge .trait-remove { background: none; border: none; color: #888; cursor: pointer; padding: 0 0.1rem; font-size: 1rem; line-height: 1; }
+  .trait-badge .trait-remove:hover { color: #f66; }
+  .trait-add-row { display: flex; gap: 0.5rem; align-items: center; }
+  .trait-add-row select { flex: 1; }
+  /* Array tables */
+  .array-table { width: 100%; border-collapse: collapse; margin-bottom: 0.4rem; }
+  .array-table th { font-size: 0.75rem; color: #888; text-align: left; padding: 0.2rem 0.4rem; }
+  .array-table td { padding: 0.25rem 0.4rem; vertical-align: middle; }
+  .array-table td:last-child { width: 36px; }
+  .btn-remove { background: none; border: 1px solid #555; border-radius: 4px; color: #888; cursor: pointer; padding: 0.1rem 0.4rem; font-size: 0.8rem; }
+  .btn-remove:hover { color: #f66; border-color: #f66; }
+  .btn-add { background: #222; border: 1px solid #555; border-radius: 4px; color: #aaa; cursor: pointer; padding: 0.25rem 0.75rem; font-size: 0.82rem; margin-top: 0.25rem; }
+  .btn-add:hover { border-color: #8af; color: #8af; }
+  /* Cost panel */
+  .cost-table { width: 100%; border-collapse: collapse; }
+  .cost-table td { padding: 0.25rem 0.3rem; }
+  .cost-table td:first-child { color: #999; font-size: 0.82rem; }
+  .cost-table td:last-child { text-align: right; font-family: monospace; font-size: 0.88rem; color: #ccc; }
+  .cost-table tr.cost-sep td { border-top: 1px solid #333; padding-top: 0.4rem; }
+  .cost-table tr.cost-total td { border-top: 1px solid #555; font-weight: 700; color: #fff; font-size: 0.95rem; }
+  .cost-bar-wrap { margin-top: 0.75rem; background: #111; border-radius: 4px; height: 10px; overflow: hidden; }
+  .cost-bar { height: 100%; background: #4caf50; border-radius: 4px; transition: width 0.2s, background 0.2s; }
+  .cost-label { margin-top: 0.35rem; font-size: 0.78rem; text-align: center; }
+  /* Submit area */
+  .ue-submit { display: flex; gap: 0.75rem; align-items: center; margin-top: 0.5rem; flex-wrap: wrap; }
+  .btn-save { background: #2a5a2a; border: 1px solid #4a8a4a; color: #8f8; border-radius: 5px; padding: 0.4rem 1.1rem; cursor: pointer; font-size: 0.88rem; }
+  .btn-save:hover { background: #3a6a3a; }
+  .btn-request { background: #2a3a5a; border: 1px solid #4a6aaa; color: #8af; border-radius: 5px; padding: 0.4rem 1.1rem; cursor: pointer; font-size: 0.88rem; }
+  .btn-request:hover { background: #3a4a6a; }
+  @media (max-width: 800px) { .ue-layout { grid-template-columns: 1fr; } .ue-cost-panel { position: static; } }
+</style>
+
+{% if item %}
+  <a href="/units/item/{{ item._id }}" style="font-size:0.85rem; color:#8af;">← Back to {{ item.name }}</a>
+{% else %}
+  <a href="/units" style="font-size:0.85rem; color:#8af;">← Back to Units</a>
+{% endif %}
+
+{% if item and g.user and g.user.is_admin %}
+<form method="POST" style="display:inline; margin-left:1rem;"
+      action="{{ request.path.replace('edit', 'clone') }}/save">
+  {{ form.csrf_token }}
+  <input type="hidden" name="reason" value="Clone">
+  <button type="submit" style="font-size:0.78rem; background:#333; border:1px solid #555; color:#aaa; border-radius:4px; padding:0.2rem 0.6rem; cursor:pointer;">Clone Unit</button>
+</form>
+{% endif %}
+
+<h1 style="margin: 0.75rem 0 1rem 0;">{{ title }}</h1>
+
+{% if item %}
+  {% if g.user and g.user.is_admin %}
+    {% set save_action = request.path ~ '/save' %}
+  {% else %}
+    {% set save_action = request.path ~ '/request' %}
+  {% endif %}
+  {% set request_action = request.path ~ '/request' %}
+{% else %}
+  {% if g.user and g.user.is_admin %}
+    {% set save_action = request.path ~ '/save' %}
+  {% else %}
+    {% set save_action = request.path ~ '/request' %}
+  {% endif %}
+  {% set request_action = request.path ~ '/request' %}
+{% endif %}
+
+<form method="POST" action="{{ save_action }}" data-prevent-enter-submit="true">
+  {{ form.csrf_token }}
+
+  <div class="ue-layout">
+
+    <!-- ===== LEFT: FORM FIELDS ===== -->
+    <div class="ue-form">
+
+      <!-- Identity -->
+      <div class="ue-section">
+        <h3>Identity</h3>
+        <div class="ue-row">
+          <label>Name</label>
+          {{ form.name(class="form-control") }}
+        </div>
+        <div class="ue-row">
+          <label>Era</label>
+          {{ form.era(class="form-control", id="era") }}
+          <label style="min-width:60px;">Type</label>
+          {{ form.unit_type(class="form-control") }}
+        </div>
+        <div class="ue-row">
+          <label>Class</label>
+          <span id="unit_class_display" style="font-size:0.85rem; color:#ccc; font-style:italic;">—</span>
+          {{ form.unit_class(id="unit_class", style="display:none;") }}
+        </div>
+        <div class="ue-row" style="align-items:flex-start; flex-wrap:wrap; gap:0.5rem;">
+          <label style="padding-top:0.35rem;">Image</label>
+          <div style="flex:1; min-width:200px;">
+            {{ form.image(id="image_url", class="form-control", placeholder="https://... or upload below") }}
+            {% if g.user and g.user.is_admin %}
+            <div style="display:flex; gap:0.5rem; margin-top:0.4rem; align-items:center; flex-wrap:wrap;">
+              <input type="file" id="image_file_input" accept="image/*" style="display:none;">
+              <button type="button" class="btn-add" onclick="document.getElementById('image_file_input').click()">
+                Upload Image
+              </button>
+              <span id="upload_status" style="font-size:0.78rem; color:#888;"></span>
+            </div>
+            {% endif %}
+            <div id="image_preview_wrap" style="margin-top:0.5rem; display:none;">
+              <img id="image_preview" src="" alt="Preview"
+                   style="max-width:160px; max-height:220px; border-radius:6px; border:1px solid #444;">
+            </div>
+          </div>
+        </div>
+
+        <script>
+        (function() {
+          const urlInput  = document.getElementById('image_url');
+          const fileInput = document.getElementById('image_file_input');
+          const preview   = document.getElementById('image_preview');
+          const previewWrap = document.getElementById('image_preview_wrap');
+          const status    = document.getElementById('upload_status');
+
+          function showPreview(src) {
+            if (src) { preview.src = src; previewWrap.style.display = ''; }
+            else { previewWrap.style.display = 'none'; }
+          }
+
+          // Show preview for existing URL on load
+          if (urlInput && urlInput.value) showPreview(urlInput.value);
+          if (urlInput) urlInput.addEventListener('input', () => showPreview(urlInput.value.trim()));
+
+          if (fileInput) {
+            fileInput.addEventListener('change', function() {
+              const file = this.files[0];
+              if (!file) return;
+              const unitName = (document.getElementById('name') || {}).value || 'unknown';
+              const fd = new FormData();
+              fd.append('image', file);
+              fd.append('unit_name', unitName);
+              if (status) { status.textContent = 'Uploading…'; status.style.color = '#888'; }
+              fetch('/units/upload_image', { method: 'POST', body: fd })
+                .then(r => r.json())
+                .then(data => {
+                  if (data.success) {
+                    urlInput.value = data.url;
+                    showPreview(data.url);
+                    if (status) { status.textContent = 'Uploaded!'; status.style.color = '#4caf50'; }
+                  } else {
+                    if (status) { status.textContent = 'Error: ' + data.error; status.style.color = '#f44336'; }
+                  }
+                })
+                .catch(e => { if (status) { status.textContent = 'Upload failed.'; status.style.color = '#f44336'; } });
+            });
+          }
+        })();
+        </script>
+      </div>
+
+      <!-- Role -->
+      <div class="ue-section">
+        <h3>Role</h3>
+        <div class="ue-row-inline">
+          <label>{{ form.melee(id="melee") }} Melee</label>
+          <label>{{ form.ranged(id="ranged") }} Ranged</label>
+          <label>{{ form.cavalry(id="cavalry") }} Cavalry</label>
+          <label>{{ form.support(id="support") }} Support</label>
+          <label><input type="checkbox" id="is_ruler"> Ruler</label>
+          <label><input type="checkbox" id="is_transport"> Transport</label>
+          <label><input type="checkbox" id="is_imperial"> Imperial</label>
+        </div>
+      </div>
+
+      <!-- Combat Stats -->
+      <div class="ue-section">
+        <h3>Combat Stats</h3>
+        <table class="ue-stat-table">
+          <tr id="row-hp">
+            <td>
+              <div class="stat-has-wrap">
+                {{ form.has_hp(id="has_hp") }}
+                <label for="has_hp" style="font-size:0.82rem;color:#bbb;cursor:pointer;">HP</label>
+              </div>
+            </td>
+            <td><div class="stat-value-group" id="val-hp">{{ form.hp(id="hp", class="form-control", type="number") }}</div></td>
+            <td class="cost-cell" id="disp-hp">—</td>
+          </tr>
+          <tr id="row-morale">
+            <td>
+              <div class="stat-has-wrap">
+                {{ form.has_morale(id="has_morale") }}
+                <label for="has_morale" style="font-size:0.82rem;color:#bbb;cursor:pointer;">Morale</label>
+              </div>
+            </td>
+            <td><div class="stat-value-group" id="val-morale">{{ form.morale(id="morale", class="form-control", type="number") }}</div></td>
+            <td class="cost-cell" id="disp-morale">—</td>
+          </tr>
+          <tr id="row-damage">
+            <td>
+              <div class="stat-has-wrap">
+                {{ form.has_damage(id="has_damage") }}
+                <label for="has_damage" style="font-size:0.82rem;color:#bbb;cursor:pointer;">Damage</label>
+              </div>
+            </td>
+            <td><div class="stat-value-group" id="val-damage">{{ form.damage(id="damage", class="form-control", type="number") }}</div></td>
+            <td class="cost-cell" id="disp-damage">—</td>
+          </tr>
+          <tr id="row-retal">
+            <td>
+              <div class="stat-has-wrap">
+                {{ form.has_retaliation_damage(id="has_retaliation_damage") }}
+                <label for="has_retaliation_damage" style="font-size:0.82rem;color:#bbb;cursor:pointer;">Retal. Damage</label>
+              </div>
+            </td>
+            <td><div class="stat-value-group" id="val-retal">{{ form.retaliation_damage(id="retaliation_damage", class="form-control", type="number") }}</div></td>
+            <td class="cost-cell" id="disp-retal">—</td>
+          </tr>
+          <tr id="row-range">
+            <td>
+              <div class="stat-has-wrap">
+                {{ form.has_range(id="has_range") }}
+                <label for="has_range" style="font-size:0.82rem;color:#bbb;cursor:pointer;">Range</label>
+              </div>
+            </td>
+            <td>
+              <div class="stat-value-group" id="val-range">
+                <span style="font-size:0.78rem;color:#888;">Min</span>
+                {{ form.minimum_range(id="minimum_range", class="form-control", type="number", style="width:60px;") }}
+                <span style="font-size:0.78rem;color:#888;">Max</span>
+                {{ form.maximum_range(id="maximum_range", class="form-control", type="number", style="width:60px;") }}
+              </div>
+            </td>
+            <td class="cost-cell" id="disp-range">—</td>
+          </tr>
+          <tr id="row-speed">
+            <td>
+              <div class="stat-has-wrap">
+                {{ form.has_speed(id="has_speed") }}
+                <label for="has_speed" style="font-size:0.82rem;color:#bbb;cursor:pointer;">Speed</label>
+              </div>
+            </td>
+            <td><div class="stat-value-group" id="val-speed">{{ form.speed(id="speed", class="form-control", type="number") }}</div></td>
+            <td class="cost-cell" id="disp-speed">—</td>
+          </tr>
+          <tr id="row-armor">
+            <td>
+              <div class="stat-has-wrap">
+                {{ form.has_armor(id="has_armor") }}
+                <label for="has_armor" style="font-size:0.82rem;color:#bbb;cursor:pointer;">Armor</label>
+              </div>
+            </td>
+            <td><div class="stat-value-group" id="val-armor">{{ form.armor(id="armor", class="form-control", type="number") }}</div></td>
+            <td class="cost-cell" id="disp-armor">—</td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- Traits -->
+      <div class="ue-section">
+        <h3>Traits</h3>
+        <div class="trait-list" id="selected-traits-container">
+          {% for trait_field in form.traits %}
+            {% set tname = trait_field.data %}
+            <div class="trait-badge" data-name="{{ tname }}">
+              {{ trait_field(type="hidden") }}
+              <span class="trait-name">{{ tname }}</span>
+              {%- set matched = all_traits | selectattr("name", "equalto", tname) | list -%}
+              {%- if matched -%}
+                <span class="trait-cost">{{ matched[0].cost | int if matched[0].cost == matched[0].cost | int else matched[0].cost }}</span>
+                {% if matched[0].description %}<span class="trait-info" title="{{ matched[0].description }}">ℹ</span>{% endif %}
+              {%- endif -%}
+              <button type="button" class="trait-remove" onclick="removeTrait(this)" title="Remove">×</button>
+            </div>
+          {% endfor %}
+        </div>
+        <div class="trait-add-row">
+          <select id="trait-picker" class="form-control">
+            <option value="">— Add a trait —</option>
+            {% for t in all_traits %}
+              <option value="{{ t.name }}"
+                      data-cost="{{ t.cost }}"
+                      data-description="{{ t.description | default('') | replace('"', '&quot;') }}">
+                {{ t.name }}{% if t.cost is not none %} ({{ t.cost | int if t.cost == t.cost | int else t.cost }}){% endif %}
+              </option>
+            {% endfor %}
+          </select>
+          <button type="button" class="btn-add" onclick="addTrait()">+ Add</button>
+        </div>
+      </div>
+
+      <!-- Special Abilities -->
+      <div class="ue-section">
+        <h3>Special Abilities <span style="font-size:0.75rem;color:#666;font-weight:normal;">(free-text)</span></h3>
+        <table class="array-table">
+          <tbody id="special_abilities-tbody">
+            {% for sa in form.special_abilities %}
+            <tr>
+              <td>{{ sa(class="form-control", placeholder="e.g. Ambush: Gains +1 damage in forest terrain.") }}</td>
+              <td><button type="button" class="btn-remove" onclick="removeRow(this, 'special_abilities')">×</button></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <button type="button" class="btn-add" onclick="addSpecialAbility()">+ Add Special Ability</button>
+      </div>
+
+      <!-- Prerequisites -->
+      <div class="ue-section">
+        <h3>Prerequisites</h3>
+        <table class="array-table">
+          <thead>
+            <tr><th>Type</th><th>Value</th><th></th></tr>
+          </thead>
+          <tbody id="prerequisites-tbody">
+            {% macro prereq_select(name, options, selected) %}
+              <select class="form-control" name="{{ name }}" id="{{ name }}">
+                <option value="">(select)</option>
+                {% for opt in options %}
+                  <option value="{{ opt }}"{% if selected == opt %} selected{% endif %}>{{ opt }}</option>
+                {% endfor %}
+              </select>
+            {% endmacro %}
+            {% for prereq in form.prerequisites %}
+            {% set ptype = prereq.form.type.data or '' %}
+            {% set pval = prereq.form.value.data or '' %}
+            {% set pidx = loop.index0 %}
+            <tr>
+              {% if prereq.form.item_id is defined %}{{ prereq.form.item_id() }}{% endif %}
+              <td>
+                <select class="form-control" name="prerequisites-{{ pidx }}-type" id="prerequisites-{{ pidx }}-type" onchange="onPrereqTypeChange(this)">
+                  <option value="district"{% if ptype == 'district' %} selected{% endif %}>district</option>
+                  <option value="nation"{% if ptype in ('nation','name','defensive_pact','military_alliance') %} selected{% endif %}>nation</option>
+                  <option value="technology"{% if ptype == 'technology' %} selected{% endif %}>technology</option>
+                  <option value="artifact"{% if ptype == 'artifact' %} selected{% endif %}>artifact</option>
+                  <option value="spell"{% if ptype == 'spell' %} selected{% endif %}>spell</option>
+                  <option value="mercenary"{% if ptype == 'mercenary' %} selected{% endif %}>mercenary</option>
+                  <option value="race"{% if ptype == 'race' %} selected{% endif %}>race</option>
+                </select>
+              </td>
+              <td>
+                {% if ptype == 'technology' %}
+                  <select class="form-control" name="prerequisites-{{ pidx }}-value" id="prerequisites-{{ pidx }}-value">
+                    <option value="">(select)</option>
+                    {% for t in tech_options %}
+                      <option value="{{ t.key }}"{% if pval == t.key %} selected{% endif %}>{{ t.display_name }}</option>
+                    {% endfor %}
+                  </select>
+                {% elif ptype == 'district' %}
+                  <select class="form-control" name="prerequisites-{{ pidx }}-value" id="prerequisites-{{ pidx }}-value">
+                    <option value="">(select)</option>
+                    {% for cat in district_categories %}
+                      <option value="{{ cat.key }}"{% if pval == cat.key %} selected{% endif %}>{{ cat.label }}</option>
+                    {% endfor %}
+                  </select>
+                {% elif ptype in ('nation', 'name', 'defensive_pact', 'military_alliance') %}
+                  {{ prereq_select('prerequisites-' ~ pidx ~ '-value', nations_options, pval) }}
+                {% elif ptype == 'artifact' %}
+                  {{ prereq_select('prerequisites-' ~ pidx ~ '-value', artifacts_options, pval) }}
+                {% elif ptype == 'spell' %}
+                  {{ prereq_select('prerequisites-' ~ pidx ~ '-value', spells_options, pval) }}
+                {% elif ptype == 'mercenary' %}
+                  {{ prereq_select('prerequisites-' ~ pidx ~ '-value', mercenaries_options, pval) }}
+                {% elif ptype == 'race' %}
+                  {{ prereq_select('prerequisites-' ~ pidx ~ '-value', races_options, pval) }}
+                {% else %}
+                  <input type="text" class="form-control" name="prerequisites-{{ pidx }}-value" id="prerequisites-{{ pidx }}-value" value="{{ pval }}">
+                {% endif %}
+              </td>
+              <td><button type="button" class="btn-remove" onclick="removeRow(this, 'prerequisites')">×</button></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <button type="button" class="btn-add" onclick="addPrerequisite()">+ Add Prerequisite</button>
+      </div>
+
+      <!-- Upkeep & Costs -->
+      <div class="ue-section">
+        <h3>Upkeep &amp; Costs</h3>
+
+        <div style="margin-bottom:0.75rem;">
+          <label class="ue-row-inline">
+            {{ form.has_upkeep(id="has_upkeep") }} Has Upkeep
+          </label>
+          <div id="upkeep-fields">
+            <table class="array-table">
+              <thead><tr><th>Resource</th><th>Amount/Turn</th><th></th></tr></thead>
+              <tbody id="upkeep-tbody">
+                {% for u in form.upkeep %}
+                <tr>
+                  {% if u.form.item_id is defined %}{{ u.form.item_id() }}{% endif %}
+                  <td>{{ u.form.resource(class="form-control", placeholder="e.g. food, magic") }}</td>
+                  <td>{{ u.form.cost(class="form-control", type="number") }}</td>
+                  <td><button type="button" class="btn-remove" onclick="removeRow(this,'upkeep');calculateCost()">×</button></td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+            <button type="button" class="btn-add" onclick="addUpkeep()">+ Add Upkeep Resource</button>
+          </div>
+        </div>
+
+        <div style="margin-bottom:0.75rem;">
+          <label class="ue-row-inline">
+            {{ form.has_recruitment_cost(id="has_recruitment_cost") }} Has Recruitment Cost
+          </label>
+          <div id="recruitment-cost-field" class="ue-row" style="margin-top:0.3rem;">
+            <label>Gold Cost</label>
+            {{ form.recruitment_cost(id="recruitment_cost", class="form-control", type="number") }}
+          </div>
+        </div>
+
+        <div>
+          <label class="ue-row-inline">
+            {{ form.has_summoning_cost(id="has_summoning_cost") }} Has Summoning Cost
+          </label>
+          <div id="summoning-cost-fields">
+            <table class="array-table">
+              <thead><tr><th>Resource</th><th>Amount</th><th></th></tr></thead>
+              <tbody id="summoning_cost-tbody">
+                {% for sc in form.summoning_cost %}
+                <tr>
+                  {% if sc.form.item_id is defined %}{{ sc.form.item_id() }}{% endif %}
+                  <td>{{ sc.form.resource(class="form-control", placeholder="e.g. magic") }}</td>
+                  <td>{{ sc.form.cost(class="form-control", type="number") }}</td>
+                  <td><button type="button" class="btn-remove" onclick="removeRow(this,'summoning_cost')">×</button></td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+            <button type="button" class="btn-add" onclick="addSummoningCost()">+ Add Summoning Resource</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Reason + Submit -->
+      <div class="ue-section">
+        <div class="ue-row" style="margin-bottom:0.75rem;">
+          <label>Reason</label>
+          {{ form.reason(class="form-control", placeholder="Why is this change being made?") }}
+        </div>
+        <div class="ue-submit">
+          {% if g.user and g.user.is_admin %}
+            <button type="submit" class="btn-save" formaction="{{ save_action }}">Save</button>
+          {% endif %}
+          <button type="submit" class="btn-request" formaction="{{ request_action }}">Request Change</button>
+        </div>
+      </div>
+
+    </div>{# end ue-form #}
+
+    <!-- ===== RIGHT: COST CALCULATOR ===== -->
+    <div class="ue-cost-panel">
+      <div style="font-size:0.9rem;font-weight:700;color:#ccc;margin-bottom:0.75rem;letter-spacing:1px;">COST BREAKDOWN</div>
+      <table class="cost-table">
+        <tr><td>HP</td><td id="disp-cost-hp">—</td></tr>
+        <tr><td>Morale</td><td id="disp-cost-morale">—</td></tr>
+        <tr><td>Damage</td><td id="disp-cost-damage">—</td></tr>
+        <tr><td>Retal. Damage</td><td id="disp-cost-retal">—</td></tr>
+        <tr><td>Range</td><td id="disp-cost-range">—</td></tr>
+        <tr><td>Speed</td><td id="disp-cost-speed">—</td></tr>
+        <tr><td>Armor</td><td id="disp-cost-armor">—</td></tr>
+        <tr class="cost-sep"><td>Traits</td><td id="disp-cost-traits">—</td></tr>
+        <tr><td>Upkeep</td><td id="disp-cost-upkeep">—</td></tr>
+        <tr class="cost-total">
+          <td>Total</td>
+          <td id="disp-cost-total" style="font-size:1.1rem;">—</td>
+        </tr>
+        <tr class="cost-sep">
+          <td>Max</td>
+          <td id="disp-cost-max" style="color:#888;">—</td>
+        </tr>
+        <tr>
+          <td>Remaining</td>
+          <td id="disp-cost-remaining">—</td>
+        </tr>
+      </table>
+      <div class="cost-bar-wrap"><div class="cost-bar" id="cost-bar" style="width:0%"></div></div>
+      <div class="cost-label" id="cost-label"></div>
+    </div>
+
+  </div>{# end ue-layout #}
+</form>
+
+<script>
+// ─── Trait data from server ───────────────────────────────────────────────────
+const ALL_TRAITS_DATA = {{ all_traits | tojson }};
+const traitMap = {};
+ALL_TRAITS_DATA.forEach(t => {
+  traitMap[t.name] = { cost: t.cost || 0, description: t.description || '' };
+});
+
+// ─── Cost formula constants ───────────────────────────────────────────────────
+const MAX_COSTS = {
+  'Ancient Unit': 17, 'Ancient Support Unit': 5, 'Ancient Transport Unit': 13,
+  'Classical Unit': 22, 'Classical Support Unit': 10, 'Classical Transport Unit': 18,
+  'Classical Imperial Unit': 27, 'Ruler Unit': 27
+};
+const MONEY_DIVISORS = {
+  'Ancient Unit': 50, 'Ancient Support Unit': 50, 'Ancient Transport Unit': 50,
+  'Classical Unit': 75, 'Classical Support Unit': 75, 'Classical Transport Unit': 75,
+  'Classical Imperial Unit': 75, 'Ruler Unit': null
+};
+// Cost per unit of upkeep (negative = reduces total cost)
+const UPKEEP_MULTIPLIERS = {
+  food: -3, wood: -3, stone: -3, mounts: -3, research: -3,
+  magic: -4, bronze: -4, iron: -4, prestige: -6
+};
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+function getNum(id) {
+  const el = document.getElementById(id);
+  return el ? (parseFloat(el.value) || 0) : 0;
+}
+function isOn(id) {
+  const el = document.getElementById(id);
+  return el ? el.checked : false;
+}
+function setDisp(id, val) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (val === 0) { el.textContent = '—'; el.style.color = ''; }
+  else { el.textContent = (val > 0 ? '+' : '') + val; el.style.color = val > 0 ? '#6af' : '#fa6'; }
+}
+
+// ─── Unit class auto-computation ─────────────────────────────────────────────
+function computeUnitClass() {
+  const era        = (document.getElementById('era') || {}).value || '';
+  const isRuler    = (document.getElementById('is_ruler')    || {}).checked;
+  const isTransport= (document.getElementById('is_transport') || {}).checked;
+  const isImperial = (document.getElementById('is_imperial')  || {}).checked;
+  const isSupport  = (document.getElementById('support')      || {}).checked;
+
+  let cls = '';
+  if (isRuler) {
+    cls = 'Ruler Unit';
+  } else if (era === 'Ancient') {
+    if (isTransport)      cls = 'Ancient Transport Unit';
+    else if (isSupport)   cls = 'Ancient Support Unit';
+    else                  cls = 'Ancient Unit';
+  } else if (era === 'Classical') {
+    if (isImperial)       cls = 'Classical Imperial Unit';
+    else if (isTransport) cls = 'Classical Transport Unit';
+    else if (isSupport)   cls = 'Classical Support Unit';
+    else                  cls = 'Classical Unit';
+  }
+
+  const select = document.getElementById('unit_class');
+  if (select) select.value = cls;
+  const disp = document.getElementById('unit_class_display');
+  if (disp) disp.textContent = cls || '—';
+  calculateCost();
+}
+
+function initClassToggles() {
+  const cls = (document.getElementById('unit_class') || {}).value || '';
+  const el_ruler     = document.getElementById('is_ruler');
+  const el_transport = document.getElementById('is_transport');
+  const el_imperial  = document.getElementById('is_imperial');
+  if (el_ruler)     el_ruler.checked     = cls === 'Ruler Unit';
+  if (el_transport) el_transport.checked = cls.includes('Transport');
+  if (el_imperial)  el_imperial.checked  = cls.includes('Imperial');
+  // Refresh display text
+  const disp = document.getElementById('unit_class_display');
+  if (disp) disp.textContent = cls || '—';
+}
+
+// ─── Main cost calculation ────────────────────────────────────────────────────
+function calculateCost() {
+  const hpCost    = isOn('has_hp')    ? (getNum('hp') - 1)                        : 0;
+  const moraleCost= isOn('has_morale')? (getNum('morale') - 1) * 2               : 0;
+  const dmgCost   = isOn('has_damage')? getNum('damage') * 3                      : 0;
+  const retalCost = isOn('has_retaliation_damage') ? getNum('retaliation_damage') * 2 : 0;
+  const speedCost = isOn('has_speed') ? getNum('speed') * 2                       : 0;
+  const armorCost = isOn('has_armor') ? getNum('armor') * 4                       : 0;
+
+  let rangeCost = 0;
+  if (isOn('has_range')) {
+    const mn = getNum('minimum_range');
+    const mx = getNum('maximum_range');
+    rangeCost = (mx - mn) * 2 + (mx - 1) * 4;
+  }
+
+  // Traits cost
+  let traitsCost = 0;
+  document.querySelectorAll('#selected-traits-container input[type="hidden"]').forEach(inp => {
+    if (inp.value && traitMap[inp.value]) traitsCost += traitMap[inp.value].cost;
+  });
+
+  // Upkeep cost (resources)
+  let upkeepCost = 0;
+  if (isOn('has_upkeep')) {
+    document.querySelectorAll('#upkeep-tbody tr').forEach(row => {
+      const res = row.querySelector('[id$="-resource"],[name$="-resource"]');
+      const amt = row.querySelector('[id$="-cost"],[name$="-cost"]');
+      if (res && amt) {
+        const key = res.value.trim().toLowerCase();
+        const mult = UPKEEP_MULTIPLIERS[key] ?? 0;
+        upkeepCost += (parseFloat(amt.value) || 0) * mult;
+      }
+    });
+  }
+
+  // Money (recruitment cost) upkeep equivalent
+  const unitClass = (document.getElementById('unit_class') || {}).value || '';
+  if (isOn('has_recruitment_cost')) {
+    const divisor = MONEY_DIVISORS[unitClass];
+    if (divisor) upkeepCost += Math.floor(-getNum('recruitment_cost') / divisor);
+  }
+
+  const total = hpCost + moraleCost + dmgCost + retalCost + rangeCost + speedCost + armorCost + traitsCost + upkeepCost;
+  const maxCost = MAX_COSTS[unitClass] ?? null;
+
+  // Update stat column displays
+  setDisp('disp-hp',     hpCost);
+  setDisp('disp-morale', moraleCost);
+  setDisp('disp-damage', dmgCost);
+  setDisp('disp-retal',  retalCost);
+  setDisp('disp-range',  rangeCost);
+  setDisp('disp-speed',  speedCost);
+  setDisp('disp-armor',  armorCost);
+
+  // Update right panel
+  setDisp('disp-cost-hp',     hpCost);
+  setDisp('disp-cost-morale', moraleCost);
+  setDisp('disp-cost-damage', dmgCost);
+  setDisp('disp-cost-retal',  retalCost);
+  setDisp('disp-cost-range',  rangeCost);
+  setDisp('disp-cost-speed',  speedCost);
+  setDisp('disp-cost-armor',  armorCost);
+  setDisp('disp-cost-traits', traitsCost);
+
+  const upkeepEl = document.getElementById('disp-cost-upkeep');
+  if (upkeepEl) { upkeepEl.textContent = upkeepCost ? (upkeepCost > 0 ? '+' : '') + upkeepCost : '—'; upkeepEl.style.color = upkeepCost < 0 ? '#fa6' : ''; }
+
+  const totalEl = document.getElementById('disp-cost-total');
+  if (totalEl) { totalEl.textContent = total; }
+
+  const maxEl    = document.getElementById('disp-cost-max');
+  const remEl    = document.getElementById('disp-cost-remaining');
+  const bar      = document.getElementById('cost-bar');
+  const label    = document.getElementById('cost-label');
+
+  if (maxCost !== null) {
+    if (maxEl)  maxEl.textContent = maxCost;
+    const remaining = maxCost - total;
+    if (remEl) {
+      remEl.textContent = remaining;
+      remEl.style.color = remaining >= 0 ? '#4caf50' : '#f44336';
+    }
+    if (totalEl) totalEl.style.color = remaining >= 0 ? '' : '#f44336';
+    const pct = Math.min(100, Math.max(0, (total / maxCost) * 100));
+    if (bar)   { bar.style.width = pct + '%'; bar.style.background = remaining >= 0 ? '#4caf50' : '#f44336'; }
+    if (label) label.textContent = total + ' / ' + maxCost;
+  } else {
+    if (maxEl)  maxEl.textContent = unitClass ? 'N/A' : '—';
+    if (remEl)  remEl.textContent = '—';
+    if (bar)    bar.style.width = '0%';
+    if (label)  label.textContent = '';
+  }
+}
+
+// ─── Show/hide conditional fields ────────────────────────────────────────────
+const CONDITIONALS = {
+  has_hp:                 'val-hp',
+  has_morale:             'val-morale',
+  has_damage:             'val-damage',
+  has_retaliation_damage: 'val-retal',
+  has_range:              'val-range',
+  has_speed:              'val-speed',
+  has_armor:              'val-armor',
+  has_upkeep:             'upkeep-fields',
+  has_recruitment_cost:   'recruitment-cost-field',
+  has_summoning_cost:     'summoning-cost-fields',
+};
+
+function syncConditionals() {
+  Object.entries(CONDITIONALS).forEach(([checkId, targetId]) => {
+    const check  = document.getElementById(checkId);
+    const target = document.getElementById(targetId);
+    if (check && target) {
+      target.style.display = check.checked ? '' : 'none';
+    }
+  });
+}
+
+// ─── Traits ──────────────────────────────────────────────────────────────────
+function addTrait() {
+  const picker = document.getElementById('trait-picker');
+  const name   = picker.value;
+  if (!name) return;
+
+  // Prevent duplicates
+  const existing = document.querySelectorAll('#selected-traits-container input[type="hidden"]');
+  for (const inp of existing) { if (inp.value === name) return; }
+
+  const n    = existing.length;
+  const info = traitMap[name] || { cost: 0, description: '' };
+  const cost = info.cost;
+  const costStr = cost >= 0 ? '+' + cost : String(cost);
+
+  const div = document.createElement('div');
+  div.className = 'trait-badge';
+  div.setAttribute('data-name', name);
+  div.innerHTML =
+    `<input type="hidden" name="traits-${n}" value="${escHtml(name)}">` +
+    `<span class="trait-name">${escHtml(name)}</span>` +
+    `<span class="trait-cost">${costStr}</span>` +
+    (info.description ? `<span class="trait-info" title="${escAttr(info.description)}">ℹ</span>` : '') +
+    `<button type="button" class="trait-remove" onclick="removeTrait(this)" title="Remove">×</button>`;
+
+  document.getElementById('selected-traits-container').appendChild(div);
+  picker.value = '';
+  reindexTraits();
+  calculateCost();
+}
+
+function removeTrait(btn) {
+  btn.closest('.trait-badge').remove();
+  reindexTraits();
+  calculateCost();
+}
+
+function reindexTraits() {
+  document.querySelectorAll('#selected-traits-container input[type="hidden"]').forEach((inp, i) => {
+    inp.name = `traits-${i}`;
+  });
+}
+
+// ─── Array management ─────────────────────────────────────────────────────────
+function removeRow(btn, fieldName) {
+  btn.closest('tr').remove();
+  reindexRows(fieldName);
+  calculateCost();
+}
+
+function reindexRows(fieldName) {
+  const tbody = document.getElementById(`${fieldName}-tbody`);
+  if (!tbody) return;
+  Array.from(tbody.children).forEach((row, i) => {
+    row.querySelectorAll('input, select, textarea').forEach(el => {
+      if (!el.name) return;
+      // skip item_id hidden fields
+      if (el.name === 'item_id' || el.name.endsWith('-item_id')) return;
+      const parts = el.name.split('-');
+      if (parts.length >= 2) { parts[1] = i; el.name = parts.join('-'); el.id = parts.join('-'); }
+    });
+  });
+}
+
+function addSpecialAbility() {
+  const tbody = document.getElementById('special_abilities-tbody');
+  const n = tbody.children.length;
+  const row = document.createElement('tr');
+  row.innerHTML =
+    `<td><input type="text" class="form-control" name="special_abilities-${n}" id="special_abilities-${n}" placeholder="e.g. Ambush: Gains +1 damage in forest terrain."></td>` +
+    `<td><button type="button" class="btn-remove" onclick="removeRow(this,'special_abilities')">×</button></td>`;
+  tbody.appendChild(row);
+}
+
+const TECH_OPTIONS = {{ tech_options | tojson }};
+const DISTRICT_CATEGORIES = {{ district_categories | tojson }};
+const NATIONS_OPTIONS = {{ nations_options | tojson }};
+const ARTIFACTS_OPTIONS = {{ artifacts_options | tojson }};
+const SPELLS_OPTIONS = {{ spells_options | tojson }};
+const MERCENARIES_OPTIONS = {{ mercenaries_options | tojson }};
+const RACES_OPTIONS = {{ races_options | tojson }};
+
+function makeNameSelect(n, names, selectedValue) {
+  let opts = '<option value="">(select)</option>' +
+    names.map(name => `<option value="${name.replace(/"/g,'&quot;')}"${name === selectedValue ? ' selected' : ''}>${name}</option>`).join('');
+  return `<select class="form-control" name="prerequisites-${n}-value" id="prerequisites-${n}-value">${opts}</select>`;
+}
+
+function makePrereqValueCell(n, type, selectedValue) {
+  if (type === 'district') {
+    let opts = '<option value="">(select)</option>' +
+      DISTRICT_CATEGORIES.map(c => `<option value="${c.key}"${c.key === selectedValue ? ' selected' : ''}>${c.label}</option>`).join('');
+    return `<select class="form-control" name="prerequisites-${n}-value" id="prerequisites-${n}-value">${opts}</select>`;
+  } else if (type === 'technology') {
+    let opts = '<option value="">(select)</option>' +
+      TECH_OPTIONS.map(t => `<option value="${t.key}"${t.key === selectedValue ? ' selected' : ''}>${t.display_name}</option>`).join('');
+    return `<select class="form-control" name="prerequisites-${n}-value" id="prerequisites-${n}-value">${opts}</select>`;
+  } else if (type === 'nation') {
+    return makeNameSelect(n, NATIONS_OPTIONS, selectedValue);
+  } else if (type === 'artifact') {
+    return makeNameSelect(n, ARTIFACTS_OPTIONS, selectedValue);
+  } else if (type === 'spell') {
+    return makeNameSelect(n, SPELLS_OPTIONS, selectedValue);
+  } else if (type === 'mercenary') {
+    return makeNameSelect(n, MERCENARIES_OPTIONS, selectedValue);
+  } else if (type === 'race') {
+    return makeNameSelect(n, RACES_OPTIONS, selectedValue);
+  } else {
+    return `<input type="text" class="form-control" name="prerequisites-${n}-value" id="prerequisites-${n}-value" value="${(selectedValue||'').replace(/"/g,'&quot;')}">`;
+  }
+}
+
+function addPrerequisite() {
+  const tbody = document.getElementById('prerequisites-tbody');
+  const n = tbody.children.length;
+  const row = document.createElement('tr');
+  const typeOpts =
+    `<option value="district">district</option>` +
+    `<option value="nation">nation</option>` +
+    `<option value="technology">technology</option>` +
+    `<option value="artifact">artifact</option>` +
+    `<option value="spell">spell</option>` +
+    `<option value="mercenary">mercenary</option>` +
+    `<option value="race">race</option>`;
+  const valueHtml = makePrereqValueCell(n, 'district', '');
+  row.innerHTML =
+    `<td><select class="form-control" name="prerequisites-${n}-type" id="prerequisites-${n}-type" onchange="onPrereqTypeChange(this)">${typeOpts}</select></td>` +
+    `<td>${valueHtml}</td>` +
+    `<td><button type="button" class="btn-remove" onclick="removeRow(this,'prerequisites')">×</button></td>`;
+  tbody.appendChild(row);
+}
+
+function onPrereqTypeChange(selectEl) {
+  const row = selectEl.closest('tr');
+  const n = Array.from(selectEl.closest('tbody').children).indexOf(row);
+  const type = selectEl.value;
+  const cell = row.querySelector('td:nth-child(2)');
+  if (!cell) return;
+  cell.innerHTML = makePrereqValueCell(n, type, '');
+  const input = cell.querySelector('input, select');
+  if (input) { input.name = `prerequisites-${n}-value`; input.id = `prerequisites-${n}-value`; }
+}
+
+function addUpkeep() {
+  const tbody = document.getElementById('upkeep-tbody');
+  const n = tbody.children.length;
+  const row = document.createElement('tr');
+  row.innerHTML =
+    `<td><input type="text" class="form-control" name="upkeep-${n}-resource" id="upkeep-${n}-resource" placeholder="e.g. food, magic"></td>` +
+    `<td><input type="number" class="form-control" name="upkeep-${n}-cost" id="upkeep-${n}-cost" value="1" min="0"></td>` +
+    `<td><button type="button" class="btn-remove" onclick="removeRow(this,'upkeep');calculateCost()">×</button></td>`;
+  tbody.appendChild(row);
+  row.querySelector('[name$="-resource"]').addEventListener('input', calculateCost);
+  row.querySelector('[name$="-cost"]').addEventListener('input', calculateCost);
+}
+
+function addSummoningCost() {
+  const tbody = document.getElementById('summoning_cost-tbody');
+  const n = tbody.children.length;
+  const row = document.createElement('tr');
+  row.innerHTML =
+    `<td><input type="text" class="form-control" name="summoning_cost-${n}-resource" id="summoning_cost-${n}-resource" placeholder="e.g. magic"></td>` +
+    `<td><input type="number" class="form-control" name="summoning_cost-${n}-cost" id="summoning_cost-${n}-cost" value="1" min="0"></td>` +
+    `<td><button type="button" class="btn-remove" onclick="removeRow(this,'summoning_cost')">×</button></td>`;
+  tbody.appendChild(row);
+}
+
+// ─── HTML escape helpers ──────────────────────────────────────────────────────
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escAttr(s) { return String(s).replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
+// ─── Attach all listeners & init ──────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', function () {
+  const watchIds = [
+    'has_hp','hp','has_morale','morale','has_damage','damage',
+    'has_retaliation_damage','retaliation_damage',
+    'has_range','minimum_range','maximum_range',
+    'has_speed','speed','has_armor','armor',
+    'has_recruitment_cost','recruitment_cost'
+  ];
+  watchIds.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.addEventListener('change', calculateCost); el.addEventListener('input', calculateCost); }
+  });
+
+  // Conditional toggles
+  Object.keys(CONDITIONALS).forEach(checkId => {
+    const el = document.getElementById(checkId);
+    if (el) el.addEventListener('change', () => { syncConditionals(); calculateCost(); });
+  });
+
+  // Class-computing toggles
+  ['era', 'support', 'is_ruler', 'is_transport', 'is_imperial'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('change', computeUnitClass);
+  });
+
+  // Attach change listeners to existing upkeep rows
+  document.querySelectorAll('#upkeep-tbody input').forEach(el => el.addEventListener('input', calculateCost));
+
+  {% if not item %}
+  // New unit: apply default stat values since WTForms ignores defaults on GET requests
+  const newUnitDefaults = {
+    has_hp: true, hp: 1,
+    has_morale: true, morale: 1,
+    has_damage: true, damage: 1,
+    has_retaliation_damage: true, retaliation_damage: 0,
+    has_range: true, minimum_range: 1, maximum_range: 1,
+    has_speed: true, speed: 1,
+    has_armor: true, armor: 0,
+  };
+  Object.entries(newUnitDefaults).forEach(([id, val]) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (el.type === 'checkbox') el.checked = val;
+    else el.value = val;
+  });
+  {% endif %}
+
+  initClassToggles();
+  syncConditionals();
+  calculateCost();
+});
+</script>
+{% endblock %}

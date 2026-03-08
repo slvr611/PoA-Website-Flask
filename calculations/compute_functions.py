@@ -1,5 +1,5 @@
 import math
-from app_core import category_data, json_data, land_unit_json_files, naval_unit_json_files
+from app_core import category_data, json_data
 from bson.objectid import ObjectId
 import copy
 from bisect import bisect_right
@@ -400,12 +400,18 @@ def compute_unit_count(field, target, base_value, field_schema, overall_total_mo
 
 def compute_unit_capacity(field, target, base_value, field_schema, overall_total_modifiers):
     pop_count = target.get("pop_count", 0)
-    
+
     unit_cap_from_pops = math.ceil(pop_count * (overall_total_modifiers.get("recruit_percentage", 0)))
-    
+
     value = base_value + overall_total_modifiers.get(field, 0) + unit_cap_from_pops
-    
+
     return int(value)
+
+def compute_support_unit_capacity(field, target, base_value, field_schema, overall_total_modifiers):
+    # Support capacity = half of land unit capacity (already precalculated into target)
+    land_unit_capacity = target.get("land_unit_capacity", 0)
+    extra = base_value + overall_total_modifiers.get(field, 0)
+    return max(0, land_unit_capacity // 2 + extra)
 
 def compute_money_income(field, target, base_value, field_schema, overall_total_modifiers):
     pop_count = target.get("pop_count", 0)
@@ -808,24 +814,40 @@ def compute_budget(field, target, base_value, field_schema, overall_total_modifi
 def compute_budget_spent(field, target, base_value, field_schema, overall_total_modifiers):
     value = overall_total_modifiers.get(field, 0)
 
-    combined_json_data = {}
-    for file_name in land_unit_json_files:
-        combined_json_data.update(json_data[file_name])
-    
-    for file_name in naval_unit_json_files:
-        combined_json_data.update(json_data[file_name])
-
-    units = []
     if field == "land_budget_spent":
-        units = target.get("land_units", [])
+        units = target.get("land_units", {})
     elif field == "naval_budget_spent":
-        units = target.get("naval_units", [])
+        units = target.get("naval_units", {})
     else:
         return value
 
-    for unit in units:
-        value += combined_json_data.get(unit, {}).get("recruitment_cost", {}).get("money", 0)
-    
+    if not units:
+        return int(value)
+
+    # Build recruitment cost lookup from DB units (era-prefixed names for multi-era units)
+    units_list = list(category_data["units"]["database"].find(
+        {"unit_class": {"$ne": "Ruler Unit"}}, {"name": 1, "era": 1, "has_recruitment_cost": 1, "recruitment_cost": 1}
+    ))
+    name_eras = {}
+    for u in units_list:
+        n = u.get("name", "")
+        if n:
+            name_eras.setdefault(n, set()).add(u.get("era", ""))
+    multi_era_names = {n for n, eras in name_eras.items() if len(eras) > 1}
+
+    recruitment_costs = {}
+    for u in units_list:
+        n = u.get("name", "")
+        if not n:
+            continue
+        era = u.get("era", "")
+        key = f"{era} {n}" if n in multi_era_names and era else n
+        if u.get("has_recruitment_cost") and u.get("recruitment_cost") is not None:
+            recruitment_costs[key] = u["recruitment_cost"]
+
+    for unit_key in units:
+        value += recruitment_costs.get(unit_key, 0)
+
     return int(value)
 
 def compute_hiring_cost(field, target, base_value, field_schema, overall_total_modifiers):
@@ -892,8 +914,10 @@ CUSTOM_COMPUTE_FUNCTIONS = {
     "district_slots": compute_district_slots,
     "land_unit_count": compute_unit_count,
     "naval_unit_count": compute_unit_count,
+    "support_unit_count": compute_unit_count,
     "land_unit_capacity": compute_unit_capacity,
     "naval_unit_capacity": compute_unit_capacity,
+    "support_unit_capacity": compute_support_unit_capacity,
     "money_income": compute_money_income,
     "resource_production": compute_resource_production,
     "resource_consumption": compute_resource_consumption,

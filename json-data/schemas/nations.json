@@ -1541,6 +1541,23 @@
         "label": "Naval Units",
         "description": "The naval units the nation has recruited"
       },
+      "support_unit_count": {
+        "bsonType": "number",
+        "label": "Support Unit Count",
+        "description": "The number of support units the nation has",
+        "calculated": true
+      },
+      "support_unit_capacity": {
+        "bsonType": "number",
+        "label": "Support Unit Capacity",
+        "description": "The number of support units the nation can field (half of land unit capacity)",
+        "calculated": true
+      },
+      "support_units": {
+        "bsonType": "array",
+        "label": "Support Units",
+        "description": "The support units the nation has recruited"
+      },
       "land_attack": {
         "bsonType": "number",
         "label": "Land Attack Modifier",

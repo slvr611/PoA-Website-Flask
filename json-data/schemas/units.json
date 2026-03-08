@@ -2,6 +2,8 @@
   "$jsonSchema": {
     "bsonType": "object",
     "required": ["name"],
+    "preview": ["era", "unit_type"],
+    "sort": "name",
     "properties": {
       "name": {
         "bsonType": "string",
@@ -25,6 +27,12 @@
         "label": "Unit Type",
         "description": "The type of unit",
         "enum": ["Land", "Naval"]
+      },
+      "unit_class": {
+        "bsonType": "enum",
+        "label": "Unit Class",
+        "description": "The class of the unit, used to determine max cost",
+        "enum": ["Ancient Unit", "Ancient Support Unit", "Ancient Transport Unit", "Classical Unit", "Classical Support Unit", "Classical Transport Unit", "Classical Imperial Unit", "Ruler Unit"]
       },
       "melee": {
         "bsonType": "boolean",
@@ -57,7 +65,7 @@
               "bsonType": "enum",
               "label": "Type",
               "description": "The type of prerequisite",
-              "enum": ["district", "name", "defensive_pact", "military_alliance"]
+              "enum": ["district", "nation", "technology", "artifact", "spell", "mercenary", "race"]
             },
             "value": {
               "bsonType": "string",
@@ -71,96 +79,120 @@
         "bsonType": "boolean",
         "label": "Has HP",
         "description": "Whether the unit has HP",
-        "hidden": true
+        "hidden": true,
+        "default": true
       },
       "hp": {
         "bsonType": "number",
         "label": "HP",
         "description": "The HP of the unit",
-        "hideIfNone": "has_hp"
+        "hideIfNone": "has_hp",
+        "default": 1
       },
       "has_morale": {
         "bsonType": "boolean",
         "label": "Has Morale",
         "description": "Whether the unit has morale",
-        "hidden": true
+        "hidden": true,
+        "default": true
       },
       "morale": {
         "bsonType": "number",
         "label": "Morale",
         "description": "The morale of the unit",
-        "hideIfNone": "has_morale"
+        "hideIfNone": "has_morale",
+        "default": 1
       },
       "has_damage": {
         "bsonType": "boolean",
         "label": "Has Damage",
         "description": "Whether the unit has damage",
-        "hidden": true
+        "hidden": true,
+        "default": true
       },
       "damage": {
         "bsonType": "number",
         "label": "Damage",
         "description": "The damage of the unit",
-        "hideIfNone": "has_damage"
+        "hideIfNone": "has_damage",
+        "default": 1
       },
       "has_retaliation_damage": {
         "bsonType": "boolean",
         "label": "Has Retaliation Damage",
         "description": "Whether the unit has retaliation damage",
-        "hidden": true
+        "hidden": true,
+        "default": false
       },
       "retaliation_damage": {
         "bsonType": "number",
         "label": "Retaliation Damage",
         "description": "The retaliation damage of the unit",
-        "hideIfNone": "has_retaliation_damage"
+        "hideIfNone": "has_retaliation_damage",
+        "default": 0
       },
       "has_range": {
         "bsonType": "boolean",
         "label": "Has Range",
         "description": "Whether the unit has a range",
-        "hidden": true
+        "hidden": true,
+        "default": true
       },
       "minimum_range": {
         "bsonType": "number",
         "label": "Minimum Range",
         "description": "The minimum range of the unit",
-        "hideIfNone": "has_range"
+        "hideIfNone": "has_range",
+        "default": 1
       },
       "maximum_range": {
         "bsonType": "number",
         "label": "Maximum Range",
         "description": "The maximum range of the unit",
-        "hideIfNone": "has_range"
+        "hideIfNone": "has_range",
+        "default": 1
       },
       "has_speed": {
         "bsonType": "boolean",
         "label": "Has Speed",
         "description": "Whether the unit has a speed",
-        "hidden": true
+        "hidden": true,
+        "default": true
       },
       "speed": {
         "bsonType": "number",
         "label": "Speed",
         "description": "The speed of the unit",
-        "hideIfNone": "has_speed"
+        "hideIfNone": "has_speed",
+        "default": 1
       },
       "has_armor": {
         "bsonType": "boolean",
         "label": "Has Armor",
         "description": "Whether the unit has armor",
-        "hidden": true
+        "hidden": true,
+        "default": false
       },
       "armor": {
         "bsonType": "number",
         "label": "Armor",
         "description": "The armor of the unit",
-        "hideIfNone": "has_armor"
+        "hideIfNone": "has_armor",
+        "default": 0
+      },
+      "traits": {
+        "bsonType": "array",
+        "label": "Traits",
+        "description": "Named traits from the traits database",
+        "items": {
+          "bsonType": "string",
+          "label": "Trait"
+        }
       },
       "special_abilities": {
         "bsonType": "array",
         "label": "Special Abilities",
-        "description": "The special abilities of the unit",
+        "description": "Free-text special abilities not covered by the traits database",
         "items": {
           "bsonType": "string",
           "label": "Special Ability",

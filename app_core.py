@@ -71,7 +71,8 @@ category_data = {
     "events": {"pluralName": "Events", "singularName": "Event", "database": mongo.db.events},
     "changes": {"pluralName": "Changes", "singularName": "Change", "database": mongo.db.changes},
     "global_modifiers": {"pluralName": "Global Modifiers", "singularName": "Global Modifiers", "database": mongo.db.global_modifiers},
-    "units": {"pluralName": "Units", "singularName": "Unit", "database": mongo.db.units}
+    "units": {"pluralName": "Units", "singularName": "Unit", "database": mongo.db.units},
+    "traits": {"pluralName": "Traits", "singularName": "Trait", "database": mongo.db.traits}
 }
 
 def ensure_mongo_indexes():
@@ -97,17 +98,6 @@ rarity_rankings = {"Mythical": 0, "Legendary": 1, "Great": 2, "Good": 3, "Mundan
 json_files = ["jobs", "tech", "nation_districts", "nation_imperial_districts", "mercenary_districts",
                 "merchant_production_districts", "merchant_specialty_districts", "merchant_luxury_districts",
                 "cities", "terrains", "walls", "positive_titles", "negative_titles", "meta_mods"]
-land_unit_json_files = ["ancient_magical_land_units", "ancient_mundane_land_units", "ancient_unique_land_units",
-                         "classical_magical_land_units", "classical_mundane_land_units", "classical_unique_land_units",
-                         "imperial_generic_units", "imperial_unique_units"]
-naval_unit_json_files = ["ancient_mundane_naval_units", "classical_magical_naval_units", "classical_mundane_naval_units"]
-misc_unit_json_files = ["ruler_units", "void_units"]
-unit_json_files = land_unit_json_files + naval_unit_json_files + misc_unit_json_files
-unit_json_file_titles = ["Ancient Magical Land Units", "Ancient Mundane Land Units", "Ancient Unique Land Units",
-                        "Classical Magical Land Units", "Classical Mundane Land Units", "Classical Unique Land Units",
-                        "Imperial Generic Units", "Imperial Unique Units", 
-                        "Ancient Mundane Naval Units", "Classical Magical Naval Units", "Classical Mundane Naval Units",
-                        "Ruler Units", "Void Units"]
 json_data = {"general_resources": [
             {"key": "food", "name": "Food", "base_storage": 20, "base_price": 50},
             {"key": "wood", "name": "Wood", "base_storage": 15, "base_price": 75},
@@ -210,10 +200,38 @@ for data_type in category_data:
 for file in json_files:
     json_data[file] = load_json("json-data/" + file + ".json")
 
-for file in unit_json_files:
-    json_data[file] = load_json("json-data/units/" + file + ".json")
-
 ensure_mongo_indexes()
+
+def upload_bytes_to_s3(file_bytes, s3_key, content_type="image/jpeg"):
+    """Upload file bytes directly to S3 (e.g. from a Flask file upload).
+    Returns (success, public_url_or_error_message).
+    """
+    try:
+        from io import BytesIO
+        s3_bucket = os.getenv("S3_BUCKET_NAME")
+        aws_access_key = os.getenv("AWS_ACCESS_KEY_ID")
+        aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+
+        if not s3_bucket or not aws_access_key or not aws_secret_key:
+            return False, "S3 configuration missing"
+
+        s3_client = boto3.client(
+            's3',
+            aws_access_key_id=aws_access_key,
+            aws_secret_access_key=aws_secret_key
+        )
+        s3_client.upload_fileobj(
+            BytesIO(file_bytes),
+            s3_bucket,
+            s3_key,
+            ExtraArgs={"ContentType": content_type}
+        )
+        public_base = os.getenv("S3_PUBLIC_BASE_URL", f"https://{s3_bucket}.s3.amazonaws.com")
+        public_url = f"{public_base.rstrip('/')}/{s3_key}"
+        return True, public_url
+    except Exception as e:
+        return False, f"S3 upload failed: {str(e)}"
+
 
 def upload_to_s3(file_path, s3_key):
     """Upload a file to S3 bucket"""

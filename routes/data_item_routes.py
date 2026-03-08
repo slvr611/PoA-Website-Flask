@@ -1,18 +1,103 @@
-from flask import Blueprint, render_template, request, redirect, flash
+from flask import Blueprint, render_template, request, redirect, flash, jsonify
 from forms import form_generator
 from helpers.data_helpers import get_data_on_category, get_data_on_item
 from helpers.change_helpers import request_change, approve_change, recalculate_object
 from helpers.render_helpers import get_linked_objects
 from helpers.form_helpers import validate_form_with_jsonschema
 from routes.nation_routes import edit_nation, nation_edit_request, nation_edit_approve
-from app_core import category_data, mongo, rarity_rankings, json_data, find_dict_in_list
+from app_core import category_data, mongo, rarity_rankings, json_data, find_dict_in_list, upload_bytes_to_s3
 from helpers.auth_helpers import admin_required
 from pymongo import ASCENDING
 from bson import ObjectId
 from copy import deepcopy
+import os
 
 
 data_item_routes = Blueprint("data_item_routes", __name__)
+
+_DISTRICT_FILES = [
+    "nation_districts", "nation_imperial_districts", "mercenary_districts",
+    "merchant_production_districts", "merchant_specialty_districts", "merchant_luxury_districts"
+]
+
+def _build_unit_edit_extras(item=None):
+    """Returns context variables shared by the new-unit and edit-unit routes."""
+    all_traits = list(category_data["traits"]["database"].find(
+        {}, {"_id": 0, "name": 1, "cost": 1, "description": 1}
+    ).sort("name", ASCENDING))
+
+    tech_options = sorted(
+        [{"key": k, "display_name": v.get("display_name", k)} for k, v in json_data.get("tech", {}).items()],
+        key=lambda x: x["display_name"]
+    )
+
+    # Build district key→category lookup and sorted category list
+    district_key_to_cat = {}
+    cat_set = set()
+    for fname in _DISTRICT_FILES:
+        for key, data in json_data.get(fname, {}).items():
+            cat = data.get("type", "")
+            if cat:
+                district_key_to_cat[key] = cat
+                cat_set.add(cat)
+    district_categories = sorted(
+        [{"key": c, "label": c.replace("_", " ").title()} for c in cat_set],
+        key=lambda x: x["label"]
+    )
+
+    def _names(col):
+        return [d["name"] for d in category_data[col]["database"].find({}, {"_id": 0, "name": 1}).sort("name", ASCENDING)]
+
+    # Migrate any era-specific district keys to their category in-place
+    if item and "prerequisites" in item:
+        for pre in item["prerequisites"]:
+            if pre.get("type") == "district":
+                val = pre.get("value", "")
+                if val in district_key_to_cat:
+                    pre["value"] = district_key_to_cat[val]
+
+    races_options = _names("races")
+
+    return dict(
+        all_traits=all_traits,
+        tech_options=tech_options,
+        district_categories=district_categories,
+        nations_options=_names("nations"),
+        artifacts_options=_names("artifacts"),
+        spells_options=_names("spells"),
+        mercenaries_options=_names("mercenaries"),
+        races_options=races_options,
+    )
+
+
+
+ALLOWED_IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.webp'}
+
+@data_item_routes.route("/units/upload_image", methods=["POST"])
+@admin_required
+def unit_upload_image():
+    if 'image' not in request.files:
+        return jsonify({"success": False, "error": "No file provided"}), 400
+    file = request.files['image']
+    if not file.filename:
+        return jsonify({"success": False, "error": "No file selected"}), 400
+
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in ALLOWED_IMAGE_EXTENSIONS:
+        return jsonify({"success": False, "error": f"File type '{ext}' not allowed"}), 400
+
+    unit_name = request.form.get("unit_name", "unknown").strip()
+    safe_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in unit_name.replace(" ", "_")).lower()
+    s3_key = f"unit_images/{safe_name}{ext}"
+
+    file_bytes = file.read()
+    content_type = file.content_type or "image/jpeg"
+
+    success, result = upload_bytes_to_s3(file_bytes, s3_key, content_type)
+    if success:
+        return jsonify({"success": True, "url": result})
+    else:
+        return jsonify({"success": False, "error": result}), 500
 
 @data_item_routes.route("/<data_type>")
 def data_list(data_type):
@@ -57,8 +142,28 @@ def data_item(data_type, item_ref):
     schema, db, item = get_data_on_item(data_type, item_ref)
     linked_objects = get_linked_objects(schema, item)
 
-    # Use a custom template for units to render a card-style layout
+    unit_traits = []
+    if data_type == "units":
+        trait_names = item.get("traits", [])
+        if trait_names:
+            traits_db = category_data["traits"]["database"]
+            unit_traits = list(traits_db.find({"name": {"$in": trait_names}}))
+            trait_order = {name: i for i, name in enumerate(trait_names)}
+            unit_traits.sort(key=lambda t: trait_order.get(t.get("name"), 999))
+
     template_name = "units_item.html" if data_type == "units" else "dataItem.html"
+
+    district_files = ["nation_districts", "nation_imperial_districts", "mercenary_districts",
+                      "merchant_production_districts", "merchant_specialty_districts", "merchant_luxury_districts"]
+    districts_lookup = {}
+    for fname in district_files:
+        for key, data in json_data.get(fname, {}).items():
+            districts_lookup[key] = data.get("display_name", key)
+
+    tech_lookup = {key: data.get("display_name", key) for key, data in json_data.get("tech", {}).items()}
+
+    def _names_set(col):
+        return {d["name"] for d in category_data[col]["database"].find({}, {"_id": 0, "name": 1})}
 
     return render_template(
         template_name,
@@ -67,7 +172,12 @@ def data_item(data_type, item_ref):
         item=item,
         linked_objects=linked_objects,
         json_data=json_data,
-        find_dict_in_list=find_dict_in_list
+        find_dict_in_list=find_dict_in_list,
+        unit_traits=unit_traits,
+        districts_lookup=districts_lookup,
+        tech_lookup=tech_lookup,
+        mercenaries_names=_names_set("mercenaries"),
+        races_names=_names_set("races"),
     )
 
 @data_item_routes.route("/<data_type>/edit")
@@ -109,7 +219,7 @@ def data_list_edit(data_type):
 @data_item_routes.route("/<data_type>/new", methods=["GET"])
 def data_item_new(data_type):
     schema, db = get_data_on_category(data_type)
-    
+
     dropdown_options = {}
     for field, attributes in schema["properties"].items():
         dropdown_options[field] = []
@@ -117,19 +227,29 @@ def data_item_new(data_type):
             related_collections = attributes.get("collections")
             for related_collection in related_collections:
                 dropdown_options[field] += list(mongo.db[related_collection].find({}, {"name": 1, "_id": 1}).sort("name", ASCENDING))
-    
+
     form = form_generator.get_form(data_type, schema)
     form.populate_linked_fields(schema, dropdown_options)
-    
-    template = render_template(
+
+    if data_type == "units":
+        extras = _build_unit_edit_extras(item=None)
+        return render_template(
+            "units_edit.html",
+            title="New Unit",
+            schema=schema,
+            form=form,
+            item=None,
+            dropdown_options=dropdown_options,
+            **extras
+        )
+
+    return render_template(
         "dataItemNew.html",
         title="New " + category_data[data_type]["singularName"],
         schema=schema,
         form=form,
         dropdown_options=dropdown_options
     )
-    
-    return template
 
 @data_item_routes.route("/<data_type>/new/request", methods=["POST"])
 def data_item_new_request(data_type):
@@ -163,13 +283,18 @@ def data_item_new_request(data_type):
         flash(f"Validation Error: {error}")
         return redirect("/" + data_type + "/new")
     
-    if "name" in form_data and db.find_one({"name": form_data["name"]}):
-        flash("Name must be unique!")
-        return redirect("/" + data_type + "/new")
-    
+    if "name" in form_data:
+        if data_type == "units":
+            if db.find_one({"name": form_data["name"], "era": form_data.get("era")}):
+                flash("A unit with this name already exists in this era!")
+                return redirect("/units/new")
+        elif db.find_one({"name": form_data["name"]}):
+            flash("Name must be unique!")
+            return redirect("/" + data_type + "/new")
+
     reason = form_data.pop("reason", "No Reason Given")
     after_data = form_data
-    
+
     change_id = request_change(
         data_type=data_type,
         item_id=None,
@@ -178,7 +303,7 @@ def data_item_new_request(data_type):
         after_data=after_data,
         reason=reason
     )
-    
+
     flash(f"Create request #{change_id} created and awaits admin approval.")
     
     return redirect("/" + data_type)
@@ -216,13 +341,18 @@ def data_item_new_approve(data_type):
         flash(f"Validation Error: {error}")
         return redirect("/" + data_type + "/new")
     
-    if "name" in form_data and db.find_one({"name": form_data["name"]}):
-        flash("Name must be unique!")
-        return redirect("/" + data_type + "/new")
-    
+    if "name" in form_data:
+        if data_type == "units":
+            if db.find_one({"name": form_data["name"], "era": form_data.get("era")}):
+                flash("A unit with this name already exists in this era!")
+                return redirect("/units/new")
+        elif db.find_one({"name": form_data["name"]}):
+            flash("Name must be unique!")
+            return redirect("/" + data_type + "/new")
+
     reason = form_data.pop("reason", "No Reason Given")
     after_data = form_data
-    
+
     change_id = request_change(
         data_type=data_type,
         item_id=None,
@@ -231,9 +361,9 @@ def data_item_new_approve(data_type):
         after_data=after_data,
         reason=reason
     )
-    
+
     approve_change(change_id)
-    
+
     flash(f"Create request #{change_id} created and approved.")
     
     return redirect("/" + data_type)
@@ -241,7 +371,7 @@ def data_item_new_approve(data_type):
 @data_item_routes.route("/<data_type>/edit/<item_ref>", methods=["GET"])
 def data_item_edit(data_type, item_ref):
     schema, db, item = get_data_on_item(data_type, item_ref)
-    
+
     dropdown_options = {}
     for field, attrs in schema["properties"].items():
         if attrs.get("collections"):
@@ -256,7 +386,19 @@ def data_item_edit(data_type, item_ref):
 
     form = form_generator.get_form(data_type, schema, item=item)
     form.populate_linked_fields(schema, dropdown_options)
-    
+
+    if data_type == "units":
+        extras = _build_unit_edit_extras(item=item)
+        return render_template(
+            "units_edit.html",
+            title=f"Edit {item_ref}",
+            schema=schema,
+            form=form,
+            item=item,
+            dropdown_options=dropdown_options,
+            **extras
+        )
+
     return render_template(
         "dataItemEdit.html",
         title=f"Edit {item_ref}",
@@ -302,15 +444,20 @@ def data_item_edit_request(data_type, item_ref):
         flash(f"Validation Error: {error}")
         return redirect("/" + data_type + "/edit/" + item_ref)
     
-    if "name" in form_data and form_data["name"] != item_ref and db.find_one({"name": form_data["name"]}):
-        flash("Name must be unique!")
-        return redirect(f"/{data_type}/edit/{item_ref}")
-    
+    if "name" in form_data:
+        if data_type == "units":
+            if db.find_one({"name": form_data["name"], "era": form_data.get("era"), "_id": {"$ne": item["_id"]}}):
+                flash("A unit with this name already exists in this era!")
+                return redirect(f"/units/edit/{item_ref}")
+        elif form_data["name"] != item.get("name") and db.find_one({"name": form_data["name"]}):
+            flash("Name must be unique!")
+            return redirect(f"/{data_type}/edit/{item_ref}")
+
     item_id = item["_id"]
     reason = form_data.get("reason", "No Reason Given")
     before_data = item
     after_data = form_data
-    
+
     change_id = request_change(
         data_type=data_type,
         item_id=item_id,
@@ -319,9 +466,9 @@ def data_item_edit_request(data_type, item_ref):
         after_data=after_data,
         reason=reason
     )
-    
+
     flash(f"Change request #{change_id} created and awaits admin approval.")
-    
+
     return redirect("/" + data_type)
 
 @data_item_routes.route("/<data_type>/edit/<item_ref>/save", methods=["POST"])
@@ -361,15 +508,20 @@ def data_item_edit_approve(data_type, item_ref):
         flash(f"Validation Error: {error}")
         return redirect("/" + data_type + "/edit/" + item_ref)
     
-    if "name" in form_data and form_data["name"] != item_ref and db.find_one({"name": form_data["name"]}):
-        flash("Name must be unique!")
-        return redirect(f"/{data_type}/edit/{item_ref}")
-    
+    if "name" in form_data:
+        if data_type == "units":
+            if db.find_one({"name": form_data["name"], "era": form_data.get("era"), "_id": {"$ne": item["_id"]}}):
+                flash("A unit with this name already exists in this era!")
+                return redirect(f"/units/edit/{item_ref}")
+        elif form_data["name"] != item.get("name") and db.find_one({"name": form_data["name"]}):
+            flash("Name must be unique!")
+            return redirect(f"/{data_type}/edit/{item_ref}")
+
     item_id = item["_id"]
     reason = form_data.get("reason", "No Reason Given")
     before_data = item
     after_data = form_data
-    
+
     change_id = request_change(
         data_type=data_type,
         item_id=item_id,

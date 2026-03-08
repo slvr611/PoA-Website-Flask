@@ -4,7 +4,7 @@ from wtforms import FieldList, FormField, HiddenField, SubmitField, MultipleFile
 from wtforms import widgets
 from wtforms.validators import DataRequired, NumberRange, Optional, ValidationError
 from bson import ObjectId
-from app_core import json_data, category_data, land_unit_json_files, naval_unit_json_files
+from app_core import json_data, category_data
 import json
 from copy import deepcopy
 from calculations.field_calculations import calculate_all_fields
@@ -756,17 +756,45 @@ class BaseSchemaForm(FlaskForm):
         elif field_name == "negative_titles":
             choices += [(title, json_data["negative_titles"][title]["display_name"]) for title in json_data["negative_titles"]]
         
+        elif field_name == "support_units":
+            units_list = list(category_data["units"]["database"].find(
+                {"unit_type": "Land", "support": True, "unit_class": {"$ne": "Ruler Unit"}},
+                {"name": 1, "era": 1}
+            ).sort("name", 1))
+            name_eras = {}
+            for u in units_list:
+                n = u.get("name", "")
+                if n:
+                    name_eras.setdefault(n, set()).add(u.get("era", ""))
+            multi_era_names = {n for n, eras in name_eras.items() if len(eras) > 1}
+            for u in units_list:
+                n = u.get("name", "")
+                if not n:
+                    continue
+                era = u.get("era", "")
+                key = f"{era} {n}" if n in multi_era_names and era else n
+                choices.append((key, key))
+
         elif field_name == "land_units" or field_name == "naval_units":
-            combined_data = {}
-            json_files = []
-            if field_name == "land_units":
-                json_files = land_unit_json_files
-            else:
-                json_files = naval_unit_json_files
-            for file_name in json_files:
-                combined_data.update(json_data[file_name])
-            choices += [(key, data.get("display_name", key))
-                        for key, data in combined_data.items()]
+            unit_type = "Land" if field_name == "land_units" else "Naval"
+            extra_filter = {"support": {"$ne": True}} if field_name == "land_units" else {}
+            units_list = list(category_data["units"]["database"].find(
+                {"unit_type": unit_type, "unit_class": {"$ne": "Ruler Unit"}, **extra_filter},
+                {"name": 1, "era": 1}
+            ).sort("name", 1))
+            name_eras = {}
+            for u in units_list:
+                n = u.get("name", "")
+                if n:
+                    name_eras.setdefault(n, set()).add(u.get("era", ""))
+            multi_era_names = {n for n, eras in name_eras.items() if len(eras) > 1}
+            for u in units_list:
+                n = u.get("name", "")
+                if not n:
+                    continue
+                era = u.get("era", "")
+                key = f"{era} {n}" if n in multi_era_names and era else n
+                choices.append((key, key))
         
         elif field_name in dropdown_options:
             for option in dropdown_options[field_name]:
@@ -1051,12 +1079,25 @@ class DynamicSchemaForm(BaseSchemaForm):
             return SelectField(**field_args)
         
         elif field_type == "json_unit_enum":
-            combined_data = {}
-            json_files = land_unit_json_files + naval_unit_json_files
-            for file_name in json_files:
-                combined_data.update(json_data[file_name])
-            field_args["choices"] = [("", "None")] + [(key, data.get("display_name", key))
-                for key, data in combined_data.items()]
+            units_list = list(category_data["units"]["database"].find(
+                {"unit_class": {"$ne": "Ruler Unit"}},
+                {"name": 1, "era": 1}
+            ).sort("name", 1))
+            name_eras = {}
+            for u in units_list:
+                n = u.get("name", "")
+                if n:
+                    name_eras.setdefault(n, set()).add(u.get("era", ""))
+            multi_era_names = {n for n, eras in name_eras.items() if len(eras) > 1}
+            unit_choices = []
+            for u in units_list:
+                n = u.get("name", "")
+                if not n:
+                    continue
+                era = u.get("era", "")
+                key = f"{era} {n}" if n in multi_era_names and era else n
+                unit_choices.append((key, key))
+            field_args["choices"] = [("", "None")] + unit_choices
             return SelectField(**field_args)
         
         elif field_type == "json_resource_enum":

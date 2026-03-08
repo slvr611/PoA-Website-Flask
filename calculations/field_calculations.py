@@ -2,7 +2,7 @@ import math
 import copy
 from copy import deepcopy
 from time import perf_counter
-from app_core import mongo, json_data, category_data, land_unit_json_files, naval_unit_json_files
+from app_core import mongo, json_data, category_data
 from calculations.compute_functions import compute_pop_count, compute_field
 from bson.objectid import ObjectId
 from app_core import json_data
@@ -103,6 +103,7 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
     job_totals = {}
     land_unit_details = {}
     naval_unit_details = {}
+    support_unit_details = {}
     unit_totals = {}
     prestige_modifiers = {}
     title_modifiers = {}
@@ -125,12 +126,15 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
         job_totals = sum_job_totals(target, jobs_assigned, job_details)
 
         land_units_assigned = collect_land_units_assigned(target)
-        land_unit_details = calculate_unit_details(target, "land", land_unit_json_files, modifier_totals, district_totals, tech_totals, city_totals, law_totals, external_modifiers_total)
+        land_unit_details = calculate_unit_details(target, "land", modifier_totals, district_totals, tech_totals, city_totals, law_totals, external_modifiers_total)
 
         naval_units_assigned = collect_naval_units_assigned(target)
-        naval_unit_details = calculate_unit_details(target, "naval", naval_unit_json_files, modifier_totals, district_totals, tech_totals, city_totals, law_totals, external_modifiers_total)
+        naval_unit_details = calculate_unit_details(target, "naval", modifier_totals, district_totals, tech_totals, city_totals, law_totals, external_modifiers_total)
 
-        unit_totals = sum_all_unit_totals(land_units_assigned, land_unit_details, naval_units_assigned, naval_unit_details, external_modifiers_total)
+        support_units_assigned = collect_support_units_assigned(target)
+        support_unit_details = calculate_unit_details(target, "support", modifier_totals, district_totals, tech_totals, city_totals, law_totals, external_modifiers_total)
+
+        unit_totals = sum_all_unit_totals(land_units_assigned, land_unit_details, naval_units_assigned, naval_unit_details, support_units_assigned, support_unit_details)
 
         prestige_modifiers = {}
         if target.get("empire", False):
@@ -154,11 +158,11 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
         law_totals[secondary_resource_two + "_production"] = law_totals.get("secondary_resource_production", 0)
     record_timing("target_specific_calculations_ms", phase_start)
 
-    attributes_to_precalculate = ["administration", "effective_territory", "current_territory", "road_capacity", "effective_pop_capacity", "pop_count"]
+    attributes_to_precalculate = ["administration", "effective_territory", "current_territory", "road_capacity", "effective_pop_capacity", "pop_count", "land_unit_capacity"]
 
     phase_start = perf_counter()
     overall_total_modifiers = {}
-    calculated_values = {"district_details": district_details, "job_details": job_details, "land_unit_details": land_unit_details, "naval_unit_details": naval_unit_details}
+    calculated_values = {"district_details": district_details, "job_details": job_details, "land_unit_details": land_unit_details, "naval_unit_details": naval_unit_details, "support_unit_details": support_unit_details}
     for d in [external_modifiers_total, modifier_totals, district_totals, tech_totals, loose_node_totals, territory_terrain_totals, city_totals, law_totals, job_totals, unit_totals, prestige_modifiers, title_modifiers]:
         for key, value in d.items():
             overall_total_modifiers[key] = overall_total_modifiers.get(key, 0) + value
@@ -761,10 +765,110 @@ def collect_land_units_assigned(target):
 def collect_naval_units_assigned(target):
     return target.get("naval_units", {})
 
+def collect_support_units_assigned(target):
+    return target.get("support_units", {})
+
+def _db_prerequisites_to_requirements(prerequisites):
+    """Convert DB prerequisites array [{type, value}] to the JSON requirements dict format."""
+    requirements = {}
+    for pre in prerequisites or []:
+        ptype = pre.get("type", "")
+        val = pre.get("value", "")
+        if not ptype:
+            continue
+        # Blank artifact values are kept as empty string so check_unit_requirements can hide the unit
+        if not val and ptype != "artifact":
+            continue
+        # Map DB type names to JSON requirement keys used by check_unit_requirements
+        if ptype == "technology":
+            key = "research"
+        elif ptype == "nation":
+            key = "name"
+        else:
+            key = ptype
+        requirements.setdefault(key, []).append(val)
+    return requirements
+
+def load_db_units(unit_type=None):
+    """Load units from MongoDB and return them in the JSON calculation-compatible format.
+    unit_type: 'land' or 'naval' (lowercase) to filter by type, or None for all.
+    Ruler units are always excluded (they are not field units).
+    Units whose name appears in multiple eras are keyed/displayed as "Era Name".
+    """
+    query = {"unit_class": {"$ne": "Ruler Unit"}}
+    if unit_type == "support":
+        query["unit_type"] = "Land"
+        query["support"] = True
+    elif unit_type == "land":
+        query["unit_type"] = "Land"
+        query["support"] = {"$ne": True}
+    elif unit_type:
+        query["unit_type"] = unit_type.capitalize()
+    units_list = list(category_data["units"]["database"].find(query))
+
+    # Detect names that appear across multiple eras
+    name_eras = {}
+    for unit in units_list:
+        name = unit.get("name", "")
+        era = unit.get("era", "")
+        if name:
+            name_eras.setdefault(name, set()).add(era)
+    multi_era_names = {n for n, eras in name_eras.items() if len(eras) > 1}
+
+    db_units = {}
+    for unit in units_list:
+        name = unit.get("name", "")
+        if not name:
+            continue
+        era = unit.get("era", "")
+        # Prefix era for units whose name collides across multiple eras
+        if name in multi_era_names and era:
+            key = f"{era} {name}"
+            display_name = f"{era} {name}"
+        else:
+            key = name
+            display_name = name
+        upkeep = {}
+        if unit.get("has_upkeep") and unit.get("upkeep"):
+            for row in unit["upkeep"]:
+                res = row.get("resource", "")
+                cost = row.get("cost", 0)
+                if res:
+                    upkeep[res] = cost
+        recruitment_cost = {}
+        if unit.get("has_recruitment_cost") and unit.get("recruitment_cost") is not None:
+            recruitment_cost = {"money": unit["recruitment_cost"]}
+        requirements = _db_prerequisites_to_requirements(unit.get("prerequisites", []))
+        db_units[key] = {
+            "display_name": display_name,
+            "unit_type": unit.get("unit_type", ""),
+            "unit_class": unit.get("unit_class", ""),
+            "era": era,
+            "recruitment_cost": recruitment_cost,
+            "upkeep": upkeep,
+            "requirements": requirements,
+        }
+    return db_units
+
+def _district_key_to_category(district_key):
+    """Return the category type (e.g. 'forge') for a district key (e.g. 'ancient_forge')."""
+    all_district_files = [
+        "nation_districts", "nation_imperial_districts", "mercenary_districts",
+        "merchant_production_districts", "merchant_specialty_districts", "merchant_luxury_districts"
+    ]
+    for fname in all_district_files:
+        data = json_data.get(fname, {}).get(district_key)
+        if data:
+            return data.get("type", "")
+    return ""
+
+
 def check_unit_requirements(target, unit_details):
     requirements = unit_details.get("requirements", {})
     meets_requirements = True
-    district_types = [district.get("type", "") for district in target.get("districts", [])]
+    nation_district_keys = [district.get("type", "") for district in target.get("districts", [])]
+    # Categories of all districts the nation has (e.g. {'forge', 'workshop'})
+    nation_district_categories = {_district_key_to_category(k) for k in nation_district_keys if k}
 
     check_name = False
     check_defensive_pact = False
@@ -774,7 +878,11 @@ def check_unit_requirements(target, unit_details):
         if requirement == "district":
             has_district = False
             for district in value:
-                if district in district_types:
+                # Exact key match (old JSON format: e.g. "ancient_forge")
+                if district in nation_district_keys:
+                    has_district = True
+                # Category match (new MongoDB format: e.g. "forge")
+                elif district in nation_district_categories:
                     has_district = True
             if not has_district:
                 meets_requirements = False
@@ -786,7 +894,12 @@ def check_unit_requirements(target, unit_details):
         elif requirement == "spell":
             meets_requirements = False
         elif requirement == "artifact":
-            meets_requirements = False # TODO: Implement the check for artifacts
+            # Hide the unit if any artifact prerequisite is blank (unknown artifact)
+            for art_val in value:
+                if not art_val:
+                    meets_requirements = False
+                    break
+            # Non-blank artifact values: show the unit (ownership check not yet implemented)
         elif requirement == "name":
             check_name = True
         elif requirement == "empire" and target.get("empire", False):
@@ -796,6 +909,8 @@ def check_unit_requirements(target, unit_details):
         elif requirement == "military_alliance":
             check_military_alliance = True
         elif requirement == "mercenary":
+            meets_requirements = False
+        elif requirement == "race":
             meets_requirements = False
     
     if check_name or check_defensive_pact or check_military_alliance:
@@ -852,10 +967,8 @@ def check_unit_requirements(target, unit_details):
 
     return meets_requirements
 
-def calculate_unit_details(target, unit_type, unit_json_files, modifier_totals, district_totals, tech_totals, city_totals, law_totals, external_modifiers_total):
-    unit_details = {}
-    for unit_file in unit_json_files:
-        unit_details.update(json_data[unit_file])
+def calculate_unit_details(target, unit_type, modifier_totals, district_totals, tech_totals, city_totals, law_totals, external_modifiers_total):
+    unit_details = load_db_units(unit_type)
 
     modifier_sources = [modifier_totals, district_totals, city_totals, tech_totals, law_totals, external_modifiers_total]
     general_resources = json_data["general_resources"]
@@ -1285,23 +1398,22 @@ def sum_job_totals(target, jobs_assigned, job_details):
         
     return totals
 
-def sum_all_unit_totals(land_units_assigned, land_unit_details, naval_units_assigned, naval_unit_details, external_modifiers_total):
-    land_unit_totals = sum_unit_totals(land_units_assigned, land_unit_details, land_unit_json_files)
-    naval_unit_totals = sum_unit_totals(naval_units_assigned, naval_unit_details, naval_unit_json_files)
+def sum_all_unit_totals(land_units_assigned, land_unit_details, naval_units_assigned, naval_unit_details, support_units_assigned, support_unit_details):
     totals = {}
-    for key, value in land_unit_totals.items():
-        totals[key] = value
-    for key, value in naval_unit_totals.items():
-        totals[key] = totals.get(key, 0) + value
+    for unit_totals in [
+        sum_unit_totals(land_units_assigned, land_unit_details),
+        sum_unit_totals(naval_units_assigned, naval_unit_details),
+        sum_unit_totals(support_units_assigned, support_unit_details),
+    ]:
+        for key, value in unit_totals.items():
+            totals[key] = totals.get(key, 0) + value
     return totals
 
-def sum_unit_totals(units_assigned, unit_details, unit_json_files):
+def sum_unit_totals(units_assigned, unit_details):
     if not units_assigned:
         return {}
 
-    original_unit_details = {}
-    for unit_file in unit_json_files:
-        original_unit_details.update(json_data[unit_file])
+    original_unit_details = load_db_units()
 
     totals = {}
     general_resources = json_data["general_resources"]

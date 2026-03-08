@@ -1,54 +1,253 @@
 {% extends "layout.html" %}
 
 {% block content %}
-<div class="units-container">
-    <h1>Units Database</h1>
-    
-    {% for category, units in categorized_units.items() %}
-    <div class="unit-category">
-        <h2>{{ category }}</h2>
-        <div class="unit-grid">
-            {% for unit in units %}
-            <div class="unit-card" onclick="openModal('{{ unit.image_path }}')">
-                <img src="{{ unit.image_path }}" alt="{{ unit.name }}" loading="lazy">
-            </div>
-            {% endfor %}
-        </div>
+<style>
+  /* ── Unit list page ──────────────────────────────────────────── */
+  .units-page-wrapper { max-width: 1400px; margin: 0 auto; padding: 0 2rem; }
+  .units-page-header { display:flex; align-items:baseline; gap:1.5rem; flex-wrap:wrap; margin-bottom:1.5rem; }
+  .units-page-header h1 { margin:0; }
+  .unit-era-section { margin-bottom:3rem; }
+  .unit-era-heading { font-size:1.4rem; font-weight:800; border-bottom:2px solid #444; padding-bottom:0.3rem; margin-bottom:1.25rem; }
+  .unit-type-group { margin-bottom:1.5rem; }
+  .unit-type-heading { font-size:1rem; letter-spacing:1px; text-transform:uppercase; color:#888; margin:0 0 0.75rem 0; }
+  .unit-card-grid { display:flex; flex-wrap:wrap; gap:1.25rem; }
+
+  /* ── Mini unit card ──────────────────────────────────────────── */
+  .uc { background:#fff; color:#111; border-radius:10px; overflow:hidden; border:5px solid #111;
+        width:260px; flex-shrink:0; display:flex; flex-direction:column; font-size:0.82rem; }
+  .uc header { background:#fff; color:#111; padding:0.6rem 0.75rem 0.5rem;
+               display:flex; align-items:flex-start; justify-content:space-between; gap:0.5rem;
+               border-bottom:3px solid #111; }
+  .uc-title { font-size:1.05rem; font-weight:900; letter-spacing:0.5px; margin:0; line-height:1.2;
+              text-transform:uppercase; font-variant:small-caps; }
+  .uc-title a { color:#111; text-decoration:none; }
+  .uc-title a:hover { text-decoration:underline; }
+  .uc-icon { width:36px; height:36px; border-radius:4px; object-fit:cover; border:2px solid #111; flex-shrink:0; }
+  .uc-body { padding:0.6rem 0.75rem 0.3rem; flex:1; overflow:hidden; }
+  .uc-subline { font-style:italic; color:#222; margin:0 0 0.35rem 0; line-height:1.3; font-size:0.82rem; }
+  .uc-prereq { font-size:0.78rem; color:#333; margin-bottom:0.45rem; }
+  .uc-stats { display:grid; grid-template-columns:1fr 1fr; gap:0.2rem 0.5rem; margin:0.35rem 0 0.5rem; }
+  .uc-stat { white-space:nowrap; font-size:0.8rem; }
+  .uc-stat b { font-weight:700; }
+  .uc-rule { height:2px; background:#111; margin:0.5rem 0; opacity:0.15; }
+  .uc-abilities { font-size:0.79rem; }
+  .uc-ability { margin-bottom:0.45rem; }
+  .uc-ability-name { font-weight:700; display:block; }
+  .uc-ability-desc { color:#333; margin:0.1rem 0 0; line-height:1.35; }
+  .uc-no-abilities { color:#888; font-style:italic; font-size:0.76rem; }
+  .uc-footer { padding:0.5rem 0.75rem; border-top:2px solid #111; background:#fff; font-size:0.76rem; }
+  .uc-footer-heading { font-variant:small-caps; letter-spacing:1px; font-weight:700; color:#333;
+                       font-size:0.72rem; margin-bottom:0.2rem; }
+  .uc-footer-row { display:flex; align-items:center; justify-content:space-between; gap:0.4rem; }
+  .uc-cost { color:#333; flex:1; }
+  .uc-cost .muted { color:#888; font-style:italic; }
+  .uc-edit-link { background:#111; color:#fff; border-radius:4px; padding:0.15rem 0.5rem;
+                  text-decoration:none; font-size:0.72rem; white-space:nowrap; flex-shrink:0; }
+  .uc-edit-link:hover { background:#333; }
+
+  /* ── Imperial unit variant ───────────────────────────────────── */
+  .uc--imperial { border-color:#B8860B; }
+  .uc--imperial header { border-bottom-color:#B8860B; background:#B8860B; color:#fff; }
+  .uc--imperial .uc-title a { color:#fff; }
+  .uc--imperial .uc-icon { border-color:#fff; }
+  .uc--imperial .uc-rule { background:#B8860B; opacity:0.4; }
+  .uc--imperial .uc-footer { border-top-color:#B8860B; }
+  .uc--imperial .uc-edit-link { background:#B8860B; }
+  .uc--imperial .uc-edit-link:hover { background:#9A6E09; }
+</style>
+
+{% macro unit_card(unit) %}
+{%- set roles = [] -%}
+{%- if unit.get('melee')   -%}{%- set _ = roles.append('Melee')   -%}{%- endif -%}
+{%- if unit.get('ranged')  -%}{%- set _ = roles.append('Ranged')  -%}{%- endif -%}
+{%- if unit.get('cavalry') -%}{%- set _ = roles.append('Cavalry') -%}{%- endif -%}
+{%- if unit.get('support') -%}{%- set _ = roles.append('Support') -%}{%- endif -%}
+
+{%- macro stat_val(flag, val) -%}
+  {%- if flag and not unit.get(flag) -%}-
+  {%- elif val is not none and val != '' -%}{{ val }}
+  {%- else -%}-{%- endif -%}
+{%- endmacro -%}
+
+<div class="uc{% if 'Imperial' in (unit.get('unit_class') or '') %} uc--imperial{% endif %}">
+  <header>
+    <h2 class="uc-title">
+      <a href="/units/item/{{ unit._id }}">{{ unit.name }}</a>
+    </h2>
+    {% if unit.image %}
+      <img class="uc-icon" src="{{ unit.image }}" alt="{{ unit.name }}">
+    {% endif %}
+  </header>
+
+  <div class="uc-body">
+    {# Subline: Era - Roles #}
+    {%- set is_ruler = unit.get('unit_class') == 'Ruler Unit' -%}
+    <div class="uc-subline">
+      {{ unit.get('era', '') }}{% if roles %} - {{ roles | join(' or ' if is_ruler else ', ') }}{% endif %}
     </div>
+
+    {# Prerequisites #}
+    {%- set is_imperial = 'Imperial' in (unit.get('unit_class') or '') -%}
+    {% if unit.get('prerequisites') or is_imperial %}
+      <div class="uc-prereq">
+        <b>Prerequisites:</b>
+        {%- if is_imperial %}Empire{% if unit.get('prerequisites') %}, {% endif %}{% endif -%}
+        {% for pre in unit.get('prerequisites', []) %}
+          {%- set val = pre.get('value', '') -%}
+          {%- set ptype = pre.get('type', '') -%}
+          {%- if ptype == 'district' -%}
+            {%- set era_key = (unit.get('era','')|lower) ~ '_' ~ val -%}
+            {{ districts_lookup.get(val, districts_lookup.get(era_key, val | replace('_',' ') | title)) or val }}
+          {%- elif ptype == 'nation' or ptype in ('name', 'defensive_pact', 'military_alliance') -%}
+            {%- if val -%}<a href="/nations/item/{{ val }}">Allied to {{ val }}</a>{%- else -%}Unknown Nation{%- endif -%}
+          {%- elif ptype == 'technology' -%}
+            {{ tech_lookup.get(val, val) }}
+          {%- elif ptype == 'artifact' -%}
+            {%- if val -%}<a href="/artifacts/item/{{ val }}">{{ val }}</a>{%- else -%}Unknown Artifact{%- endif -%}
+          {%- elif ptype == 'spell' -%}
+            {%- if val -%}<a href="/spells/item/{{ val }}">{{ val }}</a>{%- else -%}Unknown Spell{%- endif -%}
+          {%- elif ptype == 'mercenary' -%}
+            {% if val in mercenaries_names %}<a href="/mercenaries/item/{{ val }}">{{ val }}</a>{% else %}{{ val }}{% endif %}
+          {%- elif ptype == 'race' -%}
+            Has {{ val }} pop
+          {%- else -%}
+            {{ val }}
+          {%- endif -%}
+          {%- if not loop.last %}, {% endif %}
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {# Stats grid (2 columns for compactness) #}
+    <div class="uc-stats">
+      <div class="uc-stat"><b>HP:</b> {{ stat_val('has_hp', unit.get('hp')) }}</div>
+      <div class="uc-stat"><b>Morale:</b> {{ stat_val('has_morale', unit.get('morale')) }}</div>
+      <div class="uc-stat"><b>Damage:</b> {{ stat_val('has_damage', unit.get('damage')) }}</div>
+      <div class="uc-stat"><b>Retal:</b> {{ stat_val('has_retaliation_damage', unit.get('retaliation_damage')) }}</div>
+      <div class="uc-stat">
+        <b>Range:</b>
+        {% if unit.get('has_range') %}
+          {% if unit.get('minimum_range') is not none and unit.get('maximum_range') is not none %}
+            {% if unit.minimum_range == unit.maximum_range %}{{ unit.maximum_range }}{% else %}{{ unit.minimum_range }}-{{ unit.maximum_range }}{% endif %}
+          {% elif unit.get('maximum_range') is not none %}
+            {{ unit.maximum_range }}
+          {% else %}-{% endif %}
+        {% else %}-{% endif %}
+      </div>
+      <div class="uc-stat"><b>Speed:</b> {{ stat_val('has_speed', unit.get('speed')) }}</div>
+      <div class="uc-stat"><b>Armor:</b> {{ stat_val('has_armor', unit.get('armor')) }}</div>
+    </div>
+
+    <div class="uc-rule"></div>
+
+    {# Abilities: DB traits then free-text special abilities #}
+    <div class="uc-abilities">
+      {%- set has_any = [] -%}
+
+      {% for tname in unit.get('traits', []) %}
+        {%- set trait = traits_lookup.get(tname) -%}
+        {%- set _ = has_any.append(1) -%}
+        <div class="uc-ability">
+          <span class="uc-ability-name">{{ tname }}</span>
+          {% if trait and trait.description %}
+            <p class="uc-ability-desc">{{ trait.description }}</p>
+          {% endif %}
+        </div>
+      {% endfor %}
+
+      {% for desc in unit.get('special_abilities', []) %}
+        {%- set _ = has_any.append(1) -%}
+        {%- set parts = desc.split(':', 1) -%}
+        <div class="uc-ability">
+          {% if parts|length == 2 and parts[0]|length < 60 %}
+            <span class="uc-ability-name">{{ parts[0].strip() }}</span>
+            <p class="uc-ability-desc">{{ parts[1].strip() }}</p>
+          {% else %}
+            {%- set pd = desc.split(' - ', 1) -%}
+            {% if pd|length == 2 and pd[0]|length < 60 %}
+              <span class="uc-ability-name">{{ pd[0].strip() }}</span>
+              <p class="uc-ability-desc">{{ pd[1].strip() }}</p>
+            {% else %}
+              <p class="uc-ability-desc">{{ desc }}</p>
+            {% endif %}
+          {% endif %}
+        </div>
+      {% endfor %}
+
+      {% if not has_any %}
+        <span class="uc-no-abilities">No special abilities.</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="uc-footer">
+    <div class="uc-footer-heading">Maintenance / Recruitment Cost</div>
+    <div class="uc-footer-row">
+      {%- set upkeep_parts = [] -%}
+      {%- if unit.get('has_upkeep') and unit.get('upkeep') -%}
+        {%- for u in unit.upkeep -%}
+          {%- set _ = upkeep_parts.append((u.get('cost',0)|string) ~ ' ' ~ u.get('resource','')|title) -%}
+        {%- endfor -%}
+      {%- endif -%}
+      {%- set cost_parts = [] -%}
+      {%- if upkeep_parts -%}{%- set _ = cost_parts.append(upkeep_parts|join(', ')) -%}{%- endif -%}
+      {%- if unit.get('has_recruitment_cost') and unit.get('recruitment_cost') is not none -%}
+        {%- set rc = unit.recruitment_cost -%}
+        {%- set _ = cost_parts.append('$' ~ (rc|int if rc == rc|int else rc)) -%}
+      {%- endif -%}
+      {%- if unit.get('has_summoning_cost') and unit.get('summoning_cost') -%}
+        {%- set sp = [] -%}
+        {%- for s in unit.summoning_cost -%}{%- set _ = sp.append((s.get('cost',0)|string) ~ ' ' ~ s.get('resource','')|title) -%}{%- endfor -%}
+        {%- if sp -%}{%- set _ = cost_parts.append('Summon: ' ~ sp|join(', ')) -%}{%- endif -%}
+      {%- endif -%}
+      <span class="uc-cost">{% if cost_parts %}{{ cost_parts | join(' / ') }}{% else %}<span class="muted">None</span>{% endif %}</span>
+      {% if g.user is not none %}
+        <a class="uc-edit-link" href="/units/edit/{{ unit._id }}">Edit</a>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endmacro %}
+
+{# ── Page content ──────────────────────────────────────────────────── #}
+<div class="units-page-wrapper">
+<div class="units-page-header">
+  <h1>Units Database</h1>
+  {% if g.user is not none %}
+    <a href="/units/new" style="font-size:0.85rem;">+ Add New Unit</a>
+  {% endif %}
+</div>
+
+{% if ruler_units %}
+<div class="unit-era-section">
+  <h2 class="unit-era-heading">Ruler Units</h2>
+  <div class="unit-card-grid">
+    {% for unit in ruler_units %}
+      {{ unit_card(unit) }}
     {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% for era, type_groups in grouped_units.items() %}
+<div class="unit-era-section">
+  <h2 class="unit-era-heading">{{ era }}</h2>
+  {% for unit_type, units in type_groups.items() %}
+  <div class="unit-type-group">
+    {% if type_groups | length > 1 %}
+    <h3 class="unit-type-heading">{{ unit_type }}</h3>
+    {% endif %}
+    <div class="unit-card-grid">
+      {% for unit in units %}
+        {{ unit_card(unit) }}
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<p style="color:#888; margin-top:2rem;">No units have been added yet.</p>
+{% endfor %}
 </div>
 
-<!-- Modal -->
-<div id="imageModal" class="modal">
-    <span class="modal-close" onclick="closeModal()">&times;</span>
-    <img id="modalImage" class="modal-content" src="" alt="Unit Card">
-</div>
-
-<script>
-function openModal(imagePath) {
-    const modal = document.getElementById('imageModal');
-    const modalImg = document.getElementById('modalImage');
-    modal.style.display = "block";
-    modalImg.src = imagePath;
-}
-
-function closeModal() {
-    const modal = document.getElementById('imageModal');
-    modal.style.display = "none";
-}
-
-// Close modal when clicking outside the image
-document.getElementById('imageModal').addEventListener('click', function(event) {
-    if (event.target === this) {
-        closeModal();
-    }
-});
-
-// Close modal with escape key
-document.addEventListener('keydown', function(event) {
-    if (event.key === 'Escape') {
-        closeModal();
-    }
-});
-</script>
 {% endblock %}
