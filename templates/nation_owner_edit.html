@@ -453,42 +453,6 @@
                 </div>
                 <div class="section-content">
                     <div class="table-wrapper">
-                        <h2>War Modifiers</h2>
-                        <table class="info-table">
-                            <tr>
-                                <th>{{ schema.properties.land_attack.label }}:</th>
-                                <td>{{ nation.land_attack }}</td>
-                            </tr>
-                            <tr>
-                                <th>{{ schema.properties.land_defense.label }}:</th>
-                                <td>{{ nation.land_defense }}</td>
-                            </tr>
-                            <tr>
-                                <th>{{ schema.properties.naval_attack.label }}:</th>
-                                <td>{{ nation.naval_attack }}</td>
-                            </tr>
-                            <tr>
-                                <th>{{ schema.properties.naval_defense.label }}:</th>
-                                <td>{{ nation.naval_defense }}</td>
-                            </tr>
-                            <tr>
-                                <th>{{ schema.properties.mercenary_land_attack.label }}:</th>
-                                <td>{{ nation.mercenary_land_attack }}</td>
-                            </tr>
-                            <tr>
-                                <th>{{ schema.properties.mercenary_land_defense.label }}:</th>
-                                <td>{{ nation.mercenary_land_defense }}</td>
-                            </tr>
-                            <tr>
-                                <th>{{ schema.properties.mercenary_naval_attack.label }}:</th>
-                                <td>{{ nation.mercenary_naval_attack }}</td>
-                            </tr>
-                            <tr>
-                                <th>{{ schema.properties.mercenary_naval_defense.label }}:</th>
-                                <td>{{ nation.mercenary_naval_defense }}</td>
-                            </tr>
-                        </table>
-                        
                         <h2>Land Units</h2>
                         <p>Land Units: {{ nation.get("land_unit_count", 0) }}/{{ nation.get("land_unit_capacity", 0) }}</p>
                         <table class="jobs-table">

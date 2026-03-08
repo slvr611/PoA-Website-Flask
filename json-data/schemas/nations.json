@@ -1123,22 +1123,22 @@
         "laws": {
           "Standard": {},
           "Nomadic": {
-            "land_unit_speed": 1
+            "land_unit_speed": 1,
+            "land_cavalry_unit_speed": 1
           },
           "Shock": {
-            "first_session_land_attack": 2,
-            "after_first_session_land_defense": -4
+            "land_unit_speed": 1
           },
           "Volley": {
-            "land_unit_speed_mult": 0.5,
-            "land_unit_range_when_stationary": 1
+            "land_melee_unit_defense": 1,
+            "land_melee_unit_retaliation_damage": 1,
+            "land_melee_unit_attack": -2
           },
-          "Safeguard": {
-            "land_defense_against_ranged": 2,
-            "defensive_war_land_defense": 1,
-            "offensive_war_land_attack": -4
+          "Safeguard": {},
+          "Militia": {
+            "civilian_unit_strength": 1,
+            "civilian_unit_morale": 1
           },
-          "Militia": {},
           "Ambush": {
             "land_attack_vs_damaged_units": 2,
             "land_non_ruler_unit_speed": 1,
