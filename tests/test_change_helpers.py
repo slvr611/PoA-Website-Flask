@@ -89,6 +89,72 @@ class TestDeepMerge:
     def test_top_level_scalar_overwrite(self):
         assert ch.deep_merge({"v": "old"}, {"v": "new"}) == {"v": "new"}
 
+    def test_id_based_replacement_requires_both_sides_to_have_ids(self):
+        # When only the UPDATE list has _id but the EXISTING list does not,
+        # deep_merge must NOT do a full list replacement.  Full replacement
+        # would wipe all data on existing items, replacing them with minimal
+        # {"_id": "hex"} dicts (the bug that wiped progress quest data).
+        # Instead it should fall back to positional merge so existing data
+        # is preserved and the new item is appended.
+        existing = {
+            "progress_quests": [
+                {
+                    "quest_name": "Existing Quest",
+                    "current_progress": 6,
+                    "required_progress": 19,
+                    "slot": "no_slot",
+                },
+                {},
+            ]
+        }
+        # Simulates after_data where _ensure_item_ids added _id to every item:
+        # the first two quests are represented only by their new _id (unchanged
+        # fields were stripped by keep_only_differences), and the third is new.
+        after_data = {
+            "progress_quests": [
+                {"_id": "aaa1"},
+                {"_id": "aaa2"},
+                {
+                    "_id": "aaa3",
+                    "quest_name": "New Quest",
+                    "current_progress": 0,
+                    "required_progress": 10,
+                    "slot": "no_slot",
+                },
+            ]
+        }
+        result = ch.deep_merge(existing, after_data)
+
+        # Existing quest data must NOT be wiped
+        assert result["progress_quests"][0].get("quest_name") == "Existing Quest", \
+            "Existing quest data was wiped by deep_merge"
+        assert result["progress_quests"][0].get("current_progress") == 6, \
+            "current_progress was reset"
+        # New quest must be appended
+        assert len(result["progress_quests"]) == 3
+        assert result["progress_quests"][2].get("quest_name") == "New Quest"
+
+    def test_id_based_full_replacement_when_both_sides_have_ids(self):
+        # When BOTH existing and update lists carry _id, full ID-based
+        # replacement is correct (the after list is the authoritative state).
+        existing = {
+            "quests": [
+                {"_id": "x1", "quest_name": "Old Quest", "current_progress": 5},
+                {"_id": "x2", "quest_name": "Another", "current_progress": 3},
+            ]
+        }
+        after_data = {
+            "quests": [
+                {"_id": "x1", "quest_name": "Old Quest", "current_progress": 7},
+                {"_id": "x2", "quest_name": "Another", "current_progress": 3},
+                {"_id": "x3", "quest_name": "Brand New", "current_progress": 0},
+            ]
+        }
+        result = ch.deep_merge(existing, after_data)
+        assert len(result["quests"]) == 3
+        assert result["quests"][0]["current_progress"] == 7
+        assert result["quests"][2]["quest_name"] == "Brand New"
+
 
 class TestDeepCompare:
     """helpers.change_helpers.deep_compare"""

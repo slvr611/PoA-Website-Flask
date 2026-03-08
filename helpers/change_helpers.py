@@ -389,8 +389,15 @@ def deep_merge(original, updates):
             else:
                 merged[key] = deep_merge(merged[key], value)
         elif key in merged and isinstance(merged[key], list) and isinstance(value, list):
-            if _all_have_ids(merged[key]) or _all_have_ids(value):
-                # ID-based: after_data carries the full intended list, so replace entirely.
+            if _all_have_ids(merged[key]) and _all_have_ids(value):
+                # ID-based: both sides carry stable _id values, so after_data
+                # carries the full intended list and we replace entirely.
+                # Requiring BOTH sides to have IDs prevents a false positive
+                # when _ensure_item_ids has stamped fresh IDs onto after_data
+                # items that never had them in the DB — in that case the
+                # existing list must be merged positionally so its data is
+                # not wiped by the minimal {"_id": "hex"} diffs stored in
+                # the change document.
                 merged[key] = deepcopy(value)
             else:
                 # Positional merge (legacy / non-ID data)

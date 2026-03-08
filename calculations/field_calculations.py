@@ -894,12 +894,35 @@ def check_unit_requirements(target, unit_details):
         elif requirement == "spell":
             meets_requirements = False
         elif requirement == "artifact":
-            # Hide the unit if any artifact prerequisite is blank (unknown artifact)
+            nation_id = str(target.get("_id", ""))
+            # Lazily fetch ruler IDs once per unit check
+            ruler_ids = None
             for art_val in value:
                 if not art_val:
+                    # Blank/unknown artifact prerequisite — hide the unit
                     meets_requirements = False
                     break
-            # Non-blank artifact values: show the unit (ownership check not yet implemented)
+                if not nation_id:
+                    meets_requirements = False
+                    break
+                if ruler_ids is None:
+                    ruler_ids = [
+                        str(c["_id"])
+                        for c in category_data["characters"]["database"].find(
+                            {"ruling_nation_org": nation_id}, {"_id": 1}
+                        )
+                    ]
+                if not ruler_ids:
+                    meets_requirements = False
+                    break
+                has_artifact = category_data["artifacts"]["database"].find_one({
+                    "owner": {"$in": ruler_ids},
+                    "name": art_val,
+                    "equipped": True
+                })
+                if not has_artifact:
+                    meets_requirements = False
+                    break
         elif requirement == "name":
             check_name = True
         elif requirement == "empire" and target.get("empire", False):
