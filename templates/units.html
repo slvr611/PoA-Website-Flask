@@ -57,11 +57,15 @@
 </style>
 
 {% macro unit_card(unit) %}
+{%- set is_transport = 'Transport' in (unit.get('unit_class') or '') -%}
 {%- set roles = [] -%}
-{%- if unit.get('melee')   -%}{%- set _ = roles.append('Melee')   -%}{%- endif -%}
-{%- if unit.get('ranged')  -%}{%- set _ = roles.append('Ranged')  -%}{%- endif -%}
-{%- if unit.get('cavalry') -%}{%- set _ = roles.append('Cavalry') -%}{%- endif -%}
-{%- if unit.get('support') -%}{%- set _ = roles.append('Support') -%}{%- endif -%}
+{%- if is_transport -%}{%- set _ = roles.append('Transport') -%}
+{%- else -%}
+  {%- if unit.get('melee')   -%}{%- set _ = roles.append('Melee')   -%}{%- endif -%}
+  {%- if unit.get('ranged')  -%}{%- set _ = roles.append('Ranged')  -%}{%- endif -%}
+  {%- if unit.get('cavalry') -%}{%- set _ = roles.append('Cavalry') -%}{%- endif -%}
+  {%- if unit.get('support') -%}{%- set _ = roles.append('Support') -%}{%- endif -%}
+{%- endif -%}
 
 {%- macro stat_val(flag, val) -%}
   {%- if flag and not unit.get(flag) -%}-

@@ -43,11 +43,15 @@
 
     <div class='unit-body'>
       {# Era and roles line, e.g., "Ancient - Support" #}
+      {%- set is_transport = 'Transport' in (item.get('unit_class') or '') -%}
       {% set roles = [] %}
-      {% if item.get('melee') %}{% set _ = roles.append('Melee') %}{% endif %}
-      {% if item.get('ranged') %}{% set _ = roles.append('Ranged') %}{% endif %}
-      {% if item.get('cavalry') %}{% set _ = roles.append('Cavalry') %}{% endif %}
-      {% if item.get('support') %}{% set _ = roles.append('Support') %}{% endif %}
+      {% if is_transport %}{% set _ = roles.append('Transport') %}
+      {% else %}
+        {% if item.get('melee') %}{% set _ = roles.append('Melee') %}{% endif %}
+        {% if item.get('ranged') %}{% set _ = roles.append('Ranged') %}{% endif %}
+        {% if item.get('cavalry') %}{% set _ = roles.append('Cavalry') %}{% endif %}
+        {% if item.get('support') %}{% set _ = roles.append('Support') %}{% endif %}
+      {% endif %}
       {%- set is_ruler = item.get('unit_class') == 'Ruler Unit' -%}
       <div class='unit-subline'>
         {{ item.get('era', 'Unknown Era') }}{% if roles %} - {{ roles | join(' or ' if is_ruler else ', ') }}{% endif %}

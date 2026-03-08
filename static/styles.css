@@ -173,6 +173,32 @@ h1, h2 {
     background-color: #2a2a2a;
 }
 
+/* Army unit table — stat columns are centered and compact */
+.unit-army-table thead th,
+.unit-army-table tbody td {
+    white-space: nowrap;
+}
+.unit-army-table .unit-stat-cell {
+    text-align: center;
+    color: #ccc;
+    font-size: 0.88rem;
+}
+.unit-army-table .unit-stat-na {
+    color: #555;
+    text-align: center;
+}
+.unit-army-table .unit-stat-modified {
+    color: #7ec8ff;
+    font-weight: 700;
+    cursor: help;
+    text-align: center;
+}
+.unit-magic-tag {
+    color: #a97dff;
+    font-size: 0.75rem;
+    vertical-align: super;
+}
+
 /* Nation Page Container */
 .nation-page-container {
   width: 80%;

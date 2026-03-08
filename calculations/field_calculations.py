@@ -789,6 +789,92 @@ def _db_prerequisites_to_requirements(prerequisites):
         requirements.setdefault(key, []).append(val)
     return requirements
 
+_UNIT_STAT_NAMES = [
+    "attack", "defense", "hp", "morale", "damage",
+    "retaliation_damage", "range", "speed", "armor",
+]
+
+def _get_unit_stat_prefixes(unit_type_str, is_support, is_magical):
+    """Return all modifier prefixes that apply to this unit.
+
+    The naming convention is:
+      [magical|mundane_][land|naval|support_]unit
+    e.g. "unit", "land_unit", "mundane_unit", "magical_land_unit", ...
+    """
+    prefixes = ["unit"]
+    magic_tag = "magical" if is_magical else "mundane"
+
+    if is_support:
+        prefixes.append("support_unit")
+        prefixes.append(f"{magic_tag}_support_unit")
+    elif unit_type_str == "Land":
+        prefixes.append("land_unit")
+        prefixes.append(f"{magic_tag}_land_unit")
+    elif unit_type_str == "Naval":
+        prefixes.append("naval_unit")
+        prefixes.append(f"{magic_tag}_naval_unit")
+
+    prefixes.append(f"{magic_tag}_unit")
+    return prefixes
+
+
+def _apply_unit_stat_modifiers(base_stats, unit_type_str, is_support, is_magical, modifier_sources):
+    """Compute effective_stats by applying all matching stat modifiers to base_stats.
+
+    Modifiers that end in a stat name (e.g. 'unit_hp', 'land_unit_attack') are applied
+    additively. 'strength' is a shorthand that applies to both attack and defense.
+    Stats whose base value is None (flag disabled) are left as None.
+
+    Bare 'strength' (e.g. from military_funding laws) is treated as unit_strength and
+    applies to all units. Type-scoped bare strength (e.g. 'land_strength') is also
+    supported and applies only to matching unit types.
+    """
+    effective = dict(base_stats)
+    prefixes = _get_unit_stat_prefixes(unit_type_str, is_support, is_magical)
+
+    # Bare strength modifier keys that map to attack+defense (bypassing the prefix system).
+    # 'strength' → all units; 'land_strength'/'naval_strength'/'support_strength' → typed.
+    if is_support:
+        bare_strength_keys = {"strength", "support_strength"}
+    elif unit_type_str == "Land":
+        bare_strength_keys = {"strength", "land_strength"}
+    elif unit_type_str == "Naval":
+        bare_strength_keys = {"strength", "naval_strength"}
+    else:
+        bare_strength_keys = {"strength"}
+
+    def _add_strength(val):
+        if effective.get("attack") is not None:
+            effective["attack"] = (effective["attack"] or 0) + val
+        if effective.get("defense") is not None:
+            effective["defense"] = (effective["defense"] or 0) + val
+
+    for source in modifier_sources:
+        for modifier, value in source.items():
+            # Handle bare strength keys first
+            if modifier in bare_strength_keys:
+                _add_strength(value)
+                continue
+
+            for prefix in prefixes:
+                # strength shorthand → attack + defense
+                if modifier == f"{prefix}_strength":
+                    _add_strength(value)
+                    break
+                # individual stat modifiers
+                matched = False
+                for stat in _UNIT_STAT_NAMES:
+                    if modifier == f"{prefix}_{stat}":
+                        if effective.get(stat) is not None:
+                            effective[stat] = (effective[stat] or 0) + value
+                        matched = True
+                        break
+                if matched:
+                    break
+
+    return effective
+
+
 def load_db_units(unit_type=None):
     """Load units from MongoDB and return them in the JSON calculation-compatible format.
     unit_type: 'land' or 'naval' (lowercase) to filter by type, or None for all.
@@ -839,14 +925,47 @@ def load_db_units(unit_type=None):
         if unit.get("has_recruitment_cost") and unit.get("recruitment_cost") is not None:
             recruitment_cost = {"money": unit["recruitment_cost"]}
         requirements = _db_prerequisites_to_requirements(unit.get("prerequisites", []))
+
+        # Range display: None if no range, single value if min==max, else "min-max"
+        if unit.get("has_range"):
+            min_r = unit.get("minimum_range")
+            max_r = unit.get("maximum_range")
+            if min_r is not None and max_r is not None:
+                range_val = max_r if min_r == max_r else f"{min_r}-{max_r}"
+            elif max_r is not None:
+                range_val = max_r
+            else:
+                range_val = None
+        else:
+            range_val = None
+
+        traits = unit.get("traits") or []
+        is_magical = any(t.lower() == "magical" for t in traits)
+        is_support = bool(unit.get("support"))
+
         db_units[key] = {
             "display_name": display_name,
             "unit_type": unit.get("unit_type", ""),
             "unit_class": unit.get("unit_class", ""),
             "era": era,
+            "is_support": is_support,
+            "is_magical": is_magical,
             "recruitment_cost": recruitment_cost,
             "upkeep": upkeep,
             "requirements": requirements,
+            "base_stats": {
+                # attack/defense default has_* to True: these fields were added later,
+                # so existing DB units that predate them should still show 0 (not None).
+                "attack":              unit.get("attack", 0)             if unit.get("has_attack", True)              else None,
+                "defense":             unit.get("defense", 0)            if unit.get("has_defense", True)             else None,
+                "hp":                  unit.get("hp")                    if unit.get("has_hp")                        else None,
+                "morale":              unit.get("morale")                if unit.get("has_morale")                    else None,
+                "damage":              unit.get("damage")                if unit.get("has_damage")                    else None,
+                "retaliation_damage":  unit.get("retaliation_damage")    if unit.get("has_retaliation_damage")        else None,
+                "range":               range_val,
+                "speed":               unit.get("speed")                 if unit.get("has_speed")                     else None,
+                "armor":               unit.get("armor")                 if unit.get("has_armor")                     else None,
+            },
         }
     return db_units
 
@@ -1033,8 +1152,16 @@ def calculate_unit_details(target, unit_type, modifier_totals, district_totals, 
                         new_upkeep = int(round(new_upkeep))
                     new_details["upkeep"][resource] = new_upkeep
 
+            new_details["effective_stats"] = _apply_unit_stat_modifiers(
+                new_details["base_stats"],
+                new_details.get("unit_type", ""),
+                new_details.get("is_support", False),
+                new_details.get("is_magical", False),
+                modifier_sources,
+            )
+
             new_unit_details[unit] = new_details
-    
+
     return new_unit_details
 
 def collect_external_requirements(target, schema, target_data_type):

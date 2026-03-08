@@ -75,6 +75,34 @@
           }
         }
       },
+      "has_attack": {
+        "bsonType": "boolean",
+        "label": "Has Attack",
+        "description": "Whether the unit has an attack stat",
+        "hidden": true,
+        "default": true
+      },
+      "attack": {
+        "bsonType": "number",
+        "label": "Attack",
+        "description": "The attack stat of the unit",
+        "hideIfNone": "has_attack",
+        "default": 0
+      },
+      "has_defense": {
+        "bsonType": "boolean",
+        "label": "Has Defense",
+        "description": "Whether the unit has a defense stat",
+        "hidden": true,
+        "default": true
+      },
+      "defense": {
+        "bsonType": "number",
+        "label": "Defense",
+        "description": "The defense stat of the unit",
+        "hideIfNone": "has_defense",
+        "default": 0
+      },
       "has_hp": {
         "bsonType": "boolean",
         "label": "Has HP",

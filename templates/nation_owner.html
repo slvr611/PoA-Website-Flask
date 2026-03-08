@@ -694,119 +694,77 @@
 			</div>
 			<div class="section-content">
 				<div class="table-wrapper">
-					<h2>War Modifiers</h2>
-					<table class="info-table">
-						<tr>
-							<th>{{ schema.properties.land_attack.label }}:</th>
-							<td>{{ nation.land_attack }}</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.land_defense.label }}:</th>
-							<td>{{ nation.land_defense }}</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.naval_attack.label }}:</th>
-							<td>{{ nation.naval_attack }}</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.naval_defense.label }}:</th>
-							<td>{{ nation.naval_defense }}</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.mercenary_land_attack.label }}:</th>
-							<td>{{ nation.mercenary_land_attack }}</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.mercenary_land_defense.label }}:</th>
-							<td>{{ nation.mercenary_land_defense }}</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.mercenary_naval_attack.label }}:</th>
-							<td>{{ nation.mercenary_naval_attack }}</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.mercenary_naval_defense.label }}:</th>
-							<td>{{ nation.mercenary_naval_defense }}</td>
-						</tr>
+					{%- macro stat_cell(eff, base, stat) -%}
+					{%- set ev = eff.get(stat) -%}
+					{%- set bv = base.get(stat) -%}
+					{%- if ev is not none -%}
+						{%- if ev != bv -%}
+							<td class="unit-stat-cell unit-stat-modified" title="Base: {{ bv }}">{{ ev }}</td>
+						{%- else -%}
+							<td class="unit-stat-cell">{{ ev }}</td>
+						{%- endif -%}
+					{%- else -%}
+						<td class="unit-stat-cell unit-stat-na">—</td>
+					{%- endif -%}
+					{%- endmacro -%}
+					{%- macro unit_table(unit_details, counts_dict) %}
+					<div style="overflow-x:auto;">
+					<table class="jobs-table unit-army-table">
+						<thead>
+							<tr>
+								<th>Unit</th>
+								<th>#</th>
+								<th>Atk</th>
+								<th>Def</th>
+								<th>HP</th>
+								<th>Morale</th>
+								<th>Dmg</th>
+								<th>Retal</th>
+								<th>Range</th>
+								<th>Speed</th>
+								<th>Armor</th>
+								<th>Upkeep</th>
+							</tr>
+						</thead>
+						<tbody>
+							{% for unit_key, unit in unit_details.items() %}
+								{%- set s = unit.get("effective_stats", unit.get("base_stats", {})) -%}
+								{%- set b = unit.get("base_stats", {}) -%}
+								<tr>
+									<td>{{ unit.display_name }}{% if unit.get("is_magical") %} <span class="unit-magic-tag" title="Magical unit">✦</span>{% endif %}</td>
+									<td class="unit-stat-cell">{{ counts_dict.get(unit_key, 0) }}</td>
+									{{ stat_cell(s, b, "attack") }}
+									{{ stat_cell(s, b, "defense") }}
+									{{ stat_cell(s, b, "hp") }}
+									{{ stat_cell(s, b, "morale") }}
+									{{ stat_cell(s, b, "damage") }}
+									{{ stat_cell(s, b, "retaliation_damage") }}
+									{{ stat_cell(s, b, "range") }}
+									{{ stat_cell(s, b, "speed") }}
+									{{ stat_cell(s, b, "armor") }}
+									<td>
+										{% for resource, cost in unit.get("upkeep", {}).items() %}
+											{{ resource }}: {{ cost }}<br>
+										{% endfor %}
+									</td>
+								</tr>
+							{% endfor %}
+						</tbody>
 					</table>
+					</div>
+					{%- endmacro %}
+
 					<h2>Land Units</h2>
 					<p>Land Units: {{  nation.get("land_unit_count", 0) }}/{{ nation.get("land_unit_capacity", 0) }}</p>
-					<table class="jobs-table">
-						<thead>
-							<tr>
-								<th>Unit</th>
-								<th>Unit Count</th>
-								<th>Upkeep</th>
-							</tr>
-						</thead>
-						<tbody>
-							{% for unit_key, unit in nation.land_unit_details.items() %}
-								<tr>
-									<td>{{ unit.display_name }}</td>
-									<td>{{ nation.get("land_units", {}).get(unit_key, 0) }}</td>
-									<td>
-										{% if "upkeep" in unit %}
-											{% for resource, cost in unit.upkeep.items() %}
-												{{ resource }}: {{ cost }}<br>
-											{% endfor %}
-										{% endif %}
-									</td>
-								</tr>
-							{% endfor %}
-						</tbody>
-					</table>
+					{{ unit_table(nation.land_unit_details, nation.get("land_units", {})) }}
+
 					<h2>Support Units</h2>
 					<p>Support Units: {{ nation.get("support_unit_count", 0) }}/{{ nation.get("support_unit_capacity", 0) }}</p>
-					<table class="jobs-table">
-						<thead>
-							<tr>
-								<th>Unit</th>
-								<th>Unit Count</th>
-								<th>Upkeep</th>
-							</tr>
-						</thead>
-						<tbody>
-							{% for unit_key, unit in nation.get("support_unit_details", {}).items() %}
-								<tr>
-									<td>{{ unit.display_name }}</td>
-									<td>{{ nation.get("support_units", {}).get(unit_key, 0) }}</td>
-									<td>
-										{% if "upkeep" in unit %}
-											{% for resource, cost in unit.upkeep.items() %}
-												{{ resource }}: {{ cost }}<br>
-											{% endfor %}
-										{% endif %}
-									</td>
-								</tr>
-							{% endfor %}
-						</tbody>
-					</table>
+					{{ unit_table(nation.get("support_unit_details", {}), nation.get("support_units", {})) }}
+
 					<h2>Naval Units</h2>
 					<p>Naval Units: {{ nation.get("naval_unit_count", 0) }}/{{ nation.get("naval_unit_capacity", 0) }}</p>
-					<table class="jobs-table">
-						<thead>
-							<tr>
-								<th>Unit</th>
-								<th>Unit Count</th>
-								<th>Upkeep</th>
-							</tr>
-						</thead>
-						<tbody>
-							{% for unit_key, unit in nation.get("naval_unit_details", {}).items() %}
-								<tr>
-									<td>{{ unit.display_name }}</td>
-									<td>{{ nation.get("naval_units", {}).get(unit_key, 0) }}</td>
-									<td>
-										{% if "upkeep" in unit %}
-											{% for resource, cost in unit.upkeep.items() %}
-												{{ resource }}: {{ cost }}<br>
-											{% endfor %}
-										{% endif %}
-									</td>
-								</tr>
-							{% endfor %}
-						</tbody>
-					</table>	
+					{{ unit_table(nation.get("naval_unit_details", {}), nation.get("naval_units", {})) }}
 				</div>
 			</div>
 		</div>
