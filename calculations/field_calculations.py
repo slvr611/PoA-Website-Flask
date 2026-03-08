@@ -756,6 +756,9 @@ def check_job_requirements(target, job_details, overall_total_modifiers):
         elif requirement == "empire":
             if target.get("empire", False) != value:
                 meets_requirements = False
+        elif requirement == "name":
+            if target.get("name", "") not in value:
+                meets_requirements = False
     
     return meets_requirements
 
