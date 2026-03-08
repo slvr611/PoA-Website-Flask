@@ -291,7 +291,8 @@
           },
           "United": {
             "stability_loss_chance": 0.35,
-            "karma": 2
+            "karma": 2,
+            "unit_morale": 1
           }
         }
       },

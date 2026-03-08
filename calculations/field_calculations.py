@@ -794,31 +794,54 @@ _UNIT_STAT_NAMES = [
     "retaliation_damage", "range", "speed", "armor",
 ]
 
-def _get_unit_stat_prefixes(unit_type_str, is_support, is_magical):
+def _get_unit_stat_prefixes(unit_type_str, is_support, is_magical, roles, base_name):
     """Return all modifier prefixes that apply to this unit.
 
-    The naming convention is:
-      [magical|mundane_][land|naval|support_]unit
-    e.g. "unit", "land_unit", "mundane_unit", "magical_land_unit", ...
+    Prefixes follow this naming convention (all combinations that apply):
+      [magical|mundane_][land|naval|support_][role_]unit
+      [land|naval|support_]non_ruler_unit   (all processed units are non-ruler)
+      civilian_unit                         (hardcoded for units named 'Civilian')
+
+    roles: dict with keys 'melee', 'ranged', 'cavalry' (booleans)
+    base_name: raw unit name (without era prefix) for special cases
     """
-    prefixes = ["unit"]
+    prefixes = ["unit", "non_ruler_unit"]
     magic_tag = "magical" if is_magical else "mundane"
 
     if is_support:
-        prefixes.append("support_unit")
-        prefixes.append(f"{magic_tag}_support_unit")
+        type_base = "support"
     elif unit_type_str == "Land":
-        prefixes.append("land_unit")
-        prefixes.append(f"{magic_tag}_land_unit")
+        type_base = "land"
     elif unit_type_str == "Naval":
-        prefixes.append("naval_unit")
-        prefixes.append(f"{magic_tag}_naval_unit")
+        type_base = "naval"
+    else:
+        type_base = None
+
+    if type_base:
+        prefixes.append(f"{type_base}_unit")
+        prefixes.append(f"{type_base}_non_ruler_unit")
+        prefixes.append(f"{magic_tag}_{type_base}_unit")
+
+        # Role-based prefixes: land_melee_unit, land_cavalry_unit, etc.
+        for role in ("melee", "ranged", "cavalry"):
+            if roles.get(role):
+                prefixes.append(f"{type_base}_{role}_unit")
 
     prefixes.append(f"{magic_tag}_unit")
+
+    # Role-only prefixes (type-agnostic): melee_unit, cavalry_unit, etc.
+    for role in ("melee", "ranged", "cavalry"):
+        if roles.get(role):
+            prefixes.append(f"{role}_unit")
+
+    # Hardcoded: civilian_unit matches any unit whose base name is "Civilian"
+    if base_name and base_name.lower() == "civilian":
+        prefixes.append("civilian_unit")
+
     return prefixes
 
 
-def _apply_unit_stat_modifiers(base_stats, unit_type_str, is_support, is_magical, modifier_sources):
+def _apply_unit_stat_modifiers(base_stats, unit_type_str, is_support, is_magical, roles, base_name, modifier_sources):
     """Compute effective_stats by applying all matching stat modifiers to base_stats.
 
     Modifiers that end in a stat name (e.g. 'unit_hp', 'land_unit_attack') are applied
@@ -830,7 +853,7 @@ def _apply_unit_stat_modifiers(base_stats, unit_type_str, is_support, is_magical
     supported and applies only to matching unit types.
     """
     effective = dict(base_stats)
-    prefixes = _get_unit_stat_prefixes(unit_type_str, is_support, is_magical)
+    prefixes = _get_unit_stat_prefixes(unit_type_str, is_support, is_magical, roles, base_name)
 
     # Bare strength modifier keys that map to attack+defense (bypassing the prefix system).
     # 'strength' → all units; 'land_strength'/'naval_strength'/'support_strength' → typed.
@@ -945,11 +968,15 @@ def load_db_units(unit_type=None):
 
         db_units[key] = {
             "display_name": display_name,
+            "base_name": name,  # raw name without era prefix, for civilian_unit matching
             "unit_type": unit.get("unit_type", ""),
             "unit_class": unit.get("unit_class", ""),
             "era": era,
             "is_support": is_support,
             "is_magical": is_magical,
+            "melee": bool(unit.get("melee")),
+            "ranged": bool(unit.get("ranged")),
+            "cavalry": bool(unit.get("cavalry")),
             "recruitment_cost": recruitment_cost,
             "upkeep": upkeep,
             "requirements": requirements,
@@ -983,6 +1010,10 @@ def _district_key_to_category(district_key):
 
 
 def check_unit_requirements(target, unit_details):
+    # Imperial units require the nation to be an empire
+    if "Imperial" in (unit_details.get("unit_class") or "") and not target.get("empire", False):
+        return False
+
     requirements = unit_details.get("requirements", {})
     meets_requirements = True
     nation_district_keys = [district.get("type", "") for district in target.get("districts", [])]
@@ -1044,8 +1075,6 @@ def check_unit_requirements(target, unit_details):
                     break
         elif requirement == "name":
             check_name = True
-        elif requirement == "empire" and target.get("empire", False):
-            meets_requirements = False,
         elif requirement == "defensive_pact":
             check_defensive_pact = True
         elif requirement == "military_alliance":
@@ -1157,6 +1186,8 @@ def calculate_unit_details(target, unit_type, modifier_totals, district_totals, 
                 new_details.get("unit_type", ""),
                 new_details.get("is_support", False),
                 new_details.get("is_magical", False),
+                {"melee": new_details.get("melee", False), "ranged": new_details.get("ranged", False), "cavalry": new_details.get("cavalry", False)},
+                new_details.get("base_name", ""),
                 modifier_sources,
             )
 
