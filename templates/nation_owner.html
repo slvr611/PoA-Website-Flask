@@ -730,7 +730,7 @@
 						</tr>
 					</table>
 					<h2>Land Units</h2>
-					<p>Land Units: {{  nation.land_unit_count }}/{{ nation.land_unit_capacity }}</p>
+					<p>Land Units: {{  nation.get("land_unit_count", 0) }}/{{ nation.get("land_unit_capacity", 0) }}</p>
 					<table class="jobs-table">
 						<thead>
 							<tr>
@@ -756,7 +756,7 @@
 						</tbody>
 					</table>
 					<h2>Support Units</h2>
-					<p>Support Units: {{ nation.support_unit_count }}/{{ nation.support_unit_capacity }}</p>
+					<p>Support Units: {{ nation.get("support_unit_count", 0) }}/{{ nation.get("support_unit_capacity", 0) }}</p>
 					<table class="jobs-table">
 						<thead>
 							<tr>
@@ -766,7 +766,7 @@
 							</tr>
 						</thead>
 						<tbody>
-							{% for unit_key, unit in nation.support_unit_details.items() %}
+							{% for unit_key, unit in nation.get("support_unit_details", {}).items() %}
 								<tr>
 									<td>{{ unit.display_name }}</td>
 									<td>{{ nation.get("support_units", {}).get(unit_key, 0) }}</td>
@@ -782,7 +782,7 @@
 						</tbody>
 					</table>
 					<h2>Naval Units</h2>
-					<p>Naval Units: {{ nation.naval_unit_count }}/{{ nation.naval_unit_capacity }}</p>
+					<p>Naval Units: {{ nation.get("naval_unit_count", 0) }}/{{ nation.get("naval_unit_capacity", 0) }}</p>
 					<table class="jobs-table">
 						<thead>
 							<tr>
@@ -792,7 +792,7 @@
 							</tr>
 						</thead>
 						<tbody>
-							{% for unit_key, unit in nation.naval_unit_details.items() %}
+							{% for unit_key, unit in nation.get("naval_unit_details", {}).items() %}
 								<tr>
 									<td>{{ unit.display_name }}</td>
 									<td>{{ nation.get("naval_units", {}).get(unit_key, 0) }}</td>

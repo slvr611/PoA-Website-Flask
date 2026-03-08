@@ -490,7 +490,7 @@
                         </table>
                         
                         <h2>Land Units</h2>
-                        <p>Land Units: {{ nation.land_unit_count }}/{{ nation.land_unit_capacity }}</p>
+                        <p>Land Units: {{ nation.get("land_unit_count", 0) }}/{{ nation.get("land_unit_capacity", 0) }}</p>
                         <table class="jobs-table">
                             <thead>
                                 <tr>
@@ -500,7 +500,7 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                {% for unit, details in nation.land_unit_details.items() %}
+                                {% for unit, details in nation.get("land_unit_details", {}).items() %}
                                     <tr>
                                         <td>{{ details.display_name }}</td>
                                         <td>{{ form.land_units[unit] }}</td>
@@ -516,8 +516,8 @@
                             </tbody>
                         </table>
 
-                        <h2>Naval Units</h2>
-                        <p>Naval Units: {{ nation.naval_unit_count }}/{{ nation.naval_unit_capacity }}</p>
+                        <h2>Support Units</h2>
+                        <p>Support Units: {{ nation.get("support_unit_count", 0) }}/{{ nation.get("support_unit_capacity", 0) }}</p>
                         <table class="jobs-table">
                             <thead>
                                 <tr>
@@ -527,7 +527,34 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                {% for unit, details in nation.naval_unit_details.items() %}
+                                {% for unit, details in nation.get("support_unit_details", {}).items() %}
+                                    <tr>
+                                        <td>{{ details.display_name }}</td>
+                                        <td>{{ form.support_units[unit] }}</td>
+                                        <td>
+                                        {% if details.upkeep is defined %}
+                                            {% for resource, cost in details.upkeep.items() %}
+                                                {{ resource }}: {{ cost }}<br>
+                                            {% endfor %}
+                                        {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+
+                        <h2>Naval Units</h2>
+                        <p>Naval Units: {{ nation.get("naval_unit_count", 0) }}/{{ nation.get("naval_unit_capacity", 0) }}</p>
+                        <table class="jobs-table">
+                            <thead>
+                                <tr>
+                                    <th>Unit</th>
+                                    <th>Unit Count</th>
+                                    <th>Upkeep</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for unit, details in nation.get("naval_unit_details", {}).items() %}
                                     <tr>
                                         <td>{{ details.display_name }}</td>
                                         <td>{{ form.naval_units[unit] }}</td>
