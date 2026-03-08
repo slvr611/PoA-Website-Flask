@@ -20,11 +20,13 @@ class FormGenerator:
             job_details = {}
             land_unit_details = {}
             naval_unit_details = {}
+            support_unit_details = {}
             if item:
                 job_details = item.get("job_details", {})
                 land_unit_details = item.get("land_unit_details", {})
                 naval_unit_details = item.get("naval_unit_details", {})
-            return NationForm.create_form(schema, item, formdata, job_details, land_unit_details, naval_unit_details)
+                support_unit_details = item.get("support_unit_details", {})
+            return NationForm.create_form(schema, item, formdata, job_details, land_unit_details, naval_unit_details, support_unit_details)
 
         elif data_type == "jobs":
             job_details = {}
@@ -275,6 +277,32 @@ class NavalUnitAssignmentDict(Form):
             unit_field = getattr(self, unit_key, None)
             if unit_field:
                 unit_field.data = unit_val
+
+class SupportUnitAssignmentDict(Form):
+    """Form for handling Support Unit assignment as a dictionary"""
+
+    class Meta:
+        csrf = False
+
+    @classmethod
+    def create_form_class(cls, unit_details):
+        for unit in unit_details.keys():
+            field = IntegerField(unit, validators=[NumberRange(min=0)], default=0)
+            setattr(cls, unit, field)
+
+        return cls
+
+    def load_form_from_item(self, item, schema):
+        """Loads form data from a database item"""
+
+        if not item:
+            return
+
+        for unit_key, unit_val in item.items():
+            unit_field = getattr(self, unit_key, None)
+            if unit_field:
+                unit_field.data = unit_val
+
 
 class ModifierForm(Form):
     """Form for handling nation/character modifiers as a dictionary"""
@@ -1222,7 +1250,7 @@ class NationForm(BaseSchemaForm):
 
     # Add dynamic law fields from schema
     @classmethod
-    def create_form_class(cls, schema, job_details, land_unit_details, naval_unit_details):
+    def create_form_class(cls, schema, job_details, land_unit_details, naval_unit_details, support_unit_details={}):
         """Creates a form class with additional fields from schema"""
         for field_name, field_schema in schema.get("properties", {}).items():
             if field_schema.get("bsonType") == "enum" and not hasattr(cls, field_name):
@@ -1253,14 +1281,16 @@ class NationForm(BaseSchemaForm):
         cls.land_units = FormField(LandUnitAssignmentDict)
         NavalUnitAssignmentDict.create_form_class(naval_unit_details)
         cls.naval_units = FormField(NavalUnitAssignmentDict)
+        SupportUnitAssignmentDict.create_form_class(support_unit_details)
+        cls.support_units = FormField(SupportUnitAssignmentDict)
 
         return cls
     
     @classmethod
-    def create_form(cls, schema, nation=None, formdata=None, job_details={}, land_unit_details={}, naval_unit_details={}):
+    def create_form(cls, schema, nation=None, formdata=None, job_details={}, land_unit_details={}, naval_unit_details={}, support_unit_details={}):
         """Creates and populates a nation form"""
         # First create the form class with all fields
-        form_class = cls.create_form_class(schema, job_details, land_unit_details, naval_unit_details)
+        form_class = cls.create_form_class(schema, job_details, land_unit_details, naval_unit_details, support_unit_details)
         
         # Create form instance
         if formdata:
