@@ -114,13 +114,13 @@ def _ensure_item_ids(data):
 
 
 def _all_have_ids(lst):
-    """Return True if *every* item in ``lst`` is a dict that carries a ``_id`` field.
+    """Return True if *every* item in ``lst`` is a dict with a non-empty ``_id``.
 
     Used to decide whether ID-based or positional list matching applies.
     Returns False for empty lists, lists with non-dict items, or lists where
-    any dict is missing the ``_id`` field.
+    any dict is missing ``_id`` or has a falsy ``_id`` (None, '').
     """
-    return bool(lst) and all(isinstance(item, dict) and '_id' in item for item in lst)
+    return bool(lst) and all(isinstance(item, dict) and item.get('_id') for item in lst)
 
 
 def _calculate_and_attach_fields(data_type, target):
@@ -362,6 +362,52 @@ def system_approve_change(change_id):
                 )
             return True
     return False
+
+
+def force_approve_change(change_id):
+    """Approve a change without running check_no_other_changes.
+
+    Used when a change was stranded by subsequent ticks modifying the target,
+    but the intended update is still correct and should be applied.
+    """
+    approver = mongo.db.players.find_one({"id": g.user.get("id", None)})
+    if approver is None or not approver.get("is_admin", False):
+        flash("You must be an admin to approve changes.")
+        return None
+
+    changes_collection = mongo.db.changes
+    now = datetime.now(timezone.utc)
+    change = changes_collection.find_one({"_id": change_id})
+    target_collection = category_data[change["target_collection"]]["database"]
+    after_data = change["after_requested_data"]
+    before_data = change["before_requested_data"]
+
+    if change["change_type"] == "Update":
+        existing = target_collection.find_one({"_id": change["target"]})
+        merged = deep_merge(existing, after_data)
+        merged = _calculate_and_attach_fields(change["target_collection"], merged)
+        target_collection.update_one({"_id": change["target"]}, {"$set": merged})
+    elif change["change_type"] == "Add":
+        after_data = _calculate_and_attach_fields(change["target_collection"], after_data)
+        change["target"] = target_collection.insert_one(after_data).inserted_id
+    else:
+        target_collection.delete_one({"_id": change["target"]})
+
+    changes_collection.update_one({"_id": change_id}, {"$set": {
+        "status": "Approved",
+        "time_implemented": now,
+        "last_modified_time": now,
+        "approver": approver["_id"],
+        "before_implemented_data": before_data,
+        "after_implemented_data": after_data
+    }})
+    propagate_updates(
+        changed_data_type=change["target_collection"],
+        changed_object_id=change["target"],
+        changed_object=merged if change["change_type"] == "Update" else after_data,
+        reason=f"Force-approved change #{change_id}"
+    )
+    return True
 
 
 def deny_change(change_id):
@@ -616,8 +662,9 @@ def check_no_other_changes(before_data, after_data, current_data):
                 
         # Handle primitive values
         elif c_val != b_val and c_val != a_val:
-            # Special case for integers (allow changes)
-            if any(isinstance(v, int) for v in [b_val, a_val, c_val]):
+            # Allow numeric fields to have changed (e.g. tick-generated rolls,
+            # stability values, calculated percentages).
+            if any(isinstance(v, (int, float)) for v in [b_val, a_val, c_val]):
                 continue
             return False
     

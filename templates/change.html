@@ -38,7 +38,7 @@
 			{% set after_data = None %}
 			{% if item["status"] == "Pending" %}
 				{% set player_label = schema.properties.requester.label %}
-				{% set player_object = linked_objects["requester"] %}
+				{% set player_object = linked_objects.get("requester") %}
 				{% set time_label = schema.properties.time_requested.label %}
 				{% set time_data = item["time_requested"] %}
 				{% set changes_label = "Requested Changes" %}
@@ -46,7 +46,7 @@
 				{% set after_data = item["after_requested_data"] %}
 			{% elif item["status"] == "Approved" %}
 				{% set player_label = schema.properties.approver.label %}
-				{% set player_object = linked_objects["approver"] %}
+				{% set player_object = linked_objects.get("approver") %}
 				{% set time_label = schema.properties.time_implemented.label %}
 				{% set time_data = item["time_implemented"] %}
 				{% set changes_label = "Changes" %}
@@ -54,17 +54,17 @@
 				{% set after_data = item["after_implemented_data"] %}
 			{% elif item["status"] == "Reverted" %}
 				{% set player_label = schema.properties.reverter.label %}
-				{% set player_object = linked_objects["reverter"] %}
+				{% set player_object = linked_objects.get("reverter") %}
 				{% set time_label = schema.properties.time_reverted.label %}
 				{% set time_data = item["time_reverted"] %}
 				{% set changes_label = "Reverted Changes" %}
 				{% set before_data = item["before_reverted_data"] %}
 				{% set after_data = item["after_reverted_data"] %}
 			{% endif %}
-			
+
 			<tr>
 				<th><strong>{{ player_label }}:</strong></th>
-				<td><a href="{{ player_object["link"] }}">{{ player_object["name"] }}</a></td>
+				<td>{% if player_object %}<a href="{{ player_object["link"] }}">{{ player_object["name"] }}</a>{% else %}Unknown{% endif %}</td>
 			</tr>
 			<tr>
 				<th><strong>{{ time_label }}:</strong></th>
@@ -85,6 +85,7 @@
 		{% if item["status"] == "Pending" and g.user.is_admin %}
 			<div class="action-buttons">
 				<a href="{{ request.path }}/approve" class="btn btn-approve">Approve</a>
+				<a href="{{ request.path }}/force-approve" class="btn btn-approve" style="opacity:0.7;" onclick="return confirm('Force-approve this change without conflict checking?')">Force Approve</a>
 				<a href="{{ request.path }}/deny" class="btn btn-deny">Deny</a>
 			</div>
 		{% endif %}

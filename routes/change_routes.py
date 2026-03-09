@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, redirect, flash
 from helpers.auth_helpers import admin_required
 from helpers.data_helpers import get_data_on_category, get_data_on_item
 from helpers.render_helpers import get_linked_objects
-from helpers.change_helpers import approve_change, deny_change
+from helpers.change_helpers import approve_change, deny_change, force_approve_change
 from app_core import category_data, mongo, app
 from pymongo import DESCENDING, ASCENDING
 from bson import ObjectId
@@ -196,6 +196,19 @@ def approve_change_route(item_ref):
         flash(f"Error approving change: {e}")
 
     return redirect("/changes")
+
+@change_routes.route("/changes/item/<item_ref>/force-approve")
+@admin_required
+def force_approve_change_route(item_ref):
+    try:
+        change_id = ObjectId(item_ref)
+        force_approve_change(change_id)
+        flash(f"Change #{item_ref} has been force-approved.")
+    except Exception as e:
+        flash(f"Error force-approving change: {e}")
+
+    return redirect("/changes")
+
 
 @change_routes.route("/changes/item/<item_ref>/deny")
 @admin_required

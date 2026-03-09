@@ -972,13 +972,6 @@ def _extract_labeled_from_object(obj, required_fields, linked_schema, target_dat
             for key, val in law_mods.items():
                 stripped, matched = _strip_modifier_key(key, target_data_type, modifier_prefix)
                 if not matched:
-                    print(
-                        f"[MODIFIER DEBUG] Unmatched enum law key: "
-                        f"field_name='{field_name}', source_label='{base_label}', "
-                        f"req_field='{req_field}', field_value='{field_value}', "
-                        f"key='{key}', val={val}, "
-                        f"target_data_type='{target_data_type}', modifier_prefix='{modifier_prefix}'"
-                    )
                     continue
                 final_key, final_val = _apply_special_mod_multipliers(stripped, val, obj, linked_schema)
                 if final_val:
@@ -997,12 +990,7 @@ def _extract_labeled_from_object(obj, required_fields, linked_schema, target_dat
                 if matched and mod_val:
                     plain_mods[stripped] = plain_mods.get(stripped, 0) + mod_val
                 elif not matched and mod_val:
-                    print(
-                        f"[MODIFIER DEBUG] Unmatched modifier in array: "
-                        f"field_name='{field_name}', source_label='{base_label}', "
-                        f"mod_field='{mod_field}', mod_val={mod_val}, "
-                        f"target_data_type='{target_data_type}', modifier_prefix='{modifier_prefix}'"
-                    )
+                    pass
 
         # ── title arrays ──────────────────────────────────────────────────
         elif field_type == "array" and req_field in ("positive_titles", "negative_titles"):
