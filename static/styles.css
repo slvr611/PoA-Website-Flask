@@ -1560,6 +1560,12 @@ h1, h2 {
     border-radius: 5px;
 }
 
+.context-tooltip {
+    color: #7ec8ff;
+    font-weight: 700;
+    cursor: help;
+}
+
 .context-tooltip-popup {
     position: absolute;
     background: #1b1f2a;
