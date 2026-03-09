@@ -411,9 +411,9 @@ def modifier_decay_tick(old_target, new_target, schema):
     new_modifiers = []
     for modifier in new_target.get("modifiers", []):
         new_modifier = deepcopy(modifier)
-        if int(new_modifier["duration"]) > 0:
+        if int(new_modifier.get("duration", -1)) > 0:
             new_modifier["duration"] = int(new_modifier["duration"]) - 1
-        if int(new_modifier["duration"]) != 0:
+        if int(new_modifier.get("duration", -1)) != 0:
             new_modifiers.append(new_modifier)
     new_target["modifiers"] = new_modifiers
     return ""
