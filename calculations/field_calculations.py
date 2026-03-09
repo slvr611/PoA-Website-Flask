@@ -126,13 +126,15 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
         job_totals = sum_job_totals(target, jobs_assigned, job_details)
 
         land_units_assigned = collect_land_units_assigned(target)
-        land_unit_details = calculate_unit_details(target, "land", modifier_totals, district_totals, tech_totals, city_totals, law_totals, external_modifiers_total)
+        nation_tagged_sources = _build_unit_tagged_sources(target, schema, district_details)
+
+        land_unit_details = calculate_unit_details(target, "land", modifier_totals, district_totals, tech_totals, city_totals, law_totals, external_modifiers_total, schema, district_details, nation_tagged_sources)
 
         naval_units_assigned = collect_naval_units_assigned(target)
-        naval_unit_details = calculate_unit_details(target, "naval", modifier_totals, district_totals, tech_totals, city_totals, law_totals, external_modifiers_total)
+        naval_unit_details = calculate_unit_details(target, "naval", modifier_totals, district_totals, tech_totals, city_totals, law_totals, external_modifiers_total, schema, district_details, nation_tagged_sources)
 
         support_units_assigned = collect_support_units_assigned(target)
-        support_unit_details = calculate_unit_details(target, "support", modifier_totals, district_totals, tech_totals, city_totals, law_totals, external_modifiers_total)
+        support_unit_details = calculate_unit_details(target, "support", modifier_totals, district_totals, tech_totals, city_totals, law_totals, external_modifiers_total, schema, district_details, nation_tagged_sources)
 
         unit_totals = sum_all_unit_totals(land_units_assigned, land_unit_details, naval_units_assigned, naval_unit_details, support_units_assigned, support_unit_details)
 
@@ -321,6 +323,7 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
             component_sources,
             overall_total_modifiers,
             calculated_values,
+            nation_tagged_sources,
         )
         record_timing("compute_breakdowns_ms", phase_start)
         local_timings["total_calculate_all_fields_ms"] = round((perf_counter() - calc_start) * 1000, 2)
@@ -844,22 +847,162 @@ def _get_unit_stat_prefixes(unit_type_str, is_support, is_magical, roles, base_n
     return prefixes
 
 
-def _apply_unit_stat_modifiers(base_stats, unit_type_str, is_support, is_magical, roles, base_name, modifier_sources):
-    """Compute effective_stats by applying all matching stat modifiers to base_stats.
+def _build_unit_tagged_sources(target, schema, district_details):
+    """Build a list of labeled modifier sources for unit stat breakdown.
 
-    Modifiers that end in a stat name (e.g. 'unit_hp', 'land_unit_attack') are applied
-    additively. 'strength' is a shorthand that applies to both attack and defense.
-    Stats whose base value is None (flag disabled) are left as None.
+    Returns list of {"label": str, "modifiers": dict}.  Each entry represents one
+    distinct source (a law option, a district, a nation modifier, a technology, a city,
+    a ruler modifier, or an artifact).
+    """
+    tagged = []
+    schema_properties = schema.get("properties", {})
 
-    Bare 'strength' (e.g. from military_funding laws) is treated as unit_strength and
-    applies to all units. Type-scoped bare strength (e.g. 'land_strength') is also
-    supported and applies only to matching unit types.
+    # Laws
+    for law_name in schema.get("laws", []):
+        law_field = schema_properties.get(law_name, {})
+        selected = target.get(law_name, "")
+        law_data = law_field.get("laws", {}).get(selected)
+        if law_data:
+            law_label = law_field.get("label", law_name)
+            tagged.append({"label": f"{law_label}: {selected}", "modifiers": law_data})
+
+    # Districts
+    def _synergy_matches(node, requirement):
+        if not node:
+            return False
+        if isinstance(requirement, list):
+            return "any" in requirement or node in requirement
+        return requirement == "any" or node == requirement
+
+    for district in target.get("districts", []):
+        if not isinstance(district, dict):
+            continue
+        district_type = district.get("type", "")
+        district_node = district.get("node", "")
+        district_data = district_details.get(district_type, {})
+        district_name = district_data.get("display_name", district_type)
+        mods = district_data.get("modifiers", {})
+        if mods:
+            tagged.append({"label": f"District: {district_name}", "modifiers": mods})
+        if _synergy_matches(district_node, district_data.get("synergy_requirement", "")):
+            synergy_mods = district_data.get("synergy_modifiers", {})
+            if synergy_mods:
+                tagged.append({"label": f"District: {district_name} (Synergy)", "modifiers": synergy_mods})
+
+    if target.get("empire", False):
+        imperial_district = target.get("imperial_district", {})
+        imperial_type = imperial_district.get("type", "")
+        imperial_node = imperial_district.get("node", "")
+        imperial_data = json_data["nation_imperial_districts"].get(imperial_type, {})
+        imperial_name = imperial_data.get("display_name", imperial_type)
+        mods = imperial_data.get("modifiers", {})
+        if mods:
+            tagged.append({"label": f"District: {imperial_name}", "modifiers": mods})
+        if _synergy_matches(imperial_node, imperial_data.get("synergy_requirement", "")):
+            synergy_mods = imperial_data.get("synergy_modifiers", {})
+            if synergy_mods:
+                tagged.append({"label": f"District: {imperial_name} (Synergy)", "modifiers": synergy_mods})
+
+    # Technologies
+    for tech_key, tech_val in target.get("technologies", {}).items():
+        if tech_val.get("researched"):
+            tech_data = json_data["tech"].get(tech_key, {})
+            mods = tech_data.get("modifiers", {})
+            if mods:
+                tech_name = tech_data.get("display_name", tech_key)
+                tagged.append({"label": f"Technology: {tech_name}", "modifiers": mods})
+
+    # Cities
+    city_json = json_data["cities"]
+    wall_json = json_data["walls"]
+    for city in target.get("cities", []):
+        city_type = city.get("type", "")
+        city_data = city_json.get(city_type, {})
+        city_mods = city_data.get("modifiers", {})
+        if city_mods:
+            city_name = city_data.get("display_name", city_type)
+            tagged.append({"label": f"City: {city_name}", "modifiers": city_mods})
+        wall_data = wall_json.get(city.get("wall", ""), {})
+        wall_mods = wall_data.get("modifiers", {})
+        if wall_mods:
+            wall_name = wall_data.get("display_name", city.get("wall", ""))
+            tagged.append({"label": f"City: {wall_name}", "modifiers": wall_mods})
+
+    # Nation modifiers (each entry is its own source)
+    for mod in target.get("modifiers", []):
+        field = mod.get("field", "")
+        value = mod.get("value", 0)
+        if field and value:
+            source = mod.get("source", "")
+            label = f"Modifier: {source}" if source else "Modifier"
+            tagged.append({"label": label, "modifiers": {field: value}})
+
+    # External: rulers, their modifiers, titles, and artifacts
+    nation_id = str(target.get("_id", ""))
+    if nation_id:
+        char_schema_props = category_data.get("characters", {}).get("schema", {}).get("properties", {})
+        rulers = list(category_data["characters"]["database"].find(
+            {"ruling_nation_org": nation_id},
+            {"name": 1, "modifiers": 1, "positive_titles": 1, "negative_titles": 1},
+        ))
+        for ruler in rulers:
+            ruler_name = ruler.get("name", "Unknown Ruler")
+
+            # Ruler modifiers (prefixed "nation_" in the character's modifier list)
+            for mod in ruler.get("modifiers", []):
+                field = mod.get("field", "")
+                value = mod.get("value", 0)
+                if field and value and field.startswith("nation_"):
+                    tagged.append({
+                        "label": f"Ruler: {ruler_name}",
+                        "modifiers": {field[len("nation_"):]: value},
+                    })
+
+            # Ruler titles
+            all_titles = ruler.get("positive_titles", []) + ruler.get("negative_titles", [])
+            if all_titles:
+                title_mods = calculate_title_modifiers(all_titles, "nation", char_schema_props)
+                if title_mods:
+                    tagged.append({"label": f"Ruler: {ruler_name} (Titles)", "modifiers": title_mods})
+
+            # Artifacts equipped by this ruler
+            ruler_id = str(ruler["_id"])
+            artifacts = list(category_data["artifacts"]["database"].find(
+                {"owner": ruler_id, "equipped": True},
+                {"name": 1, "external_modifiers": 1},
+            ))
+            for artifact in artifacts:
+                artifact_name = artifact.get("name", "Unknown Artifact")
+                for ext_mod in artifact.get("external_modifiers", []):
+                    if ext_mod.get("type") == "nation":
+                        mod_key = ext_mod.get("modifier", "")
+                        mod_val = ext_mod.get("value", 0)
+                        if mod_key and mod_val:
+                            tagged.append({
+                                "label": f"Artifact: {artifact_name}",
+                                "modifiers": {mod_key: mod_val},
+                            })
+
+    return tagged
+
+
+def _apply_unit_stat_modifiers(base_stats, unit_type_str, is_support, is_magical, roles, base_name, tagged_sources):
+    """Compute effective_stats and per-stat breakdown from tagged modifier sources.
+
+    tagged_sources: list of {"label": str, "modifiers": dict}
+    Returns: (effective_stats, stat_breakdown)
+      effective_stats: dict of stat → final value (None if stat is disabled)
+      stat_breakdown:  dict of stat → [{"label": str, "value": num}, ...] (only modified stats)
+
+    'strength' is a shorthand that applies to both attack and defense.
+    Stats whose base value is None (flag disabled) are skipped.
+    Bare 'strength' (e.g. from military_funding laws) applies to all units.
+    Type-scoped bare strength (e.g. 'land_strength') applies only to matching types.
     """
     effective = dict(base_stats)
+    breakdown = {stat: [] for stat in _UNIT_STAT_NAMES}
     prefixes = _get_unit_stat_prefixes(unit_type_str, is_support, is_magical, roles, base_name)
 
-    # Bare strength modifier keys that map to attack+defense (bypassing the prefix system).
-    # 'strength' → all units; 'land_strength'/'naval_strength'/'support_strength' → typed.
     if is_support:
         bare_strength_keys = {"strength", "support_strength"}
     elif unit_type_str == "Land":
@@ -869,36 +1012,39 @@ def _apply_unit_stat_modifiers(base_stats, unit_type_str, is_support, is_magical
     else:
         bare_strength_keys = {"strength"}
 
-    def _add_strength(val):
+    def _add_strength(val, label):
         if effective.get("attack") is not None:
             effective["attack"] = (effective["attack"] or 0) + val
+            breakdown["attack"].append({"label": label, "value": val})
         if effective.get("defense") is not None:
             effective["defense"] = (effective["defense"] or 0) + val
+            breakdown["defense"].append({"label": label, "value": val})
 
-    for source in modifier_sources:
-        for modifier, value in source.items():
-            # Handle bare strength keys first
-            if modifier in bare_strength_keys:
-                _add_strength(value)
+    for source in tagged_sources:
+        label = source["label"]
+        for modifier, value in source["modifiers"].items():
+            if not value:
                 continue
-
+            if modifier in bare_strength_keys:
+                _add_strength(value, label)
+                continue
             for prefix in prefixes:
-                # strength shorthand → attack + defense
                 if modifier == f"{prefix}_strength":
-                    _add_strength(value)
+                    _add_strength(value, label)
                     break
-                # individual stat modifiers
                 matched = False
                 for stat in _UNIT_STAT_NAMES:
                     if modifier == f"{prefix}_{stat}":
                         if effective.get(stat) is not None:
                             effective[stat] = (effective[stat] or 0) + value
+                            breakdown[stat].append({"label": label, "value": value})
                         matched = True
                         break
                 if matched:
                     break
 
-    return effective
+    stat_breakdown = {stat: entries for stat, entries in breakdown.items() if entries}
+    return effective, stat_breakdown
 
 
 def load_db_units(unit_type=None):
@@ -1159,10 +1305,12 @@ def check_unit_requirements(target, unit_details):
 
     return meets_requirements
 
-def calculate_unit_details(target, unit_type, modifier_totals, district_totals, tech_totals, city_totals, law_totals, external_modifiers_total):
+def calculate_unit_details(target, unit_type, modifier_totals, district_totals, tech_totals, city_totals, law_totals, external_modifiers_total, schema=None, district_details=None, tagged_sources=None):
     unit_details = load_db_units(unit_type)
 
     modifier_sources = [modifier_totals, district_totals, city_totals, tech_totals, law_totals, external_modifiers_total]
+    if tagged_sources is None:
+        tagged_sources = _build_unit_tagged_sources(target, schema or {}, district_details or {})
     general_resources = json_data["general_resources"]
     general_resources = [resource["key"] for resource in general_resources]
     unique_resources = json_data["unique_resources"]
@@ -1202,14 +1350,14 @@ def calculate_unit_details(target, unit_type, modifier_totals, district_totals, 
                         new_upkeep = int(round(new_upkeep))
                     new_details["upkeep"][resource] = new_upkeep
 
-            new_details["effective_stats"] = _apply_unit_stat_modifiers(
+            new_details["effective_stats"], new_details["stat_breakdown"] = _apply_unit_stat_modifiers(
                 new_details["base_stats"],
                 new_details.get("unit_type", ""),
                 new_details.get("is_support", False),
                 new_details.get("is_magical", False),
                 {"melee": new_details.get("melee", False), "ranged": new_details.get("ranged", False), "cavalry": new_details.get("cavalry", False)},
                 new_details.get("base_name", ""),
-                modifier_sources,
+                tagged_sources,
             )
 
             new_unit_details[unit] = new_details
@@ -1676,9 +1824,11 @@ def parse_meta_modifiers(target, overall_total_modifiers):
     return overall_total_modifiers
 
 
-def compute_nation_breakdowns(target, schema_properties, component_sources, overall_total_modifiers, calculated_values):
+def compute_nation_breakdowns(target, schema_properties, component_sources, overall_total_modifiers, calculated_values, tagged_sources=None):
     """
     Build tooltip-friendly breakdowns for a nation's key fields.
+    tagged_sources: list of {"label": str, "modifiers": dict} from _build_unit_tagged_sources.
+    When provided, stab/resource/karma entries show individual source names instead of aggregate labels.
     """
     pop_count = int(calculated_values.get("pop_count", target.get("pop_count", 0)) or 0)
     road_usage = int(target.get("road_usage", 0) or 0)
@@ -1698,12 +1848,18 @@ def compute_nation_breakdowns(target, schema_properties, component_sources, over
         "resource_production": {},
         "resource_consumption": {},
         "money_income": [],
+        "karma": [],
     }
+
+    use_detailed = tagged_sources is not None
 
     # Stability Gain Chance
     stability_gain_base = schema_properties.get("stability_gain_chance", {}).get("base_value", 0)
-    stability_gain_mods = collect_field_contributions("stability_gain_chance", component_sources, overall_total_modifiers)
-    stability_gain_extra = stability_gain_extras(calculated_values, overall_total_modifiers, target, territory_types)
+    if use_detailed:
+        stability_gain_mods = collect_detailed_field_contributions("stability_gain_chance", tagged_sources, multiplier=100)
+    else:
+        stability_gain_mods = collect_field_contributions("stability_gain_chance", component_sources, overall_total_modifiers)
+    stability_gain_extra = stability_gain_extras(calculated_values, overall_total_modifiers, target, territory_types, tagged_sources if use_detailed else None)
     breakdowns["stability_gain_chance"].append({"label": "Base", "value": stability_gain_base * 100})
     breakdowns["stability_gain_chance"].extend(convert_percentage_contribs(stability_gain_mods))
     breakdowns["stability_gain_chance"].extend(convert_percentage_contribs(stability_gain_extra))
@@ -1711,8 +1867,11 @@ def compute_nation_breakdowns(target, schema_properties, component_sources, over
 
     # Stability Loss Chance
     stability_loss_base = schema_properties.get("stability_loss_chance", {}).get("base_value", 0)
-    stability_loss_mods = collect_field_contributions("stability_loss_chance", component_sources, overall_total_modifiers)
-    stability_loss_extra = stability_loss_extras(calculated_values, overall_total_modifiers, target, territory_types)
+    if use_detailed:
+        stability_loss_mods = collect_detailed_field_contributions("stability_loss_chance", tagged_sources, multiplier=100)
+    else:
+        stability_loss_mods = collect_field_contributions("stability_loss_chance", component_sources, overall_total_modifiers)
+    stability_loss_extra = stability_loss_extras(calculated_values, overall_total_modifiers, target, territory_types, tagged_sources if use_detailed else None)
     breakdowns["stability_loss_chance"].append({"label": "Base", "value": stability_loss_base * 100})
     breakdowns["stability_loss_chance"].extend(convert_percentage_contribs(stability_loss_mods))
     breakdowns["stability_loss_chance"].extend(convert_percentage_contribs(stability_loss_extra))
@@ -1722,19 +1881,35 @@ def compute_nation_breakdowns(target, schema_properties, component_sources, over
     for resource in json_data["general_resources"] + json_data["unique_resources"]:
         key = resource["key"]
         breakdowns["resource_production"][key] = build_resource_production_breakdown(
-            key, component_sources, overall_total_modifiers, calculated_values, target
+            key, component_sources, overall_total_modifiers, calculated_values, target, tagged_sources
         )
 
     # Resource Consumption
     for resource in json_data["general_resources"] + json_data["unique_resources"]:
         key = resource["key"]
         breakdowns["resource_consumption"][key] = build_resource_consumption_breakdown(
-            key, component_sources, overall_total_modifiers, calculated_values, target, rolling_consumption
+            key, component_sources, overall_total_modifiers, calculated_values, target, rolling_consumption, tagged_sources
         )
+
+    # Karma
+    karma_base = schema_properties.get("karma", {}).get("base_value", 0)
+    if use_detailed:
+        karma_mods = collect_detailed_field_contributions("karma", tagged_sources)
+    else:
+        karma_mods = collect_field_contributions("karma", component_sources, overall_total_modifiers)
+    breakdowns["karma"].append({"label": "Base", "value": karma_base})
+    breakdowns["karma"].extend(karma_mods)
+    rolling = target.get("rolling_karma", 0)
+    temporary = target.get("temporary_karma", 0)
+    if rolling:
+        breakdowns["karma"].append({"label": "Rolling Karma", "value": rolling})
+    if temporary:
+        breakdowns["karma"].append({"label": "Temporary Karma", "value": temporary})
+    breakdowns["karma"].append({"label": "Total", "value": calculated_values.get("karma", karma)})
 
     # Money Income
     breakdowns["money_income"] = build_money_income_breakdown(
-        component_sources, overall_total_modifiers, schema_properties, calculated_values, target
+        component_sources, overall_total_modifiers, schema_properties, calculated_values, target, tagged_sources
     )
 
     return breakdowns
@@ -1750,14 +1925,33 @@ def collect_field_contributions(field_key, component_sources, overall_totals):
     return contributions
 
 
+def collect_detailed_field_contributions(field_keys, tagged_sources, multiplier=1):
+    """Return per-source contributions using labeled tagged sources.
+
+    field_keys: str or list of str — all matched keys are summed per source.
+    multiplier: applied to each value before appending (e.g. 100 for percentages).
+    Only sources with a non-zero combined value are included.
+    """
+    if isinstance(field_keys, str):
+        field_keys = [field_keys]
+    contributions = []
+    for source in tagged_sources:
+        value = sum(source["modifiers"].get(k, 0) for k in field_keys)
+        if value:
+            contributions.append({"label": source["label"], "value": round(value * multiplier, 4)})
+    return contributions
+
+
 def convert_percentage_contribs(items):
     converted = []
     for item in items:
-        converted.append({"label": item["label"], "value": round(item["value"], 4)})
+        rounded = round(item["value"], 4)
+        if rounded:
+            converted.append({"label": item["label"], "value": rounded})
     return converted
 
 
-def stability_gain_extras(calculated_values, overall_total_modifiers, target, territory_types):
+def stability_gain_extras(calculated_values, overall_total_modifiers, target, territory_types, tagged_sources=None):
     extras = []
     karma = target.get("karma", 0)
     unique_minority_count = target.get("unique_minority_count", 0)
@@ -1768,8 +1962,25 @@ def stability_gain_extras(calculated_values, overall_total_modifiers, target, te
     total_production = sum(calculated_values.get("resource_production", {}).values())
 
     extras.append({"label": "Karma", "value": max(min(karma * overall_total_modifiers.get("stability_gain_chance_per_positive_karma", 0), overall_total_modifiers.get("max_stability_gain_chance_per_positive_karma", 0)), 0) * 100})
-    extras.append({"label": "Minorities", "value": max(min(unique_minority_count * minority_impact * overall_total_modifiers.get("stability_gain_chance_per_unique_minority", 0), overall_total_modifiers.get("max_stability_gain_chance_per_unique_minority", 0)), 0) * 100})
-    extras.append({"label": "Population", "value": pop_count * overall_total_modifiers.get("stability_gain_chance_per_pop", 0) * 100})
+
+    # Minorities: break down per source if possible
+    if tagged_sources is not None:
+        for source in tagged_sources:
+            per_minority = source["modifiers"].get("stability_gain_chance_per_unique_minority", 0)
+            if per_minority:
+                extras.append({"label": source["label"], "value": round(unique_minority_count * minority_impact * per_minority * 100, 4)})
+    else:
+        extras.append({"label": "Minorities", "value": max(min(unique_minority_count * minority_impact * overall_total_modifiers.get("stability_gain_chance_per_unique_minority", 0), overall_total_modifiers.get("max_stability_gain_chance_per_unique_minority", 0)), 0) * 100})
+
+    # Population: break down per source if possible
+    if tagged_sources is not None:
+        for source in tagged_sources:
+            per_pop = source["modifiers"].get("stability_gain_chance_per_pop", 0)
+            if per_pop:
+                extras.append({"label": source["label"], "value": round(pop_count * per_pop * 100, 4)})
+    else:
+        extras.append({"label": "Population", "value": pop_count * overall_total_modifiers.get("stability_gain_chance_per_pop", 0) * 100})
+
     extras.append({"label": "Road Usage", "value": int(road_usage) * overall_total_modifiers.get("stability_gain_chance_per_road_usage", 0) * 100})
     extras.append({"label": "Production", "value": overall_total_modifiers.get("stability_gain_chance_per_resource_production", 0) * total_production * 100})
 
@@ -1784,7 +1995,7 @@ def stability_gain_extras(calculated_values, overall_total_modifiers, target, te
     return extras
 
 
-def stability_loss_extras(calculated_values, overall_total_modifiers, target, territory_types):
+def stability_loss_extras(calculated_values, overall_total_modifiers, target, territory_types, tagged_sources=None):
     extras = []
     karma = target.get("karma", 0)
     unique_minority_count = target.get("unique_minority_count", 0)
@@ -1794,8 +2005,25 @@ def stability_loss_extras(calculated_values, overall_total_modifiers, target, te
     stability = target.get("stability", "Unknown")
 
     extras.append({"label": "Karma", "value": max(min(-karma * overall_total_modifiers.get("stability_loss_chance_per_negative_karma", 0), overall_total_modifiers.get("max_stability_loss_chance_per_negative_karma", 0)), 0) * 100})
-    extras.append({"label": "Minorities", "value": max(min(unique_minority_count * minority_impact * overall_total_modifiers.get("stability_loss_chance_per_unique_minority", 0), overall_total_modifiers.get("max_stability_loss_chance_per_unique_minority", 0)), 0) * 100})
-    extras.append({"label": "Population", "value": pop_count * overall_total_modifiers.get("stability_loss_chance_per_pop", 0) * 100})
+
+    # Minorities: break down per source if possible
+    if tagged_sources is not None:
+        for source in tagged_sources:
+            per_minority = source["modifiers"].get("stability_loss_chance_per_unique_minority", 0)
+            if per_minority:
+                extras.append({"label": source["label"], "value": round(unique_minority_count * minority_impact * per_minority * 100, 4)})
+    else:
+        extras.append({"label": "Minorities", "value": max(min(unique_minority_count * minority_impact * overall_total_modifiers.get("stability_loss_chance_per_unique_minority", 0), overall_total_modifiers.get("max_stability_loss_chance_per_unique_minority", 0)), 0) * 100})
+
+    # Population: break down per source if possible
+    if tagged_sources is not None:
+        for source in tagged_sources:
+            per_pop = source["modifiers"].get("stability_loss_chance_per_pop", 0)
+            if per_pop:
+                extras.append({"label": source["label"], "value": round(pop_count * per_pop * 100, 4)})
+    else:
+        extras.append({"label": "Population", "value": pop_count * overall_total_modifiers.get("stability_loss_chance_per_pop", 0) * 100})
+
     extras.append({"label": "Road Usage", "value": int(road_usage) * overall_total_modifiers.get("stability_loss_chance_per_road_usage", 0) * 100})
 
     if stability == "United":
@@ -1812,16 +2040,58 @@ def stability_loss_extras(calculated_values, overall_total_modifiers, target, te
     return extras
 
 
-def build_resource_production_breakdown(resource_key, component_sources, overall_totals, calculated_values, target):
+def build_resource_production_breakdown(resource_key, component_sources, overall_totals, calculated_values, target, tagged_sources=None):
     entries = []
     total_value = calculated_values.get("resource_production", {}).get(resource_key, 0)
 
-    for label, source in component_sources.items():
-        if not source:
+    if tagged_sources is not None:
+        entries.extend(collect_detailed_field_contributions(
+            [resource_key + "_production", "resource_production"], tagged_sources
+        ))
+        # Jobs: break down per job type
+        job_details = calculated_values.get("job_details", {})
+        jobs_assigned = target.get("jobs", {})
+        for job_key, count in jobs_assigned.items():
+            if count and job_key in job_details:
+                prod = job_details[job_key].get("production", {}).get(resource_key, 0)
+                if prod:
+                    label = job_details[job_key].get("display_name", job_key.replace("_", " ").title())
+                    entries.append({"label": label, "value": prod * count})
+    else:
+        for label, source in component_sources.items():
+            if not source:
+                continue
+            value = source.get(resource_key + "_production", 0) + source.get("resource_production", 0)
+            if value:
+                entries.append({"label": label.title(), "value": value})
+
+    # Terrain: one entry per terrain type that produces this resource
+    terrain_json_data = json_data["terrains"]
+    territory_types = target.get("territory_types", {})
+    for terrain, tile_count in territory_types.items():
+        terrain_data = terrain_json_data.get(terrain, {})
+        terrain_resource = terrain_data.get("resource", "none")
+        # Check for swap modifiers
+        for modifier, mod_value in overall_totals.items():
+            if modifier.startswith(terrain + "_swap_") and modifier.endswith("_production") and mod_value > 1:
+                terrain_resource = modifier.replace("_production", "").replace(terrain + "_swap_", "")
+        if terrain_resource != resource_key:
             continue
-        value = source.get(resource_key + "_production", 0) + source.get("resource_production", 0)
-        if value:
-            entries.append({"label": label.title(), "value": value})
+        count_required = terrain_data.get("count_required", 4)
+        count_required += overall_totals.get(terrain + "_terrain_count_required", 0)
+        terrain_prod = tile_count // max(count_required, 1)
+        if terrain_prod:
+            display_name = terrain_data.get("display_name", terrain.replace("_", " ").title())
+            entries.append({"label": f"Terrain: {display_name} ({tile_count} tiles)", "value": terrain_prod})
+        # Extra production modifiers
+        for modifier, mod_value in overall_totals.items():
+            if modifier.startswith(terrain + "_extra_") and modifier.endswith("_production_per"):
+                extra_resource = modifier.replace("_production_per", "").replace(terrain + "_extra_", "")
+                if extra_resource == resource_key and mod_value:
+                    extra_prod = tile_count // max(mod_value, 1)
+                    if extra_prod:
+                        display_name = terrain_data.get("display_name", terrain.replace("_", " ").title())
+                        entries.append({"label": f"Terrain: {display_name} (extra)", "value": extra_prod})
 
     # Nodes
     nodes = overall_totals.get(resource_key + "_nodes", 0)
@@ -1849,16 +2119,30 @@ def build_resource_production_breakdown(resource_key, component_sources, overall
     return entries
 
 
-def build_resource_consumption_breakdown(resource_key, component_sources, overall_totals, calculated_values, target, rolling_consumption):
+def build_resource_consumption_breakdown(resource_key, component_sources, overall_totals, calculated_values, target, rolling_consumption, tagged_sources=None):
     entries = []
     total_value = calculated_values.get("resource_consumption", {}).get(resource_key, 0)
 
-    for label, source in component_sources.items():
-        if not source:
-            continue
-        value = source.get(resource_key + "_consumption", 0) + source.get("resource_consumption", 0)
-        if value:
-            entries.append({"label": label.title(), "value": value})
+    if tagged_sources is not None:
+        entries.extend(collect_detailed_field_contributions(
+            [resource_key + "_consumption", "resource_consumption"], tagged_sources
+        ))
+        # Jobs: break down per job type
+        job_details = calculated_values.get("job_details", {})
+        jobs_assigned = target.get("jobs", {})
+        for job_key, count in jobs_assigned.items():
+            if count and job_key in job_details:
+                upkeep = job_details[job_key].get("upkeep", {}).get(resource_key, 0)
+                if upkeep:
+                    label = job_details[job_key].get("display_name", job_key.replace("_", " ").title())
+                    entries.append({"label": label, "value": upkeep * count})
+    else:
+        for label, source in component_sources.items():
+            if not source:
+                continue
+            value = source.get(resource_key + "_consumption", 0) + source.get("resource_consumption", 0)
+            if value:
+                entries.append({"label": label.title(), "value": value})
 
     if resource_key == "food":
         food_consumption_per_pop = 1 + overall_totals.get("food_consumption_per_pop", 0)
@@ -1879,21 +2163,34 @@ def build_resource_consumption_breakdown(resource_key, component_sources, overal
     return entries
 
 
-def build_money_income_breakdown(component_sources, overall_totals, schema_properties, calculated_values, target):
+def build_money_income_breakdown(component_sources, overall_totals, schema_properties, calculated_values, target, tagged_sources=None):
     entries = []
     base_value = schema_properties.get("money_income", {}).get("base_value", 0)
     entries.append({"label": "Base", "value": base_value})
 
-    for label, source in component_sources.items():
-        if not source:
-            continue
-        value = source.get("money_income", 0)
-        if value:
-            entries.append({"label": label.title(), "value": value})
+    if tagged_sources is not None:
+        entries.extend(collect_detailed_field_contributions("money_income", tagged_sources))
+        job_value = component_sources.get("jobs", {}).get("money_income", 0)
+        if job_value:
+            entries.append({"label": "Jobs", "value": job_value})
+    else:
+        for label, source in component_sources.items():
+            if not source:
+                continue
+            value = source.get("money_income", 0)
+            if value:
+                entries.append({"label": label.title(), "value": value})
 
-    money_income_per_pop_total = overall_totals.get("money_income_per_pop", 0)
-    if money_income_per_pop_total:
-        entries.append({"label": "Per Pop", "value": money_income_per_pop_total * calculated_values.get("pop_count", target.get("pop_count", 0))})
+    pop_count = calculated_values.get("pop_count", target.get("pop_count", 0))
+    if tagged_sources is not None:
+        for source in tagged_sources:
+            per_pop = source["modifiers"].get("money_income_per_pop", 0)
+            if per_pop:
+                entries.append({"label": source["label"], "value": round(per_pop * pop_count, 4)})
+    else:
+        money_income_per_pop_total = overall_totals.get("money_income_per_pop", 0)
+        if money_income_per_pop_total:
+            entries.append({"label": "Per Pop", "value": money_income_per_pop_total * pop_count})
 
     stockpile = target.get("money", 0)
     per_storage = overall_totals.get("money_income_per_money_storage", 0)

@@ -1569,7 +1569,7 @@ h1, h2 {
     padding: 10px 12px;
     border-radius: 6px;
     z-index: 9999;
-    max-width: 260px;
+    max-width: 400px;
     font-size: 13px;
 }
 
@@ -1587,5 +1587,7 @@ h1, h2 {
 }
 
 .context-tooltip-row {
-    white-space: nowrap;
+    overflow-wrap: break-word;
+    word-break: break-word;
+    max-width: 400px;
 }

@@ -90,7 +90,13 @@
 						</tr>
 						<tr>
 							<th>{{ schema.properties.karma.label }}:</th>
-							<td>{{ nation.karma }}</td>
+							<td>
+								<span
+									class="context-tooltip"
+									data-tooltip-title="Karma"
+									data-breakdown='{{ breakdowns.get("karma", [])|tojson }}'
+								>{{ nation.karma }}</span>
+							</td>
 						</tr>
 						<tr>
 							<th>{{ schema.properties.rolling_karma.label }}:</th>
@@ -694,12 +700,16 @@
 			</div>
 			<div class="section-content">
 				<div class="table-wrapper">
-					{%- macro stat_cell(eff, base, stat) -%}
+					{%- macro stat_cell(eff, base, stat, breakdown) -%}
 					{%- set ev = eff.get(stat) -%}
 					{%- set bv = base.get(stat) -%}
+					{%- set entries = breakdown.get(stat, []) -%}
 					{%- if ev is not none -%}
-						{%- if ev != bv -%}
-							<td class="unit-stat-cell unit-stat-modified" title="Base: {{ bv }}">{{ ev }}</td>
+						{%- if entries -%}
+							{%- set bd_list = [{"label": "Base", "value": bv}] + entries -%}
+							<td class="unit-stat-cell unit-stat-modified context-tooltip"
+								data-tooltip-title="{{ stat | replace('_', ' ') | title }}"
+								data-breakdown='{{ bd_list | tojson }}'>{{ ev }}</td>
 						{%- else -%}
 							<td class="unit-stat-cell">{{ ev }}</td>
 						{%- endif -%}
@@ -730,18 +740,19 @@
 							{% for unit_key, unit in unit_details.items() %}
 								{%- set s = unit.get("effective_stats", unit.get("base_stats", {})) -%}
 								{%- set b = unit.get("base_stats", {}) -%}
+								{%- set bd = unit.get("stat_breakdown", {}) -%}
 								<tr>
 									<td>{{ unit.display_name }}{% if unit.get("is_magical") %} <span class="unit-magic-tag" title="Magical unit">✦</span>{% endif %}</td>
 									<td class="unit-stat-cell">{{ counts_dict.get(unit_key, 0) }}</td>
-									{{ stat_cell(s, b, "attack") }}
-									{{ stat_cell(s, b, "defense") }}
-									{{ stat_cell(s, b, "hp") }}
-									{{ stat_cell(s, b, "morale") }}
-									{{ stat_cell(s, b, "damage") }}
-									{{ stat_cell(s, b, "retaliation_damage") }}
-									{{ stat_cell(s, b, "range") }}
-									{{ stat_cell(s, b, "speed") }}
-									{{ stat_cell(s, b, "armor") }}
+									{{ stat_cell(s, b, "attack", bd) }}
+									{{ stat_cell(s, b, "defense", bd) }}
+									{{ stat_cell(s, b, "hp", bd) }}
+									{{ stat_cell(s, b, "morale", bd) }}
+									{{ stat_cell(s, b, "damage", bd) }}
+									{{ stat_cell(s, b, "retaliation_damage", bd) }}
+									{{ stat_cell(s, b, "range", bd) }}
+									{{ stat_cell(s, b, "speed", bd) }}
+									{{ stat_cell(s, b, "armor", bd) }}
 									<td>
 										{% for resource, cost in unit.get("upkeep", {}).items() %}
 											{{ resource }}: {{ cost }}<br>

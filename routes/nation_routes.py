@@ -172,12 +172,12 @@ def nation_item(item_ref):
     timings["render_template_ms"] = round((perf_counter() - phase_start) * 1000, 2)
     timings["total_request_ms"] = round((perf_counter() - request_start) * 1000, 2)
 
-    current_app.logger.info(
-        "Nation page timing: nation=%s timings=%s calc_timings=%s",
-        item_ref,
-        timings,
-        calc_timings
-    )
+    # current_app.logger.info(
+    #     "Nation page timing: nation=%s timings=%s calc_timings=%s",
+    #     item_ref,
+    #     timings,
+    #     calc_timings
+    # )
 
     return rendered
 
