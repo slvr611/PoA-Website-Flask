@@ -118,7 +118,9 @@
 		"tier": 1,
 		"type": "positive",
 		"modifiers": {
-			"nation_money_income": 60
+			"nation_money_income": 60,
+			"merchant_income": 60,
+			"mercenary_budget": 60
 		}
 	},
 	"the_wealthy": {
@@ -126,7 +128,9 @@
 		"tier": 2,
 		"type": "positive",
 		"modifiers": {
-			"nation_money_income": 120
+			"nation_money_income": 120,
+			"merchant_income": 120,
+			"mercenary_budget": 120
 		}
 	},
 	"the_golden": {
@@ -134,7 +138,9 @@
 		"tier": 3,
 		"type": "positive",
 		"modifiers": {
-			"nation_money_income": 180
+			"nation_money_income": 180,
+			"merchant_income": 180,
+			"mercenary_budget": 180
 		}
 	},
 	"the_fair": {
@@ -244,7 +250,8 @@
 		"tier": 1,
 		"type": "positive",
 		"modifiers": {
-			"nation_food_production": 1
+			"nation_food_production": 1,
+			"merchant_resource_production": 1
 		}
 	},
 	"the_countryman": {
@@ -252,7 +259,8 @@
 		"tier": 2,
 		"type": "positive",
 		"modifiers": {
-			"nation_food_production": 2
+			"nation_food_production": 2,
+			"merchant_resource_production": 2
 		}
 	},
 	"the_green": {
@@ -260,7 +268,8 @@
 		"tier": 3,
 		"type": "positive",
 		"modifiers": {
-			"nation_food_production": 4
+			"nation_food_production": 4,
+			"merchant_resource_production": 4
 		}
 	},
 	"the_tireless": {

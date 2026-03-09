@@ -121,7 +121,9 @@
 		"tier": 1,
 		"type": "negative",
 		"modifiers": {
-			"nation_money_income": -45
+			"nation_money_income": -45,
+			"merchant_income": -45,
+			"mercenary_budget": -45
 		}
 	},
 	"the_pauper": {
@@ -129,7 +131,9 @@
 		"tier": 2,
 		"type": "negative",
 		"modifiers": {
-			"nation_money_income": -75
+			"nation_money_income": -75,
+			"merchant_income": -75,
+			"mercenary_budget": -75
 		}
 	},
 	"the_beggar": {
@@ -137,7 +141,9 @@
 		"tier": 3,
 		"type": "negative",
 		"modifiers": {
-			"nation_money_income": -105
+			"nation_money_income": -105,
+			"merchant_income": -105,
+			"mercenary_budget": -105
 		}
 	},
 	"the_hypocrite": {
@@ -241,7 +247,8 @@
 		"tier": 1,
 		"type": "negative",
 		"modifiers": {
-			"nation_food_production": -1
+			"nation_food_production": -1,
+			"merchant_resource_production": -1
 		}
 	},
 	"the_stranger": {
@@ -249,7 +256,8 @@
 		"tier": 2,
 		"type": "negative",
 		"modifiers": {
-			"nation_food_production": -2
+			"nation_food_production": -2,
+			"merchant_resource_production": -2
 		}
 	},
 	"the_black_thumb": {
@@ -257,7 +265,8 @@
 		"tier": 3,
 		"type": "negative",
 		"modifiers": {
-			"nation_food_production": -4
+			"nation_food_production": -4,
+			"merchant_resource_production": -4
 		}
 	},
 	"the_lazy": {

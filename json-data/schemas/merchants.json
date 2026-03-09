@@ -12,6 +12,12 @@
       "location"
     ],
     "sort": "location",
+    "external_calculation_requirements": {
+      "leaders": [
+        "positive_titles",
+        "negative_titles"
+      ]
+    },
     "properties": {
       "name": {
         "bsonType": "string",
@@ -189,6 +195,41 @@
               "bsonType": "string",
               "label": "Link",
               "description": "The link to the quest"
+            }
+          }
+        }
+      },
+      "modifiers": {
+        "bsonType": "array",
+        "label": "Ongoing Modifiers",
+        "description": "The ongoing modifiers currently affecting this merchant company",
+        "items": {
+          "bsonType": "object",
+          "properties": {
+            "_id": {
+              "bsonType": "string",
+              "label": "Item ID",
+              "description": "Stable identifier for change tracking across reorders"
+            },
+            "field": {
+              "bsonType": "string",
+              "label": "Modifier Field",
+              "description": "The calculated field the modifier affects"
+            },
+            "value": {
+              "bsonType": "number",
+              "label": "Modifier Value",
+              "description": "The value of the modifier"
+            },
+            "duration": {
+              "bsonType": "number",
+              "label": "Modifier Duration",
+              "description": "The duration of the modifier"
+            },
+            "source": {
+              "bsonType": "string",
+              "label": "Modifier Source",
+              "description": "The source of the modifier"
             }
           }
         }

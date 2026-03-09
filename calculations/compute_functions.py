@@ -453,6 +453,13 @@ def compute_resource_production(field, target, base_value, field_schema, overall
         if overall_total_modifiers.get(resource["key"] + "_production_per_naval_unit", 0) > 0:
             specific_resource_production += int(math.floor(naval_unit_count * overall_total_modifiers.get(resource["key"] + "_production_per_naval_unit", 0)))
         
+        if resource["key"] == "food":
+            food_stockpile = target.get("resource_storage", {}).get("food", 0)
+            food_production_per_stockpiled_food = overall_total_modifiers.get("food_production_per_stockpiled_food", 0)
+            max_food_production_per_stockpiled_food = overall_total_modifiers.get("max_food_production_per_stockpiled_food", 0)
+            if food_production_per_stockpiled_food > 0:
+                specific_resource_production += min(food_stockpile // food_production_per_stockpiled_food, max_food_production_per_stockpiled_food)
+
         if resource["key"] == "research":
             pop_database = category_data["pops"]["database"]
             pops = pop_database.find({"nation": str(target.get("_id", ""))})

@@ -847,12 +847,336 @@ def _get_unit_stat_prefixes(unit_type_str, is_support, is_magical, roles, base_n
     return prefixes
 
 
+# ---------------------------------------------------------------------------
+# Universal labeled modifier helpers
+# ---------------------------------------------------------------------------
+
+_EXTERNAL_FIELD_LABEL_MAP = {
+    "overlord": "Overlord",
+    "primary_religion": "Religion",
+    "wonders": "Wonder",
+    "region": "Region",
+    "vassals": "Vassal",
+    "markets": "Market",
+    "owned_markets": "Owned Market",
+    "pops": "Pop",
+}
+
+
+def _field_label_prefix(field_name):
+    """Human-readable label prefix for an external_calculation_requirements field."""
+    return _EXTERNAL_FIELD_LABEL_MAP.get(field_name, field_name.replace("_", " ").title())
+
+
+def _strip_modifier_key(key, target_data_type, modifier_prefix):
+    """Strip the target_data_type (with optional modifier_prefix) from a modifier key.
+
+    Returns (stripped_key, matched).  If neither prefix matches, matched=False and
+    stripped_key equals the original key.
+    """
+    if modifier_prefix:
+        full_prefix = f"{modifier_prefix}_{target_data_type}_"
+        if key.startswith(full_prefix):
+            return key[len(full_prefix):], True
+    std_prefix = f"{target_data_type}_"
+    if key.startswith(std_prefix):
+        return key[len(std_prefix):], True
+    return key, False
+
+
+def _apply_special_mod_multipliers(stripped_key, val, obj, linked_schema):
+    """Apply _per_market_tier and _per_member special multipliers.
+
+    Returns (final_key, final_val).
+    """
+    final_key = stripped_key
+    final_val = val
+
+    if "_per_market_tier" in final_key:
+        schema_props = (linked_schema or {}).get("properties", {})
+        tier_mult = (
+            schema_props.get("tier", {})
+            .get("laws", {})
+            .get(obj.get("tier", "I"), {})
+            .get("tier_multiplier", 1)
+        )
+        if tier_mult > 0:
+            final_val = val * tier_mult
+        elif "market" in schema_props and obj.get("market"):
+            mkt = mongo.db["markets"].find_one({"_id": ObjectId(obj["market"])})
+            if mkt:
+                tier_mult = (
+                    category_data["markets"]["schema"]
+                    .get("properties", {})
+                    .get("tier", {})
+                    .get("laws", {})
+                    .get(mkt.get("tier", "I"), {})
+                    .get("tier_multiplier", 1)
+                )
+                final_val = val * tier_mult
+        final_key = final_key.replace("_per_market_tier", "")
+
+    if "_per_member" in final_key:
+        member_count = mongo.db["market_links"].count_documents({"market": str(obj.get("_id", ""))})
+        final_val = final_val * member_count
+        final_key = final_key.replace("_per_member", "")
+
+    return final_key, final_val
+
+
+def _extract_labeled_from_object(obj, required_fields, linked_schema, target_data_type,
+                                  modifier_prefix, base_label, field_name=""):
+    """Extract labeled modifier entries from a single linked object.
+
+    Returns [{"label": str, "modifiers": dict}].
+
+    Plain modifiers (external_modifiers arrays, modifier arrays, titles, nodes) are
+    grouped under *base_label*.  Enum-law fields get their own sub-label that includes
+    the selected value so the tooltip is self-explanatory.
+
+    Keys that cannot be matched to target_data_type produce a DEBUG print and are
+    skipped so they don't silently corrupt totals.
+    """
+    schema_props = (linked_schema or {}).get("properties", {})
+    plain_mods = {}        # accumulated under base_label
+    per_field_entries = [] # entries needing their own enum sub-label
+
+    for req_field in required_fields:
+        if isinstance(req_field, dict):
+            # Nested requirement (e.g., {"artifacts": [...]}) – handled elsewhere.
+            continue
+
+        if req_field not in obj:
+            continue
+
+        req_field_schema = schema_props.get(req_field, {})
+        field_type = req_field_schema.get("bsonType", "")
+
+        # ── external_modifiers array ──────────────────────────────────────
+        if field_type == "array" and req_field == "external_modifiers":
+            for modifier in obj[req_field]:
+                if modifier.get("type") != target_data_type:
+                    continue
+                key = modifier.get("modifier", "")
+                val = modifier.get("value", 0)
+                if key and val:
+                    plain_mods[key] = plain_mods.get(key, 0) + val
+
+        # ── enum field with laws (stances, traits, types …) ──────────────
+        elif field_type == "enum" and req_field_schema.get("laws"):
+            field_value = obj.get(req_field, "")
+            if not field_value or field_value == "None":
+                continue
+            law_mods = req_field_schema["laws"].get(field_value, {})
+            entry_mods = {}
+            for key, val in law_mods.items():
+                stripped, matched = _strip_modifier_key(key, target_data_type, modifier_prefix)
+                if not matched:
+                    print(
+                        f"[MODIFIER DEBUG] Unmatched enum law key: "
+                        f"field_name='{field_name}', source_label='{base_label}', "
+                        f"req_field='{req_field}', field_value='{field_value}', "
+                        f"key='{key}', val={val}, "
+                        f"target_data_type='{target_data_type}', modifier_prefix='{modifier_prefix}'"
+                    )
+                    continue
+                final_key, final_val = _apply_special_mod_multipliers(stripped, val, obj, linked_schema)
+                if final_val:
+                    entry_mods[final_key] = entry_mods.get(final_key, 0) + final_val
+            if entry_mods:
+                field_label = req_field_schema.get("label", req_field.replace("_", " ").title())
+                sub_label = f"{base_label} ({field_label}: {field_value})"
+                per_field_entries.append({"label": sub_label, "modifiers": entry_mods})
+
+        # ── modifiers array ({field, value} objects) ──────────────────────
+        elif field_type == "array" and req_field == "modifiers":
+            for modifier in obj[req_field]:
+                mod_field = modifier.get("field", "")
+                mod_val = modifier.get("value", 0)
+                stripped, matched = _strip_modifier_key(mod_field, target_data_type, modifier_prefix)
+                if matched and mod_val:
+                    plain_mods[stripped] = plain_mods.get(stripped, 0) + mod_val
+                elif not matched and mod_val:
+                    print(
+                        f"[MODIFIER DEBUG] Unmatched modifier in array: "
+                        f"field_name='{field_name}', source_label='{base_label}', "
+                        f"mod_field='{mod_field}', mod_val={mod_val}, "
+                        f"target_data_type='{target_data_type}', modifier_prefix='{modifier_prefix}'"
+                    )
+
+        # ── title arrays ──────────────────────────────────────────────────
+        elif field_type == "array" and req_field in ("positive_titles", "negative_titles"):
+            title_mods = calculate_title_modifiers(obj[req_field], target_data_type, schema_props)
+            for k, v in title_mods.items():
+                if v:
+                    plain_mods[k] = plain_mods.get(k, 0) + v
+
+        # ── wonder node (json_resource_enum) ─────────────────────────────
+        elif field_type == "json_resource_enum" and req_field == "node":
+            resource = obj.get(req_field)
+            if resource:
+                plain_mods[f"{resource}_nodes"] = plain_mods.get(f"{resource}_nodes", 0) + 1
+
+        # ── catch-all: unknown field type ─────────────────────────────────
+        else:
+            print(
+                f"[MODIFIER DEBUG] Unknown field type in labeled extraction: "
+                f"field_name='{field_name}', source_label='{base_label}', "
+                f"req_field='{req_field}', field_type='{field_type}', "
+                f"obj_keys={list(obj.keys())[:10]}"
+            )
+
+    result = []
+    if plain_mods:
+        result.append({"label": base_label, "modifiers": plain_mods})
+    result.extend(per_field_entries)
+    return result
+
+
+def _collect_external_labeled(target, schema, target_data_type):
+    """Build labeled tagged sources for all external_calculation_requirements.
+
+    Skips 'rulers' and 'primary_race' because those are already handled with
+    richer labeling inside _build_unit_tagged_sources.
+
+    Returns [{"label": str, "modifiers": dict}].
+    """
+    SKIP_FIELDS = {"rulers", "primary_race"}
+    tagged = []
+    external_reqs = schema.get("external_calculation_requirements", {})
+    schema_properties = schema.get("properties", {})
+
+    # ── Global modifiers ─────────────────────────────────────────────────
+    try:
+        for global_mod in mongo.db["global_modifiers"].find():
+            mods = {}
+            for modifier in global_mod.get("external_modifiers", []):
+                if modifier.get("type") == target_data_type:
+                    key = modifier.get("modifier", "")
+                    val = modifier.get("value", 0)
+                    if key and val:
+                        mods[key] = mods.get(key, 0) + val
+            if mods:
+                tagged.append({
+                    "label": f"Global: {global_mod.get('name', 'Global Modifier')}",
+                    "modifiers": mods,
+                })
+    except Exception as exc:
+        print(f"[MODIFIER DEBUG] Error processing global modifiers: {exc}")
+
+    # ── Per-field external requirements ──────────────────────────────────
+    for field_name, required_fields in external_reqs.items():
+        if field_name in SKIP_FIELDS:
+            continue
+
+        field_schema = schema_properties.get(field_name, {})
+        collections = field_schema.get("collections")
+        if not collections:
+            continue
+
+        modifier_prefix = None
+        if isinstance(required_fields, dict):
+            modifier_prefix = required_fields.get("modifier_prefix")
+            required_fields = required_fields.get("fields", [])
+
+        if required_fields is None:
+            required_fields = []
+        elif not isinstance(required_fields, list):
+            required_fields = [required_fields]
+
+        # Filter out nested dicts (handled elsewhere / skipped for now)
+        plain_required = [f for f in required_fields if isinstance(f, str)]
+        if not plain_required:
+            continue
+
+        label_prefix = _field_label_prefix(field_name)
+
+        for collection in collections:
+            linked_schema = category_data.get(collection, {}).get("schema", {})
+            try:
+                # ── join-table pattern (markets, owned_markets, vassals via linkCollection) ──
+                if field_schema.get("linkCollection") and field_schema.get("linkQueryTarget"):
+                    link_collection = field_schema["linkCollection"]
+                    link_query_target = field_schema["linkQueryTarget"]
+                    query_target = field_schema.get("queryTarget")
+                    if not query_target:
+                        continue
+
+                    links = list(mongo.db[link_collection].find(
+                        {link_query_target: str(target.get("_id", ""))},
+                    ))
+                    for link in links:
+                        # Resolve target object to get a name for the label
+                        tgt_obj_name = "Unknown"
+                        tgt_obj = None
+                        if query_target in link:
+                            tgt_obj = mongo.db[collection].find_one({"_id": ObjectId(link[query_target])})
+                            if tgt_obj:
+                                tgt_obj_name = tgt_obj.get("name", tgt_obj.get("display_name", "Unknown"))
+
+                        obj_label = f"{label_prefix}: {tgt_obj_name}"
+                        link_schema = category_data.get(link_collection, {}).get("schema", {})
+
+                        # Extract from the link row itself
+                        tagged.extend(_extract_labeled_from_object(
+                            link, plain_required, link_schema,
+                            target_data_type, modifier_prefix, obj_label, field_name,
+                        ))
+                        # Extract from the target object
+                        if tgt_obj is not None:
+                            tagged.extend(_extract_labeled_from_object(
+                                tgt_obj, plain_required, linked_schema,
+                                target_data_type, modifier_prefix, obj_label, field_name,
+                            ))
+
+                # ── queryTargetAttribute pattern (wonders, vassals, owned_markets) ──
+                elif field_schema.get("queryTargetAttribute"):
+                    query_attr = field_schema["queryTargetAttribute"]
+                    if "_id" not in target:
+                        continue
+                    linked_objects = list(mongo.db[collection].find(
+                        {query_attr: str(target["_id"])}
+                    ))
+                    for obj in linked_objects:
+                        if not obj.get("equipped", True):
+                            continue
+                        obj_name = obj.get("name", obj.get("display_name", "Unknown"))
+                        obj_label = f"{label_prefix}: {obj_name}"
+                        tagged.extend(_extract_labeled_from_object(
+                            obj, plain_required, linked_schema,
+                            target_data_type, modifier_prefix, obj_label, field_name,
+                        ))
+
+                # ── simple direct-link pattern (overlord, religion, region) ──
+                else:
+                    object_id = target.get(field_name)
+                    if not object_id:
+                        continue
+                    obj = mongo.db[collection].find_one({"_id": ObjectId(object_id)})
+                    if not obj:
+                        continue
+                    obj_name = obj.get("name", obj.get("display_name", "Unknown"))
+                    obj_label = f"{label_prefix}: {obj_name}"
+                    tagged.extend(_extract_labeled_from_object(
+                        obj, plain_required, linked_schema,
+                        target_data_type, modifier_prefix, obj_label, field_name,
+                    ))
+
+            except Exception as exc:
+                print(
+                    f"[MODIFIER DEBUG] Error processing field '{field_name}' "
+                    f"collection '{collection}': {exc}"
+                )
+
+    return tagged
+
+
 def _build_unit_tagged_sources(target, schema, district_details):
-    """Build a list of labeled modifier sources for unit stat breakdown.
+    """Build a comprehensive list of labeled modifier sources for nation/unit breakdown.
 
     Returns list of {"label": str, "modifiers": dict}.  Each entry represents one
     distinct source (a law option, a district, a nation modifier, a technology, a city,
-    a ruler modifier, or an artifact).
+    a ruler modifier, an artifact, a racial trait, or any external source).
     """
     tagged = []
     schema_properties = schema.get("properties", {})
@@ -982,6 +1306,34 @@ def _build_unit_tagged_sources(target, schema, district_details):
                                 "label": f"Artifact: {artifact_name}",
                                 "modifiers": {mod_key: mod_val},
                             })
+
+    # Primary race traits (positive_trait / negative_trait)
+    primary_race_id = target.get("primary_race")
+    if primary_race_id:
+        try:
+            race = category_data["races"]["database"].find_one(
+                {"_id": ObjectId(primary_race_id)},
+                {"name": 1, "positive_trait": 1, "negative_trait": 1},
+            )
+            if race:
+                race_name = race.get("name", "Unknown Race")
+                race_schema_props = category_data["races"]["schema"].get("properties", {})
+                for trait_field in ("positive_trait", "negative_trait"):
+                    trait_value = race.get(trait_field, "")
+                    if not trait_value or trait_value == "None":
+                        continue
+                    trait_laws = race_schema_props.get(trait_field, {}).get("laws", {})
+                    raw_mods = trait_laws.get(trait_value, {})
+                    # Strip "nation_" prefix; skip keys that don't apply to nations
+                    stripped = {k[len("nation_"):]: v for k, v in raw_mods.items() if k.startswith("nation_")}
+                    if stripped:
+                        tagged.append({"label": f"Race: {race_name} ({trait_value})", "modifiers": stripped})
+        except Exception:
+            pass
+
+    # All remaining external sources (global mods, religion, wonders, region,
+    # overlord/vassal stances, markets) — labeled automatically.
+    tagged.extend(_collect_external_labeled(target, schema, "nation"))
 
     return tagged
 
@@ -2110,6 +2462,16 @@ def build_resource_production_breakdown(resource_key, component_sources, overall
         homogeneity_bonus = overall_totals.get("research_production_if_religously_homogeneous", 0)
         if homogeneity_bonus:
             entries.append({"label": "Religious Homogeneity", "value": homogeneity_bonus})
+
+    # Mill: food production from food storage
+    if resource_key == "food":
+        food_stockpile = target.get("resource_storage", {}).get("food", 0)
+        per_stockpiled = overall_totals.get("food_production_per_stockpiled_food", 0)
+        max_per_stockpiled = overall_totals.get("max_food_production_per_stockpiled_food", 0)
+        if per_stockpiled > 0:
+            mill_bonus = min(food_stockpile // per_stockpiled, max_per_stockpiled)
+            if mill_bonus:
+                entries.append({"label": "Mill (Stockpile)", "value": mill_bonus})
 
     # Locks
     if overall_totals.get("locks_" + resource_key + "_production", 0) > 0:
