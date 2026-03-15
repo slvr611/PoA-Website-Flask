@@ -858,7 +858,7 @@ class BaseSchemaForm(FlaskForm):
                 field = getattr(self, field_name)
                 if field:
                     self.populate_select_field(field_name, self[field_name], schema, dropdown_options)
-            elif field_schema.get("bsonType") == "array" and (field_schema.get("items", {}).get("bsonType") == "json_district_enum" or field_schema.get("items", {}).get("bsonType") == "json_unit_enum"):
+            elif field_schema.get("bsonType") == "array" and (field_schema.get("items", {}).get("bsonType") == "json_district_enum" or field_schema.get("items", {}).get("bsonType") == "json_unit_enum" or field_schema.get("items", {}).get("bsonType") == "db_unit_enum"):
                 field = getattr(self, field_name)
                 if field.entries:
                     for entry in field.entries:
@@ -1180,7 +1180,11 @@ class DynamicSchemaForm(BaseSchemaForm):
                     combined_data.update(json_data[file_name])
                 subfield.choices = [("", "None")] + [(key, data.get("display_name", key))
                 for key, data in combined_data.items()]
-                
+
+                return FieldList(subfield, min_entries=0)
+
+            elif items_type == "db_unit_enum":
+                subfield = SelectField("Value", choices=[("", "None")])
                 return FieldList(subfield, min_entries=0)
                 
             elif items_type == "linked_object":

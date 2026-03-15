@@ -306,7 +306,27 @@
 											{% endfor %}
 										</ul>
 									</td>
-								{% elif properties.get("items", {}).get("bsonType", "None") == "json_resource_enum" %}
+								{% elif properties.get("items", {}).get("bsonType", "None") == "db_unit_enum" %}
+								<td>
+									<ul>
+										{% set length = item[field]|length %}
+										{% set max_length = properties.get("max_length") %}
+										{% if max_length and max_length is string %}
+											{% set max_length = item.get(max_length, 0) %}
+										{% endif %}
+										{% if max_length and length < max_length %}
+											{% set length = max_length %}
+										{% endif %}
+										{% for i in range(0, length) %}
+											{% if item.get(field, [])[i] %}
+												<li>{{ item.get(field, [])[i] }}</li>
+											{% else %}
+												<li>None</li>
+											{% endif %}
+										{% endfor %}
+									</ul>
+								</td>
+							{% elif properties.get("items", {}).get("bsonType", "None") == "json_resource_enum" %}
 									<td>
 										<ul>
 											{% set length = item[field]|length %}
