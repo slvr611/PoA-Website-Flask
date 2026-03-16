@@ -505,9 +505,16 @@ def keep_only_differences_dict(before_data, after_data):
         current_before = before_data.get(key)
         current_after = after_data.get(key)
         if isinstance(current_before, dict) and isinstance(current_after, dict):
-            temp_before, temp_after = keep_only_differences_dict(current_before, current_after)
-            if len(temp_before) > 0 or len(temp_after) > 0:
-                new_before[key], new_after[key] = temp_before, temp_after
+            if not current_after and current_before:
+                # after is explicitly empty but before had data (e.g. vassal
+                # concessions reset to {}).  Record as a direct replacement so
+                # the change is not silently dropped by the empty-loop guard.
+                new_before[key] = current_before
+                new_after[key] = {}
+            else:
+                temp_before, temp_after = keep_only_differences_dict(current_before, current_after)
+                if len(temp_before) > 0 or len(temp_after) > 0:
+                    new_before[key], new_after[key] = temp_before, temp_after
         elif isinstance(current_before, list) and isinstance(current_after, list):
             temp_before, temp_after = keep_only_differences_list(current_before, current_after)
             if not deep_compare(temp_before, temp_after):  #If the lists are the same, don't include them in the new data. This is because the lists are already in the database and don't need to be updated. If they are different, include them in the new data. This is because the lists have been updated and need to be updated in the database.
