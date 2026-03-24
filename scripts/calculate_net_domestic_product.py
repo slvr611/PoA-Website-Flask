@@ -119,6 +119,12 @@ def compute_base_net_value(
     nation_copy["jobs"] = {
         job: count for job, count in nation_jobs.items() if job in locked_jobs
     }
+    #nation_copy["consumption_stance"] = "Standard"
+    #nation_copy["science_stance"] = "Pragmatic"
+    #nation_copy["tax_stance"] = "Low"
+    nation_copy["land_units"] = []
+    nation_copy["naval_units"] = []
+    nation_copy["support_units"] = []
     modifiers = nation_copy.get("modifiers", [])
     if isinstance(modifiers, list):
         nation_copy["modifiers"] = [
@@ -126,6 +132,7 @@ def compute_base_net_value(
             for modifier in modifiers
             if isinstance(modifier, dict)
             and (modifier.get("duration", -1) == -1 or modifier.get("duration", 0) >= 3)
+            and modifier.get("key") != "magic_consumption"
         ]
     technologies = nation_copy.get("technologies", {})
     if isinstance(technologies, dict):
