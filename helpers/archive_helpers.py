@@ -6,7 +6,7 @@ from app_core import mongo, upload_to_s3
 # Number of sessions (ticks) of non-pending changes to retain.
 # Changes approved/denied more than this many sessions ago will be
 # exported to S3 and deleted from MongoDB on each tick.
-ARCHIVE_AFTER_N_SESSIONS = 5
+ARCHIVE_AFTER_N_SESSIONS = 20
 
 
 def archive_old_changes(current_session):
