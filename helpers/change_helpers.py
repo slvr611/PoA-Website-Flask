@@ -226,6 +226,8 @@ def approve_change(change_id):
 
     changes_collection = mongo.db.changes
     now = datetime.now(timezone.utc)
+    global_modifiers = mongo.db["global_modifiers"].find_one({"name": "global_modifiers"})
+    session_number = global_modifiers.get("session_counter", 0) if global_modifiers else 0
     change = changes_collection.find_one({"_id": change_id})
     target_collection = category_data[change["target_collection"]]["database"]
 
@@ -239,6 +241,7 @@ def approve_change(change_id):
             "time_implemented": now,
             "last_modified_time": now,
             "approver": approver["_id"],
+            "session_number": session_number,
             "before_implemented_data": {},
             "after_implemented_data": after_data
         }})
@@ -270,6 +273,7 @@ def approve_change(change_id):
                 "time_implemented": now,
                 "last_modified_time": now,
                 "approver": approver["_id"],
+                "session_number": session_number,
                 "before_implemented_data": before_data,
                 "after_implemented_data": after_data
             }})
@@ -298,6 +302,8 @@ def system_approve_change(change_id):
 
     changes_collection = mongo.db.changes
     now = datetime.now(timezone.utc)
+    global_modifiers = mongo.db["global_modifiers"].find_one({"name": "global_modifiers"})
+    session_number = global_modifiers.get("session_counter", 0) if global_modifiers else 0
     change = changes_collection.find_one({"_id": change_id})
     target_collection = category_data[change["target_collection"]]["database"]
 
@@ -312,6 +318,7 @@ def system_approve_change(change_id):
             "time_implemented": now,
             "last_modified_time": now,
             "approver": approver["_id"],
+            "session_number": session_number,
             "before_implemented_data": {},
             "after_implemented_data": after_data
         }})
@@ -342,6 +349,7 @@ def system_approve_change(change_id):
                 "time_implemented": now,
                 "last_modified_time": now,
                 "approver": approver["_id"],
+                "session_number": session_number,
                 "before_implemented_data": target,
                 "after_implemented_data": after_data
             }})
@@ -377,6 +385,8 @@ def force_approve_change(change_id):
 
     changes_collection = mongo.db.changes
     now = datetime.now(timezone.utc)
+    global_modifiers = mongo.db["global_modifiers"].find_one({"name": "global_modifiers"})
+    session_number = global_modifiers.get("session_counter", 0) if global_modifiers else 0
     change = changes_collection.find_one({"_id": change_id})
     target_collection = category_data[change["target_collection"]]["database"]
     after_data = change["after_requested_data"]
@@ -398,6 +408,7 @@ def force_approve_change(change_id):
         "time_implemented": now,
         "last_modified_time": now,
         "approver": approver["_id"],
+        "session_number": session_number,
         "before_implemented_data": before_data,
         "after_implemented_data": after_data
     }})
@@ -417,12 +428,15 @@ def deny_change(change_id):
 
     changes_collection = mongo.db.changes
     now = datetime.now(timezone.utc)
+    global_modifiers = mongo.db["global_modifiers"].find_one({"name": "global_modifiers"})
+    session_number = global_modifiers.get("session_counter", 0) if global_modifiers else 0
 
     changes_collection.update_one({"_id": change_id}, {"$set": {
         "status": "Rejected",
         "time_rejected": now,
         "last_modified_time": now,
-        "denier": denier["_id"]
+        "denier": denier["_id"],
+        "session_number": session_number
     }})
     return True
 

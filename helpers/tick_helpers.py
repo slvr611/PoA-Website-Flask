@@ -4,6 +4,7 @@ from helpers.data_helpers import get_data_on_category
 from calculations.field_calculations import calculate_all_fields
 from pymongo import ASCENDING
 from helpers.change_helpers import system_request_change, system_approve_change
+from helpers.archive_helpers import archive_old_changes
 from app_core import mongo, json_data, upload_to_s3, character_stats
 from flask import flash
 from app_core import backup_mongodb_async, category_data, temperament_enum, base_temperament_odds, cultural_trait_temperament_modifiers
@@ -353,6 +354,11 @@ def tick(form_data):
                 reason="Tick Update for " + old_nations[i]["name"]
             )
             system_approve_change(change_id)
+
+    global_modifiers_refreshed = mongo.db["global_modifiers"].find_one({"name": "global_modifiers"})
+    current_session = global_modifiers_refreshed.get("session_counter", 0) if global_modifiers_refreshed else 0
+    archive_message = archive_old_changes(current_session)
+    full_tick_summary += f"\n\nArchival: {archive_message}"
 
     if "run_Give Tick Summary" in form_data:
         give_tick_summary(player_tick_summary, full_tick_summary)
