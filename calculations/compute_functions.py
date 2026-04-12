@@ -216,6 +216,23 @@ def compute_pop_count(field, target, base_value, field_schema, overall_total_mod
     
     return int(pop_count)
 
+def compute_effective_pop_capacity(field, target, base_value, field_schema, overall_total_modifiers):
+    effective_pop_cap_from_vassals = 0
+    if overall_total_modifiers.get("nomad_pop_capacity_per_vassal", 0) > 0 and overall_total_modifiers.get("nomadic", 0) > 0:
+        nation_database = category_data["nations"]["database"]
+        target_id = str(target.get("_id", ""))
+        calc_cache = target.get("_calc_cache", {})
+        if "vassal_count" in calc_cache:
+            vassal_count = int(calc_cache.get("vassal_count", 0))
+        else:
+            vassal_count = int(nation_database.count_documents({"overlord": target_id}))
+
+        effective_pop_cap_from_vassals = vassal_count * overall_total_modifiers.get("nomad_pop_capacity_per_vassal", 0)
+    
+    effective_pop_cap = base_value + overall_total_modifiers.get(field, 0) + effective_pop_cap_from_vassals
+    
+    return effective_pop_cap
+
 def compute_minority_count(field, target, base_value, field_schema, overall_total_modifiers):
     pop_database = category_data["pops"]["database"]
     target_id = str(target.get("_id", ""))
@@ -914,6 +931,7 @@ CUSTOM_COMPUTE_FUNCTIONS = {
     "concessions_qty": compute_concessions_qty,
     "working_pop_count": compute_working_pop_count,
     "pop_count": compute_pop_count,
+    "effective_pop_capacity": compute_effective_pop_capacity,
     "unique_minority_count": compute_minority_count,
     "stability_gain_chance": compute_stability_gain_chance,
     "stability_loss_chance": compute_stability_loss_chance,
