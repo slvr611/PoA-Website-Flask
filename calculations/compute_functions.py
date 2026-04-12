@@ -229,7 +229,7 @@ def compute_effective_pop_capacity(field, target, base_value, field_schema, over
 
         effective_pop_cap_from_vassals = vassal_count * overall_total_modifiers.get("nomad_pop_capacity_per_vassal", 0)
     
-    effective_pop_cap = base_value + overall_total_modifiers.get(field, 0) + effective_pop_cap_from_vassals
+    effective_pop_cap = int(base_value + overall_total_modifiers.get(field, 0) + effective_pop_cap_from_vassals)
     
     return effective_pop_cap
 
