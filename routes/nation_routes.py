@@ -1,11 +1,13 @@
-from flask import Blueprint, render_template, request, redirect, flash, g, current_app
+from flask import Blueprint, render_template, request, redirect, flash, g, current_app, jsonify
+import os
+import re
 from copy import deepcopy
 from helpers.data_helpers import get_data_on_category, get_data_on_item, get_dropdown_options
 from helpers.render_helpers import get_linked_objects
 from helpers.change_helpers import request_change, approve_change, system_approve_change
 from helpers.form_helpers import validate_form_with_jsonschema
 from helpers.auth_helpers import owner_required
-from app_core import category_data, mongo, json_data, find_dict_in_list
+from app_core import category_data, mongo, json_data, find_dict_in_list, upload_bytes_to_s3
 from helpers.auth_helpers import admin_required
 from pymongo import ASCENDING
 from forms import form_generator, wtform_to_json
@@ -366,3 +368,92 @@ def nation_edit_jobs_approve(item_ref):
     print(system_approve_change(change_id))
     flash(f"Change request #{change_id} created and approved.")
     return redirect("/nations/item/" + item_ref)
+
+
+# ---------------------------------------------------------------------------
+# Nation cosmetics (accent color, banner, flag)
+# ---------------------------------------------------------------------------
+
+_NATION_IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.webp'}
+_ACCENT_COLOR_RE = re.compile(r'^#[0-9a-fA-F]{6}$')
+
+
+def _is_nation_owner_or_admin(nation_id_str):
+    if not g.user:
+        return False
+    user = mongo.db.players.find_one({"id": g.user.get("id")})
+    if not user:
+        return False
+    if user.get("is_admin"):
+        return True
+    characters = list(mongo.db.characters.find({"player": str(user["_id"])}, {"ruling_nation_org": 1}))
+    return any(str(c.get("ruling_nation_org", "")) == nation_id_str for c in characters)
+
+
+@nation_routes.route("/nations/cosmetics/<item_ref>", methods=["GET"])
+def nation_cosmetics(item_ref):
+    schema, db, nation = get_data_on_item("nations", item_ref)
+    if not _is_nation_owner_or_admin(str(nation["_id"])):
+        flash("You don't have permission to customize this nation.")
+        return redirect(f"/nations/item/{item_ref}")
+    return render_template("nation_cosmetics.html", nation=nation)
+
+
+@nation_routes.route("/nations/cosmetics/<item_ref>/save", methods=["POST"])
+def nation_cosmetics_save(item_ref):
+    schema, db, nation = get_data_on_item("nations", item_ref)
+    if not _is_nation_owner_or_admin(str(nation["_id"])):
+        flash("You don't have permission to customize this nation.")
+        return redirect(f"/nations/item/{item_ref}")
+
+    updates = {
+        "banner_url": request.form.get("banner_url", "").strip(),
+        "flag_url":   request.form.get("flag_url",   "").strip(),
+    }
+    accent = request.form.get("accent_color", "").strip()
+    if _ACCENT_COLOR_RE.match(accent):
+        updates["accent_color"] = accent
+
+    mongo.db.nations.update_one({"_id": nation["_id"]}, {"$set": updates})
+    flash("Customization saved.")
+    return redirect(f"/nations/item/{nation.get('name', item_ref)}")
+
+
+def _upload_nation_image(nation, image_type):
+    if 'image' not in request.files:
+        return jsonify({"success": False, "error": "No file provided"}), 400
+    file = request.files['image']
+    if not file.filename:
+        return jsonify({"success": False, "error": "No file selected"}), 400
+
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in _NATION_IMAGE_EXTENSIONS:
+        return jsonify({"success": False, "error": f"File type '{ext}' not allowed"}), 400
+
+    safe_name = "".join(
+        c if c.isalnum() or c in "-_" else "_"
+        for c in nation.get("name", "unknown").replace(" ", "_")
+    ).lower()
+    s3_key = f"nation_images/{safe_name}_{image_type}{ext}"
+
+    file_bytes = file.read()
+    success, result = upload_bytes_to_s3(file_bytes, s3_key, file.content_type or "image/jpeg")
+    if success:
+        return jsonify({"success": True, "url": result})
+    return jsonify({"success": False, "error": result}), 500
+
+
+@nation_routes.route("/nations/upload_banner/<item_ref>", methods=["POST"])
+def nation_upload_banner(item_ref):
+    schema, db, nation = get_data_on_item("nations", item_ref)
+    if not _is_nation_owner_or_admin(str(nation["_id"])):
+        return jsonify({"success": False, "error": "Not authorized"}), 403
+    return _upload_nation_image(nation, "banner")
+
+
+@nation_routes.route("/nations/upload_flag/<item_ref>", methods=["POST"])
+def nation_upload_flag(item_ref):
+    schema, db, nation = get_data_on_item("nations", item_ref)
+    if not _is_nation_owner_or_admin(str(nation["_id"])):
+        return jsonify({"success": False, "error": "Not authorized"}), 403
+    return _upload_nation_image(nation, "flag")

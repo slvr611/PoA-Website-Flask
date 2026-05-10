@@ -11,9 +11,13 @@ from .auth_routes import auth_routes
 from .admin_tool_routes import admin_tool_routes
 from .misc_routes import misc_routes
 from .tick_routes import tick_routes
+from .war_routes import war_routes
 
 def register_routes(app, mongo, discord):
     app.register_blueprint(base_routes)
+    # war_routes must be registered before data_item_routes so /wars/item/<ref>
+    # uses the custom war view instead of the generic dataItem template.
+    app.register_blueprint(war_routes)
     app.register_blueprint(data_item_routes)
     app.register_blueprint(change_routes)
     app.register_blueprint(nation_routes)

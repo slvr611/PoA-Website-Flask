@@ -226,9 +226,7 @@ def upload_bytes_to_s3(file_bytes, s3_key, content_type="image/jpeg"):
             s3_key,
             ExtraArgs={"ContentType": content_type}
         )
-        public_base = os.getenv("S3_PUBLIC_BASE_URL", f"https://{s3_bucket}.s3.amazonaws.com")
-        public_url = f"{public_base.rstrip('/')}/{s3_key}"
-        return True, public_url
+        return True, f"/api/s3-image/{s3_key}"
     except Exception as e:
         return False, f"S3 upload failed: {str(e)}"
 

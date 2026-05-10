@@ -1,0 +1,175 @@
+{% extends "layout.html" %}
+
+{% block title %}{{ war.name }}{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="war-nav">
+        <a href="/wars">← All Wars</a>
+        {% if g.user and g.user.get("is_admin") %}
+            &nbsp;|&nbsp; <a href="/wars/edit/{{ war_id }}">Edit</a>
+            &nbsp;|&nbsp; <a href="/wars/create">Create New War</a>
+        {% endif %}
+        &nbsp;|&nbsp; <a href="/api/war-session-data/{{ war_id }}" target="_blank">API JSON</a>
+    </div>
+
+    <h1>{{ war.name }}</h1>
+
+    {% macro render_side(side_entries, side_label, side_class) %}
+    <section class="war-side {{ side_class }}">
+        <h2 class="war-side-heading">{{ side_label }}</h2>
+        {% if not side_entries %}
+            <p class="muted">None assigned.</p>
+        {% endif %}
+        {% for entry in side_entries %}
+        <div class="war-nation-card">
+            <h3 class="war-nation-name">
+                <a href="{{ entry.link }}">{{ entry.nation.name }}</a>
+            </h3>
+
+            {% if entry.rulers %}
+            <details class="war-details">
+                <summary>Leaders ({{ entry.rulers | length }})</summary>
+                <table class="info-table war-inner-table">
+                    <thead><tr><th>Name</th><th>Type</th><th>Initiative</th></tr></thead>
+                    <tbody>
+                        {% for ruler in entry.rulers %}
+                        <tr>
+                            <td>{{ ruler.name }}</td>
+                            <td>{{ ruler.get("character_type", "—") }}</td>
+                            <td>{{ ruler.get("strategy", 0) or 0 }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </details>
+            {% endif %}
+
+            {% if entry.unit_types %}
+            <details class="war-details">
+                <summary>Units ({{ entry.unit_types | length }} type{{ 's' if entry.unit_types | length != 1 }})</summary>
+                <div class="war-units-scroll">
+                    <table class="info-table war-units-table">
+                        <thead>
+                            <tr>
+                                <th>Unit</th><th>Cnt</th><th>ATK</th><th>DEF</th>
+                                <th>HP</th><th>DMG</th><th>ARM</th><th>RNG</th>
+                                <th>Source</th><th>Modifiers</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for ut in entry.unit_types %}
+                            <tr>
+                                <td>{{ ut.name }}</td>
+                                <td>{{ ut.count }}</td>
+                                <td>{{ ut.baseAttack }}</td>
+                                <td>{{ ut.baseDefense }}</td>
+                                <td>{{ ut.baseHp }}</td>
+                                <td>{{ ut.baseDamage }}</td>
+                                <td>{{ ut.baseArmor }}</td>
+                                <td>{{ ut.baseRange }}</td>
+                                <td>{% if ut.get("mercenaryName") %}<em>{{ ut.mercenaryName }}</em>{% else %}Nation{% endif %}</td>
+                                <td>
+                                    {% if ut.modifiers %}
+                                    <ul class="modifier-list">
+                                        {% for mod in ut.modifiers %}
+                                        <li>{{ mod.statTarget }} {% if mod.value > 0 %}+{% endif %}{{ mod.value }} ({{ mod.source }})</li>
+                                        {% endfor %}
+                                    </ul>
+                                    {% else %}—{% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </details>
+            {% else %}
+            <p class="muted" style="margin: 6px 0 0;">No units assigned.</p>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </section>
+    {% endmacro %}
+
+    {{ render_side(attackers, "⚔ Attackers", "attackers") }}
+
+    {% if attackers and defenders %}
+    <div class="war-vs-divider">— VS —</div>
+    {% endif %}
+
+    {{ render_side(defenders, "🛡 Defenders", "defenders") }}
+
+    {% if unassigned %}
+    {{ render_side(unassigned, "Participants (unassigned stance)", "unassigned") }}
+    {% endif %}
+</div>
+
+<style>
+/* ── layout ── */
+.war-nav { margin-bottom: 1rem; }
+.war-side { margin-bottom: 1.5rem; }
+.war-side-heading {
+    margin: 0 0 0.75rem;
+    padding-bottom: 4px;
+    border-bottom: 2px solid #555;
+    color: #e0e0e0;
+}
+.war-vs-divider {
+    text-align: center;
+    font-size: 1.4rem;
+    font-weight: bold;
+    color: #aaa;
+    margin: 0.5rem 0 1.25rem;
+    letter-spacing: 0.15em;
+}
+
+/* ── nation cards ── */
+.war-nation-card {
+    border: 1px solid #444;
+    border-radius: 6px;
+    padding: 12px 16px;
+    margin-bottom: 0.75rem;
+    background: #1a1a1a;
+}
+.war-nation-name {
+    margin: 0 0 10px;
+    font-size: 1.05rem;
+}
+.war-nation-name a { color: #8ab4f8; text-decoration: none; }
+.war-nation-name a:hover { text-decoration: underline; }
+
+/* ── details / summary (replaces expandable-toggle) ── */
+.war-details {
+    margin-bottom: 6px;
+}
+.war-details > summary {
+    cursor: pointer;
+    display: inline-block;
+    padding: 4px 12px;
+    border: 1px solid #555;
+    border-radius: 4px;
+    background: #2a2a2a;
+    color: #e0e0e0;
+    font-size: 0.88rem;
+    user-select: none;
+    list-style: none;
+}
+.war-details > summary::-webkit-details-marker { display: none; }
+.war-details > summary::after { content: " ▼"; font-size: 0.75em; }
+.war-details[open] > summary::after { content: " ▲"; }
+.war-details > summary:hover { background: #333; border-color: #888; }
+
+/* ── tables inside details ── */
+.war-inner-table { margin-top: 8px; }
+.war-units-scroll { overflow-x: auto; }
+.war-units-table th,
+.war-units-table td { white-space: nowrap; font-size: 0.82em; }
+
+/* ── misc ── */
+.modifier-list { margin: 0; padding-left: 1.2em; font-size: 0.8em; }
+.muted { color: #888; font-style: italic; }
+.attackers .war-side-heading { color: #e08888; }
+.defenders .war-side-heading { color: #88b4e0; }
+</style>
+{% endblock %}

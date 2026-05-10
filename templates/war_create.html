@@ -1,0 +1,86 @@
+{% extends "layout.html" %}
+
+{% block title %}Create War{% endblock %}
+
+{% block content %}
+<div class="container">
+    <a href="/wars">← Back to Wars</a>
+    <h1>Create War</h1>
+
+    {% with messages = get_flashed_messages() %}
+        {% if messages %}
+            <ul class="errors">
+                {% for message in messages %}<li>{{ message }}</li>{% endfor %}
+            </ul>
+        {% endif %}
+    {% endwith %}
+
+    <form method="POST" action="/wars/create">
+        <table class="info-table">
+            <tr>
+                <th><label for="name">War Name</label></th>
+                <td><input type="text" id="name" name="name" class="form-control" required placeholder="e.g. War of the Red Plains"></td>
+            </tr>
+            <tr>
+                <th>Attackers</th>
+                <td>
+                    <div class="nation-checklist">
+                        {% for nation in nations %}
+                            <label class="checklist-item">
+                                <input type="checkbox" name="attackers" value="{{ nation._id }}">
+                                {{ nation.name }}
+                            </label>
+                        {% endfor %}
+                    </div>
+                </td>
+            </tr>
+            <tr>
+                <th>Defenders</th>
+                <td>
+                    <div class="nation-checklist">
+                        {% for nation in nations %}
+                            <label class="checklist-item">
+                                <input type="checkbox" name="defenders" value="{{ nation._id }}">
+                                {{ nation.name }}
+                            </label>
+                        {% endfor %}
+                    </div>
+                </td>
+            </tr>
+        </table>
+
+        <button type="submit" class="btn-save">Create War</button>
+    </form>
+</div>
+
+<style>
+.nation-checklist {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    padding: 8px;
+    border: 1px solid #444;
+    border-radius: 4px;
+    background: #1a1a1a;
+}
+.checklist-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 160px;
+    cursor: pointer;
+    color: #e0e0e0;
+}
+.btn-save {
+    background: #2a3f5a;
+    color: #90b8e0;
+    border: 1px solid #3a5a8a;
+    border-radius: 4px;
+    padding: 7px 18px;
+    cursor: pointer;
+    font-size: 0.95rem;
+    margin-top: 1rem;
+}
+.btn-save:hover { background: #334d72; }
+</style>
+{% endblock %}

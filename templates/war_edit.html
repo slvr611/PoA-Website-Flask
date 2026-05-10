@@ -1,0 +1,170 @@
+{% extends "layout.html" %}
+
+{% block title %}Edit – {{ war.name }}{% endblock %}
+
+{% block content %}
+<div class="container">
+    <a href="/wars/item/{{ war.name }}">← Back to War</a>
+
+    {% with messages = get_flashed_messages() %}
+        {% if messages %}
+            <ul class="errors">
+                {% for message in messages %}<li>{{ message }}</li>{% endfor %}
+            </ul>
+        {% endif %}
+    {% endwith %}
+
+    <h1>Edit: {{ war.name }}</h1>
+
+    <form method="POST" action="/wars/edit/{{ war_id }}/save">
+
+        {# ── War name ── #}
+        <table class="info-table" style="margin-bottom: 1.5rem;">
+            <tr>
+                <th><label for="name">War Name</label></th>
+                <td><input type="text" id="name" name="name" class="form-control" value="{{ war.name }}" required></td>
+            </tr>
+        </table>
+
+        {# ── Participants table (modifier-style rows) ── #}
+        <h2 style="margin-bottom: 0.5rem;">Participants</h2>
+        <table class="info-table war-edit-table">
+            <thead>
+                <tr>
+                    <th>Nation</th>
+                    <th>Stance</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="participants-tbody">
+                {% for p in participants %}
+                <tr>
+                    {# existing participant: nation shown as text, IDs in hidden fields #}
+                    <input type="hidden" name="participants-{{ loop.index0 }}-link_id"   value="{{ p.link_id }}">
+                    <input type="hidden" name="participants-{{ loop.index0 }}-nation_id"  value="{{ p.nation_id_str }}">
+                    <td>{{ p.nation.name }}</td>
+                    <td>
+                        <select name="participants-{{ loop.index0 }}-stance" class="form-control we-stance">
+                            <option value="Attacker" {% if p.stance == "Attacker" %}selected{% endif %}>Attacker</option>
+                            <option value="Defender" {% if p.stance == "Defender" %}selected{% endif %}>Defender</option>
+                        </select>
+                    </td>
+                    <td>
+                        <button type="button" class="btn-remove" onclick="removeParticipantRow(this)">Remove</button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <button type="button" class="btn-add" onclick="addParticipantRow()">+ Add Participant</button>
+
+        <div style="margin-top: 1.5rem;">
+            <button type="submit" class="btn-save">Save Changes</button>
+            <a href="/wars/item/{{ war.name }}" style="margin-left: 1rem; color: #aaa;">Cancel</a>
+        </div>
+    </form>
+</div>
+
+{# Embed all nations as JSON for the JS dropdown #}
+<script>
+const ALL_NATIONS = [
+    {% for nation in all_nations %}
+    { id: "{{ nation._id }}", name: {{ nation.name | tojson }} }{% if not loop.last %},{% endif %}
+    {% endfor %}
+];
+
+function _nationOptions(selectedId) {
+    return ALL_NATIONS.map(n => {
+        const sel = n.id === selectedId ? ' selected' : '';
+        return `<option value="${n.id}"${sel}>${n.name}</option>`;
+    }).join('');
+}
+
+function _rowIndex() {
+    return document.getElementById('participants-tbody').children.length;
+}
+
+function _reindex() {
+    const rows = document.getElementById('participants-tbody').children;
+    Array.from(rows).forEach((tr, i) => {
+        tr.querySelectorAll('input[name], select[name]').forEach(el => {
+            el.name = el.name.replace(/participants-\d+-/, `participants-${i}-`);
+        });
+    });
+}
+
+function addParticipantRow(nationId, stance) {
+    const idx = _rowIndex();
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+        <input type="hidden" name="participants-${idx}-link_id" value="">
+        <td>
+            <select name="participants-${idx}-nation_id" class="form-control we-nation">
+                <option value="">— select nation —</option>
+                ${_nationOptions(nationId || '')}
+            </select>
+        </td>
+        <td>
+            <select name="participants-${idx}-stance" class="form-control we-stance">
+                <option value="Attacker"${stance === 'Attacker' ? ' selected' : ''}>Attacker</option>
+                <option value="Defender"${stance === 'Defender' ? ' selected' : ''}>Defender</option>
+            </select>
+        </td>
+        <td>
+            <button type="button" class="btn-remove" onclick="removeParticipantRow(this)">Remove</button>
+        </td>
+    `;
+    document.getElementById('participants-tbody').appendChild(tr);
+}
+
+function removeParticipantRow(btn) {
+    btn.closest('tr').remove();
+    _reindex();
+}
+</script>
+
+<style>
+.war-edit-table { width: 100%; margin-bottom: 0.5rem; }
+.war-edit-table th { text-align: left; padding: 6px 10px; }
+.war-edit-table td { padding: 4px 10px; vertical-align: middle; }
+.war-edit-table input[type="hidden"] { display: none; }
+.we-stance  { min-width: 110px; }
+.we-nation  { min-width: 200px; }
+
+/* ── buttons ── */
+.btn-add {
+    background: #2a3f2a;
+    color: #90d090;
+    border: 1px solid #4a7a4a;
+    border-radius: 4px;
+    padding: 6px 14px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    margin-top: 4px;
+}
+.btn-add:hover { background: #33502a; }
+
+.btn-remove {
+    background: #3f2a2a;
+    color: #d09090;
+    border: 1px solid #7a4a4a;
+    border-radius: 4px;
+    padding: 4px 10px;
+    cursor: pointer;
+    font-size: 0.85rem;
+}
+.btn-remove:hover { background: #502a2a; }
+
+.btn-save {
+    background: #2a3f5a;
+    color: #90b8e0;
+    border: 1px solid #3a5a8a;
+    border-radius: 4px;
+    padding: 7px 18px;
+    cursor: pointer;
+    font-size: 0.95rem;
+}
+.btn-save:hover { background: #334d72; }
+</style>
+{% endblock %}

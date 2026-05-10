@@ -4,11 +4,46 @@
 {% block title %}{{ nation["name"] }}{% endblock %}
 
 {% block content %}
+<style>
+.nation-page-container {
+    --nation-accent: {{ nation.get('accent_color', '#4a90d9') }};
+}
+.header-bar { border-bottom-color: var(--nation-accent) !important; }
+.section-header h2 { color: var(--nation-accent); }
+.nation-flag {
+    max-height: 90px;
+    max-width: 180px;
+    border: 2px solid var(--nation-accent);
+    border-radius: 4px;
+    margin-bottom: 0.5rem;
+    object-fit: contain;
+}
+.header-bar-has-banner {
+    background-size: cover;
+    background-position: center;
+    position: relative;
+}
+.header-bar-has-banner::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: rgba(18, 18, 18, 0.72);
+    z-index: 0;
+}
+.header-bar-has-banner > * { position: relative; z-index: 1; }
+</style>
 <div class="nation-page-container">
-	<div class="header-bar">
+	<div class="header-bar{% if nation.get('banner_url') %} header-bar-has-banner{% endif %}"
+		{% if nation.get('banner_url') %}style="background-image: url('{{ nation.banner_url | e }}');"{% endif %}>
+		{% if nation.get('flag_url') %}
+			<img src="{{ nation.flag_url | e }}" alt="{{ nation.name }} flag" class="nation-flag">
+		{% endif %}
 		<h1>{{ nation.name }}</h1>
 		{% if g.user is not none %}
 			<a href="{{ request.path.replace('item', 'edit') }}" class="edit-button">Edit</a>
+		{% endif %}
+		{% if user_is_owner or (g.user and g.user.get('is_admin')) %}
+			<a href="/nations/cosmetics/{{ nation.name }}" class="edit-button">Customize</a>
 		{% endif %}
 		<div class="action-links">
 			<a href="{{ request.path }}/changes/pending">View Pending Changes</a>

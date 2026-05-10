@@ -1,8 +1,9 @@
-from flask import Blueprint, render_template, session, redirect, url_for, g, send_from_directory, after_this_request, request
+from flask import Blueprint, render_template, session, redirect, url_for, g, send_from_directory, after_this_request, request, Response, abort
 from pymongo import ASCENDING
 from app_core import mongo
 import datetime
 import os
+import boto3
 
 
 base_routes = Blueprint('base_routes', __name__)
@@ -68,6 +69,33 @@ def map():
 def go_back():
     previous_url = session.get('second_previous_url', url_for("base_routes.home"))
     return redirect(previous_url)
+
+@base_routes.route('/api/s3-image/<path:s3_key>')
+def s3_image_proxy(s3_key):
+    """Serve images stored in the private S3 bucket through the Flask app."""
+    s3_bucket     = os.getenv("S3_BUCKET_NAME")
+    aws_access_key = os.getenv("AWS_ACCESS_KEY_ID")
+    aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+
+    if not all([s3_bucket, aws_access_key, aws_secret_key]):
+        abort(503)
+
+    try:
+        client = boto3.client(
+            "s3",
+            aws_access_key_id=aws_access_key,
+            aws_secret_access_key=aws_secret_key,
+        )
+        obj = client.get_object(Bucket=s3_bucket, Key=s3_key)
+        content_type = obj.get("ContentType", "application/octet-stream")
+        return Response(
+            obj["Body"].read(),
+            mimetype=content_type,
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
+    except Exception:
+        abort(404)
+
 
 @base_routes.route('/static/images/maps/<path:filename>')
 def optimized_map_serving(filename):
