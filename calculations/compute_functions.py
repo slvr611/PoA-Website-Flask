@@ -367,9 +367,22 @@ def compute_stability_loss_chance(field, target, base_value, field_schema, overa
         
         pop_stability_loss += bloodthirsty_pop_count * stability_loss_chance_per_bloodthirsty_pop
 
+    infamy = target.get("infamy", 0)
+    if infamy < 10:
+        infamy_stability_loss = 0.0
+    elif infamy < 20:
+        infamy_stability_loss = 0.20
+    elif infamy < 30:
+        infamy_stability_loss = 0.30
+    elif infamy < 50:
+        infamy_stability_loss = 0.40
+    else:
+        infamy_stability_loss = infamy * 0.01
+    infamy_stability_loss *= 1 * overall_total_modifiers.get("stability_loss_chance_from_infamy_mult", 0)
+
     max_stability_loss_chance = 2 + overall_total_modifiers.get("max_stability_loss_chance", 0)
 
-    value = round(min(max(base_value + overall_total_modifiers.get(field, 0) + karma_stability_loss + minority_stability_loss + pop_stability_loss + stab_loss_chance_from_stability + road_stability_loss + war_stability_loss, 0), max_stability_loss_chance), 2)
+    value = round(min(max(base_value + overall_total_modifiers.get(field, 0) + karma_stability_loss + minority_stability_loss + pop_stability_loss + stab_loss_chance_from_stability + road_stability_loss + war_stability_loss + infamy_stability_loss, 0), max_stability_loss_chance), 2)
 
     return value
 
@@ -499,36 +512,38 @@ def compute_resource_production(field, target, base_value, field_schema, overall
     return production_dict
 
 def compute_resource_consumption(field, target, base_value, field_schema, overall_total_modifiers):
-    consumption_dict = {}
-    
-    pop_count = target.get("pop_count", 0)
-    
     all_resources = json_data["general_resources"] + json_data["unique_resources"]
-    
+    resource_keys = {r["key"] for r in all_resources}
+    pop_count = target.get("pop_count", 0)
+
+    # First pass: base consumption for each resource
+    consumption_dict = {}
     for resource in all_resources:
         specific_resource_consumption = 0
-        modifiers_to_check = [resource["key"] + "_consumption", "resource_consumption"]
-        for modifier in modifiers_to_check:
+        for modifier in [resource["key"] + "_consumption", "resource_consumption"]:
             specific_resource_consumption += overall_total_modifiers.get(modifier, 0)
-        
+
         if resource["key"] == "food":
             food_consumption_per_pop = 1 + overall_total_modifiers.get("food_consumption_per_pop", 0)
             food_consumption = pop_count * food_consumption_per_pop
-            if food_consumption_per_pop < 1:
-                food_consumption = math.ceil(food_consumption)
-            else:
-                food_consumption = math.floor(food_consumption)
+            food_consumption = math.ceil(food_consumption) if food_consumption_per_pop < 1 else math.floor(food_consumption)
             specific_resource_consumption += food_consumption
         elif resource["key"] == "research":
-            technologies = target.get("technologies", {})
-            for tech, details in technologies.items():
+            for _, details in target.get("technologies", {}).items():
                 specific_resource_consumption += details.get("investing", 0)
-        
-        specific_resource_consumption = max(specific_resource_consumption, 0)
-        
-        consumption_dict[resource["key"]] = int(specific_resource_consumption)
-    
-    return consumption_dict
+
+        consumption_dict[resource["key"]] = max(specific_resource_consumption, 0)
+
+    # Second pass: apply consumption conversions
+    # Modifier keys have the form "{resource_from}_to_{resource_to}_consumption_conversion"
+    for r_from in resource_keys:
+        for r_to in resource_keys:
+            ratio = overall_total_modifiers.get(f"{r_from}_to_{r_to}_consumption_conversion", 0)
+            if ratio and r_from != r_to:
+                consumption_dict[r_to] = consumption_dict.get(r_to, 0) + consumption_dict.get(r_from, 0) * ratio
+                consumption_dict[r_from] = 0
+
+    return {k: int(max(v, 0)) for k, v in consumption_dict.items()}
 
 def compute_resource_excess(field, target, base_value, field_schema, overall_total_modifiers):
     excess_dict = {}
@@ -916,6 +931,20 @@ def compute_progress_per_session(field, target, base_value, field_schema, overal
     
     return progress_quests
 
+def compute_era_resource_stockpile_kept(field, target, base_value, field_schema, overall_total_modifiers):
+    result = {}
+    suffix = "_stockpile_kept_modifier"
+    for key, val in overall_total_modifiers.items():
+        if not val or not key.endswith(suffix):
+            continue
+        if key == "era_resource_stockpile_kept_modifier":
+            result["resource"] = result.get("resource", 0) + val
+        elif key.startswith("era_"):
+            resource_name = key[len("era_"):-len(suffix)]
+            if resource_name:
+                result[resource_name] = result.get(resource_name, 0) + val
+    return result
+
 ##############################################################
 
 CUSTOM_COMPUTE_FUNCTIONS = {
@@ -988,4 +1017,5 @@ CUSTOM_COMPUTE_FUNCTIONS = {
     "hiring_cost": compute_hiring_cost,
     "progress_quests": compute_progress_per_session,
     "progress_per_session": compute_progress_per_session,
+    "era_resource_stockpile_kept": compute_era_resource_stockpile_kept,
 }

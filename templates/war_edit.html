@@ -18,11 +18,27 @@
 
     <form method="POST" action="/wars/edit/{{ war_id }}/save">
 
-        {# ── War name ── #}
+        {# ── War name & session ── #}
         <table class="info-table" style="margin-bottom: 1.5rem;">
             <tr>
                 <th><label for="name">War Name</label></th>
                 <td><input type="text" id="name" name="name" class="form-control" value="{{ war.name }}" required></td>
+            </tr>
+            <tr>
+                <th>Session Declared</th>
+                <td style="color:#aaa;">{{ war.session_declared if war.session_declared is not none else '—' }}</td>
+            </tr>
+            <tr>
+                <th><label for="session_ended">Session Ended</label></th>
+                <td>
+                    <select id="session_ended" name="session_ended" class="form-control" style="min-width:120px;">
+                        <option value="ongoing" {% if war.session_ended is none %}selected{% endif %}>Ongoing</option>
+                        {% set start = (war.session_declared or 1)|int %}
+                        {% for s in range(start, current_session + 1) %}
+                        <option value="{{ s }}" {% if war.session_ended == s %}selected{% endif %}>Session {{ s }}</option>
+                        {% endfor %}
+                    </select>
+                </td>
             </tr>
         </table>
 

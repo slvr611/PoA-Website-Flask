@@ -1,0 +1,224 @@
+{% extends "layout.html" %}
+
+{% block title %}Bulk Pop Creation{% endblock %}
+
+{% block content %}
+<style>
+.bulk-create-container { max-width: 960px; margin: 0 auto; padding: 16px; }
+.nation-section { border: 1px solid #444; border-radius: 4px; margin-bottom: 16px; background: #1a1a1a; }
+.nation-section-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 12px; background: #242424; border-radius: 4px 4px 0 0;
+}
+.nation-section-header h3 { margin: 0; font-size: 1em; }
+.nation-section table { width: 100%; border-collapse: collapse; }
+.nation-section td, .nation-section th { padding: 5px 8px; border-bottom: 1px solid #333; }
+.nation-section th { font-size: 0.85em; color: #aaa; background: #1e1e1e; }
+.nation-section select { width: 100%; background: #2a2a2a; color: #eee; border: 1px solid #555; padding: 3px 5px; border-radius: 3px; }
+.nation-section .add-pop-btn { margin: 8px 12px; font-size: 0.9em; }
+.action-cell { white-space: nowrap; }
+.action-cell button { margin-right: 4px; font-size: 0.8em; padding: 2px 7px; }
+.footer-bar {
+    position: sticky; bottom: 0; background: #1e1e1e; border-top: 1px solid #444;
+    padding: 10px 16px; display: flex; align-items: center; gap: 16px; z-index: 100;
+}
+.add-nation-row { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+.add-nation-row select { min-width: 200px; }
+#empty-state { color: #888; font-style: italic; padding: 24px 0; text-align: center; }
+</style>
+
+<div class="bulk-create-container">
+    <h1>Bulk Pop Creation</h1>
+
+    <div class="add-nation-row">
+        <select id="nation-selector">
+            <option value="">— select a nation —</option>
+            {% for n in nations %}
+            <option value="{{ n.id }}" data-race="{{ n.race }}" data-culture="{{ n.culture }}" data-religion="{{ n.religion }}">{{ n.name }}</option>
+            {% endfor %}
+        </select>
+        <button type="button" onclick="addNation()">Add Nation</button>
+    </div>
+
+    <div id="nations-container">
+        <div id="empty-state">No nations added yet. Select a nation above and click Add Nation.</div>
+    </div>
+
+    <div class="footer-bar">
+        <span id="total-count" style="font-weight:bold;">0 pops staged</span>
+        <button id="submit-btn" onclick="submitAll()">Create All Pops</button>
+    </div>
+</div>
+
+<script>
+const nations = {{ nations|tojson }};
+const races = {{ races|tojson }};
+const cultures = {{ cultures|tojson }};
+const religions = {{ religions|tojson }};
+
+function buildOptions(list, selectedId) {
+    let html = '<option value="">— none —</option>';
+    for (const item of list) {
+        html += `<option value="${item.id}"${item.id === selectedId ? ' selected' : ''}>${item.name}</option>`;
+    }
+    return html;
+}
+
+function createRow(tbody, raceId, cultureId, religionId) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+        <td><select class="pop-race">${buildOptions(races, raceId)}</select></td>
+        <td><select class="pop-culture">${buildOptions(cultures, cultureId)}</select></td>
+        <td><select class="pop-religion">${buildOptions(religions, religionId)}</select></td>
+        <td class="action-cell">
+            <button type="button" onclick="duplicateRow(this)">Duplicate</button>
+            <button type="button" onclick="removeRow(this)">Remove</button>
+        </td>
+    `;
+    tbody.appendChild(tr);
+    updateCount();
+}
+
+function duplicateRow(btn) {
+    const row = btn.closest('tr');
+    // Read current values explicitly — cloneNode doesn't reliably copy live select state
+    const raceId = row.querySelector('.pop-race').value;
+    const cultureId = row.querySelector('.pop-culture').value;
+    const religionId = row.querySelector('.pop-religion').value;
+    const tbody = row.parentElement;
+    createRow(tbody, raceId, cultureId, religionId);
+    // Move the newly appended row to be right after the source row
+    tbody.insertBefore(tbody.lastElementChild, row.nextSibling);
+}
+
+function removeRow(btn) {
+    const row = btn.closest('tr');
+    const tbody = row.parentElement;
+    row.remove();
+    // if tbody is now empty, show placeholder
+    if (!tbody.querySelector('tr')) {
+        const section = tbody.closest('.nation-section');
+        section.querySelector('.pop-rows-empty').style.display = '';
+    }
+    updateCount();
+}
+
+function addNation() {
+    const sel = document.getElementById('nation-selector');
+    const nationId = sel.value;
+    if (!nationId) return;
+
+    const nationName = sel.options[sel.selectedIndex].text;
+    const defaultRace = sel.options[sel.selectedIndex].dataset.race || '';
+    const defaultCulture = sel.options[sel.selectedIndex].dataset.culture || '';
+    const defaultReligion = sel.options[sel.selectedIndex].dataset.religion || '';
+
+    document.getElementById('empty-state').style.display = 'none';
+
+    // Re-use existing section for this nation if present
+    let section = document.getElementById(`ns-${nationId}`);
+    if (!section) {
+        section = document.createElement('div');
+        section.className = 'nation-section';
+        section.id = `ns-${nationId}`;
+        section.dataset.nationId = nationId;
+        section.dataset.defaultRace = defaultRace;
+        section.dataset.defaultCulture = defaultCulture;
+        section.dataset.defaultReligion = defaultReligion;
+        section.innerHTML = `
+            <div class="nation-section-header">
+                <h3>${nationName}</h3>
+                <button type="button" onclick="removeNationSection(this)">Remove</button>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Race</th><th>Culture</th><th>Religion</th><th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="pop-rows"></tbody>
+            </table>
+            <p class="pop-rows-empty" style="display:none; padding:6px 12px; color:#888; font-style:italic; font-size:0.9em;">No pops — click Add Pop.</p>
+            <button type="button" class="add-pop-btn" onclick="addDefaultPop(this.closest('.nation-section'))">+ Add Pop</button>
+        `;
+        document.getElementById('nations-container').appendChild(section);
+    }
+
+    addDefaultPop(section);
+    sel.value = '';
+}
+
+function addDefaultPop(section) {
+    section.querySelector('.pop-rows-empty').style.display = 'none';
+    createRow(
+        section.querySelector('.pop-rows'),
+        section.dataset.defaultRace || '',
+        section.dataset.defaultCulture || '',
+        section.dataset.defaultReligion || ''
+    );
+}
+
+function removeNationSection(btn) {
+    btn.closest('.nation-section').remove();
+    if (!document.querySelector('.nation-section')) {
+        document.getElementById('empty-state').style.display = '';
+    }
+    updateCount();
+}
+
+function updateCount() {
+    const total = document.querySelectorAll('.pop-rows tr').length;
+    document.getElementById('total-count').textContent =
+        total + ' pop' + (total !== 1 ? 's' : '') + ' staged';
+}
+
+async function submitAll() {
+    const pops = [];
+    document.querySelectorAll('.nation-section').forEach(section => {
+        const nationId = section.dataset.nationId;
+        section.querySelectorAll('.pop-rows tr').forEach(row => {
+            pops.push({
+                nation: nationId,
+                race: row.querySelector('.pop-race').value,
+                culture: row.querySelector('.pop-culture').value,
+                religion: row.querySelector('.pop-religion').value,
+            });
+        });
+    });
+
+    if (pops.length === 0) {
+        alert('No pops staged. Add at least one pop before submitting.');
+        return;
+    }
+
+    const btn = document.getElementById('submit-btn');
+    btn.disabled = true;
+    btn.textContent = 'Creating…';
+
+    try {
+        const res = await fetch('/pops/bulk_create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(pops),
+        });
+        const data = await res.json();
+        let msg = `Created ${data.created} pop${data.created !== 1 ? 's' : ''} successfully.`;
+        if (data.errors && data.errors.length) {
+            msg += '\n\nErrors:\n' + data.errors.join('\n');
+        }
+        alert(msg);
+        if (data.created > 0) {
+            // Clear all staged pops
+            document.getElementById('nations-container').innerHTML =
+                '<div id="empty-state" style="color:#888;font-style:italic;padding:24px 0;text-align:center;">No nations added yet. Select a nation above and click Add Nation.</div>';
+            updateCount();
+        }
+    } catch (e) {
+        alert('Request failed: ' + e.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Create All Pops';
+    }
+}
+</script>
+{% endblock %}

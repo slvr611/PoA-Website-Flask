@@ -6,21 +6,26 @@ def synergy_matches(node, requirement):
         return False
     if isinstance(requirement, list):
         return "any" in requirement or node in requirement
-    if requirement == "any":
-        return True
-    return node == requirement
+    return requirement == "any" or node == requirement
+
+
+def get_synergies(details):
+    if "synergies" in details:
+        return details["synergies"]
+    req = details.get("synergy_requirement", "")
+    if req:
+        return [{"requirement": req}]
+    return []
 
 
 def district_synergy_active(district_type, district_node):
     details = json_data["nation_districts"].get(district_type, {})
-    requirement = details.get("synergy_requirement", "")
-    return synergy_matches(district_node, requirement)
+    return any(synergy_matches(district_node, syn.get("requirement", "")) for syn in get_synergies(details))
 
 
 def imperial_synergy_active(district_type, district_node):
     details = json_data["nation_imperial_districts"].get(district_type, {})
-    requirement = details.get("synergy_requirement", "")
-    return synergy_matches(district_node, requirement)
+    return any(synergy_matches(district_node, syn.get("requirement", "")) for syn in get_synergies(details))
 
 
 def main():

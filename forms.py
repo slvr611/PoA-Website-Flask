@@ -308,7 +308,13 @@ class ModifierForm(Form):
     """Form for handling nation/character modifiers as a dictionary"""
 
     item_id = HiddenField('_id')
-    field = StringField("Field", validators=[DataRequired()])
+    modifier_type = StringField("Modifier Type")
+    scope = StringField("Scope")
+    resource = StringField("Resource")
+    resource_from = StringField("From Resource")
+    resource_to = StringField("To Resource")
+    job = StringField("Job")
+    attribute = StringField("Attribute")
     value = FloatField("Value", default=1)
     duration = IntegerField("Duration", validators=[NumberRange()], default=-1)
     source = StringField("Source", validators=[DataRequired()])
@@ -352,6 +358,12 @@ class ModifierForm(Form):
                         field.load_form_from_item(field_value, schema)
                     else:
                         field.data = field_value
+
+        # Backwards compat: if stored with old 'field' or 'key' but no 'modifier_type', map it
+        if 'modifier_type' not in item or not item.get('modifier_type'):
+            legacy_field = item.get('field', item.get('key', ''))
+            if legacy_field:
+                self._fields['modifier_type'].data = legacy_field
 
         # Map _id from DB doc to item_id field (WTForms cannot register field
         # names that start with '_', so we expose it as item_id instead).
@@ -554,13 +566,14 @@ class ExternalModifierForm(Form):
 
 class IndividualTechDict(Form):
     """Form for handling individual tech investments"""
-    
+
     class Meta:
         csrf = False
-    
+
     investing = IntegerField("Investing", default=0)
     cost = IntegerField("Cost", default=0)
     researched = BooleanField("Researched", default=False)
+    cost_manually_set = BooleanField("Cost Manually Set", default=False)
 
     def initialize_cost(self, nation, name):
         self.cost.data = json_data.get("tech", {}).get(name, {}).get("cost", 0)
@@ -573,6 +586,7 @@ class IndividualTechDict(Form):
             self.investing.data = item.get("investing", 0)
             self.cost.data = item.get("cost", json_data.get("tech", {}).get(name, {}).get("cost", 0))
             self.researched.data = item.get("researched", False)
+            self.cost_manually_set.data = item.get("cost_manually_set", False)
 
 class OverallTechDict(Form):
     """Form for handling nation tech"""

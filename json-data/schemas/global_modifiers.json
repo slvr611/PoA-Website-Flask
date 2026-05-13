@@ -1,7 +1,9 @@
 {
   "$jsonSchema": {
     "bsonType": "object",
-    "required": ["name"],
+    "required": [
+      "name"
+    ],
     "properties": {
       "name": {
         "bsonType": "string",
@@ -24,7 +26,13 @@
               "bsonType": "enum",
               "label": "Type",
               "description": "The type of entity the modifier affects",
-              "enum": ["nation", "character", "merchant", "mercenary", "faction"]
+              "enum": [
+                "nation",
+                "character",
+                "merchant",
+                "mercenary",
+                "faction"
+              ]
             },
             "modifier": {
               "bsonType": "string",
@@ -35,6 +43,41 @@
               "bsonType": "number",
               "label": "Modifier Value",
               "description": "The value of the modifier"
+            }
+          }
+        }
+      },
+      "modifiers": {
+        "bsonType": "array",
+        "label": "Ongoing Modifiers",
+        "description": "Scope-based modifiers applied by this entity",
+        "items": {
+          "bsonType": "object",
+          "properties": {
+            "_id": {
+              "bsonType": "string",
+              "label": "Item ID",
+              "description": "Stable identifier for change tracking across reorders"
+            },
+            "key": {
+              "bsonType": "string",
+              "label": "Modifier Key",
+              "description": "The key of the modifier"
+            },
+            "value": {
+              "bsonType": "number",
+              "label": "Modifier Value",
+              "description": "The value of the modifier"
+            },
+            "duration": {
+              "bsonType": "number",
+              "label": "Modifier Duration",
+              "description": "The duration of the modifier"
+            },
+            "source": {
+              "bsonType": "string",
+              "label": "Modifier Source",
+              "description": "The source of the modifier"
             }
           }
         }

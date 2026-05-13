@@ -15,6 +15,7 @@
                 {{ form.technologies[tech_id].investing() }}
                 {{ form.technologies[tech_id].cost() }}
                 {{ form.technologies[tech_id].researched() }}
+                {{ form.technologies[tech_id].cost_manually_set() }}
             {% endfor %}
         </div>
     {% endif %}
@@ -74,8 +75,8 @@
         const investing = nation_techs[techId] && typeof nation_techs[techId] === 'object' ? (nation_techs[techId].investing || 0) : 0;
         
         let label = tech.display_name;
-        if (status === "available" && editable) {
-            // For available techs in edit mode, just add a newline to make space for the editing section
+        if (status !== "researched" && editable) {
+            // Add a newline spacer to make room for the cost (and investing) overlay
             label += `\n.`;
         } else if (investing > 0) {
             label += `\n${invested} (+${investing}) / ${getCost(techId)}`;
@@ -117,7 +118,8 @@
                 label: getTechLabel(id, tech),
                 type: tech.type,
                 status: status,
-                editable: status === "available" && editable
+                editable: status !== "researched" && editable,
+                investingEditable: status === "available" && editable
             }
         });
 
@@ -353,12 +355,13 @@
     cy.ready(function() {
         if (editable) {
             const overlays = []; // Track all overlays for batch updates
-            
+
             cy.nodes().forEach(node => {
                 if (node.data('editable')) {
                     const techId = node.id();
                     const tech = techs[techId];
                     const invested = node.data('invested') || 0;
+                    const canEditInvesting = node.data('investingEditable');
                     let investing = 0;
                     if (form && form[techId] && form[techId].investing) {
                         investing = form[techId].investing.data;
@@ -371,8 +374,12 @@
                     if (form && form[techId] && form[techId].cost) {
                         costID = "node_" + form[techId].cost.id;
                     }
+                    let costManuallySetID = "UNKNOWN";
+                    if (form && form[techId] && form[techId].cost_manually_set) {
+                        costManuallySetID = form[techId].cost_manually_set.id;
+                    }
                     const cost = getCost(techId);
-                    
+
                     // Create an HTML overlay for this node
                     const overlay = document.createElement('div');
                     overlay.className = 'tech-node-overlay';
@@ -380,32 +387,47 @@
                     overlay.style.position = 'absolute';
                     overlay.style.zIndex = '10';
                     overlay.style.pointerEvents = 'auto';
-                    
-                    // Create the input field
-                    const inputHtml = `
-                        <div class="tech-node-input-container">
-                            <span>${invested} + </span>
-                            <input type="number" 
-                                   class="tech-node-input" 
-                                   id="${investingID}" 
-                                   value="${investing}" 
-                                   min="0">
-                            <span> / </span>
-                            <input type="number" 
-                                   class="tech-node-input" 
-                                   id="${costID}" 
-                                   value="${cost}" 
-                                   min="0">
-                        </div>
-                    `;
+
+                    // Build overlay: show investing input only for available techs
+                    let inputHtml;
+                    if (canEditInvesting) {
+                        inputHtml = `
+                            <div class="tech-node-input-container">
+                                <span>${invested} + </span>
+                                <input type="number"
+                                       class="tech-node-input"
+                                       id="${investingID}"
+                                       value="${investing}"
+                                       min="0">
+                                <span> / </span>
+                                <input type="number"
+                                       class="tech-node-input"
+                                       id="${costID}"
+                                       value="${cost}"
+                                       min="0">
+                            </div>
+                        `;
+                    } else {
+                        // Cost-only overlay for locked techs
+                        inputHtml = `
+                            <div class="tech-node-input-container">
+                                <span>Cost: </span>
+                                <input type="number"
+                                       class="tech-node-input"
+                                       id="${costID}"
+                                       value="${cost}"
+                                       min="0">
+                            </div>
+                        `;
+                    }
                     overlay.innerHTML = inputHtml;
-                    
+
                     // Add to the Cytoscape container
                     document.getElementById('cy').appendChild(overlay);
-                    
+
                     // Store overlay reference
                     overlays.push({ overlay, node });
-                    
+
                     // Position the overlay on the node
                     const updatePosition = () => {
                         const pos = node.renderedPosition();
@@ -415,48 +437,42 @@
                         overlay.style.transform = `scale(${Math.max(0.8, Math.min(1.2, zoom))})`;
                         overlay.style.transformOrigin = 'center top';
                     };
-                    
+
                     // Update position initially
                     updatePosition();
-                    
-                    // Update the hidden form field when input changes
-                    document.getElementById(investingID).addEventListener('change', function(e) {
-                        const value = parseInt(e.target.value) || 0;
-                        document.getElementById(form[techId].investing.id).value = value;
-                        
-                        // Update the node data
-                        node.data('investing', value);
-                        
-                        // Update nation_techs for the info panel
-                        if (!nation_techs[techId]) {
-                            nation_techs[techId] = { invested: 0, investing: value };
-                        } else {
-                            nation_techs[techId].investing = value;
-                        }
-                    });
-                    
-                    // Add click handler to select all text when clicked
-                    document.getElementById(investingID).addEventListener('click', function(e) {
-                        e.target.select();
-                        e.stopPropagation();
-                    });
 
+                    // Wire up investing input (only for available techs)
+                    if (canEditInvesting) {
+                        document.getElementById(investingID).addEventListener('change', function(e) {
+                            const value = parseInt(e.target.value) || 0;
+                            document.getElementById(form[techId].investing.id).value = value;
+                            node.data('investing', value);
+                            if (!nation_techs[techId]) {
+                                nation_techs[techId] = { invested: 0, investing: value };
+                            } else {
+                                nation_techs[techId].investing = value;
+                            }
+                        });
+                        document.getElementById(investingID).addEventListener('click', function(e) {
+                            e.target.select();
+                            e.stopPropagation();
+                        });
+                    }
+
+                    // Wire up cost input (all non-researched techs)
                     document.getElementById(costID).addEventListener('change', function(e) {
                         const value = parseInt(e.target.value) || 0;
                         document.getElementById(form[techId].cost.id).value = value;
-                        
-                        // Update the node data
+                        // Mark cost as manually set so recalculation won't override it
+                        const msEl = document.getElementById(costManuallySetID);
+                        if (msEl) msEl.checked = true;
                         node.data('cost', value);
-                        
-                        // Update nation_techs for the info panel
                         if (!nation_techs[techId]) {
-                            nation_techs[techId] = { invested: 0, investing: value };
+                            nation_techs[techId] = { invested: 0, cost: value };
                         } else {
-                            nation_techs[techId].investing = value;
+                            nation_techs[techId].cost = value;
                         }
                     });
-                    
-                    // Add click handler to select all text when clicked
                     document.getElementById(costID).addEventListener('click', function(e) {
                         e.target.select();
                         e.stopPropagation();

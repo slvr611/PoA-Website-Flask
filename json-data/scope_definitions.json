@@ -1,0 +1,154 @@
+{
+    "nation_self": {
+        "name": "Nation (Self)",
+        "description": "The nation itself",
+        "source_type": "nation",
+        "target_type": "nation",
+        "resolution": {"type": "direct"}
+    },
+    "nation_ruling_characters": {
+        "name": "Ruling Characters",
+        "description": "All characters currently ruling this nation",
+        "source_type": "nation",
+        "target_type": "character",
+        "resolution": {"type": "reverse_link", "collection": "characters", "link_field": "ruling_nation_org"}
+    },
+    "nation_vassals": {
+        "name": "Vassals",
+        "description": "Nations that are vassals of this nation",
+        "source_type": "nation",
+        "target_type": "nation",
+        "resolution": {"type": "reverse_link", "collection": "nations", "link_field": "overlord"}
+    },
+    "nation_overlord": {
+        "name": "Overlord",
+        "description": "The nation this nation is a vassal of",
+        "source_type": "nation",
+        "target_type": "nation",
+        "resolution": {"type": "forward_link", "collection": "nations", "link_field": "overlord"}
+    },
+    "character_self": {
+        "name": "Character (Self)",
+        "description": "The character itself",
+        "source_type": "character",
+        "target_type": "character",
+        "resolution": {"type": "direct"}
+    },
+    "character_ruling_nation": {
+        "name": "Ruling Nation",
+        "description": "The nation this character rules",
+        "source_type": "character",
+        "target_type": "nation",
+        "resolution": {"type": "forward_link", "collection": "nations", "link_field": "ruling_nation_org"}
+    },
+    "character_ruling_merchant": {
+        "name": "Ruling Merchant Org",
+        "description": "The merchant organisation this character runs",
+        "source_type": "character",
+        "target_type": "merchant",
+        "resolution": {"type": "forward_link", "collection": "merchants", "link_field": "ruling_merchant_org"}
+    },
+    "character_ruling_mercenary": {
+        "name": "Ruling Mercenary Band",
+        "description": "The mercenary band this character commands",
+        "source_type": "character",
+        "target_type": "mercenary",
+        "resolution": {"type": "forward_link", "collection": "mercenaries", "link_field": "ruling_mercenary_org"}
+    },
+    "artifact_owner": {
+        "name": "Owner (Character)",
+        "description": "The character who owns this artifact",
+        "source_type": "artifact",
+        "target_type": "character",
+        "resolution": {"type": "forward_link", "collection": "characters", "link_field": "owner"}
+    },
+    "artifact_owner_ruling_nation": {
+        "name": "Owner's Ruling Nation",
+        "description": "The nation ruled by the character who owns this artifact",
+        "source_type": "artifact",
+        "target_type": "nation",
+        "resolution": {
+            "type": "chain",
+            "steps": [
+                {"type": "forward_link", "collection": "characters", "link_field": "owner"},
+                {"type": "forward_link", "collection": "nations", "link_field": "ruling_nation_org"}
+            ]
+        }
+    },
+    "merchant_self": {
+        "name": "Merchant Org (Self)",
+        "description": "The merchant organisation itself",
+        "source_type": "merchant",
+        "target_type": "merchant",
+        "resolution": {"type": "direct"}
+    },
+    "mercenary_self": {
+        "name": "Mercenary Band (Self)",
+        "description": "The mercenary band itself",
+        "source_type": "mercenary",
+        "target_type": "mercenary",
+        "resolution": {"type": "direct"}
+    },
+    "wonder_owner_nation": {
+        "name": "Owner Nation",
+        "description": "The nation that owns this wonder",
+        "source_type": "wonder",
+        "target_type": "nation",
+        "resolution": {"type": "forward_link", "collection": "nations", "link_field": "owner_nation"}
+    },
+    "wonder_owner_characters": {
+        "name": "Owner Nation's Characters",
+        "description": "Characters ruling the nation that owns this wonder",
+        "source_type": "wonder",
+        "target_type": "character",
+        "resolution": {
+            "type": "chain",
+            "steps": [
+                {"type": "forward_link", "collection": "nations", "link_field": "owner_nation"},
+                {"type": "reverse_link", "collection": "characters", "link_field": "ruling_nation_org"}
+            ]
+        }
+    },
+    "region_nations": {
+        "name": "Nations in Region",
+        "description": "Nations located in this region",
+        "source_type": "region",
+        "target_type": "nation",
+        "resolution": {"type": "reverse_link", "collection": "nations", "link_field": "region"}
+    },
+    "region_characters": {
+        "name": "Characters in Region",
+        "description": "Characters whose nation is in this region",
+        "source_type": "region",
+        "target_type": "character",
+        "resolution": {"type": "reverse_link", "collection": "characters", "link_field": "region"}
+    },
+    "global_nations": {
+        "name": "All Nations",
+        "description": "Applies to all nations",
+        "source_type": "global",
+        "target_type": "nation",
+        "resolution": {"type": "broadcast"}
+    },
+    "global_characters": {
+        "name": "All Characters",
+        "description": "Applies to all characters",
+        "source_type": "global",
+        "target_type": "character",
+        "resolution": {"type": "broadcast"}
+    },
+    "global_merchants": {
+        "name": "All Merchant Orgs",
+        "description": "Applies to all merchant organisations",
+        "source_type": "global",
+        "target_type": "merchant",
+        "resolution": {"type": "broadcast"}
+    },
+    "global_mercenaries": {
+        "name": "All Mercenary Bands",
+        "description": "Applies to all mercenary bands",
+        "source_type": "global",
+        "target_type": "mercenary",
+        "resolution": {"type": "broadcast"}
+    }
+}

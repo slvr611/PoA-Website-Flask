@@ -85,11 +85,14 @@
 									{% if properties.resource_storage or field == "resource_storage" or field == "resource_capacity" or field == "resource_production" or field == "resource_consumption" or field == "resource_excess" %}
 										<table class="compact-table resource-table">
 											<tbody>
+												{% set res_cap = item.get("resource_capacity", {}) %}
 												{% for resource_key, resource_value in item.get(field, {}).items()|sort %}
-													<tr>
-														<th>{{ resource_key }}</th>
-														<td>{{ resource_value }}</td>
-													</tr>
+													{% if not res_cap or res_cap.get(resource_key, 1) != 0 %}
+														<tr>
+															<th>{{ resource_key }}</th>
+															<td>{{ resource_value }}</td>
+														</tr>
+													{% endif %}
 												{% endfor %}
 											</tbody>
 										</table>
@@ -189,7 +192,48 @@
 									</td>
 								{% elif properties.get("items", {}).get("bsonType", "None") == "object" %}
 									<td>
-										{% if field == "progress_quests" %}
+										{% if field == "modifiers" %}
+											<table class="linked-objects-table">
+												<thead>
+													<tr>
+														<th>Modifier</th>
+														<th>Scope</th>
+														<th>Value</th>
+														<th>Duration</th>
+														<th>Source</th>
+													</tr>
+												</thead>
+												<tbody>
+													{% for sub_item in item.get(field, []) %}
+														{% set mod_type_key = sub_item.get("modifier_type", sub_item.get("key", sub_item.get("field", ""))) %}
+														{% set type_def = json_data.get("modifier_types", {}).get(mod_type_key, {}) %}
+														{% set type_name = type_def.get("name", mod_type_key) %}
+														{% set field_template = type_def.get("field_template", mod_type_key) %}
+														{% set resolved_field = field_template
+															| replace("{attribute}", sub_item.get("attribute", ""))
+															| replace("{resource}", sub_item.get("resource", ""))
+															| replace("{resource_from}", sub_item.get("resource_from", ""))
+															| replace("{resource_to}", sub_item.get("resource_to", ""))
+															| replace("{job}", sub_item.get("job", ""))
+														%}
+														{% set scope_key = sub_item.get("scope", "") %}
+														{% set scope_name = scope_definitions.get(scope_key, {}).get("name", scope_key) if scope_key else "" %}
+														<tr>
+															<td>
+																<strong>{{ type_name }}</strong>
+																{% if type_def.get("extra_fields") %}
+																	<br><small class="text-muted">{{ resolved_field }}</small>
+																{% endif %}
+															</td>
+															<td>{{ scope_name }}</td>
+															<td>{{ sub_item.get("value", 0) }}</td>
+															<td>{{ sub_item.get("duration", -1) }}</td>
+															<td>{{ sub_item.get("source", "") }}</td>
+														</tr>
+													{% endfor %}
+												</tbody>
+											</table>
+										{% elif field == "progress_quests" %}
 											<table class="linked-objects-table">
 												<thead>
 													<tr>

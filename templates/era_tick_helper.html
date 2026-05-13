@@ -1,12 +1,20 @@
 {% extends "layout.html" %}
 
-{% block title %}Session Tick Helper{% endblock %}
+{% block title %}Era / Age Tick Helper{% endblock %}
 
 {% block content %}
 <div class="container">
-    <h1>Session Tick Helper</h1>
-    <p><b>REMEMBER TO RUN KARMA TICK FIRST!</b></p>
-    <form method="post" action="/run_tick">
+    <h1>Era / Age Tick Helper</h1>
+    <p><b>These ticks are run at the end of an era or age transition. Use with caution — most are irreversible.</b></p>
+    <p><a href="/tick_helper">← Session Tick Helper</a></p>
+    <form method="post" action="/run_era_tick">
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                <ul class="errors">
+                    {% for message in messages %}<li>{{ message }}</li>{% endfor %}
+                </ul>
+            {% endif %}
+        {% endwith %}
         <div class="select-all-container">
             <button type="button" id="select-all-btn" class="select-all-button">Select All</button>
         </div>
@@ -20,18 +28,14 @@
             <tbody>
                 {% for tick_function_label, tick_function in tick_functions.items() %}
                     <tr>
-                        <td>
-                            {{ tick_function_label}}
-                        </td>
-                        <td>
-                            <input type="checkbox" name="run_{{ tick_function_label }}">
-                        </td>
+                        <td>{{ tick_function_label }}</td>
+                        <td><input type="checkbox" name="run_{{ tick_function_label }}"></td>
                     </tr>
                 {% endfor %}
             </tbody>
         </table>
         <div class="button-container">
-            <button type="submit" class="submit-button">Run Tick</button>
+            <button type="submit" class="submit-button">Run Era Tick</button>
         </div>
     </form>
 </div>
@@ -41,12 +45,10 @@
         const selectAllBtn = document.getElementById('select-all-btn');
         const checkboxes = document.querySelectorAll('input[type="checkbox"]');
         let allSelected = false;
-        
+
         selectAllBtn.addEventListener('click', function() {
             allSelected = !allSelected;
-            checkboxes.forEach(checkbox => {
-                checkbox.checked = allSelected;
-            });
+            checkboxes.forEach(cb => { cb.checked = allSelected; });
             selectAllBtn.textContent = allSelected ? 'Deselect All' : 'Select All';
         });
     });

@@ -57,10 +57,12 @@
       ],
       "wonders": [
         "external_modifiers",
+        "modifiers",
         "node"
       ],
       "region": [
-        "external_modifiers"
+        "external_modifiers",
+        "modifiers"
       ],
       "rulers": [
         "positive_titles",
@@ -68,7 +70,8 @@
         "modifiers",
         {
           "artifacts": [
-            "external_modifiers"
+            "external_modifiers",
+            "modifiers"
           ]
         }
       ],
@@ -1635,6 +1638,13 @@
         "label": "Resource Capacity",
         "description": "The resource reserves of the nation",
         "calculated": true
+      },
+      "era_resource_stockpile_kept": {
+        "bsonType": "object",
+        "label": "Era Resource Stockpile Kept",
+        "description": "Computed per-resource bonus to the kept fraction during era stockpile decay. Key 'resource' applies to all resources; any other key applies only to that resource.",
+        "calculated": true,
+        "hidden": true
       },
       "luxury_resources": {
         "bsonType": "array",

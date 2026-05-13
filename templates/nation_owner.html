@@ -342,10 +342,7 @@
 						<tbody>
 							{% for pop in linked_objects["pops"] %}
 								<tr>
-									<!-- If there's no separate name/ID, just show the loop index -->
 									<td><a href="{{ pop['link'] }}">{{ loop.index }}</a></td>
-
-									<!-- Link to Race detail page -->
 									<td>
 									{% if pop["linked_objects"]["race"] %}
 										<a href="{{ pop['linked_objects']['race']['link'] }}">{{ pop['linked_objects']['race']['name'] }}</a>
@@ -353,8 +350,6 @@
 										None
 									{% endif %}
 									</td>
-
-									<!-- Link to Culture detail page -->
 									<td>
 									{% if pop['linked_objects']['culture'] %}
 										<a href="{{ pop['linked_objects']['culture']['link'] }}">{{ pop['linked_objects']['culture']['name'] }}</a>
@@ -362,8 +357,6 @@
 										None
 									{% endif %}
 									</td>
-
-									<!-- Link to Religion detail page -->
 									<td>
 									{% if pop["linked_objects"]["religion"] %}
 										<a href="{{ pop['linked_objects']['religion']['link'] }}">{{ pop["linked_objects"]["religion"]["name"] }}</a>
@@ -953,7 +946,10 @@
 									<td>
 										{% if "upkeep" in job %}
 											{% for resource, cost in job.upkeep.items() %}
-												{{ resource }}: {{ cost }}<br>
+												<span class="context-tooltip"
+													data-tooltip-title="{{ job.display_name }} - {{ resource }} Upkeep (per worker)"
+													data-breakdown='{{ breakdowns.get("job_consumption", {}).get(job_key, {}).get(resource, [])|tojson }}'
+												>{{ resource }}: {{ cost }}</span><br>
 											{% endfor %}
 										{% endif %}
 									</td>
@@ -961,7 +957,10 @@
 										{% if "production" in job %}
 											{% for resource, prod in job.production.items() %}
 												{% set prod_val = (prod|float)|round(2) %}
-												{{ resource }}: {{ prod_val|int if prod_val == (prod_val|int) else "%.2f"|format(prod_val) }}<br>
+												<span class="context-tooltip"
+													data-tooltip-title="{{ job.display_name }} - {{ resource }} Production (per worker)"
+													data-breakdown='{{ breakdowns.get("job_production", {}).get(job_key, {}).get(resource, [])|tojson }}'
+												>{{ resource }}: {{ prod_val|int if prod_val == (prod_val|int) else "%.2f"|format(prod_val) }}</span><br>
 											{% endfor %}
 										{% endif %}
 									</td>
@@ -1252,26 +1251,64 @@
 				<table class="info-table">
 					<thead>
 						<tr>
-							<th>Field</th>
-						<th>Value</th>
-						<th>Duration</th>
-						<th>Source</th>
-					</tr>
-				</thead>
-				<tbody>
-					{% for modifier in nation.modifiers %}
-						<tr>
-							<td>{{ modifier.field }}</td>
-							<td>{{ modifier.value }}</td>
-							<td>{{ modifier.duration }}</td>
-							<td>{{ modifier.source }}</td>
+							<th>Modifier Type</th>
+							<th>Scope</th>
+							<th>Value</th>
+							<th>Duration</th>
+							<th>Source</th>
 						</tr>
-					{% endfor %}
-				</tbody>
-			</table>
+					</thead>
+					<tbody>
+						{% for modifier in nation.modifiers %}
+							{% set mod_type = modifier.get('modifier_type', '') %}
+							{% set type_def = modifier_types.get(mod_type, {}) %}
+							{% set type_name = type_def.get('name', modifier.get('field', modifier.get('key', mod_type or '(unknown)'))) %}
+							{% set ns = namespace(parts=[]) %}
+							{% for extra in type_def.get('extra_fields', []) %}
+								{% set val = modifier.get(extra.key) or '' %}
+								{% if val %}
+									{% if extra.source == 'all_resources' %}
+										{% set found = all_resources | selectattr('key', 'equalto', val) | first %}
+										{% set ns.parts = ns.parts + [(found.name if found else val)] %}
+									{% elif extra.source == 'jobs' %}
+										{% set found = all_jobs | selectattr('key', 'equalto', val) | first %}
+										{% set ns.parts = ns.parts + [(found.name if found else val)] %}
+									{% else %}
+										{% set ns.parts = ns.parts + [val] %}
+									{% endif %}
+								{% endif %}
+							{% endfor %}
+							{% set scope_key = modifier.get('scope', '') %}
+							{% set scope_name = scope_definitions.get(scope_key, {}).get('name', '') %}
+							<tr>
+								<td>
+									{{ type_name }}
+									{% if ns.parts %}
+										<small class="text-muted">({{ ns.parts | join(', ') }})</small>
+									{% endif %}
+								</td>
+								<td>
+									{% if scope_name %}
+										<small>{{ scope_name }}</small>
+									{% else %}
+										<small class="text-muted">—</small>
+									{% endif %}
+								</td>
+								<td>
+									{{ modifier.value }}
+									{% if type_def.get('value_format') == 'percentage' %}
+										<small class="text-muted">(%)</small>
+									{% endif %}
+								</td>
+								<td>{{ modifier.duration }}</td>
+								<td>{{ modifier.source }}</td>
+							</tr>
+						{% endfor %}
+					</tbody>
+				</table>
+			</div>
 		</div>
 	</div>
-</div>
 {% endblock %}
 
 <script>

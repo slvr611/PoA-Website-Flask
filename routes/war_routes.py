@@ -9,10 +9,14 @@ war_routes = Blueprint("war_routes", __name__)
 _S3_MAPS_BASE = "https://poa-website-static-assets.s3.us-east-1.amazonaws.com/maps/"
 
 
+def _current_session():
+    gm = mongo.db.global_modifiers.find_one({"name": "global_modifiers"})
+    return int((gm or {}).get("session_counter", 1))
+
+
 def _current_terrain_map_url():
     """Return the S3 URL of the most recent terrain map, matching map.html logic."""
-    gm = mongo.db.global_modifiers.find_one({"name": "global_modifiers"})
-    session_num = int((gm or {}).get("session_counter", 1))
+    session_num = _current_session()
 
     if session_num <= 17:
         filename = "PoA_Geographical_Map_Tribal_Session_1.dzi"
@@ -397,7 +401,7 @@ def _build_war_payload(war_id_strings):
 @admin_required
 def create_war_form():
     nations = list(mongo.db.nations.find({}, {"_id": 1, "name": 1}).sort("name", ASCENDING))
-    return render_template("war_create.html", nations=nations)
+    return render_template("war_create.html", nations=nations, current_session=_current_session())
 
 
 @war_routes.route("/wars/create", methods=["POST"])
@@ -414,7 +418,7 @@ def create_war():
         flash("At least one participant is required.")
         return redirect("/wars/create")
 
-    war_doc = {"name": name}
+    war_doc = {"name": name, "session_declared": _current_session()}
     war_id = mongo.db.wars.insert_one(war_doc).inserted_id
 
     for nation_id in attacker_ids:
@@ -547,6 +551,7 @@ def edit_war_form(item_ref):
     war, war_id_str = _fetch_war(item_ref)
     participants = _current_participants(war_id_str)
     all_nations = list(mongo.db.nations.find({}, {"_id": 1, "name": 1}).sort("name", ASCENDING))
+    current_session = _current_session()
 
     return render_template(
         "war_edit.html",
@@ -554,6 +559,7 @@ def edit_war_form(item_ref):
         war_id=war_id_str,
         participants=participants,
         all_nations=all_nations,
+        current_session=current_session,
     )
 
 
@@ -562,10 +568,23 @@ def edit_war_form(item_ref):
 def save_war(item_ref):
     war, war_id_str = _fetch_war(item_ref)
 
-    # --- Update war name ---
+    # --- Update war name and session fields ---
+    updates = {}
     new_name = request.form.get("name", "").strip()
     if new_name and new_name != war.get("name", ""):
-        mongo.db.wars.update_one({"_id": war["_id"]}, {"$set": {"name": new_name}})
+        updates["name"] = new_name
+
+    raw_ended = request.form.get("session_ended", "").strip()
+    if raw_ended == "" or raw_ended == "ongoing":
+        updates["session_ended"] = None
+    else:
+        try:
+            updates["session_ended"] = int(raw_ended)
+        except ValueError:
+            pass
+
+    if updates:
+        mongo.db.wars.update_one({"_id": war["_id"]}, {"$set": updates})
 
     # --- Parse submitted participant rows (participants-N-* indexed fields) ---
     submitted = []

@@ -1,4 +1,5 @@
 import uuid
+import math
 from bson import ObjectId
 from helpers.data_helpers import get_data_on_category
 from calculations.field_calculations import calculate_all_fields
@@ -525,6 +526,97 @@ def character_heal_tick(old_character, new_character, schema):
         result = f"{old_character.get('name', 'Unknown')} has healed from {old_character.get('health_status', 'Unknown')} to {new_character.get('health_status', 'Unknown')}.\n"
     return result
 
+def character_heal_then_death_tick(old_character, new_character, schema):
+    result = ""
+    if old_character.get("health_status", "Healthy") == "Dead":
+        return ""
+
+    # Phase 1: Heal
+    healed_to_healthy = False
+    if old_character["health_status"] != "Healthy":
+        health_status_enum = schema["properties"]["health_status"]["enum"]
+        health_index = health_status_enum.index(old_character["health_status"])
+        heal_roll = random.random()
+        new_character["heal_roll"] = heal_roll
+        new_character["heal_chance_at_tick"] = old_character.get("heal_chance", 0)
+        if heal_roll <= old_character.get("heal_chance", 0):
+            health_index = max(health_index - 1, 0)
+            new_character["health_status"] = health_status_enum[health_index]
+            result += f"{old_character.get('name', 'Unknown')} has healed from {old_character['health_status']} to {new_character['health_status']}.\n"
+            healed_to_healthy = new_character["health_status"] == "Healthy"
+
+    # Phase 2: Death chance — recalculate if healed to Healthy so injury modifier is removed
+    if healed_to_healthy:
+        recalculated = calculate_all_fields(new_character, schema, "character")
+        death_chance = recalculated.get("death_chance", 0)
+    else:
+        death_chance = old_character.get("death_chance", 0)
+
+    # Phase 3: Death roll
+    death_roll = random.random()
+    new_character["death_roll"] = death_roll
+    new_character["death_chance_at_tick"] = death_chance
+    if death_roll <= death_chance:
+        new_character["health_status"] = "Dead"
+        new_character["ruling_nation_org"] = None
+        new_character["region"] = None
+        new_character["player"] = None
+        result += f"{old_character.get('name', 'Unknown')} has died.\n"
+
+        if old_character.get("ruling_nation_org", ""):
+            nation_schema, nation_db = get_data_on_category("nations")
+            try:
+                old_nation = nation_db.find_one({"_id": ObjectId(old_character.get("ruling_nation_org", ""))})
+            except Exception:
+                old_nation = None
+            if old_nation:
+                old_nation.update(calculate_all_fields(old_nation, nation_schema, "nation"))
+                new_nation = deepcopy(old_nation)
+                leader_death_stab_loss_roll = random.random()
+                new_nation["leader_death_stab_loss_roll"] = leader_death_stab_loss_roll
+                new_nation["leader_death_stab_loss_chance_at_tick"] = old_nation.get("stability_loss_chance_on_leader_death", 0)
+
+                amounts = []
+                reasons = []
+
+                if leader_death_stab_loss_roll <= old_nation.get("stability_loss_chance_on_leader_death", 0):
+                    amounts.append(-1)
+                    reasons.append("stability_loss_chance_on_leader_death")
+
+                if old_nation.get("stability_loss_chance_on_leader_death_per_age", 0) > 0:
+                    stability_loss_chance = min(
+                        old_nation.get("stability_loss_chance_on_leader_death_per_age", 0) * old_character.get("age", 1),
+                        old_nation.get("max_stability_loss_chance_on_leader_death_per_age", 0)
+                    )
+                    leader_death_age_stab_loss_roll = random.random()
+                    new_nation["leader_death_age_stab_loss_roll"] = leader_death_age_stab_loss_roll
+                    new_nation["leader_death_age_stab_loss_chance_at_tick"] = stability_loss_chance
+
+                    amount = 0
+                    while stability_loss_chance > 1:
+                        amount += 1
+                        stability_loss_chance -= 1
+                    if leader_death_age_stab_loss_roll <= stability_loss_chance:
+                        amount += 1
+                    if amount > 0:
+                        amounts.append(-amount)
+                        reasons.append("autocracy_increased_stability_loss_chance_on_leader_death")
+
+                result += adjust_stability(old_nation, new_nation, nation_schema, amounts, reasons)
+
+                change_id = system_request_change(
+                    data_type="nations",
+                    item_id=old_nation["_id"],
+                    change_type="Update",
+                    before_data=old_nation,
+                    after_data=new_nation,
+                    reason="Death of " + old_character.get('name', 'Unknown') + " has caused an update for " + old_nation.get('name', 'Unknown')
+                )
+                system_approve_change(change_id)
+
+    return result
+
+
 def character_mana_tick(old_character, new_character, schema):
     if old_character.get("health_status", "Healthy") == "Dead":
         return ""
@@ -767,12 +859,26 @@ def update_rolling_karma(old_nation, new_nation, schema):
     return ""
 
 def nation_infamy_decay_tick(old_nation, new_nation, schema):
-    # TODO: Prevent Decay while at war
-    if int(old_nation.get("infamy", 0)) < 5:
-        new_nation["infamy"] = 0
+    infamy = int(old_nation.get("infamy", 0))
+    if infamy == 0:
         return ""
-    else:
-        new_nation["infamy"] = int(round(old_nation.get("infamy", 0) / 10)) * 5
+
+    global_modifiers = mongo.db["global_modifiers"].find_one({"name": "global_modifiers"})
+    current_session = global_modifiers.get("session_counter", 0) if global_modifiers else 0
+
+    nation_id_str = str(old_nation.get("_id", ""))
+    attacker_links = list(mongo.db.war_links.find({"participant": nation_id_str, "stance": "Attacker"}))
+    for link in attacker_links:
+        war = mongo.db.wars.find_one({"_id": ObjectId(link["war"])}) if link.get("war") else None
+        if war:
+            session_declared = war.get("session_declared", 0)
+            session_ended = war.get("session_ended", None)
+            if session_declared <= current_session and (session_ended is None or session_ended >= current_session):
+                new_nation["infamy"] = infamy
+                return ""
+
+    decay = max(min(math.floor((infamy / 2) / 5) * 5, 20), 5)
+    new_nation["infamy"] = max(0, infamy - decay)
     return ""
 
 def nation_prestige_gain_tick(old_nation, new_nation, schema):
@@ -1106,6 +1212,72 @@ def library_tick(old_nation, new_nation, schema):
     return ""
 
 ###########################################################
+# Era / Age Tick Functions
+###########################################################
+
+_RELATION_STEPS = ["Hostile", "Unfriendly", "Neutral", "Friendly", "Allied"]
+_COMPLIANCE_STEPS = ["Rebellious", "Defiant", "Neutral", "Compliant", "Loyal"]
+
+
+def era_reset_stability_to_balanced_tick(old_nation, new_nation, schema):
+    new_nation["stability"] = "Balanced"
+    return ""
+
+
+def era_compliance_decay_tick(old_nation, new_nation, schema):
+    current = old_nation.get("compliance", "None")
+    if current == "None" or current not in _COMPLIANCE_STEPS or current == "Neutral":
+        return ""
+    idx = _COMPLIANCE_STEPS.index(current)
+    neutral_idx = _COMPLIANCE_STEPS.index("Neutral")
+    new_nation["compliance"] = _COMPLIANCE_STEPS[idx + 1 if idx < neutral_idx else idx - 1]
+    return ""
+
+
+def era_resource_stockpile_decay_tick(old_nation, new_nation, schema):
+    storage = old_nation.get("resource_storage") or {}
+    if not storage:
+        return ""
+    base_kept = random.uniform(0.4, 0.6)
+    stockpile_kept = old_nation.get("era_resource_stockpile_kept") or {}
+    all_bonus = stockpile_kept.get("resource", 0)
+    new_storage = {}
+    for resource, amount in storage.items():
+        if not isinstance(amount, (int, float)) or amount <= 0:
+            new_storage[resource] = amount
+            continue
+        per_resource_bonus = stockpile_kept.get(resource, 0)
+        kept_pct = min(base_kept + all_bonus + per_resource_bonus, 1.0)
+        new_storage[resource] = round(amount * kept_pct)
+    new_nation["resource_storage"] = new_storage
+    return ""
+
+
+def era_relations_decay_tick():
+    neutral_idx = _RELATION_STEPS.index("Neutral")
+    relations = list(mongo.db.diplo_relations.find())
+    count = 0
+    for relation in relations:
+        current = relation.get("relation", "Neutral")
+        if current == "Neutral" or current not in _RELATION_STEPS:
+            continue
+        idx = _RELATION_STEPS.index(current)
+        new_val = _RELATION_STEPS[idx + 1 if idx < neutral_idx else idx - 1]
+        change_id = system_request_change(
+            data_type="diplo_relations",
+            item_id=relation["_id"],
+            change_type="Update",
+            before_data={"relation": current},
+            after_data={"relation": new_val},
+            reason="Era Tick: Relations Decay to Neutral",
+        )
+        if change_id:
+            system_approve_change(change_id)
+            count += 1
+    return f"Decayed {count} relation(s) toward Neutral.\n"
+
+
+###########################################################
 # Tick Function Constants
 ###########################################################
 
@@ -1116,8 +1288,7 @@ GENERAL_TICK_FUNCTIONS = {
 }
 
 CHARACTER_TICK_FUNCTIONS = {
-    "Character Death Tick": character_death_tick,
-    "Character Heal Tick": character_heal_tick,
+    "Character Heal and Death Tick": character_heal_then_death_tick,
     "Character Mana Tick": character_mana_tick,
     "Character Age Tick": character_age_tick,
     "Character Stat Gain Tick": character_stat_gain_tick,
@@ -1174,10 +1345,70 @@ NATION_TICK_FUNCTIONS = {
     "Nation Pop Loss Tick": pop_loss_tick,
     "Nation Temperament Tick": temperament_tick,
     "Nation Library Tick": library_tick,
+}
+
+ERA_NATION_TICK_FUNCTIONS = {
     "Nation Tech Cost Reduction Tick (Generally Don't Use)": nation_tech_cost_reduction_tick,
     "Nation Reset Rolling Karma to Zero (Generally Don't Use)": reset_rolling_karma_to_zero,
     "Nation Reset All Temperaments (Generally Don't Use)": reset_all_temperaments,
+    "Era Reset Stability to Balanced": era_reset_stability_to_balanced_tick,
+    "Era Compliance Decay to Neutral": era_compliance_decay_tick,
+    "Era Resource Stockpile Decay": era_resource_stockpile_decay_tick,
 }
+
+ERA_GENERAL_TICK_FUNCTIONS = {
+    "Era Relations Decay to Neutral": era_relations_decay_tick,
+}
+
+def era_tick(form_data):
+    full_tick_summary = ""
+
+    collect_nation_data = any(
+        f"run_{label}" in form_data for label in ERA_NATION_TICK_FUNCTIONS
+    )
+
+    if collect_nation_data:
+        nation_schema, nation_db = get_data_on_category("nations")
+        old_nations = list(nation_db.find().sort("name", ASCENDING))
+        new_nations = []
+        for nation in old_nations:
+            if nation:
+                nation.update(calculate_all_fields(nation, nation_schema, "nation"))
+                new_nations.append(deepcopy(nation))
+
+        for label, fn in ERA_NATION_TICK_FUNCTIONS.items():
+            if f"run_{label}" in form_data:
+                print(label)
+                for i in range(len(old_nations)):
+                    result = fn(old_nations[i], new_nations[i], nation_schema)
+                    full_tick_summary += result
+
+        for i in range(len(old_nations)):
+            change_id = system_request_change(
+                data_type="nations",
+                item_id=old_nations[i]["_id"],
+                change_type="Update",
+                before_data=old_nations[i],
+                after_data=new_nations[i],
+                reason="Era Tick Update for " + old_nations[i]["name"],
+            )
+            system_approve_change(change_id)
+
+    for label, fn in ERA_GENERAL_TICK_FUNCTIONS.items():
+        if f"run_{label}" in form_data:
+            print(label)
+            full_tick_summary += fn()
+
+    return full_tick_summary
+
+
+def run_era_tick_async(form_data):
+    from threading import Thread
+    thread = Thread(target=era_tick, args=(form_data,))
+    thread.daemon = True
+    thread.start()
+    return "Era tick started in background."
+
 
 def adjust_stability(old_nation, new_nation, schema, amounts=[-1], reasons=[""]):
     result = ""

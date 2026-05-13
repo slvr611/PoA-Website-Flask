@@ -25,6 +25,11 @@ document.addEventListener("DOMContentLoaded", () => {
     body.className = "context-tooltip-body";
 
     list.forEach((entry) => {
+      if (entry.label === "Total") {
+        const sep = document.createElement("div");
+        sep.className = "context-tooltip-sep";
+        body.appendChild(sep);
+      }
       const row = document.createElement("div");
       row.className = "context-tooltip-row";
       row.textContent = `${entry.label}: ${entry.value}`;

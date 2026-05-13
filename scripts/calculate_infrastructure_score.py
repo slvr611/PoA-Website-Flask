@@ -50,10 +50,14 @@ def score_districts(nation: Dict[str, Any]) -> Tuple[int, int]:
             score_total += ANCIENT_DISTRICT_WITHOUT_NODE_SCORE
         if node:
             score_total += NODE_SCORE
-        synergy_requirements = json_data["nation_districts"].get(d.get("type"), {}).get("synergy_requirement", [])
-        if isinstance(synergy_requirements, str):
-            synergy_requirements = [synergy_requirements]
-        if node and ("any" in synergy_requirements or node in synergy_requirements):
+        dd = json_data["nation_districts"].get(d.get("type"), {})
+        synergies = dd.get("synergies") or ([{"requirement": dd["synergy_requirement"]}] if "synergy_requirement" in dd else [])
+        synergy_active = node and any(
+            (isinstance(s.get("requirement"), list) and ("any" in s["requirement"] or node in s["requirement"]))
+            or s.get("requirement") in ("any", node)
+            for s in synergies
+        )
+        if synergy_active:
             score_total += SYNERGY_SCORE
         counted += 1
 

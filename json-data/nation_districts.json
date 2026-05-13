@@ -14,12 +14,19 @@
 			"ruler_artifact_slots": 10,
 			"artificer_bronze_upkeep": -1
 		},
-		"synergy_requirement": ["magic", "stone"],
-		"synergy_node_active": true,
-		"synergy_modifiers": {
-			"ruler_artifact_slots": 4
-		},
-		"count": 1
+		"count": 1,
+		"synergies": [
+			{
+				"requirement": [
+					"magic",
+					"stone"
+				],
+				"modifiers": {
+					"ruler_artifact_slots": 4
+				},
+				"node_active": true
+			}
+		]
 	},
 	"ancient_barrow": {
 		"display_name": "Ancient Barrow",
@@ -34,12 +41,18 @@
 			"nation_spell_cost": -1,
 			"nation_spell_cost_minimum": 2
 		},
-		"synergy_requirement": ["magic"],
-		"synergy_node_active": true,
-		"synergy_modifiers": {
-			"ignore_magic_cost": true
-		},
-		"count": 1
+		"count": 1,
+		"synergies": [
+			{
+				"requirement": [
+					"magic"
+				],
+				"modifiers": {
+					"ignore_magic_cost": true
+				},
+				"node_active": true
+			}
+		]
 	},
 	"ancient_cache": {
 		"display_name": "Ancient Cache",
@@ -56,15 +69,21 @@
 			"mounts_storage_capacity": 5,
 			"bronze_storage_capacity": 5
 		},
-		"synergy_requirement": ["stone"],
-		"synergy_node_active": true,
-		"synergy_modifiers": {
-			"wood_storage_capacity": 5,
-			"stone_storage_capacity": 5,
-			"mounts_storage_capacity": 5,
-			"bronze_storage_capacity": 5
-		},
-		"count": 1
+		"count": 1,
+		"synergies": [
+			{
+				"requirement": [
+					"stone"
+				],
+				"modifiers": {
+					"wood_storage_capacity": 5,
+					"stone_storage_capacity": 5,
+					"mounts_storage_capacity": 5,
+					"bronze_storage_capacity": 5
+				},
+				"node_active": true
+			}
+		]
 	},
 	"ancient_center": {
 		"display_name": "Ancient Center",
@@ -80,12 +99,18 @@
 			"administration": 1,
 			"bureaucrat_wood_upkeep": -1
 		},
-		"synergy_requirement": ["wood"],
-		"synergy_node_active": true,
-		"synergy_modifiers": {
-			"administration": 1
-		},
-		"count": 1
+		"count": 1,
+		"synergies": [
+			{
+				"requirement": [
+					"wood"
+				],
+				"modifiers": {
+					"administration": 1
+				},
+				"node_active": true
+			}
+		]
 	},
 	"ancient_church": {
 		"display_name": "Ancient Church",
@@ -96,13 +121,17 @@
 			"wood": 3,
 			"bronze": 1
 		},
-		"modifiers": {
-		},
-		"synergy_requirement": ["wood"],
-		"synergy_node_active": true,
-		"synergy_modifiers": {
-		},
-		"count": 1
+		"modifiers": {},
+		"count": 1,
+		"synergies": [
+			{
+				"requirement": [
+					"wood"
+				],
+				"modifiers": {},
+				"node_active": true
+			}
+		]
 	},
 	"ancient_dock": {
 		"display_name": "Ancient Dock",
@@ -117,12 +146,18 @@
 			"wood_consumption": 1,
 			"food_production": 1
 		},
-		"synergy_requirement": ["food"],
-		"synergy_node_active": true,
-		"synergy_modifiers": {
-			"food_production": 1
-		},
-		"count": 1
+		"count": 1,
+		"synergies": [
+			{
+				"requirement": [
+					"food"
+				],
+				"modifiers": {
+					"food_production": 1
+				},
+				"node_active": true
+			}
+		]
 	},
 	"ancient_forge": {
 		"display_name": "Ancient Forge",
@@ -138,12 +173,18 @@
 			"bronze_production": 1,
 			"metallurgist_bronze_production": 1
 		},
-		"synergy_requirement": ["bronze"],
-		"synergy_node_active": true,
-		"synergy_modifiers": {
-			"mundane_unit_defense": 1
-		},
-		"count": 1
+		"count": 1,
+		"synergies": [
+			{
+				"requirement": [
+					"bronze"
+				],
+				"modifiers": {
+					"mundane_unit_defense": 1
+				},
+				"node_active": true
+			}
+		]
 	},
 	"ancient_fort": {
 		"display_name": "Ancient Fort",
@@ -160,12 +201,18 @@
 		"modifiers": {
 			"stone_consumption": 1
 		},
-		"synergy_requirement": ["stone"],
-		"synergy_node_active": true,
-		"synergy_modifiers": {
-			"ignore_stone_cost": true
-		},
-		"count": 1
+		"count": 1,
+		"synergies": [
+			{
+				"requirement": [
+					"stone"
+				],
+				"modifiers": {
+					"ignore_stone_cost": true
+				},
+				"node_active": true
+			}
+		]
 	},
 	"ancient_granary": {
 		"display_name": "Ancient Granary",
@@ -178,12 +225,18 @@
 		"modifiers": {
 			"food_storage_capacity": 5
 		},
-		"synergy_requirement": ["food"],
-		"synergy_node_active": true,
-		"synergy_modifiers": {
-			"food_storage_capacity": 5
-		},
-		"count": 1
+		"count": 1,
+		"synergies": [
+			{
+				"requirement": [
+					"food"
+				],
+				"modifiers": {
+					"food_storage_capacity": 5
+				},
+				"node_active": true
+			}
+		]
 	},
 	"ancient_home": {
 		"display_name": "Ancient Home",
@@ -198,12 +251,18 @@
 			"wood_consumption": 1,
 			"effective_pop_capacity": 2
 		},
-		"synergy_requirement": ["food"],
-		"synergy_node_active": true,
-		"synergy_modifiers": {
-			"effective_pop_capacity": 1
-		},
-		"count": 1
+		"count": 1,
+		"synergies": [
+			{
+				"requirement": [
+					"food"
+				],
+				"modifiers": {
+					"effective_pop_capacity": 1
+				},
+				"node_active": true
+			}
+		]
 	},
 	"ancient_hospital": {
 		"display_name": "Ancient Hospital",
@@ -218,11 +277,16 @@
 		"modifiers": {
 			"food_consumption": 1
 		},
-		"synergy_requirement": ["food"],
-		"synergy_node_active": true,
-		"synergy_modifiers": {
-		},
-		"count": 1
+		"count": 1,
+		"synergies": [
+			{
+				"requirement": [
+					"food"
+				],
+				"modifiers": {},
+				"node_active": true
+			}
+		]
 	},
 	"ancient_farms": {
 		"display_name": "Ancient Farms",
@@ -237,12 +301,18 @@
 			"wood_consumption": 1,
 			"food_production": 2
 		},
-		"synergy_requirement": ["food"],
-		"synergy_node_active": true,
-		"synergy_modifiers": {
-			"food_production": 1
-		},
-		"count": 1
+		"count": 1,
+		"synergies": [
+			{
+				"requirement": [
+					"food"
+				],
+				"modifiers": {
+					"food_production": 1
+				},
+				"node_active": true
+			}
+		]
 	},
 	"ancient_fishery": {
 		"display_name": "Ancient Fishery",
@@ -257,12 +327,18 @@
 			"fisherman_food_production": 1,
 			"food_production": 1
 		},
-		"synergy_requirement": ["food"],
-		"synergy_node_active": true,
-		"synergy_modifiers": {
-			"food_production": 1
-		},
-		"count": 1
+		"count": 1,
+		"synergies": [
+			{
+				"requirement": [
+					"food"
+				],
+				"modifiers": {
+					"food_production": 1
+				},
+				"node_active": true
+			}
+		]
 	},
 	"ancient_magic_site": {
 		"display_name": "Ancient Magic Site",
@@ -276,12 +352,18 @@
 			"stone_consumption": 1,
 			"magic_production": 1
 		},
-		"synergy_requirement": ["magic"],
-		"synergy_node_active": true,
-		"synergy_modifiers": {
-			"magic_production": 1
-		},
-		"count": 1
+		"count": 1,
+		"synergies": [
+			{
+				"requirement": [
+					"magic"
+				],
+				"modifiers": {
+					"magic_production": 1
+				},
+				"node_active": true
+			}
+		]
 	},
 	"ancient_market": {
 		"display_name": "Ancient Market",
@@ -298,12 +380,18 @@
 			"trade_slots": 1,
 			"money_income": 100
 		},
-		"synergy_requirement": ["luxury"],
-		"synergy_node_active": false,
-		"synergy_modifiers": {
-			"money_income": 150
-		},
-		"count": 1
+		"count": 1,
+		"synergies": [
+			{
+				"requirement": [
+					"luxury"
+				],
+				"modifiers": {
+					"money_income": 150
+				},
+				"node_active": false
+			}
+		]
 	},
 	"ancient_mill": {
 		"display_name": "Ancient Mill",
@@ -319,12 +407,18 @@
 			"food_production_per_stockpiled_food": 5,
 			"max_food_production_per_stockpiled_food": 5
 		},
-		"synergy_requirement": ["food"],
-		"synergy_node_active": true,
-		"synergy_modifiers": {
-			"food_storage_capacity": 5
-		},
-		"count": 1
+		"count": 1,
+		"synergies": [
+			{
+				"requirement": [
+					"food"
+				],
+				"modifiers": {
+					"food_storage_capacity": 5
+				},
+				"node_active": true
+			}
+		]
 	},
 	"ancient_quarry": {
 		"display_name": "Ancient Quarry",
@@ -337,13 +431,19 @@
 		"modifiers": {
 			"miner_stone_production": 0.5
 		},
-		"synergy_requirement": ["stone"],
-		"synergy_node_active": true,
-		"synergy_modifiers": {
-			"district_stone_discount": 0.2,
-			"city_stone_discount": 0.2
-		},
-		"count": 1
+		"count": 1,
+		"synergies": [
+			{
+				"requirement": [
+					"stone"
+				],
+				"modifiers": {
+					"district_stone_discount": 0.2,
+					"city_stone_discount": 0.2
+				},
+				"node_active": true
+			}
+		]
 	},
 	"ancient_ranch": {
 		"display_name": "Ancient Ranch",
@@ -358,12 +458,18 @@
 			"mounts_production": 2,
 			"food_production": 1
 		},
-		"synergy_requirement": ["mounts"],
-		"synergy_node_active": true,
-		"synergy_modifiers": {
-			"mounts_production": 1
-		},
-		"count": 1
+		"count": 1,
+		"synergies": [
+			{
+				"requirement": [
+					"mounts"
+				],
+				"modifiers": {
+					"mounts_production": 1
+				},
+				"node_active": true
+			}
+		]
 	},
 	"ancient_sawmill": {
 		"display_name": "Ancient Sawmill",
@@ -376,13 +482,19 @@
 		"modifiers": {
 			"harvester_wood_production": 0.5
 		},
-		"synergy_requirement": ["wood"],
-		"synergy_node_active": true,
-		"synergy_modifiers": {
-			"district_wood_discount": 0.2,
-			"city_wood_discount": 0.2
-		},
-		"count": 1
+		"count": 1,
+		"synergies": [
+			{
+				"requirement": [
+					"wood"
+				],
+				"modifiers": {
+					"district_wood_discount": 0.2,
+					"city_wood_discount": 0.2
+				},
+				"node_active": true
+			}
+		]
 	},
 	"ancient_school": {
 		"display_name": "Ancient School",
@@ -397,11 +509,16 @@
 			"wood_consumption": 1,
 			"research_production": 1
 		},
-		"synergy_requirement": ["research"],
-		"synergy_node_active": true,
-		"synergy_modifiers": {
-		},
-		"count": 1
+		"count": 1,
+		"synergies": [
+			{
+				"requirement": [
+					"research"
+				],
+				"modifiers": {},
+				"node_active": true
+			}
+		]
 	},
 	"ancient_workshop": {
 		"display_name": "Ancient Workshop",
@@ -416,12 +533,18 @@
 		"modifiers": {
 			"wood_consumption": 1
 		},
-		"synergy_requirement": ["research"],
-		"synergy_node_active": true,
-		"synergy_modifiers": {
-			"mundane_unit_attack": 1
-		},
-		"count": 1
+		"count": 1,
+		"synergies": [
+			{
+				"requirement": [
+					"research"
+				],
+				"modifiers": {
+					"mundane_unit_attack": 1
+				},
+				"node_active": true
+			}
+		]
 	},
 	"latent_pylon": {
 		"display_name": "Latent Pylon",
@@ -452,12 +575,19 @@
 			"ruler_artifact_slots": 16,
 			"artificer_bronze_upkeep": -1
 		},
-		"synergy_requirement": ["magic", "stone"],
-		"synergy_node_active": true,
-		"synergy_modifiers": {
-			"ruler_artifact_slots": 6
-		},
-		"count": 1
+		"count": 1,
+		"synergies": [
+			{
+				"requirement": [
+					"magic",
+					"stone"
+				],
+				"modifiers": {
+					"ruler_artifact_slots": 6
+				},
+				"node_active": true
+			}
+		]
 	},
 	"classical_barrow": {
 		"display_name": "Classical Barrow",
@@ -472,12 +602,18 @@
 			"nation_spell_cost": -2,
 			"nation_spell_cost_minimum": 2
 		},
-		"synergy_requirement": ["magic"],
-		"synergy_node_active": true,
-		"synergy_modifiers": {
-			"ignore_magic_cost": true
-		},
-		"count": 1
+		"count": 1,
+		"synergies": [
+			{
+				"requirement": [
+					"magic"
+				],
+				"modifiers": {
+					"ignore_magic_cost": true
+				},
+				"node_active": true
+			}
+		]
 	},
 	"classical_brewery": {
 		"display_name": "Classical Brewery",
@@ -495,14 +631,20 @@
 		},
 		"modifiers": {
 			"food_consumption": 1,
-			"stability_gain_chance": 0.20
+			"stability_gain_chance": 0.2
 		},
-		"synergy_requirement": ["narcotics"],
-		"synergy_node_active": false,
-		"synergy_modifiers": {
-			"stability_gain_chance": 0.15
-		},
-		"count": 1
+		"count": 1,
+		"synergies": [
+			{
+				"requirement": [
+					"narcotics"
+				],
+				"modifiers": {
+					"stability_gain_chance": 0.15
+				},
+				"node_active": false
+			}
+		]
 	},
 	"classical_cache": {
 		"display_name": "Classical Cache",
@@ -520,10 +662,16 @@
 			"mounts_storage_capacity": 10,
 			"bronze_storage_capacity": 10
 		},
-		"synergy_requirement": ["stone"],
-		"synergy_node_active": true,
-		"synergy_modifiers": {},
-		"count": 1
+		"count": 1,
+		"synergies": [
+			{
+				"requirement": [
+					"stone"
+				],
+				"modifiers": {},
+				"node_active": true
+			}
+		]
 	},
 	"classical_center": {
 		"display_name": "Classical Center",
@@ -539,12 +687,18 @@
 			"administration": 2,
 			"bureaucrat_wood_upkeep": -1
 		},
-		"synergy_requirement": ["wood"],
-		"synergy_node_active": true,
-		"synergy_modifiers": {
-			"1_progress_slots": 1
-		},
-		"count": 1
+		"count": 1,
+		"synergies": [
+			{
+				"requirement": [
+					"wood"
+				],
+				"modifiers": {
+					"1_progress_slots": 1
+				},
+				"node_active": true
+			}
+		]
 	},
 	"classical_church": {
 		"display_name": "Classical Church",
@@ -556,10 +710,16 @@
 			"bronze": 1
 		},
 		"modifiers": {},
-		"synergy_requirement": ["wood"],
-		"synergy_node_active": true,
-		"synergy_modifiers": {},
-		"count": 1
+		"count": 1,
+		"synergies": [
+			{
+				"requirement": [
+					"wood"
+				],
+				"modifiers": {},
+				"node_active": true
+			}
+		]
 	},
 	"classical_dock": {
 		"display_name": "Classical Dock",
@@ -582,12 +742,18 @@
 			"food_production": 2,
 			"trade_distance_over_water": 3
 		},
-		"synergy_requirement": ["food"],
-		"synergy_node_active": true,
-		"synergy_modifiers": {
-			"food_production": 1
-		},
-		"count": 1
+		"count": 1,
+		"synergies": [
+			{
+				"requirement": [
+					"food"
+				],
+				"modifiers": {
+					"food_production": 1
+				},
+				"node_active": true
+			}
+		]
 	},
 	"classical_farm": {
 		"display_name": "Classical Farm",
@@ -602,12 +768,18 @@
 			"mount_consumption": 1,
 			"food_production": 4
 		},
-		"synergy_requirement": ["food"],
-		"synergy_node_active": true,
-		"synergy_modifiers": {
-			"food_production": 2
-		},
-		"count": 1
+		"count": 1,
+		"synergies": [
+			{
+				"requirement": [
+					"food"
+				],
+				"modifiers": {
+					"food_production": 2
+				},
+				"node_active": true
+			}
+		]
 	},
 	"classical_fishery": {
 		"display_name": "Classical Fishery",
@@ -624,12 +796,18 @@
 			"food_production": 2,
 			"food_production_per_naval_unit": 0.5
 		},
-		"synergy_requirement": ["food"],
-		"synergy_node_active": true,
-		"synergy_modifiers": {
-			"food_production": 2
-		},
-		"count": 1
+		"count": 1,
+		"synergies": [
+			{
+				"requirement": [
+					"food"
+				],
+				"modifiers": {
+					"food_production": 2
+				},
+				"node_active": true
+			}
+		]
 	},
 	"classical_forge": {
 		"display_name": "Classical Forge",
@@ -647,10 +825,17 @@
 			"iron_production": 1,
 			"metallurgist_bronze_production": 1
 		},
-		"synergy_requirement": ["bronze", "iron"],
-		"synergy_node_active": true,
-		"synergy_modifiers": {},
-		"count": 1
+		"count": 1,
+		"synergies": [
+			{
+				"requirement": [
+					"bronze",
+					"iron"
+				],
+				"modifiers": {},
+				"node_active": true
+			}
+		]
 	},
 	"classical_fort": {
 		"display_name": "Classical Fort",
@@ -667,10 +852,17 @@
 		"modifiers": {
 			"bronze_consumption": 1
 		},
-		"synergy_requirement": ["bronze", "iron"],
-		"synergy_node_active": true,
-		"synergy_modifiers": {},
-		"count": 2
+		"count": 2,
+		"synergies": [
+			{
+				"requirement": [
+					"bronze",
+					"iron"
+				],
+				"modifiers": {},
+				"node_active": true
+			}
+		]
 	},
 	"classical_granary": {
 		"display_name": "Classical Granary",
@@ -686,12 +878,18 @@
 			"food_storage_capacity": 10,
 			"farmer_food_production": 1
 		},
-		"synergy_requirement": ["food"],
-		"synergy_node_active": true,
-		"synergy_modifiers": {
-			"food_storage_capacity": 5
-		},
-		"count": 1
+		"count": 1,
+		"synergies": [
+			{
+				"requirement": [
+					"food"
+				],
+				"modifiers": {
+					"food_storage_capacity": 5
+				},
+				"node_active": true
+			}
+		]
 	},
 	"classical_guardhouse": {
 		"display_name": "Classical Guardhouse",
@@ -711,10 +909,17 @@
 			"iron_consumption": 1,
 			"stability_loss_chance": -0.1
 		},
-		"synergy_requirement": ["bronze", "iron"],
-		"synergy_node_active": true,
-		"synergy_modifiers": {},
-		"count": 1
+		"count": 1,
+		"synergies": [
+			{
+				"requirement": [
+					"bronze",
+					"iron"
+				],
+				"modifiers": {},
+				"node_active": true
+			}
+		]
 	},
 	"classical_home": {
 		"display_name": "Classical Home",
@@ -729,12 +934,18 @@
 			"wood_consumption": 1,
 			"effective_pop_capacity": 3
 		},
-		"synergy_requirement": ["food"],
-		"synergy_node_active": true,
-		"synergy_modifiers": {
-			"effective_pop_capacity": 1
-		},
-		"count": 1
+		"count": 1,
+		"synergies": [
+			{
+				"requirement": [
+					"food"
+				],
+				"modifiers": {
+					"effective_pop_capacity": 1
+				},
+				"node_active": true
+			}
+		]
 	},
 	"classical_hospital": {
 		"display_name": "Classical Hospital",
@@ -750,10 +961,16 @@
 			"food_consumption": 1,
 			"ruler_elderly_age": 1
 		},
-		"synergy_requirement": ["food"],
-		"synergy_node_active": true,
-		"synergy_modifiers": {},
-		"count": 1
+		"count": 1,
+		"synergies": [
+			{
+				"requirement": [
+					"food"
+				],
+				"modifiers": {},
+				"node_active": true
+			}
+		]
 	},
 	"classical_library": {
 		"display_name": "Classical Library",
@@ -768,10 +985,16 @@
 			"research_production_per_turns_with_library": 5,
 			"max_research_production_per_turns_with_library": 4
 		},
-		"synergy_requirement": ["wood"],
-		"synergy_node_active": true,
-		"synergy_modifiers": {},
-		"count": 1
+		"count": 1,
+		"synergies": [
+			{
+				"requirement": [
+					"wood"
+				],
+				"modifiers": {},
+				"node_active": true
+			}
+		]
 	},
 	"classical_magic_site": {
 		"display_name": "Classical Magic Site",
@@ -791,12 +1014,18 @@
 			"stone_consumption": 1,
 			"magic_production": 1
 		},
-		"synergy_requirement": ["magic"],
-		"synergy_node_active": true,
-		"synergy_modifiers": {
-			"magic_production": 1
-		},
-		"count": 1
+		"count": 1,
+		"synergies": [
+			{
+				"requirement": [
+					"magic"
+				],
+				"modifiers": {
+					"magic_production": 1
+				},
+				"node_active": true
+			}
+		]
 	},
 	"classical_market": {
 		"display_name": "Classical Market",
@@ -814,13 +1043,19 @@
 			"merchant_money_production": 50,
 			"money_income": 100
 		},
-		"synergy_requirement": ["luxury"],
-		"synergy_node_active": false,
-		"synergy_modifiers": {
-			"trade_distance": 6,
-			"trade_slots": 2
-		},
-		"count": 1
+		"count": 1,
+		"synergies": [
+			{
+				"requirement": [
+					"luxury"
+				],
+				"modifiers": {
+					"trade_distance": 6,
+					"trade_slots": 2
+				},
+				"node_active": false
+			}
+		]
 	},
 	"classical_mill": {
 		"display_name": "Classical Mill",
@@ -839,12 +1074,18 @@
 			"max_food_production_per_stockpiled_food": 10,
 			"farmer_food_production": 0.5
 		},
-		"synergy_requirement": ["food"],
-		"synergy_node_active": true,
-		"synergy_modifiers": {
-			"food_storage_capacity": 5
-		},
-		"count": 1
+		"count": 1,
+		"synergies": [
+			{
+				"requirement": [
+					"food"
+				],
+				"modifiers": {
+					"food_storage_capacity": 5
+				},
+				"node_active": true
+			}
+		]
 	},
 	"classical_mine": {
 		"display_name": "Classical Mine",
@@ -866,12 +1107,18 @@
 			"iron_production": 1,
 			"metallurgist_iron_production": 1
 		},
-		"synergy_requirement": ["iron"],
-		"synergy_node_active": true,
-		"synergy_modifiers": {
-			"iron_production": 1
-		},
-		"count": 1
+		"count": 1,
+		"synergies": [
+			{
+				"requirement": [
+					"iron"
+				],
+				"modifiers": {
+					"iron_production": 1
+				},
+				"node_active": true
+			}
+		]
 	},
 	"classical_mint": {
 		"display_name": "Classical Mint",
@@ -892,12 +1139,18 @@
 			"money_income_per_money_storage": 500,
 			"max_money_income_per_money_storage": 400
 		},
-		"synergy_requirement": ["luxury"],
-		"synergy_node_active": false,
-		"synergy_modifiers": {
-			"max_money_income_per_money_storage": 400
-		},
-		"count": 1
+		"count": 1,
+		"synergies": [
+			{
+				"requirement": [
+					"luxury"
+				],
+				"modifiers": {
+					"max_money_income_per_money_storage": 400
+				},
+				"node_active": false
+			}
+		]
 	},
 	"classical_quarry": {
 		"display_name": "Classical Quarry",
@@ -917,13 +1170,19 @@
 			"mounts_consumption": 1,
 			"miner_stone_production": 1
 		},
-		"synergy_requirement": ["stone"],
-		"synergy_node_active": true,
-		"synergy_modifiers": {
-			"district_stone_discount": 0.25,
-			"city_stone_discount": 0.25
-		},
-		"count": 1
+		"count": 1,
+		"synergies": [
+			{
+				"requirement": [
+					"stone"
+				],
+				"modifiers": {
+					"district_stone_discount": 0.25,
+					"city_stone_discount": 0.25
+				},
+				"node_active": true
+			}
+		]
 	},
 	"classical_ranch": {
 		"display_name": "Classical Ranch",
@@ -947,13 +1206,19 @@
 			"food_production": 1,
 			"miner_stone_production": 1
 		},
-		"synergy_requirement": ["mounts"],
-		"synergy_node_active": true,
-		"synergy_modifiers": {
-			"mounts_production": 1,
-			"food_production": 1
-		},
-		"count": 1
+		"count": 1,
+		"synergies": [
+			{
+				"requirement": [
+					"mounts"
+				],
+				"modifiers": {
+					"mounts_production": 1,
+					"food_production": 1
+				},
+				"node_active": true
+			}
+		]
 	},
 	"classical_sawmill": {
 		"display_name": "Classical Sawmill",
@@ -973,13 +1238,19 @@
 			"mounts_consumption": 1,
 			"harvester_wood_production": 1
 		},
-		"synergy_requirement": ["wood"],
-		"synergy_node_active": true,
-		"synergy_modifiers": {
-			"district_wood_discount": 0.25,
-			"city_wood_discount": 0.25
-		},
-		"count": 1
+		"count": 1,
+		"synergies": [
+			{
+				"requirement": [
+					"wood"
+				],
+				"modifiers": {
+					"district_wood_discount": 0.25,
+					"city_wood_discount": 0.25
+				},
+				"node_active": true
+			}
+		]
 	},
 	"classical_school": {
 		"display_name": "Classical School",
@@ -998,10 +1269,16 @@
 			"ruler_stat_gain_chance": 0.25,
 			"ruler_immortal_stat_gain_chance": -0.2
 		},
-		"synergy_requirement": ["research"],
-		"synergy_node_active": true,
-		"synergy_modifiers": {},
-		"count": 1
+		"count": 1,
+		"synergies": [
+			{
+				"requirement": [
+					"research"
+				],
+				"modifiers": {},
+				"node_active": true
+			}
+		]
 	},
 	"classical_spire": {
 		"display_name": "Classical Spire",
@@ -1018,10 +1295,17 @@
 			"iron_consumption": 1,
 			"mystic_magic_production": 1
 		},
-		"synergy_requirement": ["magic", "stone"],
-		"synergy_node_active": true,
-		"synergy_modifiers": {},
-		"count": 1
+		"count": 1,
+		"synergies": [
+			{
+				"requirement": [
+					"magic",
+					"stone"
+				],
+				"modifiers": {},
+				"node_active": true
+			}
+		]
 	},
 	"classical_workshop": {
 		"display_name": "Classical Workshop",
@@ -1042,11 +1326,18 @@
 		"modifiers": {
 			"bronze_consumption": 1
 		},
-		"synergy_requirement": ["bronze", "iron"],
-		"synergy_node_active": true,
-		"synergy_modifiers": {
-			"mundane_unit_attack": 1
-		},
-		"count": 1
+		"count": 1,
+		"synergies": [
+			{
+				"requirement": [
+					"bronze",
+					"iron"
+				],
+				"modifiers": {
+					"mundane_unit_attack": 1
+				},
+				"node_active": true
+			}
+		]
 	}
 }

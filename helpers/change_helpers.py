@@ -1,12 +1,12 @@
 import uuid
 from datetime import datetime, timezone
-from app_core import mongo, category_data
+from app_core import mongo, category_data, json_data
 from flask import g, flash
 from calculations.field_calculations import calculate_all_fields
 from copy import deepcopy
 from bson import ObjectId
 
-_NATURAL_KEY_FIELDS = ['name', 'quest_name', 'source', 'field', 'key']
+_NATURAL_KEY_FIELDS = ['name', 'quest_name', 'source', 'modifier_type', 'scope', 'attribute', 'resource_from', 'resource_to', 'field', 'key']
 
 
 def _get_natural_key(item):
@@ -123,6 +123,27 @@ def _all_have_ids(lst):
     return bool(lst) and all(isinstance(item, dict) and item.get('_id') for item in lst)
 
 
+def _update_tech_costs(nation):
+    """Re-evaluate tech costs based on the nation's current cost modifier.
+
+    Skips techs where cost_manually_set is True so player edits are preserved.
+    Minimum cost is floor(base_cost / 2).
+    """
+    tech_json = json_data.get("tech", {})
+    cost_modifier = nation.get("technology_cost_modifier", 0)
+    technologies = nation.get("technologies")
+    if not isinstance(technologies, dict):
+        return
+    for tech_id, tech_data in technologies.items():
+        if not isinstance(tech_data, dict):
+            continue
+        if tech_data.get("cost_manually_set", False):
+            continue
+        base_cost = tech_json.get(tech_id, {}).get("cost", 0)
+        min_cost = base_cost // 2
+        tech_data["cost"] = max(base_cost + cost_modifier, min_cost)
+
+
 def _calculate_and_attach_fields(data_type, target):
     schema = category_data[data_type]["schema"]
     target_data_type = category_data[data_type]["singularName"].lower()
@@ -136,6 +157,7 @@ def _calculate_and_attach_fields(data_type, target):
         )
         target.update(calculated_fields)
         target["breakdowns"] = breakdowns
+        _update_tech_costs(target)
     else:
         calculated_fields = calculate_all_fields(target, schema, target_data_type)
         target.update(calculated_fields)
@@ -233,6 +255,18 @@ def approve_change(change_id):
 
     if change["change_type"] == "Add":
         after_data = change["after_requested_data"]
+
+        if change["target_collection"] == "market_links":
+            member_id = after_data.get("member", "")
+            if member_id:
+                try:
+                    member_nation = mongo.db.nations.find_one({"_id": ObjectId(member_id)}, {"infamy": 1})
+                except Exception:
+                    member_nation = None
+                if member_nation and member_nation.get("infamy", 0) >= 50:
+                    flash("Cannot add nation to market: that nation has 50 or more infamy.")
+                    return False
+
         after_data = _calculate_and_attach_fields(change["target_collection"], after_data)
         inserted_item_id = target_collection.insert_one(after_data).inserted_id
         changes_collection.update_one({"_id": change_id}, {"$set": {

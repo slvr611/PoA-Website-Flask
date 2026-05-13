@@ -81,7 +81,8 @@ def new_character():
         schema=schema,
         dropdown_options=dropdown_options,
         general_resources=json_data["general_resources"],
-        unique_resources=json_data["unique_resources"]
+        unique_resources=json_data["unique_resources"],
+        entity_source_type="character"
     )
 
 @character_routes.route("/characters/new/request", methods=["POST"])

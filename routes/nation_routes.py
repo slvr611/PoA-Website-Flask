@@ -20,6 +20,37 @@ nation_routes = Blueprint("nation_routes", __name__)
 
 POP_PAGE_SIZE = 100
 
+
+def _validate_tech_costs(form_data):
+    """Return (True, None) or (False, error_message) checking each tech's submitted
+    cost is at least floor(base_cost / 2).  Techs with base_cost == 0 are skipped."""
+    tech_json = json_data.get("tech", {})
+    technologies = form_data.get("technologies", {})
+    if not isinstance(technologies, dict):
+        return True, None
+    errors = []
+    for tech_id, tech_data in technologies.items():
+        if not isinstance(tech_data, dict):
+            continue
+        submitted_cost = tech_data.get("cost")
+        if submitted_cost is None:
+            continue
+        base_cost = tech_json.get(tech_id, {}).get("cost", 0)
+        if base_cost <= 0:
+            continue
+        min_cost = base_cost // 2
+        if submitted_cost < min_cost:
+            display_name = tech_json.get(tech_id, {}).get("display_name", tech_id)
+            errors.append(
+                f"'{display_name}' has a minimum cost of {min_cost} "
+                f"(half of its base cost of {base_cost}), but {submitted_cost} was submitted."
+            )
+    if errors:
+        prefix = "Techs have a minimum cost equal to half their base cost. "
+        return False, prefix + " | ".join(errors)
+    return True, None
+
+
 def _to_object_ids(id_list):
     object_ids = []
     for item_id in id_list:
@@ -124,7 +155,7 @@ def nation_item(item_ref):
 
     calc_timings = {}
     breakdowns = nation.get("breakdowns", None)
-    required_breakdown_keys = {"stability_gain_chance", "stability_loss_chance", "resource_production", "resource_consumption", "money_income"}
+    required_breakdown_keys = {"stability_gain_chance", "stability_loss_chance", "resource_production", "resource_consumption", "money_income", "job_production", "job_consumption"}
     has_cached_breakdowns = isinstance(breakdowns, dict) and required_breakdown_keys.issubset(set(breakdowns.keys()))
 
     timings["calculate_all_fields_ms"] = 0.0
@@ -157,6 +188,8 @@ def nation_item(item_ref):
     else:
         timings["cache_backfill_ms"] = 0.0
     
+    user_can_edit_pops = user_is_owner or bool(g.user and g.user.get("is_admin"))
+
     phase_start = perf_counter()
     rendered = render_template(
         "nation_owner.html",
@@ -167,6 +200,7 @@ def nation_item(item_ref):
         json_data=json_data,
         cities_config=json_data["cities"],
         user_is_owner=user_is_owner,
+        user_can_edit_pops=user_can_edit_pops,
         find_dict_in_list=find_dict_in_list,
         breakdowns=breakdowns,
         pop_pagination=pop_pagination
@@ -183,11 +217,14 @@ def nation_item(item_ref):
 
     return rendered
 
-@nation_routes.route("/nations/edit/<item_ref>", methods=["GET"])
-def edit_nation(item_ref):
-    """Display nation edit form"""
+def _render_nation_edit(item_ref, form=None):
+    """Build and return the nation edit page.
+
+    Pass form=None to load from DB (GET path).  Pass a pre-built form populated
+    from request.form to preserve submitted values after a validation failure.
+    """
     schema, db, nation = get_data_on_item("nations", item_ref)
-    
+
     dropdown_options = {}
     for field, attributes in schema["properties"].items():
         if attributes.get("collections"):
@@ -199,21 +236,33 @@ def edit_nation(item_ref):
                         {}, {"name": 1, "_id": 1}
                     ).sort("name", ASCENDING)
                 )
-    
+
     linked_objects = get_linked_objects(schema, nation)
 
-    # Ensure concessions is properly formatted
     if "concessions" in nation and nation["concessions"] is not None:
         if not isinstance(nation["concessions"], dict):
             nation["concessions"] = {}
     else:
         nation["concessions"] = {}
-    
-    form = form_generator.get_form("nations", schema, item=nation)
+
+    if form is None:
+        form = form_generator.get_form("nations", schema, item=nation)
+        form.concessions.data = json.dumps(nation.get("concessions", {}))
+
     form.populate_linked_fields(schema, dropdown_options)
 
-    # Set concessions as JSON string
-    form.concessions.data = json.dumps(nation.get("concessions", {}))
+    def _opts(collection):
+        return [
+            {"id": str(item["_id"]), "name": item.get("name", "")}
+            for item in mongo.db[collection].find({}, {"_id": 1, "name": 1}).sort("name", ASCENDING)
+        ]
+
+    bulk_edit_options = {
+        "nations": _opts("nations"),
+        "races": _opts("races"),
+        "cultures": _opts("cultures"),
+        "religions": _opts("religions"),
+    }
 
     return render_template(
         "nation_owner_edit.html",
@@ -225,8 +274,15 @@ def edit_nation(item_ref):
         dropdown_options=dropdown_options,
         linked_objects=linked_objects,
         json_data=json_data,
-        find_dict_in_list=find_dict_in_list
+        find_dict_in_list=find_dict_in_list,
+        bulk_edit_options=bulk_edit_options,
     )
+
+
+@nation_routes.route("/nations/edit/<item_ref>", methods=["GET"])
+def edit_nation(item_ref):
+    """Display nation edit form"""
+    return _render_nation_edit(item_ref)
 
 @nation_routes.route("/nations/edit/<item_ref>/request", methods=["POST"])
 def nation_edit_request(item_ref):
@@ -235,17 +291,17 @@ def nation_edit_request(item_ref):
 
     form = form_generator.get_form("nations", schema, formdata=request.form)
     form.populate_linked_fields(schema, get_dropdown_options(schema))
-    
+
     if not form.validate():
         flash(f"Form validation failed: {form.errors}")
-        return redirect("/nations/edit/" + item_ref)
-    
+        return _render_nation_edit(item_ref, form=form)
+
     form_data = form.data.copy()
     form_data.pop('csrf_token', None)
     form_data.pop('submit', None)
     if "name" in form_data:
         form_data["name"] = form_data.get("name", "").strip()
-    
+
     # Process concessions field
     if 'concessions' in form_data:
         try:
@@ -253,16 +309,21 @@ def nation_edit_request(item_ref):
                 form_data['concessions'] = json.loads(form_data['concessions'])
         except (json.JSONDecodeError, TypeError):
             form_data['concessions'] = {}
-    
+
     valid, error = validate_form_with_jsonschema(form, schema)
     if not valid:
         flash(f"Validation Error: {error}")
-        return redirect("/nations/edit/" + item_ref)
-    
+        return _render_nation_edit(item_ref, form=form)
+
+    valid, error = _validate_tech_costs(form_data)
+    if not valid:
+        flash(f"Validation Error: {error}")
+        return _render_nation_edit(item_ref, form=form)
+
     if form_data["name"] != item_ref and db.find_one({"name": form_data["name"]}):
         flash("Name must be unique!")
-        return redirect(f"/nations/edit/{item_ref}")
-    
+        return _render_nation_edit(item_ref, form=form)
+
     change_id = request_change(
         data_type="nations",
         item_id=nation["_id"],
@@ -271,7 +332,7 @@ def nation_edit_request(item_ref):
         after_data=form_data,
         reason=form_data.pop("reason", "No Reason Given")
     )
-    
+
     flash(f"Change request #{change_id} created and awaits admin approval.")
     return redirect("/nations/item/" + item_ref)
 
@@ -280,14 +341,14 @@ def nation_edit_request(item_ref):
 def nation_edit_approve(item_ref):
     """Handle nation edit approval"""
     schema, db, nation = get_data_on_item("nations", item_ref)
-    
+
     form = form_generator.get_form("nations", schema, formdata=request.form)
     form.populate_linked_fields(schema, get_dropdown_options(schema))
-    
+
     if not form.validate():
         flash(f"Form validation failed: {form.errors}")
-        return redirect("/nations/edit/" + item_ref)
-    
+        return _render_nation_edit(item_ref, form=form)
+
     form_data = form.data.copy()
     form_data.pop('csrf_token', None)
     form_data.pop('submit', None)
@@ -305,12 +366,17 @@ def nation_edit_approve(item_ref):
     valid, error = validate_form_with_jsonschema(form, schema)
     if not valid:
         flash(f"Validation Error: {error}")
-        return redirect("/nations/edit/" + item_ref)
-    
+        return _render_nation_edit(item_ref, form=form)
+
+    valid, error = _validate_tech_costs(form_data)
+    if not valid:
+        flash(f"Validation Error: {error}")
+        return _render_nation_edit(item_ref, form=form)
+
     if form_data["name"] != item_ref and db.find_one({"name": form_data["name"]}):
         flash("Name must be unique!")
-        return redirect(f"/nations/edit/{item_ref}")
-    
+        return _render_nation_edit(item_ref, form=form)
+
     change_id = request_change(
         data_type="nations",
         item_id=nation["_id"],
@@ -319,7 +385,7 @@ def nation_edit_approve(item_ref):
         after_data=form_data,
         reason=form_data.pop("reason", "No Reason Given")
     )
-    
+
     approve_change(change_id)
     flash(f"Change request #{change_id} created and approved.")
     return redirect("/nations/item/" + form_data["name"])

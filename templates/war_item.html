@@ -15,6 +15,17 @@
 
     <h1>{{ war.name }}</h1>
 
+    <p class="war-session-info">
+        Session Declared: <strong>{{ war.session_declared if war.session_declared is not none else '—' }}</strong>
+        &nbsp;|&nbsp;
+        Session Ended:
+        {% if war.session_ended is not none %}
+            <strong>{{ war.session_ended }}</strong>
+        {% else %}
+            <strong style="color:#90d090;">Ongoing</strong>
+        {% endif %}
+    </p>
+
     {% macro render_side(side_entries, side_label, side_class) %}
     <section class="war-side {{ side_class }}">
         <h2 class="war-side-heading">{{ side_label }}</h2>
@@ -108,6 +119,7 @@
 <style>
 /* ── layout ── */
 .war-nav { margin-bottom: 1rem; }
+.war-session-info { color: #aaa; font-size: 0.9rem; margin: -0.25rem 0 1.25rem; }
 .war-side { margin-bottom: 1.5rem; }
 .war-side-heading {
     margin: 0 0 0.75rem;

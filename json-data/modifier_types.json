@@ -1,0 +1,365 @@
+{
+    "administration": {
+        "name": "Administration",
+        "value_format": "number",
+        "field_template": "administration",
+        "applicable_to": ["nation"]
+    },
+    "artifact_slots": {
+        "name": "Artifact Slots",
+        "value_format": "number",
+        "field_template": "artifact_slots",
+        "applicable_to": ["character"]
+    },
+    "attribute": {
+        "name": "Attribute",
+        "value_format": "number",
+        "field_template": "{attribute}",
+        "extra_fields": [
+            {"key": "attribute", "label": "Attribute", "source": "attributes"}
+        ],
+        "applicable_to": ["character"]
+    },
+    "attribute_cap": {
+        "name": "Attribute Cap",
+        "value_format": "number",
+        "field_template": "{attribute}_cap",
+        "extra_fields": [
+            {"key": "attribute", "label": "Attribute", "source": "attributes"}
+        ],
+        "applicable_to": ["character"]
+    },
+    "city_slots": {
+        "name": "City Slots",
+        "value_format": "number",
+        "field_template": "city_slots",
+        "applicable_to": ["nation"]
+    },
+    "consumption_conversion": {
+        "name": "Consumption Conversion",
+        "value_format": "percentage",
+        "field_template": "{resource_from}_to_{resource_to}_consumption_conversion",
+        "extra_fields": [
+            {"key": "resource_from", "label": "From Resource", "source": "all_resources"},
+            {"key": "resource_to", "label": "To Resource", "source": "all_resources"}
+        ],
+        "applicable_to": ["nation"]
+    },
+    "civil_war_chance": {
+        "name": "Civil War Chance",
+        "value_format": "percentage",
+        "field_template": "civil_war_chance",
+        "applicable_to": ["nation"]
+    },
+    "death_chance": {
+        "name": "Death Chance",
+        "value_format": "percentage",
+        "field_template": "death_chance",
+        "applicable_to": ["character"]
+    },
+    "death_chance_multiplier": {
+        "name": "Death Chance Multiplier",
+        "value_format": "number",
+        "field_template": "death_chance_multiplier",
+        "applicable_to": ["character"]
+    },
+    "defensive_pact_slots": {
+        "name": "Defensive Pact Slots",
+        "value_format": "number",
+        "field_template": "defensive_pact_slots",
+        "applicable_to": ["nation"]
+    },
+    "district_slots": {
+        "name": "District Slots",
+        "value_format": "number",
+        "field_template": "district_slots",
+        "applicable_to": ["nation"]
+    },
+    "era_resource_stockpile_kept_modifier": {
+        "name": "Era All-Resource Stockpile Kept",
+        "value_format": "percentage",
+        "field_template": "era_resource_stockpile_kept_modifier",
+        "applicable_to": ["nation"]
+    },
+    "era_specific_resource_stockpile_kept_modifier": {
+        "name": "Era Specific Resource Stockpile Kept",
+        "value_format": "percentage",
+        "field_template": "era_{resource}_stockpile_kept_modifier",
+        "extra_fields": [
+            {"key": "resource", "label": "Resource", "source": "all_resources"}
+        ],
+        "applicable_to": ["nation"]
+    },
+    "effective_pop_capacity": {
+        "name": "Effective Pop Capacity",
+        "value_format": "number",
+        "field_template": "effective_pop_capacity",
+        "applicable_to": ["nation"]
+    },
+    "effective_territory": {
+        "name": "Effective Territory",
+        "value_format": "number",
+        "field_template": "effective_territory",
+        "applicable_to": ["nation"]
+    },
+    "elderly_age": {
+        "name": "Elderly Age",
+        "value_format": "number",
+        "field_template": "elderly_age",
+        "applicable_to": ["character"]
+    },
+    "heal_chance": {
+        "name": "Heal Chance",
+        "value_format": "percentage",
+        "field_template": "heal_chance",
+        "applicable_to": ["character"]
+    },
+    "immortal": {
+        "name": "Immortal",
+        "value_format": "number",
+        "field_template": "immortal",
+        "applicable_to": ["character"]
+    },
+    "infamy": {
+        "name": "Infamy",
+        "value_format": "number",
+        "field_template": "infamy",
+        "applicable_to": ["nation"]
+    },
+    "job_resource_production": {
+        "name": "Job Resource Production",
+        "value_format": "number",
+        "field_template": "{job}_{resource}_production",
+        "extra_fields": [
+            {"key": "job", "label": "Job", "source": "jobs"},
+            {"key": "resource", "label": "Resource", "source": "all_resources"}
+        ],
+        "applicable_to": ["nation"]
+    },
+    "job_resource_upkeep": {
+        "name": "Job Resource Upkeep",
+        "value_format": "number",
+        "field_template": "{job}_{resource}_upkeep",
+        "extra_fields": [
+            {"key": "job", "label": "Job", "source": "jobs"},
+            {"key": "resource", "label": "Resource", "source": "all_resources"}
+        ],
+        "applicable_to": ["nation"]
+    },
+    "karma": {
+        "name": "Karma",
+        "value_format": "number",
+        "field_template": "karma",
+        "applicable_to": ["nation"]
+    },
+    "land_attack": {
+        "name": "Land Attack",
+        "value_format": "number",
+        "field_template": "land_attack",
+        "applicable_to": ["nation"]
+    },
+    "land_defense": {
+        "name": "Land Defense",
+        "value_format": "number",
+        "field_template": "land_defense",
+        "applicable_to": ["nation"]
+    },
+    "magic_point_income": {
+        "name": "Magic Point Income",
+        "value_format": "number",
+        "field_template": "magic_point_income",
+        "applicable_to": ["nation"]
+    },
+    "migration_distance": {
+        "name": "Migration Distance",
+        "value_format": "number",
+        "field_template": "migration_distance",
+        "applicable_to": ["nation"]
+    },
+    "military_alliance_slots": {
+        "name": "Military Alliance Slots",
+        "value_format": "number",
+        "field_template": "military_alliance_slots",
+        "applicable_to": ["nation"]
+    },
+    "money_income": {
+        "name": "Money Income",
+        "value_format": "number",
+        "field_template": "money_income",
+        "applicable_to": ["nation", "merchant", "mercenary"]
+    },
+    "money_capacity": {
+        "name": "Money Capacity",
+        "value_format": "number",
+        "field_template": "money_capacity",
+        "applicable_to": ["nation", "merchant", "mercenary"]
+    },
+    "morale": {
+        "name": "Morale",
+        "value_format": "number",
+        "field_template": "morale",
+        "applicable_to": ["nation", "character"]
+    },
+    "nation_magic_spell_rolls": {
+        "name": "Nation Magic Spell Rolls",
+        "value_format": "number",
+        "field_template": "nation_magic_spell_rolls",
+        "applicable_to": ["nation"]
+    },
+    "naval_attack": {
+        "name": "Naval Attack",
+        "value_format": "number",
+        "field_template": "naval_attack",
+        "applicable_to": ["nation"]
+    },
+    "naval_defense": {
+        "name": "Naval Defense",
+        "value_format": "number",
+        "field_template": "naval_defense",
+        "applicable_to": ["nation"]
+    },
+    "passive_expansion_chance": {
+        "name": "Passive Expansion Chance",
+        "value_format": "percentage",
+        "field_template": "passive_expansion_chance",
+        "applicable_to": ["nation"]
+    },
+    "pop_loss_chance": {
+        "name": "Pop Loss Chance",
+        "value_format": "percentage",
+        "field_template": "pop_loss_chance",
+        "applicable_to": ["nation"]
+    },
+    "positive_title_slots": {
+        "name": "Positive Title Slots",
+        "value_format": "number",
+        "field_template": "positive_title_slots",
+        "applicable_to": ["character"]
+    },
+    "prestige_gain": {
+        "name": "Prestige Gain",
+        "value_format": "number",
+        "field_template": "prestige_gain",
+        "applicable_to": ["nation"]
+    },
+    "recruit_percentage": {
+        "name": "Recruit Percentage",
+        "value_format": "percentage",
+        "field_template": "recruit_percentage",
+        "applicable_to": ["nation"]
+    },
+    "resource_consumption": {
+        "name": "Resource Consumption",
+        "value_format": "number",
+        "field_template": "{resource}_consumption",
+        "extra_fields": [
+            {"key": "resource", "label": "Resource", "source": "all_resources"}
+        ],
+        "applicable_to": ["nation"]
+    },
+    "resource_nodes": {
+        "name": "Resource Nodes",
+        "value_format": "number",
+        "field_template": "{resource}_nodes",
+        "extra_fields": [
+            {"key": "resource", "label": "Resource", "source": "all_resources"}
+        ],
+        "applicable_to": ["nation"]
+    },
+    "resource_production": {
+        "name": "Resource Production",
+        "value_format": "number",
+        "field_template": "{resource}_production",
+        "extra_fields": [
+            {"key": "resource", "label": "Resource", "source": "all_resources"}
+        ],
+        "applicable_to": ["nation", "merchant"]
+    },
+    "resource_storage_capacity": {
+        "name": "Resource Storage Capacity",
+        "value_format": "number",
+        "field_template": "{resource}_storage_capacity",
+        "extra_fields": [
+            {"key": "resource", "label": "Resource", "source": "all_resources"}
+        ],
+        "applicable_to": ["nation"]
+    },
+    "slow_aging": {
+        "name": "Slow Aging",
+        "value_format": "number",
+        "field_template": "slow_aging",
+        "applicable_to": ["character"]
+    },
+    "stability_gain_chance": {
+        "name": "Stability Gain Chance",
+        "value_format": "percentage",
+        "field_template": "stability_gain_chance",
+        "applicable_to": ["nation"]
+    },
+    "stability_loss_chance": {
+        "name": "Stability Loss Chance",
+        "value_format": "percentage",
+        "field_template": "stability_loss_chance",
+        "applicable_to": ["nation"]
+    },
+    "stat_gain_chance": {
+        "name": "Stat Gain Chance",
+        "value_format": "percentage",
+        "field_template": "stat_gain_chance",
+        "applicable_to": ["character"]
+    },
+    "strength": {
+        "name": "Strength",
+        "value_format": "number",
+        "field_template": "strength",
+        "applicable_to": ["nation"]
+    },
+    "trade_distance": {
+        "name": "Trade Distance",
+        "value_format": "number",
+        "field_template": "trade_distance",
+        "applicable_to": ["nation", "merchant"]
+    },
+    "trade_slots": {
+        "name": "Trade Slots",
+        "value_format": "number",
+        "field_template": "trade_slots",
+        "applicable_to": ["nation", "merchant"]
+    },
+    "turns_with_library": {
+        "name": "Turns with Library",
+        "value_format": "number",
+        "field_template": "turns_with_library",
+        "applicable_to": ["nation"]
+    },
+    "undead_chance": {
+        "name": "Undead Chance",
+        "value_format": "percentage",
+        "field_template": "undead_chance",
+        "applicable_to": ["nation"]
+    },
+    "unit_hp": {
+        "name": "Unit HP",
+        "value_format": "number",
+        "field_template": "unit_hp",
+        "applicable_to": ["nation", "unit"]
+    },
+    "unit_morale": {
+        "name": "Unit Morale",
+        "value_format": "number",
+        "field_template": "unit_morale",
+        "applicable_to": ["nation", "unit"]
+    },
+    "vampirism_chance": {
+        "name": "Vampirism Chance",
+        "value_format": "percentage",
+        "field_template": "vampirism_chance",
+        "applicable_to": ["character"]
+    },
+    "vassal_slots": {
+        "name": "Vassal Slots",
+        "value_format": "number",
+        "field_template": "vassal_slots",
+        "applicable_to": ["nation"]
+    }
+}

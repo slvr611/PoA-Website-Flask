@@ -473,9 +473,16 @@ def player_district_analysis():
             return False
         if isinstance(requirement, list):
             return "any" in requirement or node in requirement
-        if requirement == "any":
-            return True
-        return node == requirement
+        return requirement == "any" or node == requirement
+
+    def get_synergies(dd):
+        if "synergies" in dd:
+            return dd["synergies"]
+        req = dd.get("synergy_requirement", "")
+        mods = dd.get("synergy_modifiers", {})
+        if req or mods:
+            return [{"requirement": req}]
+        return []
 
     district_stats = {}
     category_stats = {}
@@ -495,8 +502,8 @@ def player_district_analysis():
             if not district_type:
                 continue
 
-            requirement = district_data.get(district_type, {}).get("synergy_requirement", "")
-            synergy_active = synergy_matches(district_node, requirement)
+            dd = district_data.get(district_type, {})
+            synergy_active = any(synergy_matches(district_node, syn.get("requirement", "")) for syn in get_synergies(dd))
             label = district_data.get(district_type, {}).get("name", district_type)
             stats = district_stats.setdefault(
                 district_type,
@@ -540,8 +547,8 @@ def player_district_analysis():
             imperial_type = imperial.get("type", "")
             imperial_node = imperial.get("node", "")
             if imperial_type:
-                requirement = imperial_data.get(imperial_type, {}).get("synergy_requirement", "")
-                synergy_active = synergy_matches(imperial_node, requirement)
+                imperial_dd = imperial_data.get(imperial_type, {})
+                synergy_active = any(synergy_matches(imperial_node, syn.get("requirement", "")) for syn in get_synergies(imperial_dd))
                 key = f"Imperial: {imperial_type}"
                 label = imperial_data.get(imperial_type, {}).get("name", key)
                 stats = district_stats.setdefault(

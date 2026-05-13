@@ -236,12 +236,13 @@
                             </tr>
                         </table>
                         
-                        <table class="info-table">
+                        <table class="info-table" id="pop-edit-table">
                             <thead>
                                 <tr class="resources-header-row">
-                                    <th colspan="7" class="resources-header">Population Details</th>
+                                    <th colspan="{{ 8 if g.user.is_admin else 7 }}" class="resources-header">Population Details</th>
                                 </tr>
                                 <tr>
+                                    <th><input type="checkbox" id="select-all-pops" title="Select all"></th>
                                     <th>#</th>
                                     <th>Race</th>
                                     <th>Culture</th>
@@ -255,23 +256,28 @@
                             </thead>
                             <tbody>
                                 {% for pop in linked_objects["pops"] %}
-                                    <tr>
+                                    <tr data-pop-id="{{ pop._id }}"
+                                        data-nation="{{ nation._id }}"
+                                        data-race="{{ pop.get('race', '') }}"
+                                        data-culture="{{ pop.get('culture', '') }}"
+                                        data-religion="{{ pop.get('religion', '') }}">
+                                        <td><input type="checkbox" class="pop-select"></td>
                                         <td><a href="{{ pop["link"] }}">{{ loop.index }}</a></td>
-                                        <td>
+                                        <td class="pop-race-cell">
                                         {% if pop["linked_objects"]["race"] %}
                                             <a href="{{ pop['linked_objects']['race']['link'] }}">{{ pop['linked_objects']['race']['name'] }}</a>
                                         {% else %}
                                             None
                                         {% endif %}
                                         </td>
-                                        <td>
+                                        <td class="pop-culture-cell">
                                         {% if pop["linked_objects"]["culture"] %}
                                             <a href="{{ pop['linked_objects']['culture']['link'] }}">{{ pop['linked_objects']['culture']['name'] }}</a>
                                         {% else %}
                                             None
                                         {% endif %}
                                         </td>
-                                        <td>
+                                        <td class="pop-religion-cell">
                                         {% if pop["linked_objects"]["religion"] %}
                                             <a href="{{ pop['linked_objects']['religion']['link'] }}">{{ pop['linked_objects']['religion']['name'] }}</a>
                                         {% else %}
@@ -282,7 +288,6 @@
                                             <td>
                                                 <input type="text" id="pop_reason" name="pop_reason" value="">
                                             </td>
-                                            
                                             {% if g.user.is_admin %}
                                                 <td><button type="submit" formaction="{{ pop['link'].replace('item', 'clone') }}/save" class="btn btn-primary">Clone Now</button></td>
                                             {% endif %}
@@ -292,6 +297,142 @@
                                 {% endfor %}
                             </tbody>
                         </table>
+
+                        <p id="bulk-edit-hint" style="margin-top:8px; font-size:0.85em; color:#888;">
+                            Check boxes in the first column to select pops for bulk editing.
+                        </p>
+
+                        <div id="bulk-edit-bar" style="display:none; margin-top:12px; padding:12px; border:1px solid #444; border-radius:4px; background:#1e1e1e;">
+                            <div style="margin-bottom:8px; font-weight:bold;">
+                                <span id="selected-count">0 pops selected</span>
+                            </div>
+                            <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end; margin-bottom:8px;">
+                                <label style="display:flex; flex-direction:column; gap:3px; font-size:0.9em;">
+                                    Move to Nation
+                                    <select id="bulk-nation" style="min-width:160px;">
+                                        <option value="">— no change —</option>
+                                        {% for opt in bulk_edit_options.nations %}
+                                        <option value="{{ opt.id }}">{{ opt.name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </label>
+                                <label style="display:flex; flex-direction:column; gap:3px; font-size:0.9em;">
+                                    Change Race
+                                    <select id="bulk-race" style="min-width:140px;">
+                                        <option value="">— no change —</option>
+                                        {% for opt in bulk_edit_options.races %}
+                                        <option value="{{ opt.id }}">{{ opt.name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </label>
+                                <label style="display:flex; flex-direction:column; gap:3px; font-size:0.9em;">
+                                    Change Culture
+                                    <select id="bulk-culture" style="min-width:140px;">
+                                        <option value="">— no change —</option>
+                                        {% for opt in bulk_edit_options.cultures %}
+                                        <option value="{{ opt.id }}">{{ opt.name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </label>
+                                <label style="display:flex; flex-direction:column; gap:3px; font-size:0.9em;">
+                                    Change Religion
+                                    <select id="bulk-religion" style="min-width:140px;">
+                                        <option value="">— no change —</option>
+                                        {% for opt in bulk_edit_options.religions %}
+                                        <option value="{{ opt.id }}">{{ opt.name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </label>
+                                <label style="display:flex; flex-direction:column; gap:3px; font-size:0.9em;">
+                                    Reason
+                                    <input type="text" id="bulk-edit-reason" placeholder="Optional reason" style="min-width:200px;">
+                                </label>
+                                <button id="bulk-edit-submit" style="align-self:flex-end;">Apply to Selected Pops</button>
+                            </div>
+                        </div>
+
+                        <script>
+                        (function() {
+                            function updateBar() {
+                                const checked = document.querySelectorAll('.pop-select:checked');
+                                const count = checked.length;
+                                document.getElementById('selected-count').textContent =
+                                    count + ' pop' + (count !== 1 ? 's' : '') + ' selected';
+                                const hasSelection = count > 0;
+                                document.getElementById('bulk-edit-bar').style.display = hasSelection ? 'block' : 'none';
+                                document.getElementById('bulk-edit-hint').style.display = hasSelection ? 'none' : '';
+                            }
+
+                            function propagateField(fieldName, newId, newName) {
+                                if (!newId) return;
+                                const cellClass = { race: 'pop-race-cell', culture: 'pop-culture-cell', religion: 'pop-religion-cell' };
+                                document.querySelectorAll('.pop-select:checked').forEach(cb => {
+                                    const row = cb.closest('tr');
+                                    row.dataset[fieldName] = newId;
+                                    const cell = row.querySelector('.' + (cellClass[fieldName] || ''));
+                                    if (cell) cell.textContent = newName;
+                                });
+                            }
+
+                            document.addEventListener('DOMContentLoaded', function() {
+                                document.getElementById('select-all-pops').addEventListener('change', function() {
+                                    document.querySelectorAll('.pop-select').forEach(cb => cb.checked = this.checked);
+                                    updateBar();
+                                });
+
+                                document.querySelectorAll('.pop-select').forEach(cb => {
+                                    cb.addEventListener('change', updateBar);
+                                });
+
+                                ['bulk-nation', 'bulk-race', 'bulk-culture', 'bulk-religion'].forEach(id => {
+                                    document.getElementById(id).addEventListener('change', function() {
+                                        propagateField(id.replace('bulk-', ''), this.value, this.options[this.selectedIndex].text);
+                                    });
+                                });
+
+                                document.getElementById('bulk-edit-submit').addEventListener('click', async function() {
+                                    const checked = Array.from(document.querySelectorAll('.pop-select:checked'));
+                                    if (!checked.length) return;
+
+                                    const updates = checked.map(cb => {
+                                        const row = cb.closest('tr');
+                                        return {
+                                            pop_id: row.dataset.popId,
+                                            nation: row.dataset.nation,
+                                            race: row.dataset.race,
+                                            culture: row.dataset.culture,
+                                            religion: row.dataset.religion,
+                                        };
+                                    });
+
+                                    const reason = document.getElementById('bulk-edit-reason').value.trim();
+                                    this.disabled = true;
+                                    this.textContent = 'Applying…';
+
+                                    try {
+                                        const res = await fetch('/pops/bulk_edit', {
+                                            method: 'POST',
+                                            headers: {'Content-Type': 'application/json'},
+                                            body: JSON.stringify({ updates, reason: reason || 'Bulk pop edit' }),
+                                        });
+                                        const data = await res.json();
+                                        const verb = data.approved ? 'Applied' : 'Submitted';
+                                        let msg = verb + ' ' + data.changes_created + ' change(s)';
+                                        if (!data.approved) msg += ' — awaiting admin approval';
+                                        if (data.errors && data.errors.length)
+                                            msg += '\n\nErrors:\n' + data.errors.join('\n');
+                                        alert(msg);
+                                        if (data.changes_created > 0) location.reload();
+                                    } catch(e) {
+                                        alert('Request failed: ' + e.message);
+                                    } finally {
+                                        this.disabled = false;
+                                        this.textContent = 'Apply to Selected Pops';
+                                    }
+                                });
+                            });
+                        })();
+                        </script>
                     </div>
                 </div>
             </div>
@@ -873,7 +1014,8 @@
                 <table class="jobs-table">
                     <thead>
                         <tr>
-                            <th>Field</th>
+                            <th>Modifier Type</th>
+                            <th>Scope</th>
                             <th>Value</th>
                             <th>Duration</th>
                             <th>Source</th>
@@ -882,14 +1024,89 @@
                     </thead>
                     <tbody id="modifiers-tbody">
                         {% for modifier_field in form.modifiers %}
+                            {% set idx = loop.index0 %}
+                            {% set mod_type = modifier_field.form.modifier_type.data or '' %}
+                            {% set type_def = modifier_types.get(mod_type, {}) %}
+                            {% set extra_fields = type_def.get('extra_fields', []) %}
+                            {% set cur_scope = modifier_field.form.scope.data or 'nation_self' %}
+                            {% set scope_target_type = scope_definitions.get(cur_scope, {}).get('target_type', 'nation') %}
                             <tr>
-                                <td>{{ modifier_field.item_id() }}{{ modifier_field.field(class="form-control") }}</td>
-                                <td>{{ modifier_field.value(class="form-control") }}</td>
-                                <td>{{ modifier_field.duration(class="form-control") }}</td>
-                                <td>{{ modifier_field.source(class="form-control") }}</td>
+                                <td>
+                                    {{ modifier_field.form.item_id() }}
+                                    <select class="form-control modifier-type-select"
+                                            name="{{ modifier_field.form.modifier_type.name }}"
+                                            id="{{ modifier_field.form.modifier_type.id }}"
+                                            data-field="modifiers"
+                                            data-idx="{{ idx }}"
+                                            onchange="onModifierTypeChange(this)">
+                                        <option value="">-- Select Modifier --</option>
+                                        {% for mt_key, mt_data in sorted_modifier_types %}
+                                            {% if scope_target_type in mt_data.get('applicable_to', ['nation']) %}
+                                                <option value="{{ mt_key }}" {% if mt_key == mod_type %}selected{% endif %}>{{ mt_data.name }}</option>
+                                            {% endif %}
+                                        {% endfor %}
+                                    </select>
+                                    <div class="modifier-extra-fields mt-1">
+                                        {% set used_keys = extra_fields | map(attribute='key') | list %}
+                                        {% for extra in extra_fields %}
+                                            {% set ef = modifier_field.form[extra.key] %}
+                                            <div class="extra-field-group mt-1">
+                                                <label class="small">{{ extra.label }}:</label>
+                                                {% if extra.source == 'all_resources' %}
+                                                    {% set cur = ef.data or '' %}
+                                                    <select class="form-control" name="{{ ef.name }}" id="{{ ef.id }}">
+                                                        <option value="">-- Select Resource --</option>
+                                                        {% for res in all_resources %}
+                                                            <option value="{{ res.key }}" {% if res.key == cur %}selected{% endif %}>{{ res.name }}</option>
+                                                        {% endfor %}
+                                                    </select>
+                                                {% elif extra.source == 'jobs' %}
+                                                    {% set cur = ef.data or '' %}
+                                                    <select class="form-control" name="{{ ef.name }}" id="{{ ef.id }}">
+                                                        <option value="">-- Select Job --</option>
+                                                        {% for job in all_jobs %}
+                                                            <option value="{{ job.key }}" {% if job.key == cur %}selected{% endif %}>{{ job.name }}</option>
+                                                        {% endfor %}
+                                                    </select>
+                                                {% elif extra.source == 'attributes' %}
+                                                    {% set cur = ef.data or '' %}
+                                                    <select class="form-control" name="{{ ef.name }}" id="{{ ef.id }}">
+                                                        <option value="">-- Select Attribute --</option>
+                                                        {% for attr in all_attributes %}
+                                                            <option value="{{ attr.key }}" {% if attr.key == cur %}selected{% endif %}>{{ attr.name }}</option>
+                                                        {% endfor %}
+                                                    </select>
+                                                {% endif %}
+                                            </div>
+                                        {% endfor %}
+                                        {% for fkey in ['resource', 'resource_from', 'resource_to', 'job', 'attribute'] %}
+                                            {% if fkey not in used_keys %}
+                                            <input type="hidden" name="{{ modifier_field.form[fkey].name }}" value="">
+                                            {% endif %}
+                                        {% endfor %}
+                                    </div>
+                                </td>
+                                <td>
+                                    <select class="form-control modifier-scope-select"
+                                            name="{{ modifier_field.form.scope.name }}"
+                                            id="{{ modifier_field.form.scope.id }}"
+                                            data-field="modifiers"
+                                            data-idx="{{ idx }}"
+                                            onchange="onScopeChange(this)">
+                                        {% for scope_opt in scopes_by_source_type.get('nation', []) %}
+                                            <option value="{{ scope_opt.key }}" {% if scope_opt.key == cur_scope %}selected{% endif %}>{{ scope_opt.name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </td>
+                                <td>
+                                    {{ modifier_field.form.value(class="form-control") }}
+                                    <small class="form-text text-muted modifier-value-hint"{% if type_def.get('value_format') != 'percentage' %} style="display:none"{% endif %}>Decimal (0.1 = 10%)</small>
+                                </td>
+                                <td>{{ modifier_field.form.duration(class="form-control") }}</td>
+                                <td>{{ modifier_field.form.source(class="form-control") }}</td>
                                 <td>
                                     <span class="drag-handle">⋮⋮</span>
-                                    <button type="button" class="btn btn-danger" onclick="removeFromArray(this, 'progress_quests')">Remove</button>
+                                    <button type="button" class="btn btn-danger" onclick="removeFromArray(this, 'modifiers')">Remove</button>
                                 </td>
                             </tr>
                         {% endfor %}
@@ -925,6 +1142,108 @@
                 }
             });
 
+            const MODIFIER_TYPES = {{ modifier_types | tojson | safe }};
+            const SORTED_MODIFIER_KEYS = {{ sorted_modifier_types | map(attribute=0) | list | tojson | safe }};
+            const ALL_RESOURCES = {{ all_resources | tojson | safe }};
+            const ALL_JOBS = {{ all_jobs | tojson | safe }};
+const ALL_ATTRIBUTES = {{ all_attributes | tojson | safe }};
+            const SCOPE_DEFINITIONS = {{ scope_definitions | tojson | safe }};
+            const SCOPE_OPTIONS = {{ scopes_by_source_type.get('nation', []) | tojson | safe }};
+
+            function buildModifierTypeOptions(selectedValue, targetType) {
+                let options = '<option value="">-- Select Modifier --</option>';
+                for (const key of SORTED_MODIFIER_KEYS) {
+                    const mt = MODIFIER_TYPES[key];
+                    if (targetType && mt.applicable_to && !mt.applicable_to.includes(targetType)) continue;
+                    const sel = key === selectedValue ? 'selected' : '';
+                    options += `<option value="${key}" ${sel}>${mt.name}</option>`;
+                }
+                return options;
+            }
+
+            function buildScopeOptions(selectedValue) {
+                const effective = selectedValue || 'nation_self';
+                return SCOPE_OPTIONS.map(s =>
+                    `<option value="${s.key}" ${s.key === effective ? 'selected' : ''}>${s.name}</option>`
+                ).join('');
+            }
+
+            function onScopeChange(select) {
+                const row = select.closest('tr');
+                const scopeKey = select.value;
+                const scopeDef = SCOPE_DEFINITIONS[scopeKey] || {};
+                const targetType = scopeDef.target_type || '';
+                const typeSelect = row ? row.querySelector('.modifier-type-select') : null;
+                if (typeSelect) {
+                    const currentVal = typeSelect.value;
+                    typeSelect.innerHTML = buildModifierTypeOptions(currentVal, targetType);
+                }
+            }
+
+            function buildExtraFieldsHTML(fieldName, index, modifierType, currentData) {
+                const typeDef = MODIFIER_TYPES[modifierType] || {};
+                const extraFields = typeDef.extra_fields || [];
+                const ALL_EXTRA_KEYS = ['resource', 'resource_from', 'resource_to', 'job', 'attribute'];
+                const renderedKeys = new Set();
+                let html = '';
+                for (const extra of extraFields) {
+                                renderedKeys.add(extra.key);
+                                const cur = (currentData && currentData[extra.key]) || '';
+                                if (extra.source === 'all_resources') {
+                                                let opts = '<option value="">-- Select Resource --</option>';
+                                                for (const res of ALL_RESOURCES) {
+                                                                opts += `<option value="${res.key}" ${res.key === cur ? 'selected' : ''}>${res.name}</option>`;
+                                                }
+                                                html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
+                                                                <select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+                                } else if (extra.source === 'jobs') {
+                                                let opts = '<option value="">-- Select Job --</option>';
+                                                for (const job of ALL_JOBS) {
+                                                                opts += `<option value="${job.key}" ${job.key === cur ? 'selected' : ''}>${job.name}</option>`;
+                                                }
+                                                html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
+                                                                <select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+                                } else if (extra.source === 'attributes') {
+                                                let opts = '<option value="">-- Select Attribute --</option>';
+                                                for (const attr of ALL_ATTRIBUTES) {
+                                                                opts += `<option value="${attr.key}" ${attr.key === cur ? 'selected' : ''}>${attr.name}</option>`;
+                                                }
+                                                html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
+                                                                <select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+                                }
+                }
+                for (const key of ALL_EXTRA_KEYS) {
+                                if (!renderedKeys.has(key)) {
+                                                html += `<input type="hidden" name="${fieldName}-${index}-${key}" id="${fieldName}-${index}-${key}" value="">`;
+                                }
+                }
+                return html;
+}
+
+            function onModifierTypeChange(select) {
+                const fieldName = select.dataset.field;
+                const index     = parseInt(select.dataset.idx);
+                const modType   = select.value;
+                const cell      = select.closest('td');
+                const extraDiv  = cell ? cell.querySelector('.modifier-extra-fields') : null;
+                if (extraDiv) {
+                    const currentData = {};
+                    extraDiv.querySelectorAll('select, input').forEach(el => {
+                        const parts = el.name.split('-');
+                        const key = parts.slice(2).join('-');
+                        if (key) currentData[key] = el.value;
+                    });
+                    extraDiv.innerHTML = buildExtraFieldsHTML(fieldName, index, modType, currentData);
+                }
+                const row  = select.closest('tr');
+                const hint = row ? row.querySelector('.modifier-value-hint') : null;
+                if (hint) {
+                    const typeDef = MODIFIER_TYPES[modType] || {};
+                    hint.textContent = 'Decimal (0.1 = 10%)';
+                    hint.style.display = typeDef.value_format === 'percentage' ? '' : 'none';
+                }
+            }
+
             function reindexProgressQuests() {
                 const tbody = document.getElementById('progress_quests-tbody');
                 Array.from(tbody.children).forEach((row, index) => {
@@ -939,11 +1258,16 @@
             function reindexModifiers() {
                 const tbody = document.getElementById('modifiers-tbody');
                 Array.from(tbody.children).forEach((row, index) => {
-                    row.querySelectorAll('input').forEach(input => {
-                        const fieldName = input.name.split('-').pop();
-                        input.name = `modifiers-${index}-${fieldName}`;
-                        input.id = `modifiers-${index}-${fieldName}`;
+                    row.querySelectorAll('input, select').forEach(input => {
+                        const parts = input.name.split('-');
+                        const fieldPart = parts.slice(2).join('-');
+                        input.name = `modifiers-${index}-${fieldPart}`;
+                        input.id   = `modifiers-${index}-${fieldPart}`;
                     });
+                    const typeSelect = row.querySelector('.modifier-type-select');
+                    if (typeSelect) typeSelect.dataset.idx = index;
+                    const scopeSelect = row.querySelector('.modifier-scope-select');
+                    if (scopeSelect) scopeSelect.dataset.idx = index;
                 });
             }
 
@@ -977,14 +1301,38 @@
                         </td>
                     `;
                 } else if (fieldName === "modifiers") {
+                    const defaultScope = SCOPE_OPTIONS.length ? SCOPE_OPTIONS[0].key : '';
+                    const defaultTargetType = defaultScope ? (SCOPE_DEFINITIONS[defaultScope] || {}).target_type || '' : '';
+                    const typeSelect = `<select class="form-control modifier-type-select"
+                        name="${fieldName}-${currentCount}-modifier_type"
+                        id="${fieldName}-${currentCount}-modifier_type"
+                        data-field="${fieldName}" data-idx="${currentCount}"
+                        onchange="onModifierTypeChange(this)">
+                        ${buildModifierTypeOptions('', defaultTargetType)}
+                    </select>`;
+                    const scopeSelect = `<select class="form-control modifier-scope-select"
+                        name="${fieldName}-${currentCount}-scope"
+                        id="${fieldName}-${currentCount}-scope"
+                        data-field="${fieldName}" data-idx="${currentCount}"
+                        onchange="onScopeChange(this)">
+                        ${buildScopeOptions(defaultScope)}
+                    </select>`;
+                    const extraFields = buildExtraFieldsHTML(fieldName, currentCount, '', {});
                     newRow.innerHTML = `
-                        <td><input type="text" class="form-control" name="${fieldName}-${currentCount}-field" id="${fieldName}-${currentCount}-field" required></td>
-                        <td><input type="float" class="form-control" name="${fieldName}-${currentCount}-value" id="${fieldName}-${currentCount}-value" required></td>
-                        <td><input type="float" class="form-control" name="${fieldName}-${currentCount}-duration" id="${fieldName}-${currentCount}-duration" value="0" required></td>
-                        <td><input type="text" class="form-control" name="${fieldName}-${currentCount}-source" id="${fieldName}-${currentCount}-source" required></td>
+                        <td>
+                            ${typeSelect}
+                            <div class="modifier-extra-fields mt-1">${extraFields}</div>
+                        </td>
+                        <td>${scopeSelect}</td>
+                        <td>
+                            <input type="number" step="any" class="form-control" name="${fieldName}-${currentCount}-value" id="${fieldName}-${currentCount}-value" value="1">
+                            <small class="form-text text-muted modifier-value-hint" style="display:none">Decimal (0.1 = 10%)</small>
+                        </td>
+                        <td><input type="number" class="form-control" name="${fieldName}-${currentCount}-duration" id="${fieldName}-${currentCount}-duration" value="-1"></td>
+                        <td><input type="text" class="form-control" name="${fieldName}-${currentCount}-source" id="${fieldName}-${currentCount}-source"></td>
                         <td>
                             <span class="drag-handle">⋮⋮</span>
-                            <button type="button" class="btn btn-danger" onclick="removeFromArray(this, 'progress_quests')">Remove</button>
+                            <button type="button" class="btn btn-danger" onclick="removeFromArray(this, 'modifiers')">Remove</button>
                         </td>
                     `;
                 } else if (fieldName === "progress_quests") {

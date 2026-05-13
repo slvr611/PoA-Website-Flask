@@ -61,7 +61,8 @@
 								<table class="modifiers-table">
 									<thead>
 										<tr>
-											<th>Field</th>
+											<th>Modifier Type</th>
+											<th>Scope</th>
 											<th>Value</th>
 											<th>Duration</th>
 											<th>Source</th>
@@ -69,15 +70,99 @@
 										</tr>
 									</thead>
 									<tbody id="{{ field.name }}-tbody">
-										{% for modifier_field in field %}
+										{% set _default_scope_map = {'nation': 'nation_self', 'character': 'character_self', 'merchant': 'merchant_self', 'mercenary': 'mercenary_self', 'artifact': 'artifact_owner', 'wonder': 'wonder_owner_nation', 'region': 'region_nations', 'global': 'global_nations'} %}
+									{% for modifier_field in field %}
+											{% set idx = loop.index0 %}
+											{% set mod_type = modifier_field.form.modifier_type.data or '' %}
+											{% set type_def = modifier_types.get(mod_type, {}) %}
+											{% set extra_fields = type_def.get('extra_fields', []) %}
+											{% set cur_scope = modifier_field.form.scope.data or '' %}
+											{% set effective_scope = cur_scope or (_default_scope_map.get(entity_source_type, '') if entity_source_type else '') %}
+											{% set scope_target_type = scope_definitions.get(effective_scope, {}).get('target_type', '') %}
 											<tr>
-												<td>{{ modifier_field.form.item_id() }}{{ modifier_field.form.field(class="form-control") }}</td>
-												<td>{{ modifier_field.form.value(class="form-control") }}</td>
+												<td>
+													{{ modifier_field.form.item_id() }}
+													<select class="form-control modifier-type-select"
+															name="{{ modifier_field.form.modifier_type.name }}"
+															id="{{ modifier_field.form.modifier_type.id }}"
+															data-field="{{ field.name }}"
+															data-idx="{{ idx }}"
+															onchange="onModifierTypeChange(this)">
+														<option value="">-- Select Modifier --</option>
+														{% for mt_key, mt_data in sorted_modifier_types %}
+															{% if not scope_target_type or scope_target_type in mt_data.get('applicable_to', []) %}
+																<option value="{{ mt_key }}" {% if mt_key == mod_type %}selected{% endif %}>{{ mt_data.name }}</option>
+															{% endif %}
+														{% endfor %}
+													</select>
+													<div class="modifier-extra-fields mt-1">
+														{%- set used_keys = extra_fields | map(attribute='key') | list %}
+														{% for extra in extra_fields %}
+															{% set ef = modifier_field.form[extra.key] %}
+															<div class="extra-field-group mt-1">
+																<label class="small">{{ extra.label }}:</label>
+																{% if extra.source == 'all_resources' %}
+																	{% set cur = ef.data or '' %}
+																	<select class="form-control" name="{{ ef.name }}" id="{{ ef.id }}">
+																		<option value="">-- Select Resource --</option>
+																		{% for res in all_resources %}
+																			<option value="{{ res.key }}" {% if res.key == cur %}selected{% endif %}>{{ res.name }}</option>
+																		{% endfor %}
+																	</select>
+																{% elif extra.source == 'jobs' %}
+																	{% set cur = ef.data or '' %}
+																	<select class="form-control" name="{{ ef.name }}" id="{{ ef.id }}">
+																		<option value="">-- Select Job --</option>
+																		{% for job in all_jobs %}
+																			<option value="{{ job.key }}" {% if job.key == cur %}selected{% endif %}>{{ job.name }}</option>
+																		{% endfor %}
+																	</select>
+																{% elif extra.source == 'attributes' %}
+																	{% set cur = ef.data or '' %}
+																	<select class="form-control" name="{{ ef.name }}" id="{{ ef.id }}">
+																		<option value="">-- Select Attribute --</option>
+																		{% for attr in all_attributes %}
+																			<option value="{{ attr.key }}" {% if attr.key == cur %}selected{% endif %}>{{ attr.name }}</option>
+																		{% endfor %}
+																	</select>
+																{% endif %}
+															</div>
+														{% endfor %}
+														{% for fkey in ['resource', 'resource_from', 'resource_to', 'job', 'attribute'] %}
+															{% if fkey not in used_keys %}
+															<input type="hidden" name="{{ modifier_field.form[fkey].name }}" value="">
+															{% endif %}
+														{% endfor %}
+													</div>
+												</td>
+												<td>
+													<select class="form-control modifier-scope-select"
+															name="{{ modifier_field.form.scope.name }}"
+															id="{{ modifier_field.form.scope.id }}"
+															data-field="{{ field.name }}"
+															data-idx="{{ idx }}"
+															onchange="onScopeChange(this)">
+														{% if entity_source_type %}
+															{% for scope_opt in scopes_by_source_type.get(entity_source_type, []) %}
+																<option value="{{ scope_opt.key }}" {% if scope_opt.key == effective_scope %}selected{% endif %}>{{ scope_opt.name }}</option>
+															{% endfor %}
+														{% else %}
+															<option value="">-- No Scope --</option>
+															{% for scope_key, scope_data in scope_definitions.items() %}
+																<option value="{{ scope_key }}" {% if scope_key == cur_scope %}selected{% endif %}>{{ scope_data.name }}</option>
+															{% endfor %}
+														{% endif %}
+													</select>
+												</td>
+												<td>
+													{{ modifier_field.form.value(class="form-control") }}
+													<small class="form-text text-muted modifier-value-hint"{% if type_def.get('value_format') != 'percentage' %} style="display:none"{% endif %}>Decimal (0.1 = 10%)</small>
+												</td>
 												<td>{{ modifier_field.form.duration(class="form-control") }}</td>
 												<td>{{ modifier_field.form.source(class="form-control") }}</td>
 												<td>
 													<span class="drag-handle">⋮⋮</span>
-													<button type="button" class="btn btn-danger" onclick="removeFromArray(this, '${fieldName}')">Remove</button>
+													<button type="button" class="btn btn-danger" onclick="removeFromArray(this, 'modifiers')">Remove</button>
 												</td>
 											</tr>
 										{% endfor %}
@@ -169,60 +254,174 @@
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 <script>
 	const negativeTitleOptions = {{ (form.negative_titles.unbound_field.choices if form.negative_titles is defined else []) | tojson | safe }};
+	const MODIFIER_TYPES = {{ modifier_types | tojson | safe }};
+	const SORTED_MODIFIER_KEYS = {{ sorted_modifier_types | map(attribute=0) | list | tojson | safe }};
+	const ALL_RESOURCES = {{ all_resources | tojson | safe }};
+	const ALL_JOBS = {{ all_jobs | tojson | safe }};
+const ALL_ATTRIBUTES = {{ all_attributes | tojson | safe }};
+	const SCOPE_DEFINITIONS = {{ scope_definitions | tojson | safe }};
+	const ENTITY_SOURCE_TYPE = {{ entity_source_type | default("") | tojson | safe }};
+	const SCOPE_OPTIONS = {{ scopes_by_source_type.get(entity_source_type, []) | tojson | safe }};
+	const SELF_SCOPE_MAP = {"nation": "nation_self", "character": "character_self", "merchant": "merchant_self", "mercenary": "mercenary_self", "artifact": "artifact_owner", "wonder": "wonder_owner_nation", "region": "region_nations", "global": "global_nations"};
 
-    // Initialize sortable for progress quests
-    document.addEventListener('DOMContentLoaded', function() {
-        const progressQuestsTbody = document.getElementById('progress_quests-tbody');
-        if (progressQuestsTbody) {
-            new Sortable(progressQuestsTbody, {
-                handle: '.drag-handle',
-                animation: 150,
-                onEnd: function() {
-                    reindexProgressQuests();
-                }
-            });
-        }
+	// ── Modifier helper functions ────────────────────────────────────────────
+
+	function buildModifierTypeOptions(selectedValue, targetType) {
+		let options = '<option value="">-- Select Modifier --</option>';
+		for (const key of SORTED_MODIFIER_KEYS) {
+			const mt = MODIFIER_TYPES[key];
+			if (targetType && mt.applicable_to && !mt.applicable_to.includes(targetType)) continue;
+			const sel = key === selectedValue ? 'selected' : '';
+			options += `<option value="${key}" ${sel}>${mt.name}</option>`;
+		}
+		return options;
+	}
+
+	function buildScopeOptions(selectedValue) {
+		const effective = selectedValue || SELF_SCOPE_MAP[ENTITY_SOURCE_TYPE] || '';
+		if (SCOPE_OPTIONS && SCOPE_OPTIONS.length) {
+			return SCOPE_OPTIONS.map(s => `<option value="${s.key}" ${s.key === effective ? 'selected' : ''}>${s.name}</option>`).join('');
+		}
+		let options = '<option value="">-- No Scope --</option>';
+		for (const [key, def] of Object.entries(SCOPE_DEFINITIONS)) {
+			const sel = key === effective ? 'selected' : '';
+			options += `<option value="${key}" ${sel}>${def.name}</option>`;
+		}
+		return options;
+	}
+
+	function onScopeChange(select) {
+		const row = select.closest('tr');
+		const scopeKey = select.value;
+		const scopeDef = SCOPE_DEFINITIONS[scopeKey] || {};
+		const targetType = scopeDef.target_type || '';
+		const typeSelect = row ? row.querySelector('.modifier-type-select') : null;
+		if (typeSelect) {
+			const currentVal = typeSelect.value;
+			typeSelect.innerHTML = buildModifierTypeOptions(currentVal, targetType);
+		}
+	}
+
+	function buildExtraFieldsHTML(fieldName, index, modifierType, currentData) {
+		const typeDef = MODIFIER_TYPES[modifierType] || {};
+		const extraFields = typeDef.extra_fields || [];
+		const ALL_EXTRA_KEYS = ['resource', 'resource_from', 'resource_to', 'job', 'attribute'];
+		const renderedKeys = new Set();
+		let html = '';
+
+		for (const extra of extraFields) {
+			renderedKeys.add(extra.key);
+			const cur = (currentData && currentData[extra.key]) || '';
+			if (extra.source === 'all_resources') {
+				let opts = '<option value="">-- Select Resource --</option>';
+				for (const res of ALL_RESOURCES) {
+					opts += `<option value="${res.key}" ${res.key === cur ? 'selected' : ''}>${res.name}</option>`;
+				}
+				html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
+					<select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+			} else if (extra.source === 'jobs') {
+				let opts = '<option value="">-- Select Job --</option>';
+				for (const job of ALL_JOBS) {
+					opts += `<option value="${job.key}" ${job.key === cur ? 'selected' : ''}>${job.name}</option>`;
+				}
+				html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
+					<select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+			} else if (extra.source === 'attributes') {
+				let opts = '<option value="">-- Select Attribute --</option>';
+				for (const attr of ALL_ATTRIBUTES) {
+					opts += `<option value="${attr.key}" ${attr.key === cur ? 'selected' : ''}>${attr.name}</option>`;
+				}
+				html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
+					<select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+			}
+		}
+
+		for (const key of ALL_EXTRA_KEYS) {
+			if (!renderedKeys.has(key)) {
+				html += `<input type="hidden" name="${fieldName}-${index}-${key}" id="${fieldName}-${index}-${key}" value="">`;
+			}
+		}
+		return html;
+	}
+
+	function onModifierTypeChange(select) {
+		const fieldName = select.dataset.field;
+		const index     = parseInt(select.dataset.idx);
+		const modType   = select.value;
+		const cell      = select.closest('td');
+		const extraDiv  = cell ? cell.querySelector('.modifier-extra-fields') : null;
+		if (extraDiv) {
+			const currentData = {};
+			extraDiv.querySelectorAll('select, input').forEach(el => {
+				const parts = el.name.split('-');
+				const key = parts.slice(2).join('-');
+				if (key) currentData[key] = el.value;
+			});
+			extraDiv.innerHTML = buildExtraFieldsHTML(fieldName, index, modType, currentData);
+		}
+		const row       = select.closest('tr');
+		const hint      = row ? row.querySelector('.modifier-value-hint') : null;
+		if (hint) {
+			const typeDef = MODIFIER_TYPES[modType] || {};
+			hint.textContent = 'Decimal (0.1 = 10%)';
+			hint.style.display = typeDef.value_format === 'percentage' ? '' : 'none';
+		}
+	}
+
+	// ── Sortable initialisation ──────────────────────────────────────────────
+
+	document.addEventListener('DOMContentLoaded', function() {
+		const progressQuestsTbody = document.getElementById('progress_quests-tbody');
+		if (progressQuestsTbody) {
+			new Sortable(progressQuestsTbody, {
+				handle: '.drag-handle', animation: 150,
+				onEnd: function() { reindexProgressQuests(); }
+			});
+		}
 		const modifiersTbody = document.getElementById('modifiers-tbody');
 		if (modifiersTbody) {
 			new Sortable(modifiersTbody, {
-				handle: '.drag-handle',
-				animation: 150,
-				onEnd: function() {
-					reindexModifiers();
-				}
+				handle: '.drag-handle', animation: 150,
+				onEnd: function() { reindexModifiers(); }
 			});
 		}
 		const externalModifiersTbody = document.getElementById('external_modifiers-tbody');
 		if (externalModifiersTbody) {
 			new Sortable(externalModifiersTbody, {
-				handle: '.drag-handle',
-				animation: 150,
-				onEnd: function() {
-					reindexExternalModifiers();
-				}
+				handle: '.drag-handle', animation: 150,
+				onEnd: function() { reindexExternalModifiers(); }
 			});
 		}
-    });
+	});
 
-    function reindexProgressQuests() {
-        const tbody = document.getElementById('progress_quests-tbody');
-        Array.from(tbody.children).forEach((row, index) => {
-            row.querySelectorAll('select, input').forEach(input => {
-                const fieldName = input.name.split('-').pop();
-                input.name = `progress_quests-${index}-${fieldName}`;
-                input.id = `progress_quests-${index}-${fieldName}`;
-            });
-        });
-    }
+	// ── Reindex functions ────────────────────────────────────────────────────
+
+	function reindexProgressQuests() {
+		const tbody = document.getElementById('progress_quests-tbody');
+		Array.from(tbody.children).forEach((row, index) => {
+			row.querySelectorAll('select, input').forEach(input => {
+				const fieldPart = input.name.split('-').pop();
+				input.name = `progress_quests-${index}-${fieldPart}`;
+				input.id   = `progress_quests-${index}-${fieldPart}`;
+			});
+		});
+	}
 
 	function reindexModifiers() {
 		const tbody = document.getElementById('modifiers-tbody');
 		Array.from(tbody.children).forEach((row, index) => {
-			row.querySelectorAll('input').forEach(input => {
-				const fieldName = input.name.split('-').pop();
-				input.name = `modifiers-${index}-${fieldName}`;
-				input.id = `modifiers-${index}-${fieldName}`;
+			// Reindex all inputs and selects — names are "modifiers-N-fieldPart"
+			row.querySelectorAll('input, select').forEach(input => {
+				const parts     = input.name.split('-');
+				const fieldPart = parts.slice(2).join('-');
+				input.name = `modifiers-${index}-${fieldPart}`;
+				input.id   = `modifiers-${index}-${fieldPart}`;
 			});
+			// Update the data-idx on the modifier-type and scope selects so onchange stays correct
+			const typeSelect = row.querySelector('.modifier-type-select');
+			if (typeSelect) typeSelect.dataset.idx = index;
+			const scopeSelect = row.querySelector('.modifier-scope-select');
+			if (scopeSelect) scopeSelect.dataset.idx = index;
 		});
 	}
 
@@ -230,131 +429,120 @@
 		const tbody = document.getElementById('external_modifiers-tbody');
 		Array.from(tbody.children).forEach((row, index) => {
 			row.querySelectorAll('select, input').forEach(input => {
-				const fieldName = input.name.split('-').pop();
-				input.name = `external_modifiers-${index}-${fieldName}`;
-				input.id = `external_modifiers-${index}-${fieldName}`;
+				const fieldPart = input.name.split('-').pop();
+				input.name = `external_modifiers-${index}-${fieldPart}`;
+				input.id   = `external_modifiers-${index}-${fieldPart}`;
 			});
 		});
 	}
 
 	function reindexNegativeTitles() {
 		const tbody = document.getElementById('negative_titles-tbody');
-		if (!tbody) {
-			return;
-		}
+		if (!tbody) return;
 		Array.from(tbody.children).forEach((row, index) => {
 			row.querySelectorAll('select').forEach(input => {
 				input.name = `negative_titles-${index}`;
-				input.id = `negative_titles-${index}`;
+				input.id   = `negative_titles-${index}`;
 			});
 		});
 	}
 
+	// ── Add/Remove array rows ────────────────────────────────────────────────
+
 	function addToArray(fieldName) {
 		const tbody = document.getElementById(`${fieldName}-tbody`);
 		const currentCount = tbody.children.length;
-		
 		const newRow = document.createElement('tr');
-		if (fieldName === "progress_quests") {
-			newRow.className = 'sortable-row';
-		}
+		if (fieldName === 'progress_quests') newRow.className = 'sortable-row';
 
-		if (fieldName === "external_modifiers") {
-			const typeChoices = ["nation", "character"].map(choice => [choice, choice]);
-			
-			const typeOptions = typeChoices.map(([value, label]) => 
-				`<option value="${value}">${label}</option>`
-			).join('');
-			
+		if (fieldName === 'external_modifiers') {
+			const typeOptions = ['nation','character','merchant','mercenary','faction']
+				.map(v => `<option value="${v}">${v}</option>`).join('');
+			newRow.innerHTML = `
+				<td><select class="form-control" name="${fieldName}-${currentCount}-type" id="${fieldName}-${currentCount}-type">${typeOptions}</select></td>
+				<td><input type="text" class="form-control" name="${fieldName}-${currentCount}-modifier" id="${fieldName}-${currentCount}-modifier"></td>
+				<td><input type="number" step="any" class="form-control" name="${fieldName}-${currentCount}-value" id="${fieldName}-${currentCount}-value"></td>
+				<td><span class="drag-handle">&#8942;&#8942;</span>
+				    <button type="button" class="btn btn-danger" onclick="removeFromArray(this,'${fieldName}')">Remove</button></td>`;
+
+		} else if (fieldName === 'modifiers') {
+			const defaultScope = (SELF_SCOPE_MAP[ENTITY_SOURCE_TYPE]) || (SCOPE_OPTIONS.length ? SCOPE_OPTIONS[0].key : '');
+			const defaultTargetType = defaultScope ? (SCOPE_DEFINITIONS[defaultScope] || {}).target_type || '' : '';
+			const typeSelect = `<select class="form-control modifier-type-select"
+				name="${fieldName}-${currentCount}-modifier_type"
+				id="${fieldName}-${currentCount}-modifier_type"
+				data-field="${fieldName}" data-idx="${currentCount}"
+				onchange="onModifierTypeChange(this)">
+				${buildModifierTypeOptions('', defaultTargetType)}
+			</select>`;
+			const scopeSelect = `<select class="form-control modifier-scope-select"
+				name="${fieldName}-${currentCount}-scope"
+				id="${fieldName}-${currentCount}-scope"
+				data-field="${fieldName}" data-idx="${currentCount}"
+				onchange="onScopeChange(this)">
+				${buildScopeOptions(defaultScope)}
+			</select>`;
+			const extraFields = buildExtraFieldsHTML(fieldName, currentCount, '', {});
 			newRow.innerHTML = `
 				<td>
-					<select class="form-control" name="${fieldName}-${currentCount}-type" id="${fieldName}-${currentCount}-type">
-						${typeOptions}
-					</select>
+					${typeSelect}
+					<div class="modifier-extra-fields mt-1">${extraFields}</div>
 				</td>
-				<td><input type="text" class="form-control" name="${fieldName}-${currentCount}-modifier" id="${fieldName}-${currentCount}-modifier" required></td>
-				<td><input type="float" class="form-control" name="${fieldName}-${currentCount}-value" id="${fieldName}-${currentCount}-value" required></td>
+				<td>${scopeSelect}</td>
 				<td>
-					<span class="drag-handle">⋮⋮</span>
-					<button type="button" class="btn btn-danger" onclick="removeFromArray(this, '${fieldName}')">Remove</button>
+					<input type="number" step="any" class="form-control" name="${fieldName}-${currentCount}-value" id="${fieldName}-${currentCount}-value" value="1">
+					<small class="form-text text-muted modifier-value-hint" style="display:none">Decimal (0.1 = 10%)</small>
 				</td>
-			`;
-		} else if (fieldName === "modifiers") {
+				<td><input type="number" class="form-control" name="${fieldName}-${currentCount}-duration" id="${fieldName}-${currentCount}-duration" value="-1"></td>
+				<td><input type="text" class="form-control" name="${fieldName}-${currentCount}-source" id="${fieldName}-${currentCount}-source"></td>
+				<td><span class="drag-handle">&#8942;&#8942;</span>
+				    <button type="button" class="btn btn-danger" onclick="removeFromArray(this,'modifiers')">Remove</button></td>`;
+
+		} else if (fieldName === 'progress_quests') {
 			newRow.innerHTML = `
-				<td><input type="text" class="form-control" name="${fieldName}-${currentCount}-field" id="${fieldName}-${currentCount}-field" required></td>
-				<td><input type="float" class="form-control" name="${fieldName}-${currentCount}-value" id="${fieldName}-${currentCount}-value" required></td>
-				<td><input type="float" class="form-control" name="${fieldName}-${currentCount}-duration" id="${fieldName}-${currentCount}-duration" value="0" required></td>
-				<td><input type="text" class="form-control" name="${fieldName}-${currentCount}-source" id="${fieldName}-${currentCount}-source" required></td>
-				<td>
-					<span class="drag-handle">⋮⋮</span>
-					<button type="button" class="btn btn-danger" onclick="removeFromArray(this, '${fieldName}')">Remove</button>
-				</td>
-			`;
-		} else if (fieldName === "progress_quests") {
-			newRow.innerHTML = `
-				<td><input type="text" class="form-control" name="${fieldName}-${currentCount}-quest_name" id="${fieldName}-${currentCount}-name" required></td>
-				<td>
-					<select class="form-control" name="${fieldName}-${currentCount}-slot" id="${fieldName}-${currentCount}-slot">
-						<option value="no_slot">No Slot</option>
-						<option value="tier_1_spell_slot">Tier 1 Spell Slot</option>
-						<option value="tier_2_spell_slot">Tier 2 Spell Slot</option>
-						<option value="tier_3_spell_slot">Tier 3 Spell Slot</option>
-					</select>
-				</td>
-				<td><input type="number" class="form-control" name="${fieldName}-${currentCount}-bonus_progress_per_tick" id="${fieldName}-${currentCount}-bonus_progress_per_tick" value="0" required></td>
-				<td><input type="number" class="form-control" name="${fieldName}-${currentCount}-current_progress" id="${fieldName}-${currentCount}-current_progress" value="0" required></td>
-				<td><input type="number" class="form-control" name="${fieldName}-${currentCount}-required_progress" id="${fieldName}-${currentCount}-required_progress" value="0" required></td>
-				<td><input type="text" class="form-control" name="${fieldName}-${currentCount}-link" id="${fieldName}-${currentCount}-link" required></td>
-				<td>
-					<span class="drag-handle">⋮⋮</span>
-					<button type="button" class="btn btn-danger" onclick="removeFromArray(this, '${fieldName}')">Remove</button>
-				</td>
-			`;
-		} else if (fieldName === "negative_titles") {
+				<td><input type="text" class="form-control" name="${fieldName}-${currentCount}-quest_name" id="${fieldName}-${currentCount}-quest_name"></td>
+				<td><select class="form-control" name="${fieldName}-${currentCount}-slot" id="${fieldName}-${currentCount}-slot">
+					<option value="no_slot">No Slot</option>
+					<option value="tier_1_spell_slot">Tier 1 Spell Slot</option>
+					<option value="tier_2_spell_slot">Tier 2 Spell Slot</option>
+					<option value="tier_3_spell_slot">Tier 3 Spell Slot</option>
+				</select></td>
+				<td><input type="number" class="form-control" name="${fieldName}-${currentCount}-bonus_progress_per_tick" id="${fieldName}-${currentCount}-bonus_progress_per_tick" value="0"></td>
+				<td><input type="number" class="form-control" name="${fieldName}-${currentCount}-current_progress" id="${fieldName}-${currentCount}-current_progress" value="0"></td>
+				<td><input type="number" class="form-control" name="${fieldName}-${currentCount}-required_progress" id="${fieldName}-${currentCount}-required_progress" value="0"></td>
+				<td><input type="text" class="form-control" name="${fieldName}-${currentCount}-link" id="${fieldName}-${currentCount}-link"></td>
+				<td><span class="drag-handle">&#8942;&#8942;</span>
+				    <button type="button" class="btn btn-danger" onclick="removeFromArray(this,'${fieldName}')">Remove</button></td>`;
+
+		} else if (fieldName === 'negative_titles') {
 			const options = (negativeTitleOptions || []).map(
-				([value, label]) => `<option value="${value}">${label}</option>`
-			).join('');
-
+				([value, label]) => `<option value="${value}">${label}</option>`).join('');
 			newRow.innerHTML = `
-				<td>
-					<select class="form-control" name="${fieldName}-${currentCount}" id="${fieldName}-${currentCount}">
-						${options}
-					</select>
-				</td>
-				<td><button type="button" class="btn btn-danger" onclick="removeFromArray(this, '${fieldName}')">Remove</button></td>
-			`;
+				<td><select class="form-control" name="${fieldName}-${currentCount}" id="${fieldName}-${currentCount}">${options}</select></td>
+				<td><button type="button" class="btn btn-danger" onclick="removeFromArray(this,'${fieldName}')">Remove</button></td>`;
 		}
 
-        tbody.appendChild(newRow);
-
-		if (fieldName === "progress_quests") {
-			updateProgressQuestSlots();
-		}
-		if (fieldName === "negative_titles") {
-			reindexNegativeTitles();
-		}
+		tbody.appendChild(newRow);
+		if (fieldName === 'progress_quests') updateProgressQuestSlots();
+		if (fieldName === 'negative_titles')  reindexNegativeTitles();
 	}
 
-    function removeFromArray(button, categoryName) {
-        const row = button.closest('tr');
-        row.remove();
-        
-        if (categoryName === 'progress_quests') {
-            reindexProgressQuests();
-        } else if (categoryName === 'negative_titles') {
-            reindexNegativeTitles();
-        } else {
-            // Reindex remaining modifiers
-            const tbody = document.getElementById(`${categoryName}-tbody`);
-            Array.from(tbody.children).forEach((row, index) => {
-                row.querySelectorAll('select, input').forEach(input => {
-                    const fieldName = input.name.split('-').pop();
-                    input.name = `${categoryName}-${index}-${fieldName}`;
-                    input.id = `${categoryName}-${index}-${fieldName}`;
-                });
-            });
-        }
-    }
+	function removeFromArray(button, categoryName) {
+		button.closest('tr').remove();
+		if      (categoryName === 'progress_quests') reindexProgressQuests();
+		else if (categoryName === 'negative_titles') reindexNegativeTitles();
+		else if (categoryName === 'modifiers')       reindexModifiers();
+		else {
+			const tbody = document.getElementById(`${categoryName}-tbody`);
+			Array.from(tbody.children).forEach((row, index) => {
+				row.querySelectorAll('select, input').forEach(input => {
+					const fieldPart = input.name.split('-').pop();
+					input.name = `${categoryName}-${index}-${fieldPart}`;
+					input.id   = `${categoryName}-${index}-${fieldPart}`;
+				});
+			});
+		}
+	}
 </script>
 
 {% endblock %}

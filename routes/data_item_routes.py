@@ -243,12 +243,19 @@ def data_item_new(data_type):
             **extras
         )
 
+    SOURCE_TYPE_MAP = {
+        "characters": "character", "nations": "nation", "artifacts": "artifact",
+        "merchants": "merchant", "mercenaries": "mercenary",
+        "laws": "nation", "titles": "character",
+        "wonders": "wonder", "regions": "region", "global_modifiers": "global",
+    }
     return render_template(
         "dataItemNew.html",
         title="New " + category_data[data_type]["singularName"],
         schema=schema,
         form=form,
-        dropdown_options=dropdown_options
+        dropdown_options=dropdown_options,
+        entity_source_type=SOURCE_TYPE_MAP.get(data_type, "")
     )
 
 @data_item_routes.route("/<data_type>/new/request", methods=["POST"])
@@ -399,13 +406,20 @@ def data_item_edit(data_type, item_ref):
             **extras
         )
 
+    SOURCE_TYPE_MAP = {
+        "characters": "character", "nations": "nation", "artifacts": "artifact",
+        "merchants": "merchant", "mercenaries": "mercenary",
+        "laws": "nation", "titles": "character",
+        "wonders": "wonder", "regions": "region", "global_modifiers": "global",
+    }
     return render_template(
         "dataItemEdit.html",
         title=f"Edit {item_ref}",
         schema=schema,
         form=form,
         item=item,
-        dropdown_options=dropdown_options
+        dropdown_options=dropdown_options,
+        entity_source_type=SOURCE_TYPE_MAP.get(data_type, "")
     )
 
 @data_item_routes.route("/<data_type>/edit/<item_ref>/request", methods=["POST"])
