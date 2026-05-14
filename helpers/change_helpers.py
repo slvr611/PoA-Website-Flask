@@ -474,6 +474,38 @@ def deny_change(change_id):
     }})
     return True
 
+def rescind_change(change_id):
+    """Allow the original requester (or an admin) to withdraw a pending change."""
+    if not g.user:
+        flash("You must be logged in to rescind a change.")
+        return False
+    player = mongo.db.players.find_one({"id": g.user.get("id")})
+    if player is None:
+        flash("Could not find your player record.")
+        return False
+
+    changes_collection = mongo.db.changes
+    change = changes_collection.find_one({"_id": change_id, "status": "Pending"})
+    if change is None:
+        flash("Change not found or is no longer pending.")
+        return False
+
+    is_admin = player.get("is_admin", False)
+    is_requester = change.get("requester") == player["_id"]
+    if not is_admin and not is_requester:
+        flash("You can only rescind your own changes.")
+        return False
+
+    now = datetime.now(timezone.utc)
+    changes_collection.update_one({"_id": change_id}, {"$set": {
+        "status": "Rescinded",
+        "time_rescinded": now,
+        "last_modified_time": now,
+        "rescinder": player["_id"],
+    }})
+    return True
+
+
 def deep_merge(original, updates):
     merged = deepcopy(original)
     for key, value in updates.items():

@@ -31,7 +31,41 @@
     z-index: 0;
 }
 .header-bar-has-banner > * { position: relative; z-index: 1; }
+.pending-value { color: #f0c040; font-weight: bold; }
+.modifier-added { color: #f0c040; }
+.modifier-removed { color: #e05555; text-decoration: line-through; }
 </style>
+
+{# ── Pending-change display macros ─────────────────────────────────────────── #}
+{# pf: plain scalar field (number or string) #}
+{% macro pf(current, pending) -%}
+{{- current -}}
+{%- if pending is not none and pending != current %} <span class="pending-value">→ {{ pending }}</span>{%- endif %}
+{%- endmacro %}
+
+{# pf_pct: percentage field (value stored as 0–1 float, displayed as integer %) #}
+{% macro pf_pct(current, pending) -%}
+{%- set c = (current * 100)|int -%}
+{{- c }}%
+{%- if pending is not none and (pending * 100)|int != c %} <span class="pending-value">→ {{ (pending * 100)|int }}%</span>{%- endif %}
+{%- endmacro %}
+
+{# pfbd: scalar field with a breakdown tooltip #}
+{% macro pfbd(current, pending, breakdown, pending_bd, title) -%}
+<span class="context-tooltip" data-tooltip-title="{{ title }}" data-breakdown='{{ breakdown|tojson }}'>{{ current }}</span>
+{%- if pending is not none and pending != current %} <span class="pending-value context-tooltip" data-tooltip-title="Pending: {{ title }}" data-breakdown='{{ pending_bd|tojson }}'>→ {{ pending }}</span>{%- endif %}
+{%- endmacro %}
+
+{# pfbd_pct: percentage field with a breakdown tooltip #}
+{% macro pfbd_pct(current, pending, breakdown, pending_bd, title) -%}
+{%- set c = (current * 100)|int -%}
+<span class="context-tooltip" data-tooltip-title="{{ title }}" data-breakdown='{{ breakdown|tojson }}'>{{ c }}%</span>
+{%- if pending is not none and (pending * 100)|int != c %} <span class="pending-value context-tooltip" data-tooltip-title="Pending: {{ title }}" data-breakdown='{{ pending_bd|tojson }}'>→ {{ (pending * 100)|int }}%</span>{%- endif %}
+{%- endmacro %}
+
+{% set pn  = pending_nation or {} %}
+{% set pbd = pending_breakdowns or {} %}
+
 <div class="nation-page-container">
 	<div class="header-bar{% if nation.get('banner_url') %} header-bar-has-banner{% endif %}"
 		{% if nation.get('banner_url') %}style="background-image: url('{{ nation.banner_url | e }}');"{% endif %}>
@@ -58,11 +92,11 @@
 					None
 				{% endif %}
 			</span>
-			<span>{{ schema.properties.pop_count.label }}: {{ nation.pop_count }} / {{ nation.effective_pop_capacity }}</span>
+			<span>{{ schema.properties.pop_count.label }}: {{ pf(nation.pop_count, pn.get("pop_count")) }} / {{ pf(nation.effective_pop_capacity, pn.get("effective_pop_capacity")) }}</span>
 			{% if nation.empire %}
 				<span>Empire</span>
-				<span>{{ schema.properties.prestige.label }}: {{ nation.prestige }}</span>
-				<span>{{ schema.properties.prestige_gain.label }}: {{ nation.prestige_gain }}</span>
+				<span>{{ schema.properties.prestige.label }}: {{ pf(nation.prestige, pn.get("prestige")) }}</span>
+				<span>{{ schema.properties.prestige_gain.label }}: {{ pf(nation.prestige_gain, pn.get("prestige_gain")) }}</span>
 			{% endif %}
 			{% if "rulers" in linked_objects and linked_objects["rulers"] is not none %}
 				<span>
@@ -74,7 +108,7 @@
 			{% endif %}
 		</div>
 	</div>
-	
+
 	<div class="expandable-sections">
 		<div class="expandable-section"  id="general-info-section">
 			<div class="section-header" onclick="toggleSection(this)">
@@ -89,78 +123,80 @@
 						</tr>
 						<tr>
 							<th>{{ schema.properties.stability.label }}:</th>
-							<td>{{ nation.stability }}</td>
+							<td>{{ pf(nation.stability, pn.get("stability")) }}</td>
 						</tr>
 						<tr>
 							<th>{{ schema.properties.stability_gain_chance.label }}:</th>
 							<td>
-								<span
-									class="context-tooltip"
-									data-tooltip-title="Stability Gain Chance"
-									data-breakdown='{{ breakdowns["stability_gain_chance"]|tojson }}'
-								>
-									{{ (nation.stability_gain_chance * 100)|int }}%
-								</span>
+								{{ pfbd_pct(
+									nation.stability_gain_chance,
+									pn.get("stability_gain_chance"),
+									breakdowns["stability_gain_chance"],
+									pbd.get("stability_gain_chance", []),
+									"Stability Gain Chance"
+								) }}
 							</td>
 						</tr>
 						<tr>
 							<th>{{ schema.properties.stability_loss_chance.label }}:</th>
 							<td>
-								<span
-									class="context-tooltip"
-									data-tooltip-title="Stability Loss Chance"
-									data-breakdown='{{ breakdowns["stability_loss_chance"]|tojson }}'
-								>
-									{{ (nation.stability_loss_chance * 100)|int }}%
-								</span>
+								{{ pfbd_pct(
+									nation.stability_loss_chance,
+									pn.get("stability_loss_chance"),
+									breakdowns["stability_loss_chance"],
+									pbd.get("stability_loss_chance", []),
+									"Stability Loss Chance"
+								) }}
 							</td>
 						</tr>
 						<tr>
 							<th>{{ schema.properties.stability_loss_chance_on_leader_death.label }}:</th>
-							<td>{{ (nation.stability_loss_chance_on_leader_death * 100)|int }}%</td>
+							<td>{{ pf_pct(nation.stability_loss_chance_on_leader_death, pn.get("stability_loss_chance_on_leader_death")) }}</td>
 						</tr>
 						<tr>
 							<th>{{ schema.properties.infamy.label }}:</th>
-							<td>{{ nation.infamy }}</td>
+							<td>{{ pf(nation.infamy, pn.get("infamy")) }}</td>
 						</tr>
 						<tr>
 							<th>{{ schema.properties.karma.label }}:</th>
 							<td>
-								<span
-									class="context-tooltip"
-									data-tooltip-title="Karma"
-									data-breakdown='{{ breakdowns.get("karma", [])|tojson }}'
-								>{{ nation.karma }}</span>
+								{{ pfbd(
+									nation.karma,
+									pn.get("karma"),
+									breakdowns.get("karma", []),
+									pbd.get("karma", []),
+									"Karma"
+								) }}
 							</td>
 						</tr>
 						<tr>
 							<th>{{ schema.properties.rolling_karma.label }}:</th>
-							<td>{{ nation.rolling_karma }}</td>
+							<td>{{ pf(nation.rolling_karma, pn.get("rolling_karma")) }}</td>
 						</tr>
 						<tr>
 							<th>{{ schema.properties.temporary_karma.label }}:</th>
-							<td>{{ nation.temporary_karma }}</td>
+							<td>{{ pf(nation.temporary_karma, pn.get("temporary_karma")) }}</td>
 						</tr>
 						{% if nation.nomadic > 0 %}
 							<tr>
 								<th>{{ schema.properties.migration_distance.label }}:</th>
-								<td>{{ nation.migration_distance }}</td>
+								<td>{{ pf(nation.migration_distance, pn.get("migration_distance")) }}</td>
 							</tr>
 							<tr>
 								<th>{{ schema.properties.stationary_delay.label }}:</th>
-								<td>{{ nation.stationary_delay }}</td>
+								<td>{{ pf(nation.stationary_delay, pn.get("stationary_delay")) }}</td>
 							</tr>
 						{% endif %}
 						{% if nation.vampirism_chance > 0 %}
 							<tr>
 								<th>{{ schema.properties.vampirism_chance.label }}:</th>
-								<td>{{ (nation.vampirism_chance * 100)|int }}%</td>
+								<td>{{ pf_pct(nation.vampirism_chance, pn.get("vampirism_chance")) }}</td>
 							</tr>
 						{% endif %}
 						{% if nation.pop_loss_chance > 0 %}
 							<tr>
 								<th>{{ schema.properties.pop_loss_chance.label }}:</th>
-								<td>{{ (nation.pop_loss_chance * 100)|int }}%</td>
+								<td>{{ pf_pct(nation.pop_loss_chance, pn.get("pop_loss_chance")) }}</td>
 							</tr>
 						{% endif %}
 					</table>
@@ -172,31 +208,31 @@
 						</tr>
 						<tr>
 							<th>{{ schema.properties.money.label }}:</th>
-							<td>{{ nation.money }} / {{ nation.money_capacity }}</td>
+							<td>{{ pf(nation.money, pn.get("money")) }} / {{ pf(nation.money_capacity, pn.get("money_capacity")) }}</td>
 						</tr>
 						<tr>
 							<th>{{ schema.properties.money_income.label }}:</th>
 							<td>
-								<span
-									class="context-tooltip"
-									data-tooltip-title="Money Income"
-									data-breakdown='{{ breakdowns["money_income"]|tojson }}'
-								>
-									{{ nation.money_income }}
-								</span>
+								{{ pfbd(
+									nation.money_income,
+									pn.get("money_income"),
+									breakdowns["money_income"],
+									pbd.get("money_income", []),
+									"Money Income"
+								) }}
 							</td>
 						</tr>
 						<tr>
 							<th>{{ schema.properties.remaining_import_slots.label }}:</th>
-							<td>{{ nation.remaining_import_slots }}</td>
+							<td>{{ pf(nation.remaining_import_slots, pn.get("remaining_import_slots")) }}</td>
 						</tr>
 						<tr>
 							<th>{{ schema.properties.remaining_export_slots.label }}:</th>
-							<td>{{ nation.remaining_export_slots }}</td>
+							<td>{{ pf(nation.remaining_export_slots, pn.get("remaining_export_slots")) }}</td>
 						</tr>
 						<tr>
 							<th>{{ schema.properties.trade_distance.label }}:</th>
-							<td>{{ nation.trade_distance }}</td>
+							<td>{{ pf(nation.trade_distance, pn.get("trade_distance")) }}</td>
 						</tr>
 					</table>
 				</div>
@@ -207,12 +243,12 @@
 						</tr>
 						<tr>
 							<th>{{ schema.properties.origin.label }}:</th>
-							<td>{{ nation.origin }}</td>
+							<td>{{ pf(nation.origin, pn.get("origin")) }}</td>
 						</tr>
 						{% if view_access_level >= schema.properties.temperament.view_access_level %}
 							<tr>
 								<th>{{ schema.properties.temperament.label }}:</th>
-								<td>{{ nation.temperament }}</td>
+								<td>{{ pf(nation.temperament, pn.get("temperament")) }}</td>
 							</tr>
 						{% endif %}
 					</table>
@@ -237,19 +273,19 @@
 						</tr>
 						<tr>
 							<th>{{ schema.properties.administration.label }}:</th>
-							<td>{{ nation.administration }}</td>
+							<td>{{ pf(nation.administration, pn.get("administration")) }}</td>
 						</tr>
 						<tr>
 							<th>{{ schema.properties.passive_expansion_chance.label }}:</th>
-							<td>{{ (nation.get("passive_expansion_chance", 0) * 100)|int }}%</td>
+							<td>{{ pf_pct(nation.get("passive_expansion_chance", 0), pn.get("passive_expansion_chance")) }}</td>
 						</tr>
 						<tr>
 							<th>Territory:</th>
-							<td>{{ nation.current_territory }} / {{ nation.effective_territory }}</td>
+							<td>{{ pf(nation.current_territory, pn.get("current_territory")) }} / {{ pf(nation.effective_territory, pn.get("effective_territory")) }}</td>
 						</tr>
 						<tr>
 							<th>Roads:</th>
-							<td>{{ nation.road_usage }} / {{ nation.road_capacity }}</td>
+							<td>{{ pf(nation.road_usage, pn.get("road_usage")) }} / {{ pf(nation.road_capacity, pn.get("road_capacity")) }}</td>
 						</tr>
 					</table>
 					<table class="info-table">
@@ -280,7 +316,7 @@
 			</div>
 		</div>
 
-		
+
 		<div class="expandable-section" id="demographics-section">
 			<div class="section-header" onclick="toggleSection(this)">
 				<h2>Demographics & Population</h2>
@@ -318,7 +354,7 @@
 						</tr>
 						<tr>
 							<th>{{ schema.properties.unique_minority_count.label }}:</th>
-							<td>{{ nation.unique_minority_count }}</td>
+							<td>{{ pf(nation.unique_minority_count, pn.get("unique_minority_count")) }}</td>
 						</tr>
 					</table>
 					<table class="info-table">
@@ -382,7 +418,7 @@
 				</div>
 			</div>
 		</div>
-		
+
 		<div class="expandable-section" id="government-section">
 			<div class="section-header" onclick="toggleSection(this)">
 				<h2>Government & Laws</h2>
@@ -396,85 +432,85 @@
 						</tr>
 						<tr>
 							<th>{{ schema.properties.government_type.label }}:</th>
-							<td>{{ nation.government_type }}</td>
+							<td>{{ pf(nation.government_type, pn.get("government_type")) }}</td>
 						</tr>
 						<tr>
 							<th>{{ schema.properties.succession_type.label }}:</th>
-							<td>{{ nation.succession_type }}</td>
+							<td>{{ pf(nation.succession_type, pn.get("succession_type")) }}</td>
 						</tr>
 						{% if nation.nomadic > 0 %}
 							<tr>
 								<th>{{ schema.properties.nomad_camp_type.label }}:</th>
-								<td>{{ nation.nomad_camp_type }}</td>
+								<td>{{ pf(nation.nomad_camp_type, pn.get("nomad_camp_type")) }}</td>
 							</tr>
 						{% endif %}
 						<tr>
 							<th>{{ schema.properties.conscription_type.label }}:</th>
-							<td>{{ nation.conscription_type }}</td>
+							<td>{{ pf(nation.conscription_type, pn.get("conscription_type")) }}</td>
 						</tr>
 						<tr>
 							<th>{{ schema.properties.military_funding.label }}:</th>
-							<td>{{ nation.military_funding }}</td>
+							<td>{{ pf(nation.military_funding, pn.get("military_funding")) }}</td>
 						</tr>
 						<tr>
 							<th>{{ schema.properties.magic_stance.label }}:</th>
-							<td>{{ nation.magic_stance }}</td>
+							<td>{{ pf(nation.magic_stance, pn.get("magic_stance")) }}</td>
 						</tr>
 						<tr>
 							<th>{{ schema.properties.centralization_law.label }}:</th>
-							<td>{{ nation.centralization_law }}</td>
+							<td>{{ pf(nation.centralization_law, pn.get("centralization_law")) }}</td>
 						</tr>
 						<tr>
 							<th>{{ schema.properties.citizenship_stance.label }}:</th>
-							<td>{{ nation.citizenship_stance }}</td>
+							<td>{{ pf(nation.citizenship_stance, pn.get("citizenship_stance")) }}</td>
 						</tr>
 						<tr>
 							<th>{{ schema.properties.foreign_acceptance.label }}:</th>
-							<td>{{ nation.foreign_acceptance }}</td>
+							<td>{{ pf(nation.foreign_acceptance, pn.get("foreign_acceptance")) }}</td>
 						</tr>
 						<tr>
 							<th>{{ schema.properties.subject_stance.label }}:</th>
-							<td>{{ nation.subject_stance }}</td>
+							<td>{{ pf(nation.subject_stance, pn.get("subject_stance")) }}</td>
 						</tr>
 						<tr>
 							<th>{{ schema.properties.land_doctrine.label }}:</th>
-							<td>{{ nation.land_doctrine }}</td>
+							<td>{{ pf(nation.land_doctrine, pn.get("land_doctrine")) }}</td>
 						</tr>
 						<tr>
 							<th>{{ schema.properties.naval_doctrine.label }}:</th>
-							<td>{{ nation.naval_doctrine }}</td>
+							<td>{{ pf(nation.naval_doctrine, pn.get("naval_doctrine")) }}</td>
 						</tr>
 						<tr>
 							<th>{{ schema.properties.diplomatic_stance.label }}:</th>
-							<td>{{ nation.diplomatic_stance }}</td>
+							<td>{{ pf(nation.diplomatic_stance, pn.get("diplomatic_stance")) }}</td>
 						</tr>
 						<tr>
 							<th>{{ schema.properties.scientific_stance.label }}:</th>
-							<td>{{ nation.scientific_stance }}</td>
+							<td>{{ pf(nation.scientific_stance, pn.get("scientific_stance")) }}</td>
 						</tr>
 						<tr>
 							<th>{{ schema.properties.economy_type.label }}:</th>
-							<td>{{ nation.economy_type }}</td>
+							<td>{{ pf(nation.economy_type, pn.get("economy_type")) }}</td>
 						</tr>
 						<tr>
 							<th>{{ schema.properties.expansion_stance.label }}:</th>
-							<td>{{ nation.expansion_stance }}</td>
+							<td>{{ pf(nation.expansion_stance, pn.get("expansion_stance")) }}</td>
 						</tr>
 						<tr>
 							<th>{{ schema.properties.mercenary_law.label }}:</th>
-							<td>{{ nation.mercenary_law }}</td>
+							<td>{{ pf(nation.mercenary_law, pn.get("mercenary_law")) }}</td>
 						</tr>
 						<tr>
 							<th>{{ schema.properties.consumption_stance.label }}:</th>
-							<td>{{ nation.consumption_stance }}</td>
+							<td>{{ pf(nation.consumption_stance, pn.get("consumption_stance")) }}</td>
 						</tr>
 						<tr>
 							<th>{{ schema.properties.tax_stance.label }}:</th>
-							<td>{{ nation.tax_stance }}</td>
+							<td>{{ pf(nation.tax_stance, pn.get("tax_stance")) }}</td>
 						</tr>
 						<tr>
 							<th>{{ schema.properties.justice_stance.label }}:</th>
-							<td>{{ nation.justice_stance }}</td>
+							<td>{{ pf(nation.justice_stance, pn.get("justice_stance")) }}</td>
 						</tr>
 					</table>
 				</div>
@@ -505,27 +541,27 @@
 							</tr>
 							<tr>
 								<th>{{ schema.properties.vassal_type.label }}:</th>
-								<td>{{ nation.vassal_type }}</td>
+								<td>{{ pf(nation.vassal_type, pn.get("vassal_type")) }}</td>
 							</tr>
 							<tr>
 								<th>{{ schema.properties.compliance.label }}:</th>
-								<td>{{ nation.compliance }}</td>
+								<td>{{ pf(nation.compliance, pn.get("compliance")) }}</td>
 							</tr>
 							<tr>
 								<th>{{ schema.properties.disobey_chance.label }}:</th>
-								<td>{{ (nation.disobey_chance * 100)|int }}%</td>
+								<td>{{ pf_pct(nation.disobey_chance, pn.get("disobey_chance")) }}</td>
 							</tr>
 							<tr>
 								<th>{{ schema.properties.rebellion_chance.label }}:</th>
-								<td>{{ (nation.rebellion_chance * 100)|int }}%</td>
+								<td>{{ pf_pct(nation.rebellion_chance, pn.get("rebellion_chance")) }}</td>
 							</tr>
 							<tr>
 								<th>{{ schema.properties.concessions_chance.label }}:</th>
-								<td>{{ (nation.concessions_chance * 100)|int }}%</td>
+								<td>{{ pf_pct(nation.concessions_chance, pn.get("concessions_chance")) }}</td>
 							</tr>
 							<tr>
 								<th>{{ schema.properties.concessions_qty.label }}:</th>
-								<td>{{ nation.concessions_qty }}</td>
+								<td>{{ pf(nation.concessions_qty, pn.get("concessions_qty")) }}</td>
 							</tr>
 							<tr>
 								<th>{{ schema.properties.get("concessions").label }}:</th>
@@ -553,7 +589,7 @@
 						<table class="info-table">
 							<tr>
 								<th>{{ schema.properties.vassal_slots.label }}:</th>
-								<td>{{ nation.vassal_slots }}</td>
+								<td>{{ pf(nation.vassal_slots, pn.get("vassal_slots")) }}</td>
 							</tr>
 						</table>
 					</div>
@@ -580,15 +616,15 @@
 										<td><a href="{{ vassal['link'] }}">{{ vassal["name"] }}</a></td>
 
 										<td>{{ vassal["vassal_type"] }}</td>
-										
+
 										<td>{{ vassal["compliance"] }}</td>
-										
+
 										<td>{{ (vassal.get("disobey_chance", 0) * 100)|int }}%</td>
-										
+
 										<td>{{ (vassal.get("rebellion_chance", 0) * 100)|int }}%</td>
 
 										<td>{{ (vassal.get("concessions_chance", 0) * 100)|int }}%</td>
-										
+
 										<td>
 											{% if vassal.get("concessions", None) is mapping %}
 												{% for resource, amount in vassal.get("concessions", {}).items() %}
@@ -609,7 +645,7 @@
 				</div>
 			</div>
 		{% endif %}
-		
+
 		<div class="expandable-section" id="diplomacy-section">
 			<div class="section-header" onclick="toggleSection(this)">
 				<h2>Diplomacy</h2>
@@ -623,15 +659,15 @@
 						</tr>
 						<tr>
 							<th>{{ schema.properties.military_alliance_slots.label }}:</th>
-							<td>{{ nation.military_alliance_slots }}</td>
+							<td>{{ pf(nation.military_alliance_slots, pn.get("military_alliance_slots")) }}</td>
 						</tr>
 						<tr>
 							<th>{{ schema.properties.defensive_pact_slots.label }}:</th>
-							<td>{{ nation.defensive_pact_slots }}</td>
+							<td>{{ pf(nation.defensive_pact_slots, pn.get("defensive_pact_slots")) }}</td>
 						</tr>
 						<tr>
 							<th>{{ schema.properties.non_aggression_pact_slots.label }}:</th>
-							<td>{{ nation.non_aggression_pact_slots }}</td>
+							<td>{{ pf(nation.non_aggression_pact_slots, pn.get("non_aggression_pact_slots")) }}</td>
 						</tr>
 					</table>
 				</div>
@@ -653,10 +689,8 @@
 							{% set diplo_index = namespace(value=1) %}
 							{% for relation in linked_objects.get("diplomatic_relations_1", {})%}
 								<tr>
-									<!-- If there's no separate name/ID, just show the loop index -->
 									<td><a href="{{ relation['link'] }}">{{ diplo_index.value }}</a></td>
 
-									<!-- Link to Nation detail page -->
 									<td>
 									{% if relation["linked_objects"]["nation_2"] %}
 										<a href="{{ relation['linked_objects'].get('nation_2', {}).get('link', '') }}">{{ relation['linked_objects'].get('nation_2', {}).get('name', 'None') }}</a>
@@ -668,7 +702,7 @@
 									<td>{{ relation.get("relation", "Neutral") }}</td>
 
 									<td>{{ relation.get("pact_type", "None") }}</td>
-									
+
 									<td>
 										{% if relation.get("pact_type", "None") in ["Defensive Pact", "Military Alliance"] %}
 											{% if user_is_owner or view_access_level >= schema.properties.temperament.view_access_level %}
@@ -685,10 +719,8 @@
 							{% endfor %}
 							{% for relation in linked_objects.get("diplomatic_relations_2", {})%}
 								<tr>
-									<!-- If there's no separate name/ID, just show the loop index -->
 									<td><a href="{{ relation['link'] }}">{{ diplo_index.value }}</a></td>
 
-									<!-- Link to Nation detail page -->
 									<td>
 									{% if relation["linked_objects"].get("nation_1", None) %}
 										<a href="{{ relation['linked_objects'].get('nation_1', {}).get('link', '') }}">{{ relation['linked_objects'].get('nation_1', {}).get('name', 'None') }}</a>
@@ -700,7 +732,7 @@
 									<td>{{ relation.get("relation", "Neutral") }}</td>
 
 									<td>{{ relation.get("pact_type", "None") }}</td>
-									
+
 									<td>
 										{% if relation.get("pact_type", "None") in ["Defensive Pact", "Military Alliance"] %}
 											{% if user_is_owner or view_access_level >= schema.properties.temperament.view_access_level %}
@@ -794,20 +826,20 @@
 					{%- endmacro %}
 
 					<h2>Land Units</h2>
-					<p>Land Units: {{  nation.get("land_unit_count", 0) }}/{{ nation.get("land_unit_capacity", 0) }}</p>
+					<p>Land Units: {{ pf(nation.get("land_unit_count", 0), pn.get("land_unit_count")) }}/{{ pf(nation.get("land_unit_capacity", 0), pn.get("land_unit_capacity")) }}</p>
 					{{ unit_table(nation.land_unit_details, nation.get("land_units", {})) }}
 
 					<h2>Support Units</h2>
-					<p>Support Units: {{ nation.get("support_unit_count", 0) }}/{{ nation.get("support_unit_capacity", 0) }}</p>
+					<p>Support Units: {{ pf(nation.get("support_unit_count", 0), pn.get("support_unit_count")) }}/{{ pf(nation.get("support_unit_capacity", 0), pn.get("support_unit_capacity")) }}</p>
 					{{ unit_table(nation.get("support_unit_details", {}), nation.get("support_units", {})) }}
 
 					<h2>Naval Units</h2>
-					<p>Naval Units: {{ nation.get("naval_unit_count", 0) }}/{{ nation.get("naval_unit_capacity", 0) }}</p>
+					<p>Naval Units: {{ pf(nation.get("naval_unit_count", 0), pn.get("naval_unit_count")) }}/{{ pf(nation.get("naval_unit_capacity", 0), pn.get("naval_unit_capacity")) }}</p>
 					{{ unit_table(nation.get("naval_unit_details", {}), nation.get("naval_units", {})) }}
 				</div>
 			</div>
 		</div>
-		
+
 		<div class="expandable-section" id="resources-jobs-section">
 			<div class="section-header" onclick="toggleSection(this)">
 				<h2>Resources & Jobs</h2>
@@ -817,7 +849,6 @@
 				<h2>Resources</h2>
 				<div class="table-wrapper">
 					<table class="resources-table">
-						<!-- First, a header row for the “General Resources” label -->
 						<thead>
 							<tr class="resources-header-row">
 								<th colspan="6" class="resources-header">General Resources</th>
@@ -832,46 +863,52 @@
 						</thead>
 						<tbody>
 							{% for resource in json_data["general_resources"] %}
+								{% set rkey = resource["key"] %}
+								{% set cur_prod = nation.get("resource_production", {}).get(rkey, 0) %}
+								{% set cur_cons = nation.get("resource_consumption", {}).get(rkey, 0) %}
+								{% set excess_value = nation.get("resource_excess", {}).get(rkey, 0) %}
+								{% set storage = nation.get("resource_storage", {}).get(rkey, 0) %}
+								{% set capacity = nation.get("nation_resource_capacity", {}).get(rkey, 0) %}
+								{% set pend_prod = pn.get("resource_production", {}).get(rkey) %}
+								{% set pend_cons = pn.get("resource_consumption", {}).get(rkey) %}
+								{% set pend_excess = pn.get("resource_excess", {}).get(rkey) %}
+								{% set pend_storage = pn.get("resource_storage", {}).get(rkey) %}
+								{% set pend_capacity = pn.get("nation_resource_capacity", {}).get(rkey) %}
 								<tr>
 									<td>{{ resource.name }}</td>
 									<td>
-										<span
-											class="context-tooltip"
-											data-tooltip-title="{{ resource.name }} Production"
-											data-breakdown='{{ breakdowns["resource_production"][resource["key"]]|tojson }}'
-										>
-											{{ nation.get("resource_production", {}).get(resource["key"], 0) }}
-										</span>
+										{{ pfbd(
+											cur_prod,
+											pend_prod,
+											breakdowns["resource_production"][rkey],
+											pbd.get("resource_production", {}).get(rkey, []),
+											resource.name ~ " Production"
+										) }}
 									</td>
 									<td>
-										<span
-											class="context-tooltip"
-											data-tooltip-title="{{ resource.name }} Consumption"
-											data-breakdown='{{ breakdowns["resource_consumption"][resource["key"]]|tojson }}'
-										>
-											{{ nation.get("resource_consumption", {}).get(resource["key"], 0) }}
-										</span>
+										{{ pfbd(
+											cur_cons,
+											pend_cons,
+											breakdowns["resource_consumption"][rkey],
+											pbd.get("resource_consumption", {}).get(rkey, []),
+											resource.name ~ " Consumption"
+										) }}
 									</td>
-									{% set excess_value = nation.get("resource_excess", {}).get(resource["key"], 0) %}
-									{% set storage = nation.get("resource_storage", {}).get(resource["key"], 0) %}
-									{% set capacity = nation.get("nation_resource_capacity", {}).get(resource["key"], 0) %}
-
 									{% if excess_value + storage < 0 %}
-                                            <td class="excess-critical-negative">{{ excess_value }}</td>
-                                        {% elif excess_value < 0 %}
-                                            <td class="excess-negative">{{ excess_value }}</td>
-                                        {% elif excess_value + storage > capacity %}
-                                            <td class="excess-overflow">{{ excess_value }}</td>
-                                        {% elif excess_value > 0 %}
-                                            <td class="excess-positive">{{ excess_value }}</td>
-                                        {% else %}
-                                            <td>{{ excess_value }}</td>
+										<td class="excess-critical-negative">{{ pf(excess_value, pend_excess) }}</td>
+									{% elif excess_value < 0 %}
+										<td class="excess-negative">{{ pf(excess_value, pend_excess) }}</td>
+									{% elif excess_value + storage > capacity %}
+										<td class="excess-overflow">{{ pf(excess_value, pend_excess) }}</td>
+									{% elif excess_value > 0 %}
+										<td class="excess-positive">{{ pf(excess_value, pend_excess) }}</td>
+									{% else %}
+										<td>{{ pf(excess_value, pend_excess) }}</td>
 									{% endif %}
-									<td>{{ nation.get("resource_storage", {}).get(resource["key"], 0) }} / {{ nation.get("nation_resource_capacity", {}).get(resource["key"], 0) }}</td>
+									<td>{{ pf(storage, pend_storage) }} / {{ pf(capacity, pend_capacity) }}</td>
 								</tr>
 							{% endfor %}
 						</tbody>
-						<!-- A second header row for the “Unique Resources” label -->
 						<thead>
 							<tr class="resources-header-row">
 								<th colspan="6" class="resources-header">Unique Resources</th>
@@ -886,48 +923,56 @@
 						</thead>
 						<tbody>
 							{% for resource in json_data["unique_resources"] %}
+								{% set rkey = resource["key"] %}
+								{% set cur_prod = nation.get("resource_production", {}).get(rkey, 0) %}
+								{% set cur_cons = nation.get("resource_consumption", {}).get(rkey, 0) %}
+								{% set excess_value = nation.get("resource_excess", {}).get(rkey, 0) %}
+								{% set storage = nation.get("resource_storage", {}).get(rkey, 0) %}
+								{% set capacity = nation.get("nation_resource_capacity", {}).get(rkey, 0) %}
+								{% set pend_prod = pn.get("resource_production", {}).get(rkey) %}
+								{% set pend_cons = pn.get("resource_consumption", {}).get(rkey) %}
+								{% set pend_excess = pn.get("resource_excess", {}).get(rkey) %}
+								{% set pend_storage = pn.get("resource_storage", {}).get(rkey) %}
+								{% set pend_capacity = pn.get("nation_resource_capacity", {}).get(rkey) %}
 								<tr>
 									<td>{{ resource.name }}</td>
 									<td>
-										<span
-											class="context-tooltip"
-											data-tooltip-title="{{ resource.name }} Production"
-											data-breakdown='{{ breakdowns["resource_production"][resource["key"]]|tojson }}'
-										>
-											{{ nation.get("resource_production", {}).get(resource["key"], 0) }}
-										</span>
+										{{ pfbd(
+											cur_prod,
+											pend_prod,
+											breakdowns["resource_production"][rkey],
+											pbd.get("resource_production", {}).get(rkey, []),
+											resource.name ~ " Production"
+										) }}
 									</td>
 									<td>
-										<span
-											class="context-tooltip"
-											data-tooltip-title="{{ resource.name }} Consumption"
-											data-breakdown='{{ breakdowns["resource_consumption"][resource["key"]]|tojson }}'
-										>
-											{{ nation.get("resource_consumption", {}).get(resource["key"], 0) }}
-										</span>
+										{{ pfbd(
+											cur_cons,
+											pend_cons,
+											breakdowns["resource_consumption"][rkey],
+											pbd.get("resource_consumption", {}).get(rkey, []),
+											resource.name ~ " Consumption"
+										) }}
 									</td>
-									{% set excess_value = nation.get("resource_excess", {}).get(resource["key"], 0) %}
-									{% set storage = nation.get("resource_storage", {}).get(resource["key"], 0) %}
-									{% set capacity = nation.get("nation_resource_capacity", {}).get(resource["key"], 0) %}
 									{% if excess_value + storage < 0 %}
-										<td class="excess-critical-negative">{{ excess_value }}</td>
+										<td class="excess-critical-negative">{{ pf(excess_value, pend_excess) }}</td>
 									{% elif excess_value < 0 %}
-										<td class="excess-negative">{{ excess_value }}</td>
+										<td class="excess-negative">{{ pf(excess_value, pend_excess) }}</td>
 									{% elif excess_value + storage > capacity %}
-										<td class="excess-overflow">{{ excess_value }}</td>
+										<td class="excess-overflow">{{ pf(excess_value, pend_excess) }}</td>
 									{% elif excess_value > 0 %}
-										<td class="excess-positive">{{ excess_value }}</td>
+										<td class="excess-positive">{{ pf(excess_value, pend_excess) }}</td>
 									{% else %}
-										<td>{{ excess_value }}</td>
+										<td>{{ pf(excess_value, pend_excess) }}</td>
 									{% endif %}
-									<td>{{ nation.get("resource_storage", {}).get(resource["key"], 0) }} / {{ nation.get("nation_resource_capacity", {}).get(resource["key"], 0) }}</td>
+									<td>{{ pf(storage, pend_storage) }} / {{ pf(capacity, pend_capacity) }}</td>
 								</tr>
 							{% endfor %}
 						</tbody>
 					</table>
 				</div>
 				<h2>Jobs</h2>
-				<p>Working Pops: {{ nation.working_pop_count }}/{{ nation.pop_count }}</p>
+				<p>Working Pops: {{ pf(nation.working_pop_count, pn.get("working_pop_count")) }}/{{ pf(nation.pop_count, pn.get("pop_count")) }}</p>
 				<div class="table-wrapper">
 					<table class="jobs-table">
 						<thead>
@@ -939,17 +984,20 @@
 							</tr>
 						</thead>
 						<tbody>
+							{% set pending_job_details = pn.get("job_details", {}) %}
 							{% for job_key, job in nation.job_details.items() %}
+								{% set pjob = pending_job_details.get(job_key, {}) %}
 								<tr>
 									<td>{{ job.display_name }}</td>
-									<td>{{ nation.jobs[job_key] if job_key in nation.jobs else 0 }}</td>
+									<td>{{ pf(nation.jobs.get(job_key, 0), pn.get("jobs", {}).get(job_key)) }}</td>
 									<td>
 										{% if "upkeep" in job %}
 											{% for resource, cost in job.upkeep.items() %}
+												{% set pcost = pjob.get("upkeep", {}).get(resource) %}
 												<span class="context-tooltip"
 													data-tooltip-title="{{ job.display_name }} - {{ resource }} Upkeep (per worker)"
 													data-breakdown='{{ breakdowns.get("job_consumption", {}).get(job_key, {}).get(resource, [])|tojson }}'
-												>{{ resource }}: {{ cost }}</span><br>
+												>{{ resource }}: {{ cost }}</span>{% if pcost is not none and pcost != cost %} <span class="pending-value">→ {{ pcost }}</span>{% endif %}<br>
 											{% endfor %}
 										{% endif %}
 									</td>
@@ -957,10 +1005,12 @@
 										{% if "production" in job %}
 											{% for resource, prod in job.production.items() %}
 												{% set prod_val = (prod|float)|round(2) %}
+												{% set pprod_raw = pjob.get("production", {}).get(resource) %}
+												{% set pprod_val = (pprod_raw|float)|round(2) if pprod_raw is not none else none %}
 												<span class="context-tooltip"
 													data-tooltip-title="{{ job.display_name }} - {{ resource }} Production (per worker)"
 													data-breakdown='{{ breakdowns.get("job_production", {}).get(job_key, {}).get(resource, [])|tojson }}'
-												>{{ resource }}: {{ prod_val|int if prod_val == (prod_val|int) else "%.2f"|format(prod_val) }}</span><br>
+												>{{ resource }}: {{ prod_val|int if prod_val == (prod_val|int) else "%.2f"|format(prod_val) }}</span>{% if pprod_val is not none and pprod_val != prod_val %} <span class="pending-value">→ {{ pprod_val|int if pprod_val == (pprod_val|int) else "%.2f"|format(pprod_val) }}</span>{% endif %}<br>
 											{% endfor %}
 										{% endif %}
 									</td>
@@ -974,21 +1024,43 @@
 				{% endif %}
 			</div>
 		</div>
-		
+
 		<div class="expandable-section" id="districts-cities-wonders-section">
 			<div class="section-header" onclick="toggleSection(this)">
 				<h2>Districts, Cities, & Wonders</h2>
 				<span class="toggle-icon">▼</span>
 			</div>
 			<div class="section-content">
+				{% set has_pending = pending_nation is not none %}
+				{% set pending_districts = pn.get("districts") or [] %}
+				{% set pending_cities = pn.get("cities") or [] %}
+
 				<h2>Districts</h2>
-				<p>{{ schema.properties.district_slots.label }}: {{ nation.district_slots }}</p>
+				<p>{{ schema.properties.district_slots.label }}: {{ pf(nation.district_slots, pn.get("district_slots")) }}</p>
 				<div class="districts-grid">
 					{% for i in range(0, nation.district_slots) %}
+						{% set cur = nation.districts[i] if (nation.districts | length > i and nation.districts[i]) else {} %}
+						{% set cur_type = cur.get("type", "") %}
+						{% set cur_node = cur.get("node", "") %}
+						{% set pd = pending_districts[i] if (has_pending and pending_districts | length > i) else none %}
+						{% set pend_type = pd.get("type", "") if pd is not none else cur_type %}
+						{% set pend_node = pd.get("node", "") if pd is not none else cur_node %}
+						{% set type_changed = pd is not none and pend_type != cur_type %}
+						{% set node_changed = pd is not none and pend_node != cur_node %}
 						<div class="district-slot">
-							{% if nation.districts | length > i and nation.districts[i] and nation.districts[i]["type"] != "" %}
-								{% set district = nation.district_details.get(nation.districts[i]["type"], {}) %}
-								<h3>{{ district.get("display_name", "") }}</h3>
+							{% if cur_type != "" %}
+								{% set district = nation.district_details.get(cur_type, {}) %}
+								{% set pend_district = json_data["nation_districts"].get(pend_type, {}) if type_changed else {} %}
+								<h3>
+									{{ district.get("display_name", "") }}
+									{% if type_changed %}
+										{% if pend_type %}
+											<span class="pending-value">→ {{ pend_district.get("display_name", pend_type) }}</span>
+										{% else %}
+											<span class="pending-value" style="color:#e05555;">→ Empty</span>
+										{% endif %}
+									{% endif %}
+								</h3>
 								<p>Type: {{ district.get("type", "") }}</p>
 								<p>
 									Cost:
@@ -1001,29 +1073,60 @@
 									{% for mod, value in district.get("modifiers", {}).items() %}
 										{{ mod }}: {{ value }}<br>
 									{% endfor %}
-								</p>
-								<p>
-									Node:
-									{% if nation.districts[i]["node"] != "" %}
-										{{ nation.districts[i]["node"] }}
-									{% else %}
-										None
+									{% if type_changed and pend_type %}
+										<span class="pending-value">
+											{% for mod, value in pend_district.get("modifiers", {}).items() %}
+												→ {{ mod }}: {{ value }}<br>
+											{% endfor %}
+										</span>
 									{% endif %}
 								</p>
+								<p>
+									Node: {{ pf(cur_node if cur_node else "None", pend_node if pend_node else "None" if node_changed else none) }}
+								</p>
 							{% else %}
-								<div class="empty-slot">
-									<p>Empty Slot</p>
-								</div>
+								{% if type_changed and pend_type %}
+									{% set pend_district = json_data["nation_districts"].get(pend_type, {}) %}
+									<div class="empty-slot">
+										<p>Empty Slot</p>
+									</div>
+									<p class="pending-value">→ {{ pend_district.get("display_name", pend_type) }}</p>
+									{% if pend_node %}
+										<p class="pending-value">Node: {{ pend_node }}</p>
+									{% endif %}
+								{% else %}
+									<div class="empty-slot">
+										<p>Empty Slot</p>
+									</div>
+								{% endif %}
 							{% endif %}
 						</div>
 					{% endfor %}
 				</div>
 				</br>
 				{% if nation.get("empire", False) %}
-					{% if nation.imperial_district and nation.imperial_district["type"] != "" %}
+					{% set cur_imp = nation.imperial_district if nation.imperial_district else {} %}
+					{% set cur_imp_type = cur_imp.get("type", "") %}
+					{% set cur_imp_node = cur_imp.get("node", "") %}
+					{% set pd_imp = pn.get("imperial_district") if has_pending else none %}
+					{% set pend_imp_type = pd_imp.get("type", "") if pd_imp is not none else cur_imp_type %}
+					{% set pend_imp_node = pd_imp.get("node", "") if pd_imp is not none else cur_imp_node %}
+					{% set imp_type_changed = pd_imp is not none and pend_imp_type != cur_imp_type %}
+					{% set imp_node_changed = pd_imp is not none and pend_imp_node != cur_imp_node %}
+					{% if cur_imp_type != "" %}
 						<div class="district-slot">
-							{% set district = nation.district_details.get(nation.imperial_district["type"], {}) %}
-							<h3>{{ district.get("display_name", "") }}</h3>
+							{% set district = nation.district_details.get(cur_imp_type, {}) %}
+							{% set pend_imp_district = json_data["nation_imperial_districts"].get(pend_imp_type, {}) if imp_type_changed else {} %}
+							<h3>
+								{{ district.get("display_name", "") }}
+								{% if imp_type_changed %}
+									{% if pend_imp_type %}
+										<span class="pending-value">→ {{ pend_imp_district.get("display_name", pend_imp_type) }}</span>
+									{% else %}
+										<span class="pending-value" style="color:#e05555;">→ Empty</span>
+									{% endif %}
+								{% endif %}
+							</h3>
 							<p>Type: {{ district.get("type", "") }}</p>
 							<p>
 								Cost:
@@ -1036,34 +1139,64 @@
 								{% for mod, value in district.get("modifiers", {}).items() %}
 									{{ mod }}: {{ value }}<br>
 								{% endfor %}
+								{% if imp_type_changed and pend_imp_type %}
+									<span class="pending-value">
+										{% for mod, value in pend_imp_district.get("modifiers", {}).items() %}
+											→ {{ mod }}: {{ value }}<br>
+										{% endfor %}
+									</span>
+								{% endif %}
 							</p>
 							<p>
-								Node:
-								{% if nation.imperial_district["node"] != "" %}
-									{{ nation.imperial_district["node"] }}
-								{% else %}
-									None
-								{% endif %}
+								Node: {{ pf(cur_imp_node if cur_imp_node else "None", pend_imp_node if pend_imp_node else "None" if imp_node_changed else none) }}
 							</p>
 						</div>
 					{% else %}
 						<div class="district-slot">
-							<div class="empty-slot">
-								<p>Empty Slot</p>
-							</div>
+							{% if imp_type_changed and pend_imp_type %}
+								{% set pend_imp_district = json_data["nation_imperial_districts"].get(pend_imp_type, {}) %}
+								<div class="empty-slot"><p>Empty Slot</p></div>
+								<p class="pending-value">→ {{ pend_imp_district.get("display_name", pend_imp_type) }}</p>
+								{% if pend_imp_node %}
+									<p class="pending-value">Node: {{ pend_imp_node }}</p>
+								{% endif %}
+							{% else %}
+								<div class="empty-slot"><p>Empty Slot</p></div>
+							{% endif %}
 						</div>
 					{% endif %}
 				{% endif %}
 				{% if nation.city_slots > 0 %}
 					<h2>Cities</h2>
-					<p>{{ schema.properties.city_slots.label }}: {{ nation.city_slots }}</p>
+					<p>{{ schema.properties.city_slots.label }}: {{ pf(nation.city_slots, pn.get("city_slots")) }}</p>
 					<div class="districts-grid">
 						{% for i in range(0, nation.city_slots) %}
+							{% set cur_city = nation.cities[i] if (nation.cities | length > i and nation.cities[i]) else {} %}
+							{% set cur_city_type = cur_city.get("type", "") %}
+							{% set cur_city_node = cur_city.get("node", "") %}
+							{% set cur_city_name = cur_city.get("name", "") %}
+							{% set pd_city = pending_cities[i] if (has_pending and pending_cities | length > i) else none %}
+							{% set pend_city_type = pd_city.get("type", "") if pd_city is not none else cur_city_type %}
+							{% set pend_city_node = pd_city.get("node", "") if pd_city is not none else cur_city_node %}
+							{% set pend_city_name = pd_city.get("name", "") if pd_city is not none else cur_city_name %}
+							{% set city_type_changed = pd_city is not none and pend_city_type != cur_city_type %}
+							{% set city_node_changed = pd_city is not none and pend_city_node != cur_city_node %}
+							{% set city_name_changed = pd_city is not none and pend_city_name != cur_city_name %}
 							<div class="district-slot">
-								{% if nation.cities | length > i and nation.cities[i] and nation.cities[i]["type"] != "" %}
-									{% set city = json_data["cities"][nation.cities[i]["type"]] %}
-									<h3>{{ city.get("display_name", "") }}</h3>
-									<p>Name: {{ nation.cities[i].get("name", "") }}</p>
+								{% if cur_city_type != "" %}
+									{% set city = json_data["cities"][cur_city_type] %}
+									{% set pend_city_data = json_data["cities"].get(pend_city_type, {}) if city_type_changed else {} %}
+									<h3>
+										{{ city.get("display_name", "") }}
+										{% if city_type_changed %}
+											{% if pend_city_type %}
+												<span class="pending-value">→ {{ pend_city_data.get("display_name", pend_city_type) }}</span>
+											{% else %}
+												<span class="pending-value" style="color:#e05555;">→ Empty</span>
+											{% endif %}
+										{% endif %}
+									</h3>
+									<p>Name: {{ pf(cur_city_name, pend_city_name if city_name_changed else none) }}</p>
 									<p>
 										Cost:
 										{% for resource, cost in city.get("cost", {}).items() %}
@@ -1075,19 +1208,30 @@
 										{% for mod, value in city.get("modifiers", {}).items() %}
 											{{ mod }}: {{ value }}<br>
 										{% endfor %}
-									</p>
-									<p>
-										Node:
-										{% if nation.cities[i]["node"] != "" %}
-											{{ nation.cities[i]["node"] }}
-										{% else %}
-											None
+										{% if city_type_changed and pend_city_type %}
+											<span class="pending-value">
+												{% for mod, value in pend_city_data.get("modifiers", {}).items() %}
+													→ {{ mod }}: {{ value }}<br>
+												{% endfor %}
+											</span>
 										{% endif %}
 									</p>
+									<p>
+										Node: {{ pf(cur_city_node if cur_city_node else "None", pend_city_node if pend_city_node else "None" if city_node_changed else none) }}
+									</p>
 								{% else %}
-									<div class="empty-slot">
-										<p>Empty Slot</p>
-									</div>
+									{% if city_type_changed and pend_city_type %}
+										{% set pend_city_data = json_data["cities"].get(pend_city_type, {}) %}
+										<div class="empty-slot"><p>Empty Slot</p></div>
+										<p class="pending-value">→ {{ pend_city_data.get("display_name", pend_city_type) }}</p>
+										{% if pend_city_node %}
+											<p class="pending-value">Node: {{ pend_city_node }}</p>
+										{% endif %}
+									{% else %}
+										<div class="empty-slot">
+											<p>Empty Slot</p>
+										</div>
+									{% endif %}
 								{% endif %}
 							</div>
 						{% endfor %}
@@ -1112,14 +1256,14 @@
 								{% for wonder in linked_objects["wonders"] %}
 									<tr>
 										<td><a href="{{ wonder['link'] }}">{{ wonder["name"] }}</a></td>
-										
+
 										<td>
 											{% if wonder["node"] is not none %}
 												{% set resource = find_dict_in_list(json_data["general_resources"], "key", wonder["node"]) %}
 												{% if not resource %}
 													{% set resource = find_dict_in_list(json_data["unique_resources"], "key", wonder["node"]) %}
 												{% endif %}
-												
+
 												{% if resource and resource is not none %}
 													{{ resource["name"] }}
 												{% elif resource is none %}
@@ -1131,9 +1275,9 @@
 												None
 											{% endif %}
 										</td>
-										
+
 										<td>{{ wonder["era_created"] }}</td>
-										
+
 										<td>{{ wonder["legacy_status"] }}</td>
 									</tr>
 								{% endfor %}
@@ -1143,7 +1287,7 @@
 				{% endif %}
 			</div>
 		</div>
-	
+
 	<div class="expandable-section" id="tech-section">
 		<div class="section-header" onclick="toggleSection(this)">
 			<h2>Technologies</h2>
@@ -1153,7 +1297,7 @@
 			{{ render_tech_tree(nation.get("technologies", {"political_philosophy": {"researched": true}}), nation.get("technology_cost_modifier", 0), nation.get("technology_cost_minimum", 2), json_data) }}
 		</div>
 	</div>
-	
+
 	<div class="expandable-section" id="progress-quests-section">
 		<div class="section-header" onclick="toggleSection(this)">
 			<h2>Progress Quests</h2>
@@ -1307,6 +1451,90 @@
 					</tbody>
 				</table>
 			</div>
+			{% if pending_nation and pending_nation.get("modifiers") != nation.get("modifiers") %}
+				{# Build sets of current and pending modifier IDs #}
+				{% set ns_cur = namespace(ids=[]) %}
+				{% for m in nation.get("modifiers", []) %}
+					{% set ns_cur.ids = ns_cur.ids + [m.get("_id", "")|string] %}
+				{% endfor %}
+				{% set ns_pend = namespace(ids=[]) %}
+				{% for m in pending_nation.get("modifiers", []) %}
+					{% set ns_pend.ids = ns_pend.ids + [m.get("_id", "")|string] %}
+				{% endfor %}
+				{# Collect added and removed modifiers #}
+				{% set ns_added = namespace(mods=[]) %}
+				{% for m in pending_nation.get("modifiers", []) %}
+					{% if m.get("_id", "")|string not in ns_cur.ids %}
+						{% set ns_added.mods = ns_added.mods + [m] %}
+					{% endif %}
+				{% endfor %}
+				{% set ns_removed = namespace(mods=[]) %}
+				{% for m in nation.get("modifiers", []) %}
+					{% if m.get("_id", "")|string not in ns_pend.ids %}
+						{% set ns_removed.mods = ns_removed.mods + [m] %}
+					{% endif %}
+				{% endfor %}
+				{% if ns_added.mods or ns_removed.mods %}
+					{# Shared macro for rendering a modifier row #}
+					{% macro mod_row(modifier, row_class) %}
+						{% set mod_type = modifier.get('modifier_type', '') %}
+						{% set type_def = modifier_types.get(mod_type, {}) %}
+						{% set type_name = type_def.get('name', modifier.get('field', modifier.get('key', mod_type or '(unknown)'))) %}
+						{% set ns = namespace(parts=[]) %}
+						{% for extra in type_def.get('extra_fields', []) %}
+							{% set val = modifier.get(extra.key) or '' %}
+							{% if val %}
+								{% if extra.source == 'all_resources' %}
+									{% set found = all_resources | selectattr('key', 'equalto', val) | first %}
+									{% set ns.parts = ns.parts + [(found.name if found else val)] %}
+								{% elif extra.source == 'jobs' %}
+									{% set found = all_jobs | selectattr('key', 'equalto', val) | first %}
+									{% set ns.parts = ns.parts + [(found.name if found else val)] %}
+								{% else %}
+									{% set ns.parts = ns.parts + [val] %}
+								{% endif %}
+							{% endif %}
+						{% endfor %}
+						{% set scope_key = modifier.get('scope', '') %}
+						{% set scope_name = scope_definitions.get(scope_key, {}).get('name', '') %}
+						<tr class="{{ row_class }}">
+							<td>
+								{{ type_name }}
+								{% if ns.parts %}<small>({{ ns.parts | join(', ') }})</small>{% endif %}
+							</td>
+							<td><small>{{ scope_name if scope_name else '—' }}</small></td>
+							<td>
+								{{ modifier.value }}
+								{% if type_def.get('value_format') == 'percentage' %}<small>(%)</small>{% endif %}
+							</td>
+							<td>{{ modifier.duration }}</td>
+							<td>{{ modifier.source }}</td>
+						</tr>
+					{% endmacro %}
+					<h3 class="pending-value" style="margin-top:1rem;">Pending Modifier Changes</h3>
+					<div class="table-wrapper">
+						<table class="info-table">
+							<thead>
+								<tr>
+									<th>Modifier Type</th>
+									<th>Scope</th>
+									<th>Value</th>
+									<th>Duration</th>
+									<th>Source</th>
+								</tr>
+							</thead>
+							<tbody>
+								{% for modifier in ns_added.mods %}
+									{{ mod_row(modifier, "modifier-added") }}
+								{% endfor %}
+								{% for modifier in ns_removed.mods %}
+									{{ mod_row(modifier, "modifier-removed") }}
+								{% endfor %}
+							</tbody>
+						</table>
+					</div>
+				{% endif %}
+			{% endif %}
 		</div>
 	</div>
 {% endblock %}
@@ -1316,7 +1544,7 @@ function toggleSection(header) {
     const section = header.parentElement;
     const content = section.querySelector('.section-content');
     const icon = header.querySelector('.toggle-icon');
-    
+
     if (content.style.display === 'none' || content.style.display === '') {
         content.style.display = 'block';
         icon.textContent = '▼';
@@ -1345,7 +1573,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 recenterTechTree();
             }
         });
-        
+
         // If section is already expanded on page load, recenter after a delay
         if (techSection.classList.contains('section-expanded')) {
             setTimeout(function() {

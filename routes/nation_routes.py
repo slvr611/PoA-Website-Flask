@@ -4,7 +4,7 @@ import re
 from copy import deepcopy
 from helpers.data_helpers import get_data_on_category, get_data_on_item, get_dropdown_options
 from helpers.render_helpers import get_linked_objects
-from helpers.change_helpers import request_change, approve_change, system_approve_change
+from helpers.change_helpers import request_change, approve_change, system_approve_change, deep_merge
 from helpers.form_helpers import validate_form_with_jsonschema
 from helpers.auth_helpers import owner_required
 from app_core import category_data, mongo, json_data, find_dict_in_list, upload_bytes_to_s3
@@ -190,6 +190,26 @@ def nation_item(item_ref):
     
     user_can_edit_pops = user_is_owner or bool(g.user and g.user.get("is_admin"))
 
+    pending_nation = None
+    pending_breakdowns = None
+    try:
+        pending_changes = list(mongo.db.changes.find({
+            "target": nation["_id"],
+            "status": "Pending",
+            "change_type": "Update",
+            "target_collection": "nations"
+        }).sort("time_requested", 1))
+        if pending_changes:
+            merged = deepcopy(nation)
+            for change in pending_changes:
+                merged = deep_merge(merged, change["after_requested_data"])
+            pending_values, pending_breakdowns = calculate_all_fields(
+                merged, schema, "nation", return_breakdowns=True
+            )
+            pending_nation = {**merged, **pending_values}
+    except Exception as e:
+        current_app.logger.warning("Failed to compute pending nation state: %s", e)
+
     phase_start = perf_counter()
     rendered = render_template(
         "nation_owner.html",
@@ -203,7 +223,9 @@ def nation_item(item_ref):
         user_can_edit_pops=user_can_edit_pops,
         find_dict_in_list=find_dict_in_list,
         breakdowns=breakdowns,
-        pop_pagination=pop_pagination
+        pop_pagination=pop_pagination,
+        pending_nation=pending_nation,
+        pending_breakdowns=pending_breakdowns,
     )
     timings["render_template_ms"] = round((perf_counter() - phase_start) * 1000, 2)
     timings["total_request_ms"] = round((perf_counter() - request_start) * 1000, 2)

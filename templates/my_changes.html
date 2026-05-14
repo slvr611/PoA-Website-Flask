@@ -1,0 +1,91 @@
+{% extends "layout.html" %}
+{% from "macros/pagination.html" import render_pagination, render_changes_preview %}
+
+{% block title %}My Pending Changes{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1>My Pending Changes ({{ total_count }} total)</h1>
+
+    {% if total_pages > 1 %}
+        {{ render_pagination(current_page, total_pages, "/my_changes") }}
+    {% endif %}
+
+    {% if changes %}
+        <div class="table-wrapper" style="overflow-x:auto;">
+            <table class="info-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Target</th>
+                        <th>Type</th>
+                        <th class="changes-column">Changes</th>
+                        <th class="reason-column">Reason</th>
+                        <th>Time</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for change in changes %}
+                        <tr>
+                            <td><a href="/changes/item/{{ change._id }}">{{ change._id }}</a></td>
+                            <td>
+                                {{ change.target_collection }}:
+                                {% if change.target_collection in preview_references and change.target|string in preview_references[change.target_collection] %}
+                                    <a href="{{ preview_references[change.target_collection][change.target|string]['link'] }}">
+                                        {{ preview_references[change.target_collection][change.target|string]['name'] }}
+                                    </a>
+                                {% else %}
+                                    {{ change.target }}
+                                {% endif %}
+                            </td>
+                            <td>{{ change.change_type }}</td>
+                            <td class="changes-column wrap-content">
+                                {{ render_changes_preview(
+                                    change.before_requested_data,
+                                    change.after_requested_data,
+                                    target_schemas.get(change.target_collection, {}),
+                                    preview_references,
+                                    view_access_level
+                                ) }}
+                            </td>
+                            <td class="reason-column wrap-content">
+                                {{ change.request_reason|format_discord_link|safe }}
+                            </td>
+                            <td>
+                                {% if change.time_requested is defined and change.time_requested is not none %}
+                                    {% if change.time_requested.__class__.__name__ == 'datetime' %}
+                                        <time class="local-time"
+                                              datetime="{{ change.time_requested.isoformat() }}{% if change.time_requested.tzinfo is none %}Z{% endif %}"
+                                              title="{{ change.time_requested.strftime('%Y-%m-%d %H:%M:%S') }} UTC">
+                                        </time>
+                                    {% else %}
+                                        {{ change.time_requested }}
+                                    {% endif %}
+                                {% endif %}
+                            </td>
+                            <td class="action-buttons">
+                                <form method="POST" action="/changes/item/{{ change._id }}/rescind"
+                                      onsubmit="return confirm('Rescind this change? It will be withdrawn and not applied.');"
+                                      style="display:inline;">
+                                    <button type="submit" class="btn btn-deny">Rescind</button>
+                                </form>
+                                {% if g.user and g.user.get('is_admin') %}
+                                    <a href="/changes/item/{{ change._id }}/approve" class="btn btn-approve"
+                                       onclick="return confirm('Approve this change?');">Approve</a>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <p>You have no pending changes.</p>
+    {% endif %}
+
+    {% if total_pages > 1 %}
+        {{ render_pagination(current_page, total_pages, "/my_changes") }}
+    {% endif %}
+</div>
+{% endblock %}

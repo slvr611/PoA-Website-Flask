@@ -1,8 +1,8 @@
-from flask import Blueprint, render_template, redirect, flash
+from flask import Blueprint, render_template, redirect, flash, g, request
 from helpers.auth_helpers import admin_required
 from helpers.data_helpers import get_data_on_category, get_data_on_item
 from helpers.render_helpers import get_linked_objects
-from helpers.change_helpers import approve_change, deny_change, force_approve_change
+from helpers.change_helpers import approve_change, deny_change, force_approve_change, rescind_change
 from app_core import category_data, mongo, app
 from pymongo import DESCENDING, ASCENDING
 from bson import ObjectId
@@ -564,3 +564,68 @@ def item_archived_changes(data_type, item_ref, page=1):
         change_type="archived",
         collection_name=category_data[data_type]['singularName']
     )
+
+
+# ── My Changes ───────────────────────────────────────────────────────────────
+
+@change_routes.route("/my_changes")
+@change_routes.route("/my_changes/page/<int:page>")
+def my_changes(page=1):
+    if not g.user:
+        flash("You must be logged in to view your changes.")
+        return redirect("/")
+
+    player = mongo.db.players.find_one({"id": g.user.get("id")})
+    if not player:
+        flash("Could not find your player record.")
+        return redirect("/")
+
+    items_per_page = 20
+    query = {"requester": player["_id"], "status": "Pending"}
+    total_count = mongo.db.changes.count_documents(query)
+    total_pages = max(1, (total_count + items_per_page - 1) // items_per_page)
+    page = max(1, min(page, total_pages))
+    skip = (page - 1) * items_per_page
+
+    changes = list(
+        mongo.db.changes.find(query)
+        .sort("time_requested", ASCENDING)
+        .skip(skip).limit(items_per_page)
+    )
+
+    # Build preview references so target names resolve to links
+    target_schemas = {name: data["schema"] for name, data in category_data.items()}
+    collections_to_preview = {}
+    for change in changes:
+        col = change.get("target_collection", "")
+        if col in category_data:
+            collections_to_preview[col] = col
+    preview_references = get_preview_references(
+        category_data.get("changes", {}).get("schema", {}),
+        collections_to_preview
+    )
+
+    return render_template(
+        "my_changes.html",
+        title="My Pending Changes",
+        changes=changes,
+        target_schemas=target_schemas,
+        preview_references=preview_references,
+        current_page=page,
+        total_pages=total_pages,
+        total_count=total_count,
+    )
+
+
+@change_routes.route("/changes/item/<item_ref>/rescind", methods=["POST"])
+def rescind_change_route(item_ref):
+    if not g.user:
+        flash("You must be logged in.")
+        return redirect("/")
+    try:
+        change_id = ObjectId(item_ref)
+        if rescind_change(change_id):
+            flash(f"Change has been rescinded.")
+    except Exception as e:
+        flash(f"Error rescinding change: {e}")
+    return redirect(request.referrer or "/my_changes")

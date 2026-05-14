@@ -729,22 +729,22 @@ def races_list():
     sorted_race_data = sorted(race_counts.items(), key=lambda x: x[1], reverse=True)
     
     # Prepare data for chart
-    race_labels = [item[0] for item in sorted_race_data]
-    race_values = [item[1] for item in sorted_race_data]
-    
+    chart_labels = [item[0] for item in sorted_race_data]
+    chart_values = [item[1] for item in sorted_race_data]
+
     # Create a dictionary of pop counts by race name for the table
     pop_counts = {}
     for race in races:
         race_name = race["name"]
         pop_counts[race_name] = race_counts.get(race_name, 0)
-    
+
     return render_template(
         "race_list.html",
         title=category_data["races"]["pluralName"],
         items=races,
         schema=schema,
-        race_labels=race_labels,
-        race_values=race_values,
+        chart_labels=chart_labels,
+        chart_values=chart_values,
         pop_counts=pop_counts
     )
 
@@ -776,22 +776,22 @@ def cultures_list():
     sorted_culture_data = sorted(culture_counts.items(), key=lambda x: x[1], reverse=True)
     
     # Prepare data for chart
-    culture_labels = [item[0] for item in sorted_culture_data]
-    culture_values = [item[1] for item in sorted_culture_data]
-    
+    chart_labels = [item[0] for item in sorted_culture_data]
+    chart_values = [item[1] for item in sorted_culture_data]
+
     # Create a dictionary of pop counts by culture name for the table
     pop_counts = {}
     for culture in cultures:
         culture_name = culture["name"]
         pop_counts[culture_name] = culture_counts.get(culture_name, 0)
-    
+
     return render_template(
         "culture_list.html",
         title=category_data["cultures"]["pluralName"],
         items=cultures,
         schema=schema,
-        culture_labels=culture_labels,
-        culture_values=culture_values,
+        chart_labels=chart_labels,
+        chart_values=chart_values,
         pop_counts=pop_counts
     )
 
@@ -823,22 +823,22 @@ def religions_list():
     sorted_religion_data = sorted(religion_counts.items(), key=lambda x: x[1], reverse=True)
     
     # Prepare data for chart
-    religion_labels = [item[0] for item in sorted_religion_data]
-    religion_values = [item[1] for item in sorted_religion_data]
-    
+    chart_labels = [item[0] for item in sorted_religion_data]
+    chart_values = [item[1] for item in sorted_religion_data]
+
     # Create a dictionary of pop counts by religion name for the table
     pop_counts = {}
     for religion in religions:
         religion_name = religion["name"]
         pop_counts[religion_name] = religion_counts.get(religion_name, 0)
-    
+
     return render_template(
         "religion_list.html",
         title=category_data["religions"]["pluralName"],
         items=religions,
         schema=schema,
-        religion_labels=religion_labels,
-        religion_values=religion_values,
+        chart_labels=chart_labels,
+        chart_values=chart_values,
         pop_counts=pop_counts
     )
 

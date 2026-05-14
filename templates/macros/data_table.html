@@ -1,0 +1,45 @@
+{% macro render_data_table(items, schema, preview_references={}, base_url='', row_class='') %}
+<div class="table-wrapper">
+	<table class="info-table">
+		<thead>
+			<tr>
+				<th>
+					{% if "name" in schema.properties %}
+						Name
+					{% else %}
+						ID
+					{% endif %}
+				</th>
+				{% for col in schema.preview %}
+					<th>{{ schema.properties[col]["label"] }}</th>
+				{% endfor %}
+			</tr>
+		</thead>
+		<tbody>
+			{% for item in items %}
+				<tr{% if row_class %} class="{{ row_class }}"{% endif %}>
+					{% if item.name %}
+						<td><a href="{{ base_url }}/item/{{ item.name }}">{{ item.name }}</a></td>
+					{% else %}
+						<td><a href="{{ base_url }}/item/{{ item._id|string }}">{{ item._id }}</a></td>
+					{% endif %}
+					{% for col in schema.preview %}
+						{% set item_value = item[col]|string %}
+						{% if col in preview_references %}
+							{% if preview_references.get(col, {}).get(item_value, {}).get('link') %}
+								<td><a href="{{ preview_references[col][item_value]['link'] }}">{{ preview_references[col][item_value]['name'] }}</a></td>
+							{% elif item[col] %}
+								<td>{{ item[col] }}</td>
+							{% else %}
+								<td>None</td>
+							{% endif %}
+						{% else %}
+							<td>{{ item[col] }}</td>
+						{% endif %}
+					{% endfor %}
+				</tr>
+			{% endfor %}
+		</tbody>
+	</table>
+</div>
+{% endmacro %}
