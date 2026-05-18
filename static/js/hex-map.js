@@ -133,9 +133,13 @@ class HexMapViewer {
         this._lastPainted = null;  // "q,r" of last painted tile (avoids duplicate API calls)
 
         // Nation cache for owner autocomplete and buildings
-        this._nationList      = null;  // [{name, color}]
+        this._nationList      = null;  // [{name, color, overlord}]
+        this._nationOverlords = {};   // name -> overlord name string
         this._nationBuildings = {};    // name -> {cities, districts}
         this._wonderList      = null;  // [{id, name, owner_nation}]
+
+        // Nation label cache — rebuilt when tile ownership changes
+        this._nationLabels = null;  // Map<name, {wx, wy, wBboxW, wBboxH}>
 
         // District def image cache: def_key -> HTMLImageElement (null if load failed)
         this._districtImages  = {};    // def_key -> HTMLImageElement | null
@@ -265,7 +269,7 @@ class HexMapViewer {
         if (bgOffsetX != null) this.bgOffsetX = bgOffsetX;
         if (bgOffsetY != null) this.bgOffsetY = bgOffsetY;
         if (bgScale   != null) this.bgScale   = bgScale;
-        if (recenter) { this._centerView(); this._scheduleOutlineRebuild(); this._scheduleTerrainRebuild(); }
+        if (recenter) { this._centerView(); this._scheduleOutlineRebuild(); this._scheduleTerrainRebuild(); this._computeNationLabels(); }
         this.render();
     }
 
@@ -345,6 +349,8 @@ class HexMapViewer {
         if (recenter) this._centerView();
         this._scheduleOutlineRebuild();
         this._scheduleTerrainRebuild();
+        this._nationLabels = null;
+        this._ensureNationList().then(() => { this._computeNationLabels(); this.render(); });
 
         this.render();
     }
@@ -723,6 +729,9 @@ class HexMapViewer {
 
         ctx.restore();
 
+        // ── Nation name labels (screen space, drawn over everything) ──────────
+        this._drawNationLabels();
+
         // ── Perf bookkeeping (cheap — always runs) ────────────────────────────
         const _t6 = performance.now();
         const p = this._perf;
@@ -767,6 +776,60 @@ class HexMapViewer {
         ctx.fillRect(pad - 4, pad - 4, maxW + 16, lines.length * lh + 10);
         ctx.fillStyle = '#00ff88';
         lines.forEach((l, i) => ctx.fillText(l, pad, pad + i * lh));
+        ctx.restore();
+    }
+
+    _drawNationLabels() {
+        if (!this._nationLabels || !this.layers.political) return;
+        const ctx = this.ctx;
+        ctx.save();
+        ctx.textAlign    = 'center';
+        ctx.textBaseline = 'middle';
+
+        for (const lb of this._nationLabels) {
+            const { name } = lb;
+            // Convert world centroid → screen
+            const sx = lb.wx * this.zoom + this.panX;
+            const sy = lb.wy * this.zoom + this.panY;
+
+            // Skip if centroid is off-screen (with generous margin)
+            if (sx < -200 || sx > this.canvas.width + 200 ||
+                sy < -200 || sy > this.canvas.height + 200) continue;
+
+            // Compute font size: fill ~60% of bbox width, clamped
+            const bboxWScreen = lb.wBboxW * this.zoom;
+            let fontSize = Math.min(bboxWScreen * 0.18, 52);
+            fontSize = Math.max(fontSize, 7);
+
+            // Shrink until name fits within bbox width
+            ctx.font = `bold italic ${fontSize}px serif`;
+            while (fontSize > 7 && ctx.measureText(name).width > bboxWScreen * 0.85) {
+                fontSize -= 1;
+                ctx.font = `bold italic ${fontSize}px serif`;
+            }
+
+            // Skip labels that would be tiny and unreadable
+            if (fontSize < 8) continue;
+
+            const overlord = this._nationOverlords[name] || '';
+            const ovFontSize = Math.max(6, fontSize * 0.55);
+
+            // Draw name shadow + text
+            ctx.shadowColor = 'rgba(0,0,0,0.75)';
+            ctx.shadowBlur  = Math.max(2, fontSize * 0.25);
+            ctx.fillStyle   = '#ffffff';
+            ctx.font = `bold italic ${fontSize}px serif`;
+            ctx.fillText(name, sx, sy);
+
+            // Draw overlord below, if present
+            if (overlord && ovFontSize >= 6) {
+                ctx.font = `italic ${ovFontSize}px serif`;
+                ctx.shadowBlur = Math.max(2, ovFontSize * 0.25);
+                ctx.fillText(`(${overlord})`, sx, sy + fontSize * 0.72);
+            }
+        }
+
+        ctx.shadowBlur = 0;
         ctx.restore();
     }
 
@@ -971,6 +1034,7 @@ class HexMapViewer {
         } else if (this.paintNationMode) {
             const owner = this.paintNationMode === '__unowned__' ? null : this.paintNationMode;
             this.tiles.set(key, { ...existing, owner });
+            this._computeNationLabels();
             this.render();
             await fetch(`/api/hex-map/tile/${q}/${r}`, {
                 method:  'POST',
@@ -992,6 +1056,7 @@ class HexMapViewer {
         this._lastPainted = key;
         const existing = this.tiles.get(key) || { q, r };
         this.tiles.set(key, { ...existing, owner: null });
+        this._computeNationLabels();
         this.render();
         await fetch(`/api/hex-map/tile/${q}/${r}`, {
             method:  'POST',
@@ -1189,6 +1254,10 @@ class HexMapViewer {
         try {
             const resp = await fetch('/api/hex-map/nation-list');
             this._nationList = (await resp.json()).nations || [];
+            this._nationOverlords = {};
+            for (const n of this._nationList) {
+                if (n.overlord) this._nationOverlords[n.name] = n.overlord;
+            }
         } catch (_) { this._nationList = []; }
     }
 
@@ -1197,6 +1266,62 @@ class HexMapViewer {
         try {
             this._wonderList = await (await fetch('/api/hex-map/wonder-list')).json();
         } catch (_) { this._wonderList = []; }
+    }
+
+    // Flat-top hex axial neighbors: the 6 directions adjacent to any (q, r).
+    static _HEX_DIRS = [[1,0],[-1,0],[0,1],[0,-1],[1,-1],[-1,1]];
+
+    // Compute one label per contiguous region of same-owner tiles via BFS flood-fill.
+    // Returns an array so one nation with two separate landmasses gets two entries.
+    _computeNationLabels() {
+        // Group tile objects by owner name
+        const byOwner = new Map();  // name -> Map<"q,r", tile>
+        for (const [key, tile] of this.tiles) {
+            if (!tile.owner) continue;
+            if (!byOwner.has(tile.owner)) byOwner.set(tile.owner, new Map());
+            byOwner.get(tile.owner).set(key, tile);
+        }
+
+        const labels = [];  // [{name, wx, wy, wBboxW, wBboxH, count}]
+        const dirs = HexMapViewer._HEX_DIRS;
+
+        for (const [name, tileMap] of byOwner) {
+            const unvisited = new Set(tileMap.keys());
+
+            while (unvisited.size > 0) {
+                // BFS for one connected component
+                const startKey = unvisited.values().next().value;
+                unvisited.delete(startKey);
+                const queue = [startKey];
+                let sumX = 0, sumY = 0, count = 0;
+                let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+
+                while (queue.length > 0) {
+                    const key = queue.pop();
+                    const tile = tileMap.get(key);
+                    const { x, y } = this._axialToPixel(tile.q, tile.r);
+                    sumX += x; sumY += y; count++;
+                    if (x < minX) minX = x; if (x > maxX) maxX = x;
+                    if (y < minY) minY = y; if (y > maxY) maxY = y;
+
+                    for (const [dq, dr] of dirs) {
+                        const nk = `${tile.q + dq},${tile.r + dr}`;
+                        if (unvisited.has(nk)) { unvisited.delete(nk); queue.push(nk); }
+                    }
+                }
+
+                labels.push({
+                    name,
+                    wx:     sumX / count,
+                    wy:     sumY / count,
+                    wBboxW: maxX - minX + this.hexSize * 2,
+                    wBboxH: maxY - minY + this.hexSize * 2,
+                    count,
+                });
+            }
+        }
+
+        this._nationLabels = labels;
     }
 
     async _loadNationBuildings(nationName) {
@@ -1228,13 +1353,14 @@ class HexMapViewer {
         }
 
         if (distSelect) {
+            const namedDistricts = buildings.districts.filter(d => d.display_name || d.type || d.def_key);
             distSelect.innerHTML = '<option value="">None</option>' +
-                buildings.districts.map(d => {
-                    const name = d.display_name || d.type || d.def_key || d.id;
+                namedDistricts.map(d => {
+                    const name = d.display_name || d.type || d.def_key;
                     const suffix = d.imperial ? ' (imperial)' : '';
                     return `<option value="${_esc(d.id)}"${d.id===curDistId?' selected':''}>${_esc(name)}${suffix}</option>`;
                 }).join('');
-            if (curDistId && !buildings.districts.find(d => d.id === curDistId)) {
+            if (curDistId && !namedDistricts.find(d => d.id === curDistId)) {
                 distSelect.insertAdjacentHTML('beforeend',
                     `<option value="${_esc(curDistId)}" selected>[current — not in owner's list]</option>`);
             }
@@ -1334,11 +1460,15 @@ class HexMapViewer {
                         const nc = await (await fetch('/api/hex-map/nation-list')).json();
                         if (nc.nations) {
                             this._nationList = nc.nations;
-                            for (const n of nc.nations) this.nationColors[n.name] = n.color;
+                            for (const n of nc.nations) {
+                                this.nationColors[n.name] = n.color;
+                                if (n.overlord) this._nationOverlords[n.name] = n.overlord;
+                            }
                         }
                     } catch (_) {}
                 }
                 this.tiles.set(key, { ...(old || { q, r }), ...update });
+                this._computeNationLabels();
                 this._showDetails(q, r);
                 this.render();
             }

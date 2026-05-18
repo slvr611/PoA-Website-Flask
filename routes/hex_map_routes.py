@@ -30,10 +30,29 @@ def _get_nation_colors():
 
 
 def _get_nation_list():
-    """Returns [{name, color}] for all nations — used for autocomplete and color lookup."""
-    nations = list(mongo.db.nations.find({}, {"name": 1, "accent_color": 1, "_id": 0}))
+    """Returns [{name, color, overlord}] for all nations — used for autocomplete, color lookup, and map labels."""
+    nations = list(mongo.db.nations.find({}, {"name": 1, "accent_color": 1, "overlord": 1, "_id": 1}))
+
+    overlord_ids = set()
+    for n in nations:
+        ov = n.get("overlord")
+        if ov:
+            try:
+                overlord_ids.add(ObjectId(str(ov)))
+            except Exception:
+                pass
+
+    overlord_names = {}
+    if overlord_ids:
+        for on in mongo.db.nations.find({"_id": {"$in": list(overlord_ids)}}, {"name": 1}):
+            overlord_names[str(on["_id"])] = on.get("name", "")
+
     return [
-        {"name": n["name"], "color": n.get("accent_color") or _name_to_color(n["name"])}
+        {
+            "name": n["name"],
+            "color": n.get("accent_color") or _name_to_color(n["name"]),
+            "overlord": overlord_names.get(str(n.get("overlord") or ""), ""),
+        }
         for n in nations
         if n.get("name")
     ]
