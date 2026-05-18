@@ -129,6 +129,7 @@ class HexMapViewer {
         this.paintMode       = null;  // terrain key, or null
         this.paintNationMode = null;  // nation name, or null
         this._painting    = false;
+        this._midPainting = false;  // middle-mouse unown paint
         this._lastPainted = null;  // "q,r" of last painted tile (avoids duplicate API calls)
 
         // Nation cache for owner autocomplete and buildings
@@ -153,7 +154,9 @@ class HexMapViewer {
 
         // Cached Path2D for full-grid outline — rebuilt when grid structure changes.
         // ctx.stroke(path) is ~free JS vs 80K canvas API calls per frame at full zoom-out.
-        this._outlinePath = null;
+        this._outlinePath  = null;
+        // Cached Path2D per terrain type — rebuilt when tile terrain data changes.
+        this._terrainPaths = null;  // { terrain_key → Path2D }
 
         // Perf overlay — toggle with viewer.showPerfOverlay = true
         this.showPerfOverlay = false;
@@ -219,6 +222,7 @@ class HexMapViewer {
         }
         this._centerView();
         this._scheduleOutlineRebuild();
+        this._scheduleTerrainRebuild();
     }
 
     /**
@@ -261,7 +265,7 @@ class HexMapViewer {
         if (bgOffsetX != null) this.bgOffsetX = bgOffsetX;
         if (bgOffsetY != null) this.bgOffsetY = bgOffsetY;
         if (bgScale   != null) this.bgScale   = bgScale;
-        if (recenter) { this._centerView(); this._scheduleOutlineRebuild(); }
+        if (recenter) { this._centerView(); this._scheduleOutlineRebuild(); this._scheduleTerrainRebuild(); }
         this.render();
     }
 
@@ -340,6 +344,7 @@ class HexMapViewer {
         if (data.hex_size && data.hex_size !== this.hexSize) { this.hexSize = data.hex_size; recenter = true; }
         if (recenter) this._centerView();
         this._scheduleOutlineRebuild();
+        this._scheduleTerrainRebuild();
 
         this.render();
     }
@@ -488,6 +493,45 @@ class HexMapViewer {
         }
     }
 
+    // Build one Path2D per terrain type covering every hex of that terrain.
+    _buildTerrainPaths() {
+        const inner = this.hexSize - 1;
+        const ox = _HEX_COS.map(c => inner * c);
+        const oy = _HEX_SIN.map(s => inner * s);
+        const groups = {};
+        for (let col = 0; col < this.cols; col++) {
+            for (let row = 0; row < this.rows; row++) {
+                const { q, r } = this._offsetToAxial(col, row);
+                const { x, y } = this._axialToPixel(q, r);
+                const tile    = this.tiles.get(`${q},${r}`);
+                const terrain = tile ? (tile.terrain || 'disconnected') : 'disconnected';
+                if (!groups[terrain]) groups[terrain] = [];
+                groups[terrain].push(
+                    `M${x+ox[0]},${y+oy[0]}` +
+                    `L${x+ox[1]},${y+oy[1]}` +
+                    `L${x+ox[2]},${y+oy[2]}` +
+                    `L${x+ox[3]},${y+oy[3]}` +
+                    `L${x+ox[4]},${y+oy[4]}` +
+                    `L${x+ox[5]},${y+oy[5]}Z`
+                );
+            }
+        }
+        this._terrainPaths = {};
+        for (const [terrain, parts] of Object.entries(groups)) {
+            this._terrainPaths[terrain] = new Path2D(parts.join(''));
+        }
+    }
+
+    _scheduleTerrainRebuild() {
+        this._terrainPaths = null;
+        const build = () => this._buildTerrainPaths();
+        if (window.requestIdleCallback) {
+            window.requestIdleCallback(build, { timeout: 3000 });
+        } else {
+            setTimeout(build, 100);
+        }
+    }
+
     _drawHex(ctx, cx, cy, size, fill, stroke, lineWidth) {
         this._hexPath(ctx, cx, cy, size);
         if (fill)   { ctx.fillStyle = fill; ctx.fill(); }
@@ -594,7 +638,7 @@ class HexMapViewer {
             allY.push(y);
             allTile.push(tile);
 
-            if (hasTerrain) {
+            if (hasTerrain && !this._terrainPaths) {
                 const fill = this._terrainFill(tile ? (tile.terrain || 'disconnected') : 'disconnected');
                 if (!terrainBuckets[fill]) terrainBuckets[fill] = [];
                 terrainBuckets[fill].push(x, y);
@@ -607,14 +651,25 @@ class HexMapViewer {
             }
         }
 
-        // ── Terrain fills: one beginPath+fill per unique terrain color ────────
+        // ── Terrain fills ─────────────────────────────────────────────────────
         const _t2 = performance.now();
-        for (const fill in terrainBuckets) {
-            const pts = terrainBuckets[fill];
-            ctx.beginPath();
-            for (let i = 0; i < pts.length; i += 2) this._hexSubpath(ctx, pts[i], pts[i + 1], inner);
-            ctx.fillStyle = fill;
-            ctx.fill();
+        if (hasTerrain) {
+            if (this._terrainPaths) {
+                // Fast path: one ctx.fill(Path2D) per terrain type — no JS loop over hexes.
+                for (const [terrain, path] of Object.entries(this._terrainPaths)) {
+                    ctx.fillStyle = this._terrainFill(terrain);
+                    ctx.fill(path);
+                }
+            } else {
+                // Fallback while cache is building: viewport-culled dynamic buckets.
+                for (const fill in terrainBuckets) {
+                    const pts = terrainBuckets[fill];
+                    ctx.beginPath();
+                    for (let i = 0; i < pts.length; i += 2) this._hexSubpath(ctx, pts[i], pts[i + 1], inner);
+                    ctx.fillStyle = fill;
+                    ctx.fill();
+                }
+            }
         }
 
         // ── Nation fills: one beginPath+fill per nation ───────────────────────
@@ -782,13 +837,38 @@ class HexMapViewer {
     _bindEvents() {
         const c = this.canvas;
         c.addEventListener('contextmenu', e => e.preventDefault());
-        c.addEventListener('mousedown',  e => {
+        c.addEventListener('mousedown', e => {
             if (e.button === 2) { this._startPan(e.clientX, e.clientY); return; }
+            if (e.button === 1) {
+                e.preventDefault();
+                this._midPainting = true;
+                this._lastPainted = null;
+                this._paintUnownedAt(e.clientX, e.clientY);
+                return;
+            }
             this._onDown(e.clientX, e.clientY);
         });
-        c.addEventListener('mousemove',  e => this._onMove(e.clientX, e.clientY));
-        c.addEventListener('mouseup',    e => this._onUp(e.clientX, e.clientY));
-        c.addEventListener('mouseleave', () => { this.isDragging = false; this._painting = false; this._updateCursor(); });
+        c.addEventListener('mousemove', e => {
+            if (this._midPainting) { this._paintUnownedAt(e.clientX, e.clientY); return; }
+            this._onMove(e.clientX, e.clientY);
+        });
+        c.addEventListener('mouseup', e => {
+            if (e.button === 1) { this._midPainting = false; this._lastPainted = null; return; }
+            this._onUp(e.clientX, e.clientY);
+        });
+        c.addEventListener('mouseleave', () => {
+            this.isDragging = false;
+            this._painting  = false;
+            this._midPainting = false;
+            this._updateCursor();
+        });
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') {
+                this.setPaintMode(null);
+                this.setPaintNationMode(null);
+                this.canvas.dispatchEvent(new CustomEvent('hexmap:pantool', { bubbles: true }));
+            }
+        });
         c.addEventListener('wheel',      e => this._onWheel(e), { passive: false });
         c.addEventListener('touchstart', e => this._onTouchStart(e), { passive: false });
         c.addEventListener('touchmove',  e => this._onTouchMove(e),  { passive: false });
@@ -881,6 +961,7 @@ class HexMapViewer {
         if (this.paintMode) {
             const terrain = this.paintMode;
             this.tiles.set(key, { ...existing, terrain });
+            this._scheduleTerrainRebuild();
             this.render();
             await fetch(`/api/hex-map/tile/${q}/${r}`, {
                 method:  'POST',
@@ -897,6 +978,26 @@ class HexMapViewer {
                 body:    JSON.stringify({ owner }),
             }).catch(() => {});
         }
+    }
+
+    async _paintUnownedAt(screenX, screenY) {
+        if (!this.isAdmin) return;
+        const rect  = this.canvas.getBoundingClientRect();
+        const world = this._screenToWorld(screenX - rect.left, screenY - rect.top);
+        const { q, r } = this._pixelToAxial(world.x, world.y);
+        const col = q, row = r + Math.floor(q / 2);
+        if (col < 0 || col >= this.cols || row < 0 || row >= this.rows) return;
+        const key = `${q},${r}`;
+        if (key === this._lastPainted) return;
+        this._lastPainted = key;
+        const existing = this.tiles.get(key) || { q, r };
+        this.tiles.set(key, { ...existing, owner: null });
+        this.render();
+        await fetch(`/api/hex-map/tile/${q}/${r}`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ owner: null }),
+        }).catch(() => {});
     }
 
     _onWheel(e) {

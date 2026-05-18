@@ -338,6 +338,9 @@ document.addEventListener('DOMContentLoaded', function () {
         toolPanBtn.addEventListener('click', _activatePan);
     }
 
+    // Escape key (fired by viewer via custom event) resets tool UI to Pan
+    document.getElementById('hex-map-canvas').addEventListener('hexmap:pantool', _activatePan);
+
     if (terrainSel) {
         terrainSel.addEventListener('change', () => {
             if (!hexViewer) return;
