@@ -375,6 +375,11 @@ document.addEventListener('DOMContentLoaded', function () {
         const current = nationSel.value;
         // Clear all but the first "off" option
         while (nationSel.options.length > 1) nationSel.remove(1);
+        // Always keep Unowned as the first selectable option
+        const unownedOpt = document.createElement('option');
+        unownedOpt.value       = '__unowned__';
+        unownedOpt.textContent = 'Unowned';
+        nationSel.appendChild(unownedOpt);
         const names = Object.keys(hexViewer.nationColors).sort();
         for (const name of names) {
             const opt = document.createElement('option');

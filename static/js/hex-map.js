@@ -633,7 +633,10 @@ class HexMapViewer {
         // live path is cheaper (avoids GPU processing thousands of off-screen hexes).
         const _t4 = performance.now();
         if (drawLines) {
-            ctx.strokeStyle = hasTerrain ? 'rgba(200,200,200,0.30)' : 'rgba(200,200,200,0.18)';
+            // Fade lines out as zoom decreases — full opacity above zoom 0.4, approaches 0 near minZoom.
+            const lineFade  = Math.min(1, this.zoom / 0.4);
+            const baseAlpha = 0.2;
+            ctx.strokeStyle = `rgba(0,0,0,${(baseAlpha * lineFade).toFixed(3)})`;
             ctx.lineWidth   = 1 / this.zoom;
             if (allX.length > 500 && this._outlinePath) {
                 ctx.stroke(this._outlinePath);
@@ -885,7 +888,7 @@ class HexMapViewer {
                 body:    JSON.stringify({ terrain }),
             }).catch(() => {});
         } else if (this.paintNationMode) {
-            const owner = this.paintNationMode;
+            const owner = this.paintNationMode === '__unowned__' ? null : this.paintNationMode;
             this.tiles.set(key, { ...existing, owner });
             this.render();
             await fetch(`/api/hex-map/tile/${q}/${r}`, {
