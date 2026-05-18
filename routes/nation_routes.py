@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, flash, g, current_app, jsonify
+from flask import Blueprint, render_template, request, redirect, flash, g, current_app, jsonify, session, abort
 import os
 import re
 from copy import deepcopy
@@ -13,7 +13,7 @@ from pymongo import ASCENDING
 from forms import form_generator, wtform_to_json
 import json
 from time import perf_counter
-from calculations.field_calculations import calculate_all_fields
+from calculations.field_calculations import calculate_all_fields, _resolve_def, check_upgrade_requirements
 from bson import ObjectId
 
 nation_routes = Blueprint("nation_routes", __name__)
@@ -177,10 +177,12 @@ def nation_item(item_ref):
         nation["breakdowns"] = breakdowns
 
         phase_start = perf_counter()
+        from calculations.visibility import collect_visibility_modifiers as _collect_vis_mods
+        nation["visibility_modifiers"] = _collect_vis_mods(nation)
         mongo.db.nations.update_one(
             {"_id": nation["_id"]},
             {
-                "$set": {**calculated_values, "breakdowns": breakdowns},
+                "$set": {**calculated_values, "breakdowns": breakdowns, "visibility_modifiers": nation["visibility_modifiers"]},
                 "$unset": {"_calc_cache": ""}
             }
         )
@@ -189,6 +191,28 @@ def nation_item(item_ref):
         timings["cache_backfill_ms"] = 0.0
     
     user_can_edit_pops = user_is_owner or bool(g.user and g.user.get("is_admin"))
+
+    # --- Visibility ---
+    from calculations.visibility import get_viewer_nation, compute_visibility, collect_visibility_modifiers
+    if "visibility_modifiers" not in nation:
+        nation["visibility_modifiers"] = collect_visibility_modifiers(nation)
+        mongo.db.nations.update_one(
+            {"_id": nation["_id"]},
+            {"$set": {"visibility_modifiers": nation["visibility_modifiers"]}}
+        )
+
+    visibility_bypassed = False
+    if g.user and g.user.get("is_admin") and session.get("bypass_visibility", False):
+        visibility_level = 4
+        visibility_bypassed = True
+    elif user_is_owner:
+        visibility_level = 4
+    else:
+        viewer_nation = get_viewer_nation(g.user) if g.user else None
+        if viewer_nation is None:
+            visibility_level = 0
+        else:
+            visibility_level = compute_visibility(viewer_nation, str(nation["_id"]))
 
     pending_nation = None
     pending_breakdowns = None
@@ -210,6 +234,16 @@ def nation_item(item_ref):
     except Exception as e:
         current_app.logger.warning("Failed to compute pending nation state: %s", e)
 
+    # Build def lookup for DB-driven districts
+    district_defs_map = {}
+    for _d in nation.get("districts", []):
+        if isinstance(_d, dict):
+            _dk = _d.get("def_key")
+            if _dk and _dk not in district_defs_map:
+                _dd = _resolve_def(_d)
+                if _dd:
+                    district_defs_map[_dk] = _dd
+
     phase_start = perf_counter()
     rendered = render_template(
         "nation_owner.html",
@@ -226,6 +260,9 @@ def nation_item(item_ref):
         pop_pagination=pop_pagination,
         pending_nation=pending_nation,
         pending_breakdowns=pending_breakdowns,
+        district_defs_map=district_defs_map,
+        visibility_level=visibility_level,
+        visibility_bypassed=visibility_bypassed,
     )
     timings["render_template_ms"] = round((perf_counter() - phase_start) * 1000, 2)
     timings["total_request_ms"] = round((perf_counter() - request_start) * 1000, 2)
@@ -286,6 +323,16 @@ def _render_nation_edit(item_ref, form=None):
         "religions": _opts("religions"),
     }
 
+    # District defs grouped by category for the district type picker
+    from pymongo import ASCENDING as _ASC
+    district_defs = list(mongo.db.district_defs.find(
+        {}, {"key": 1, "display_name": 1, "category": 1, "tier": 1, "_id": 0}
+    ).sort([("category", _ASC), ("tier", _ASC), ("display_name", _ASC)]))
+    district_categories = {
+        c["key"]: c.get("display_name", c["key"])
+        for c in mongo.db.district_categories.find({}, {"key": 1, "display_name": 1, "_id": 0})
+    }
+
     return render_template(
         "nation_owner_edit.html",
         form=form,
@@ -298,6 +345,8 @@ def _render_nation_edit(item_ref, form=None):
         json_data=json_data,
         find_dict_in_list=find_dict_in_list,
         bulk_edit_options=bulk_edit_options,
+        district_defs=district_defs,
+        district_categories=district_categories,
     )
 
 
@@ -531,6 +580,59 @@ def _upload_nation_image(nation, image_type):
     return jsonify({"success": False, "error": result}), 500
 
 
+@nation_routes.route("/nations/item/<path:nation_name>/district/<instance_id>/upgrade/<upgrade_key>", methods=["POST"])
+def purchase_district_upgrade(nation_name, instance_id, upgrade_key):
+    nation = mongo.db.nations.find_one({"name": nation_name})
+    if not nation:
+        return jsonify({"error": "Nation not found"}), 404
+
+    if not _is_nation_owner_or_admin(str(nation["_id"])):
+        return jsonify({"error": "Unauthorized"}), 403
+
+    # Find the district instance
+    district = next(
+        (d for d in nation.get("districts", []) if isinstance(d, dict) and d.get("_id") == instance_id),
+        None
+    )
+    if not district:
+        return jsonify({"error": "District instance not found"}), 404
+
+    if not district.get("def_key"):
+        return jsonify({"error": "Upgrades are only available for DB-defined districts"}), 400
+
+    district_def = _resolve_def(district)
+    if not district_def:
+        return jsonify({"error": "District definition not found"}), 404
+
+    upgrade_def = next((u for u in district_def.get("upgrades", []) if u.get("key") == upgrade_key), None)
+    if not upgrade_def:
+        return jsonify({"error": "Upgrade not found"}), 404
+
+    if upgrade_key in (district.get("upgrades") or []):
+        return jsonify({"error": "Upgrade already purchased"}), 400
+
+    if not check_upgrade_requirements(nation, upgrade_def):
+        return jsonify({"error": "Requirements not met"}), 400
+
+    # Deduct cost (same as district build cost)
+    cost = district_def.get("cost", {})
+    if cost:
+        storage = nation.get("storage", {})
+        for resource, amount in cost.items():
+            if (storage.get(resource) or 0) < amount:
+                return jsonify({"error": f"Insufficient {resource}"}), 400
+        cost_deductions = {"$inc": {f"storage.{r}": -a for r, a in cost.items()}}
+        mongo.db.nations.update_one({"_id": nation["_id"]}, cost_deductions)
+
+    # Add upgrade key to the district instance
+    mongo.db.nations.update_one(
+        {"_id": nation["_id"], "districts._id": instance_id},
+        {"$push": {"districts.$.upgrades": upgrade_key}}
+    )
+
+    return jsonify({"ok": True, "upgrade_key": upgrade_key})
+
+
 @nation_routes.route("/nations/upload_banner/<item_ref>", methods=["POST"])
 def nation_upload_banner(item_ref):
     schema, db, nation = get_data_on_item("nations", item_ref)
@@ -545,3 +647,11 @@ def nation_upload_flag(item_ref):
     if not _is_nation_owner_or_admin(str(nation["_id"])):
         return jsonify({"success": False, "error": "Not authorized"}), 403
     return _upload_nation_image(nation, "flag")
+
+
+@nation_routes.route("/visibility/toggle_bypass", methods=["POST"])
+def toggle_visibility_bypass():
+    if not (g.user and g.user.get("is_admin")):
+        abort(403)
+    session["bypass_visibility"] = not session.get("bypass_visibility", False)
+    return redirect(request.referrer or "/")

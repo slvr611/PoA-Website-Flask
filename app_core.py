@@ -23,6 +23,12 @@ load_dotenv(override=True)
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "supersecretkey")
 
+# Allow negative integers in URL routes (needed for flat-top hex axial coordinates)
+from werkzeug.routing import IntegerConverter
+class SignedIntConverter(IntegerConverter):
+    regex = r'-?\d+'
+app.url_map.converters['signed_int'] = SignedIntConverter
+
 # Discord config
 app.config["DISCORD_CLIENT_ID"] = os.getenv("DISCORD_CLIENT_ID")
 app.config["DISCORD_CLIENT_SECRET"] = os.getenv("DISCORD_CLIENT_SECRET")
@@ -82,7 +88,11 @@ def ensure_mongo_indexes():
         "characters": [[("ruling_nation_org", ASCENDING)], [("player", ASCENDING)]],
         "diplo_relations": [[("nation_1", ASCENDING)], [("nation_2", ASCENDING)]],
         "trades": [[("exporting_nation", ASCENDING)], [("importing_nation", ASCENDING)]],
-        "wonders": [[("owner_nation", ASCENDING)]],
+        "wonders":       [[("owner_nation", ASCENDING)]],
+        "hex_map_tiles":  [[("q", ASCENDING), ("r", ASCENDING)], [("owner", ASCENDING)]],
+        "hex_map_history": [[("session", ASCENDING)]],
+        "district_defs":       [[("key", ASCENDING)], [("category", ASCENDING), ("tier", ASCENDING)]],
+        "district_categories": [[("key", ASCENDING)]],
     }
 
     for collection_name, specs in index_specs.items():
@@ -98,29 +108,34 @@ rarity_rankings = {"Mythical": 0, "Legendary": 1, "Great": 2, "Good": 3, "Mundan
 json_files = ["jobs", "tech", "nation_districts", "nation_imperial_districts", "mercenary_districts",
                 "merchant_production_districts", "merchant_specialty_districts", "merchant_luxury_districts",
                 "cities", "terrains", "walls", "positive_titles", "negative_titles", "meta_mods", "modifier_types",
-                "scope_definitions"]
+                "scaling_types", "scope_definitions"]
 json_data = {"general_resources": [
-            {"key": "food", "name": "Food", "base_storage": 20, "base_price": 50},
-            {"key": "wood", "name": "Wood", "base_storage": 15, "base_price": 75},
-            {"key": "stone", "name": "Stone", "base_storage": 15, "base_price": 75},
-            {"key": "mounts", "name": "Mounts", "base_storage": 15, "base_price": 75},
-            {"key": "research", "name": "Research", "base_storage": 0},
-            {"key": "magic", "name": "Magic", "base_storage": 10, "base_price": 100}
+            # color: optional hex string for map node rendering; omit to auto-generate
+            {"key": "food",     "name": "Food",     "base_storage": 20, "base_price": 50,  "color": "#00ff00"},
+            {"key": "wood",     "name": "Wood",     "base_storage": 15, "base_price": 75,  "color": "#b47e5a"},
+            {"key": "stone",    "name": "Stone",    "base_storage": 15, "base_price": 75,  "color": "#96e3ef"},
+            {"key": "mounts",   "name": "Mounts",   "base_storage": 15, "base_price": 75,  "color": "#ffeb00"},
+            {"key": "research", "name": "Research", "base_storage": 0,                     "color": "#ff00b8"},
+            {"key": "magic",    "name": "Magic",    "base_storage": 10, "base_price": 100, "color": "#ba00ff"},
         ],
         "unique_resources": [
-            {"key": "bronze", "name": "Bronze", "base_storage": 5, "base_price": 125},
-            {"key": "iron", "name": "Iron", "base_storage": 0, "base_price": 150},
+            {"key": "iron",   "name": "Iron",   "base_storage": 0,  "base_price": 150, "color": "#828282"},
+            {"key": "gunpowder", "name": "Gunpowder", "base_storage": 0,  "base_price": 200, "color": "#d9ba2a"},
         ],
         "luxury_resources": [
-            {"key": "narcotics", "name": "Narcotics", "base_price": 300},
-            {"key": "spices", "name": "Spices", "base_price": 300},
-            {"key": "medicinal_herbs", "name": "Medicinal Herbs", "base_price": 300},
-            {"key": "dyes", "name": "dyes", "base_price": 300},
-            {"key": "magical_crystals", "name": "Magical Crystals", "base_price": 300},
-            {"key": "gold", "name": "Gold", "base_price": 300},
-            {"key": "moonstone", "name": "Moonstone", "base_price": 300},
-            {"key": "furs", "name": "Furs", "base_price": 300},
-            {"key": "quintessence", "name": "Quintessence", "base_price": 300},
+            # Luxury resources render as squares on the map
+            {"key": "narcotics",       "name": "Narcotics",       "base_price": 300, "color": "#f6092f"},
+            {"key": "spices",          "name": "Spices",          "base_price": 300, "color": "#e2620c"},
+            {"key": "medicinal_herbs", "name": "Medicinal Herbs", "base_price": 300, "color": "#0b9d11"},
+            {"key": "dyes",            "name": "Dyes",            "base_price": 300, "color": "#ff009c"},
+            {"key": "magical_crystals","name": "Magical Crystals","base_price": 300, "color": "#00ffcc"},
+            {"key": "gold",            "name": "Gold",            "base_price": 300, "color": "#f1c232"},
+            {"key": "moonstone",       "name": "Moonstone",       "base_price": 300, "color": "#ead1dc"},
+            {"key": "furs",            "name": "Furs",            "base_price": 300, "color": "#fcb893"},
+            {"key": "quintessence",    "name": "Quintessence",    "base_price": 300, "color": "#d379ff"},
+            {"key": "cocoa",           "name": "Cocoa",           "base_price": 300, "color": "#783200"},
+            {"key": "star_iron",       "name": "Star Iron",       "base_price": 300, "color": "#9fc5e8"},
+            {"key": "tea",             "name": "Tea",             "base_price": 300, "color": "#b6d7a8"},
         ],
         "slot_types": {
             "no_slot": {"progress_per_tick": 0, "name": "No Slot"},
@@ -129,14 +144,8 @@ json_data = {"general_resources": [
             "2_progress_slot": {"progress_per_tick": 2, "name": "2 Progress Slot"},
             "3_progress_slot": {"progress_per_tick": 3, "name": "3 Progress Slot"},
             "4_progress_slot": {"progress_per_tick": 4, "name": "4 Progress Slot"},
-            "tier_1_spell_slot": {"progress_per_tick": 1, "name": "Tier 1 Spell Slot"},
-            "tier_2_spell_slot": {"progress_per_tick": 2, "name": "Tier 2 Spell Slot"},
-            "tier_3_spell_slot": {"progress_per_tick": 3, "name": "Tier 3 Spell Slot"}
         },
-        "district_slot_pop_requirements": [
-            5, 10, 15, 20, 25, 30
-        ],
-        "overcap_pops_per_district_slot": 10
+        "pops_per_district_slot": 10
 }
 
 temperament_enum = ["Player", "Neutral", "Friendly", "Hostile", "Withdrawn", "Curious", "Supremacist", "Zealous"]

@@ -2,76 +2,91 @@
 	"plains": {
 		"display_name": "Plains",
 		"resource": "food",
-		"count_required": 4
+		"count_required": 4,
+		"speed_cost": 1
 	},
 	"forest": {
 		"display_name": "Forest",
 		"resource": "wood",
-		"count_required": 4
+		"count_required": 4,
+		"speed_cost": 2
 	},
 	"dense_forest": {
 		"display_name": "Dense Forest",
 		"resource": "wood",
-		"count_required": 6
+		"count_required": 3,
+		"speed_cost": 3
 	},
 	"urban": {
 		"display_name": "Urban",
 		"resource": "none",
-		"count_required": 4
+		"count_required": 4,
+		"speed_cost": 1
 	},
 	"hill": {
 		"display_name": "Hill",
 		"resource": "stone",
-		"count_required": 4
+		"count_required": 4,
+		"speed_cost": 2
 	},
 	"mountain": {
 		"display_name": "Mountain",
 		"resource": "stone",
-		"count_required": 3
+		"count_required": 3,
+		"speed_cost": 3
 	},
 	"river": {
 		"display_name": "River",
 		"resource": "food",
-		"count_required": 3
+		"count_required": 3,
+		"speed_cost": 3,
+		"naval_speed_cost": 1
 	},
 	"desert": {
 		"display_name": "Desert",
 		"resource": "mounts",
-		"count_required": 3
+		"count_required": 3,
+		"speed_cost": 1
 	},
 	"tundra": {
 		"display_name": "Tundra",
 		"resource": "mounts",
-		"count_required": 3
+		"count_required": 3,
+		"speed_cost": 1
 	},
 	"marsh": {
 		"display_name": "Marsh",
 		"resource": "wood",
-		"count_required": 3
+		"count_required": 3,
+		"speed_cost": 2
 	},
 	"hazardous_land": {
 		"display_name": "Hazardous Land",
 		"resource": "magic",
-		"count_required": 4
+		"count_required": 5,
+		"speed_cost": 2
 	},
 	"shallow_water": {
 		"display_name": "Shallow Water",
 		"resource": "food",
-		"count_required": 4
+		"count_required": 4,
+		"naval_speed_cost": 2
 	},
 	"deep_water": {
 		"display_name": "Deep Water",
 		"resource": "food",
-		"count_required": 3
+		"count_required": 3,
+		"naval_speed_cost": 3
 	},
 	"hazardous_water": {
 		"display_name": "Hazardous Water",
 		"resource": "magic",
-		"count_required": 4
+		"count_required": 5,
+		"naval_speed_cost": 2
 	},
 	"disconnected": {
 		"display_name": "Disconnected",
 		"resource": "none",
-		"count_required": 1
+		"count_required": 4
 	}
 }

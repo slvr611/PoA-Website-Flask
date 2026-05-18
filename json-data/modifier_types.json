@@ -284,6 +284,103 @@
         ],
         "applicable_to": ["nation"]
     },
+    "road_capacity": {
+        "name": "Road Capacity",
+        "value_format": "number",
+        "field_template": "road_capacity",
+        "applicable_to": ["nation"]
+    },
+    "units_per_trade_slot": {
+        "name": "Units Per Trade Slot",
+        "value_format": "number",
+        "field_template": "units_per_trade_slot",
+        "applicable_to": ["nation"]
+    },
+    "conditional_unit_buff": {
+        "name": "Unit Buff (Conditional)",
+        "value_format": "number",
+        "field_template": "{unit_category}_unit_{unit_stat}",
+        "extra_fields": [
+            {"key": "unit_category", "label": "Unit Category", "source": "unit_categories"},
+            {"key": "unit_stat", "label": "Unit Stat", "source": "unit_stats"}
+        ],
+        "applicable_to": ["nation"]
+    },
+    "ignore_elderly": {
+        "name": "Ignore Elderly Stat Penalty",
+        "value_format": "number",
+        "field_template": "ignore_elderly",
+        "applicable_to": ["character"]
+    },
+    "immortal_stat_gain_chance": {
+        "name": "Immortal Stat Gain Chance",
+        "value_format": "percentage",
+        "field_template": "immortal_stat_gain_chance",
+        "applicable_to": ["character"]
+    },
+    "stat_bonus_for_strength": {
+        "name": "Attribute Bonus for Strengths",
+        "value_format": "number",
+        "field_template": "stat_bonus_for_strength",
+        "applicable_to": ["character"]
+    },
+    "stat_bonus_for_weakness": {
+        "name": "Attribute Bonus for Weaknesses",
+        "value_format": "number",
+        "field_template": "stat_bonus_for_weakness",
+        "applicable_to": ["character"]
+    },
+    "stat_bonus_while_elderly": {
+        "name": "Attribute Bonus While Elderly",
+        "value_format": "number",
+        "field_template": "{attribute}_bonus_while_elderly",
+        "extra_fields": [
+            {"key": "attribute", "label": "Attribute", "source": "attributes"}
+        ],
+        "applicable_to": ["character"]
+    },
+    "stat_cap_bonus_for_strength": {
+        "name": "Attribute Cap Bonus for Strengths",
+        "value_format": "number",
+        "field_template": "stat_cap_bonus_for_strength",
+        "applicable_to": ["character"]
+    },
+    "stat_cap_bonus_for_weakness": {
+        "name": "Attribute Cap Bonus for Weaknesses",
+        "value_format": "number",
+        "field_template": "stat_cap_bonus_for_weakness",
+        "applicable_to": ["character"]
+    },
+    "progress_slots": {
+        "name": "Progress Slots",
+        "value_format": "number",
+        "field_template": "{tier}_progress_slots",
+        "extra_fields": [
+            {"key": "tier", "label": "Tier", "source": "progress_tiers"}
+        ],
+        "applicable_to": ["nation"]
+    },
+    "tech_cost_modifier": {
+        "name": "Technology Cost Modifier",
+        "value_format": "number",
+        "field_template": "technology_cost_modifier",
+        "applicable_to": ["nation"]
+    },
+    "tech_category_cost_modifier": {
+        "name": "Technology Cost Modifier (Category)",
+        "value_format": "number",
+        "field_template": "{tech_category}_technology_cost_modifier",
+        "extra_fields": [
+            {"key": "tech_category", "label": "Tech Category", "source": "tech_categories"}
+        ],
+        "applicable_to": ["nation"]
+    },
+    "stability_loss_chance_on_leader_death": {
+        "name": "Stability Loss Chance on Leader Death",
+        "value_format": "percentage",
+        "field_template": "stability_loss_chance_on_leader_death",
+        "applicable_to": ["nation"]
+    },
     "slow_aging": {
         "name": "Slow Aging",
         "value_format": "number",
@@ -360,6 +457,71 @@
         "name": "Vassal Slots",
         "value_format": "number",
         "field_template": "vassal_slots",
+        "applicable_to": ["nation"]
+    },
+    "terrain_production_multiplier": {
+        "name": "Terrain Production Multiplier",
+        "description": "Multiplies production from a terrain type. 1.5 = x1.5. Stacks multiplicatively.",
+        "value_format": "number",
+        "is_terrain_rule": true,
+        "rule_type": "multiplier",
+        "extra_fields": [
+            {"key": "terrain", "label": "Terrain", "source": "terrains"},
+            {"key": "resource", "label": "Resource (optional)", "source": "all_resources", "optional": true}
+        ],
+        "applicable_to": ["nation"]
+    },
+    "terrain_count_required_delta": {
+        "name": "Terrain Count Required Delta",
+        "description": "Adds to a terrain's tiles-per-resource requirement. Use negative values to reduce tiles needed.",
+        "value_format": "number",
+        "is_terrain_rule": true,
+        "rule_type": "count_required_delta",
+        "extra_fields": [
+            {"key": "terrain", "label": "Terrain", "source": "terrains"}
+        ],
+        "applicable_to": ["nation"]
+    },
+    "terrain_extra_resource": {
+        "name": "Terrain Extra Resource",
+        "description": "Terrain also produces an additional resource. Value = tiles required per 1 unit (e.g. 6 = 1 fur per 6 tundra tiles).",
+        "value_format": "number",
+        "is_terrain_rule": true,
+        "rule_type": "extra_resource",
+        "extra_fields": [
+            {"key": "terrain", "label": "Terrain", "source": "terrains"},
+            {"key": "resource", "label": "Resource", "source": "all_resources"}
+        ],
+        "applicable_to": ["nation"]
+    },
+    "terrain_swap_resource": {
+        "name": "Terrain Swap Resource",
+        "description": "Terrain produces a different resource instead of its default.",
+        "value_format": "number",
+        "is_terrain_rule": true,
+        "rule_type": "swap_resource",
+        "extra_fields": [
+            {"key": "terrain", "label": "Terrain", "source": "terrains"},
+            {"key": "resource", "label": "New Resource", "source": "all_resources"}
+        ],
+        "applicable_to": ["nation"]
+    },
+    "offensive_visibility": {
+        "name": "Offensive Visibility",
+        "value_format": "number",
+        "field_template": "offensive_visibility",
+        "is_visibility_modifier": true,
+        "extra_fields": [
+            {"key": "target_type", "label": "Target Type", "source": "visibility_target_types"},
+            {"key": "target_value", "label": "Target (region or nation name)", "optional": true}
+        ],
+        "applicable_to": ["nation"]
+    },
+    "defensive_visibility": {
+        "name": "Defensive Visibility",
+        "value_format": "number",
+        "field_template": "defensive_visibility",
+        "is_visibility_modifier": true,
         "applicable_to": ["nation"]
     }
 }

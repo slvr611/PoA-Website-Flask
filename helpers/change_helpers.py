@@ -6,7 +6,7 @@ from calculations.field_calculations import calculate_all_fields
 from copy import deepcopy
 from bson import ObjectId
 
-_NATURAL_KEY_FIELDS = ['name', 'quest_name', 'source', 'modifier_type', 'scope', 'attribute', 'resource_from', 'resource_to', 'field', 'key']
+_NATURAL_KEY_FIELDS = ['name', 'quest_name', 'source', 'modifier_type', 'scope', 'attribute', 'resource_from', 'resource_to', 'field', 'key', 'unit_category', 'unit_stat', 'tier', 'tech_category']
 
 
 def _get_natural_key(item):

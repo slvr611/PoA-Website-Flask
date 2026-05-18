@@ -1,0 +1,79 @@
+{% extends "layout.html" %}
+{% block title %}District Definitions{% endblock %}
+{% block content %}
+<style>
+  .dd-table { width: 100%; border-collapse: collapse; }
+  .dd-table th { font-size: 0.75rem; color: #888; text-align: left; padding: 0.3rem 0.5rem; border-bottom: 1px solid #333; }
+  .dd-table td { padding: 0.35rem 0.5rem; border-bottom: 1px solid #222; font-size: 0.85rem; vertical-align: middle; }
+  .dd-table tr:hover td { background: #1e1e1e; }
+  .dd-cat-header td { background: #181828; color: #99a; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 1px; padding: 0.5rem; }
+  .tier-badge { display: inline-block; font-size: 0.72rem; padding: 0.1rem 0.4rem; border-radius: 999px; border: 1px solid #555; color: #ccc; }
+  .tier-1 { border-color: #4a8; color: #4a8; }
+  .tier-2 { border-color: #8af; color: #8af; }
+  .tier-3 { border-color: #f8a; color: #f8a; }
+  .btn-sm { background: #222; border: 1px solid #555; border-radius: 4px; color: #aaa; cursor: pointer; padding: 0.15rem 0.5rem; font-size: 0.75rem; text-decoration: none; }
+  .btn-sm:hover { border-color: #8af; color: #8af; }
+  .btn-danger { border-color: #a44; color: #f88; }
+  .btn-danger:hover { border-color: #f66; color: #f66; }
+  .cost-pill { font-size: 0.72rem; font-family: monospace; color: #999; }
+  .upg-count { font-size: 0.72rem; color: #888; }
+</style>
+
+<div style="display:flex; align-items:center; gap:1rem; margin-bottom:1rem; flex-wrap:wrap;">
+  <h1 style="margin:0;">District Definitions</h1>
+  <a href="/district-defs/new" class="btn-sm" style="border-color:#4a8a4a; color:#8f8;">+ New Definition</a>
+  <a href="/district-categories" class="btn-sm">Manage Categories</a>
+</div>
+
+{% set defs_by_cat = {} %}
+{% for d in defs %}
+  {% set cat = d.get('category', '') %}
+  {% if cat not in defs_by_cat %}{% set _ = defs_by_cat.update({cat: []}) %}{% endif %}
+  {% set _ = defs_by_cat[cat].append(d) %}
+{% endfor %}
+
+{% for cat_key, cat_defs in defs_by_cat.items() %}
+{% set cat_info = categories.get(cat_key, {}) %}
+<table class="dd-table" style="margin-bottom:1.5rem;">
+  <thead>
+    <tr class="dd-cat-header">
+      <td colspan="7">
+        {{ cat_info.get('display_name', cat_key) or cat_key }}
+        <a href="/district-defs/new?category={{ cat_key }}&tier=1" class="btn-sm" style="margin-left:0.5rem; font-size:0.7rem;">+ Add</a>
+      </td>
+    </tr>
+    <tr>
+      <th>Tier</th>
+      <th>Key</th>
+      <th>Display Name</th>
+      <th>Cost</th>
+      <th>Upgrades</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for d in cat_defs | sort(attribute='tier') %}
+    <tr>
+      <td><span class="tier-badge tier-{{ d.tier }}">T{{ d.tier }}</span></td>
+      <td><code style="font-size:0.75rem;">{{ d.key }}</code></td>
+      <td>{{ d.display_name }}</td>
+      <td class="cost-pill">
+        {% for res, amt in d.get('cost', {}).items() %}{{ res }}: {{ amt }}{% if not loop.last %}, {% endif %}{% endfor %}
+      </td>
+      <td class="upg-count">{{ d.get('upgrades', []) | length }}</td>
+      <td style="white-space:nowrap;">
+        <a href="/district-defs/{{ d.key }}/edit" class="btn-sm">Edit</a>
+        <form method="POST" action="/district-defs/{{ d.key }}/delete" style="display:inline;"
+              onsubmit="return confirm('Delete {{ d.display_name }}?')">
+          <button type="submit" class="btn-sm btn-danger">Del</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p style="color:#666;">No district definitions yet. <a href="/district-defs/new" style="color:#8af;">Create one</a> or first <a href="/district-categories/new" style="color:#8af;">add a category</a>.</p>
+{% endfor %}
+
+{% endblock %}

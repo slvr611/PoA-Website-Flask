@@ -1,5 +1,6 @@
 {% extends "layout.html" %}
 {% from "macros/tech_tree.html" import render_tech_tree %}
+{% from "_modifier_macros.html" import modifier_table with context %}
 
 {% block title %}Edit Nation: {{ nation.name }}{% endblock %}
 
@@ -817,15 +818,44 @@
                 <p>{{ schema.properties.district_slots.label }}: {{ nation.district_slots }}</p>
                 <div class="districts-grid">
                     {% for district_field in form.districts %}
-                        <div class="district-slot">
-                            {{ district_field.item_id() }}
-                            <label for="{{ district_field.id }}">Slot {{ loop.index }}</label></br></br>
-                            {{ district_field.form.type.label }}: {{ district_field.form.type(class="form-control") }}
-                            {{ district_field.form.node.label }}: {{ district_field.form.node(class="form-control") }}
-                        </div>
+                    {% set idx = loop.index0 %}
+                    <div class="district-slot">
+                        {{ district_field.item_id() }}
+                        {# Hidden WTForms fields — JS keeps their values in sync with the combined select #}
+                        {{ district_field.form.type(id="district_type_" ~ idx, style="display:none") }}
+                        {{ district_field.form.def_key(id="district_defkey_" ~ idx) }}
+
+                        <label>Slot {{ loop.index }}</label><br><br>
+                        <label>District:</label>
+                        <select class="form-control district-combined-select"
+                                id="district_combined_{{ idx }}"
+                                data-idx="{{ idx }}"
+                                data-init-type="{{ district_field.form.type.data or '' }}"
+                                data-init-defkey="{{ district_field.form.def_key.data or '' }}">
+                            <option value="">— Empty Slot —</option>
+                            <optgroup label="Legacy Districts">
+                                {% for val, label in district_field.form.type.choices if val %}
+                                <option value="legacy:{{ val }}">{{ label }}</option>
+                                {% endfor %}
+                            </optgroup>
+                            {% for cat_key, cat_name in district_categories.items() %}
+                            {% set cat_defs = district_defs | selectattr("category", "equalto", cat_key) | list %}
+                            {% if cat_defs %}
+                            <optgroup label="{{ cat_name }}">
+                                {% for d in (cat_defs | sort(attribute='tier')) %}
+                                <option value="db:{{ d.key }}">T{{ d.tier }} – {{ d.display_name }}</option>
+                                {% endfor %}
+                            </optgroup>
+                            {% endif %}
+                            {% endfor %}
+                        </select>
+                        <br>
+                        <label>{{ district_field.form.node.label.text }}:</label>
+                        {{ district_field.form.node(class="form-control") }}
+                    </div>
                     {% endfor %}
                 </div>
-                </br>
+                <br>
 
                 {% if nation.get("empire", False) %}
                     <h2>Imperial District</h2>
@@ -1011,115 +1041,49 @@
                 <span class="toggle-icon">▼</span>
             </div>
             <div class="section-content">
-                <table class="jobs-table">
-                    <thead>
-                        <tr>
-                            <th>Modifier Type</th>
-                            <th>Scope</th>
-                            <th>Value</th>
-                            <th>Duration</th>
-                            <th>Source</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="modifiers-tbody">
-                        {% for modifier_field in form.modifiers %}
-                            {% set idx = loop.index0 %}
-                            {% set mod_type = modifier_field.form.modifier_type.data or '' %}
-                            {% set type_def = modifier_types.get(mod_type, {}) %}
-                            {% set extra_fields = type_def.get('extra_fields', []) %}
-                            {% set cur_scope = modifier_field.form.scope.data or 'nation_self' %}
-                            {% set scope_target_type = scope_definitions.get(cur_scope, {}).get('target_type', 'nation') %}
-                            <tr>
-                                <td>
-                                    {{ modifier_field.form.item_id() }}
-                                    <select class="form-control modifier-type-select"
-                                            name="{{ modifier_field.form.modifier_type.name }}"
-                                            id="{{ modifier_field.form.modifier_type.id }}"
-                                            data-field="modifiers"
-                                            data-idx="{{ idx }}"
-                                            onchange="onModifierTypeChange(this)">
-                                        <option value="">-- Select Modifier --</option>
-                                        {% for mt_key, mt_data in sorted_modifier_types %}
-                                            {% if scope_target_type in mt_data.get('applicable_to', ['nation']) %}
-                                                <option value="{{ mt_key }}" {% if mt_key == mod_type %}selected{% endif %}>{{ mt_data.name }}</option>
-                                            {% endif %}
-                                        {% endfor %}
-                                    </select>
-                                    <div class="modifier-extra-fields mt-1">
-                                        {% set used_keys = extra_fields | map(attribute='key') | list %}
-                                        {% for extra in extra_fields %}
-                                            {% set ef = modifier_field.form[extra.key] %}
-                                            <div class="extra-field-group mt-1">
-                                                <label class="small">{{ extra.label }}:</label>
-                                                {% if extra.source == 'all_resources' %}
-                                                    {% set cur = ef.data or '' %}
-                                                    <select class="form-control" name="{{ ef.name }}" id="{{ ef.id }}">
-                                                        <option value="">-- Select Resource --</option>
-                                                        {% for res in all_resources %}
-                                                            <option value="{{ res.key }}" {% if res.key == cur %}selected{% endif %}>{{ res.name }}</option>
-                                                        {% endfor %}
-                                                    </select>
-                                                {% elif extra.source == 'jobs' %}
-                                                    {% set cur = ef.data or '' %}
-                                                    <select class="form-control" name="{{ ef.name }}" id="{{ ef.id }}">
-                                                        <option value="">-- Select Job --</option>
-                                                        {% for job in all_jobs %}
-                                                            <option value="{{ job.key }}" {% if job.key == cur %}selected{% endif %}>{{ job.name }}</option>
-                                                        {% endfor %}
-                                                    </select>
-                                                {% elif extra.source == 'attributes' %}
-                                                    {% set cur = ef.data or '' %}
-                                                    <select class="form-control" name="{{ ef.name }}" id="{{ ef.id }}">
-                                                        <option value="">-- Select Attribute --</option>
-                                                        {% for attr in all_attributes %}
-                                                            <option value="{{ attr.key }}" {% if attr.key == cur %}selected{% endif %}>{{ attr.name }}</option>
-                                                        {% endfor %}
-                                                    </select>
-                                                {% endif %}
-                                            </div>
-                                        {% endfor %}
-                                        {% for fkey in ['resource', 'resource_from', 'resource_to', 'job', 'attribute'] %}
-                                            {% if fkey not in used_keys %}
-                                            <input type="hidden" name="{{ modifier_field.form[fkey].name }}" value="">
-                                            {% endif %}
-                                        {% endfor %}
-                                    </div>
-                                </td>
-                                <td>
-                                    <select class="form-control modifier-scope-select"
-                                            name="{{ modifier_field.form.scope.name }}"
-                                            id="{{ modifier_field.form.scope.id }}"
-                                            data-field="modifiers"
-                                            data-idx="{{ idx }}"
-                                            onchange="onScopeChange(this)">
-                                        {% for scope_opt in scopes_by_source_type.get('nation', []) %}
-                                            <option value="{{ scope_opt.key }}" {% if scope_opt.key == cur_scope %}selected{% endif %}>{{ scope_opt.name }}</option>
-                                        {% endfor %}
-                                    </select>
-                                </td>
-                                <td>
-                                    {{ modifier_field.form.value(class="form-control") }}
-                                    <small class="form-text text-muted modifier-value-hint"{% if type_def.get('value_format') != 'percentage' %} style="display:none"{% endif %}>Decimal (0.1 = 10%)</small>
-                                </td>
-                                <td>{{ modifier_field.form.duration(class="form-control") }}</td>
-                                <td>{{ modifier_field.form.source(class="form-control") }}</td>
-                                <td>
-                                    <span class="drag-handle">⋮⋮</span>
-                                    <button type="button" class="btn btn-danger" onclick="removeFromArray(this, 'modifiers')">Remove</button>
-                                </td>
-                            </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-                <button type="button" class="btn btn-primary" onclick="addToArray('modifiers')">Add Modifier</button>
+                {{ modifier_table(form.modifiers, scopes_by_source_type.get('nation', []),
+                                  entity_source_type='nation', show_scaling=True, show_drag=True) }}
             </div>
         </div>
 
         <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
         <script>
+            // Initialize district combined selects
+            function initDistrictCombinedSelects() {
+                document.querySelectorAll('.district-combined-select').forEach(function(sel) {
+                    var idx = sel.dataset.idx;
+                    var initType = sel.dataset.initType || '';
+                    var initDefkey = sel.dataset.initDefkey || '';
+
+                    if (initDefkey) {
+                        var opt = sel.querySelector('option[value="db:' + initDefkey + '"]');
+                        if (opt) sel.value = 'db:' + initDefkey;
+                    } else if (initType) {
+                        var opt2 = sel.querySelector('option[value="legacy:' + initType + '"]');
+                        if (opt2) sel.value = 'legacy:' + initType;
+                    }
+
+                    sel.addEventListener('change', function() {
+                        var val = this.value;
+                        var typeEl = document.getElementById('district_type_' + idx);
+                        var defkeyEl = document.getElementById('district_defkey_' + idx);
+                        if (val.startsWith('db:')) {
+                            if (typeEl) typeEl.value = '';
+                            if (defkeyEl) defkeyEl.value = val.slice(3);
+                        } else if (val.startsWith('legacy:')) {
+                            if (typeEl) typeEl.value = val.slice(7);
+                            if (defkeyEl) defkeyEl.value = '';
+                        } else {
+                            if (typeEl) typeEl.value = '';
+                            if (defkeyEl) defkeyEl.value = '';
+                        }
+                    });
+                });
+            }
+
             // Initialize sortable for progress quests
             document.addEventListener('DOMContentLoaded', function() {
+                initDistrictCombinedSelects();
                 const progressQuestsTbody = document.getElementById('progress_quests-tbody');
                 if (progressQuestsTbody) {
                     new Sortable(progressQuestsTbody, {
@@ -1146,9 +1110,27 @@
             const SORTED_MODIFIER_KEYS = {{ sorted_modifier_types | map(attribute=0) | list | tojson | safe }};
             const ALL_RESOURCES = {{ all_resources | tojson | safe }};
             const ALL_JOBS = {{ all_jobs | tojson | safe }};
-const ALL_ATTRIBUTES = {{ all_attributes | tojson | safe }};
+            const ALL_ATTRIBUTES = {{ all_attributes | tojson | safe }};
+            const ALL_UNIT_CATEGORIES = {{ all_unit_categories | tojson | safe }};
+            const ALL_UNIT_STATS = {{ all_unit_stats | tojson | safe }};
+            const ALL_PROGRESS_TIERS = {{ all_progress_tiers | tojson | safe }};
+            const ALL_TECH_CATEGORIES = {{ all_tech_categories | tojson | safe }};
             const SCOPE_DEFINITIONS = {{ scope_definitions | tojson | safe }};
             const SCOPE_OPTIONS = {{ scopes_by_source_type.get('nation', []) | tojson | safe }};
+            const SCALING_TYPES = {{ scaling_types | tojson | safe }};
+            const SORTED_SCALING_KEYS = {{ sorted_scaling_type_keys | tojson | safe }};
+            const ALL_TERRAINS = {{ all_terrains | tojson | safe }};
+            const ALL_DISTRICT_CATEGORIES = {{ all_district_categories | tojson | safe }};
+
+            function buildScalingOptions(selectedValue) {
+                const sel = selectedValue || 'flat';
+                let opts = '';
+                for (const key of SORTED_SCALING_KEYS) {
+                    const st = SCALING_TYPES[key];
+                    opts += '<option value="' + key + '" ' + (key === sel ? 'selected' : '') + '>' + st.name + '</option>';
+                }
+                return opts;
+            }
 
             function buildModifierTypeOptions(selectedValue, targetType) {
                 let options = '<option value="">-- Select Modifier --</option>';
@@ -1183,7 +1165,7 @@ const ALL_ATTRIBUTES = {{ all_attributes | tojson | safe }};
             function buildExtraFieldsHTML(fieldName, index, modifierType, currentData) {
                 const typeDef = MODIFIER_TYPES[modifierType] || {};
                 const extraFields = typeDef.extra_fields || [];
-                const ALL_EXTRA_KEYS = ['resource', 'resource_from', 'resource_to', 'job', 'attribute'];
+                const ALL_EXTRA_KEYS = ['resource', 'resource_from', 'resource_to', 'job', 'attribute', 'unit_category', 'unit_stat', 'tier', 'tech_category'];
                 const renderedKeys = new Set();
                 let html = '';
                 for (const extra of extraFields) {
@@ -1207,6 +1189,34 @@ const ALL_ATTRIBUTES = {{ all_attributes | tojson | safe }};
                                                 let opts = '<option value="">-- Select Attribute --</option>';
                                                 for (const attr of ALL_ATTRIBUTES) {
                                                                 opts += `<option value="${attr.key}" ${attr.key === cur ? 'selected' : ''}>${attr.name}</option>`;
+                                                }
+                                                html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
+                                                                <select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+                                } else if (extra.source === 'unit_categories') {
+                                                let opts = '<option value="">-- Select Category --</option>';
+                                                for (const uc of ALL_UNIT_CATEGORIES) {
+                                                                opts += `<option value="${uc.key}" ${uc.key === cur ? 'selected' : ''}>${uc.name}</option>`;
+                                                }
+                                                html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
+                                                                <select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+                                } else if (extra.source === 'unit_stats') {
+                                                let opts = '<option value="">-- Select Stat --</option>';
+                                                for (const us of ALL_UNIT_STATS) {
+                                                                opts += `<option value="${us.key}" ${us.key === cur ? 'selected' : ''}>${us.name}</option>`;
+                                                }
+                                                html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
+                                                                <select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+                                } else if (extra.source === 'progress_tiers') {
+                                                let opts = '<option value="">-- Select Tier --</option>';
+                                                for (const pt of ALL_PROGRESS_TIERS) {
+                                                                opts += `<option value="${pt.key}" ${pt.key === cur ? 'selected' : ''}>${pt.name}</option>`;
+                                                }
+                                                html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
+                                                                <select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+                                } else if (extra.source === 'tech_categories') {
+                                                let opts = '<option value="">-- Select Category --</option>';
+                                                for (const tc of ALL_TECH_CATEGORIES) {
+                                                                opts += `<option value="${tc.key}" ${tc.key === cur ? 'selected' : ''}>${tc.name}</option>`;
                                                 }
                                                 html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
                                                                 <select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
@@ -1318,6 +1328,12 @@ const ALL_ATTRIBUTES = {{ all_attributes | tojson | safe }};
                         ${buildScopeOptions(defaultScope)}
                     </select>`;
                     const extraFields = buildExtraFieldsHTML(fieldName, currentCount, '', {});
+                    const scalingSelect = `<select class="form-control modifier-scaling-select"
+                        name="${fieldName}-${currentCount}-scaling"
+                        id="${fieldName}-${currentCount}-scaling"
+                        onchange="onScalingChange(this)">
+                        ${buildScalingOptions('flat')}
+                    </select><small class="modifier-scaling-x-field" style="display:none">Per <input type="number" step="any" class="form-control d-inline" style="width:70px" placeholder="1" name="${fieldName}-${currentCount}-scaling_x" id="${fieldName}-${currentCount}-scaling_x" value=""></small><small class="modifier-scaling-extra-field" style="display:none"><input type="hidden" name="${fieldName}-${currentCount}-scaling_extra" id="${fieldName}-${currentCount}-scaling_extra" value=""></small><small class="form-text text-muted modifier-max-field" style="display:none">Max: <input type="number" step="any" class="form-control d-inline" style="width:80px" placeholder="None" name="${fieldName}-${currentCount}-max_value" id="${fieldName}-${currentCount}-max_value"></small>`;
                     newRow.innerHTML = `
                         <td>
                             ${typeSelect}
@@ -1328,6 +1344,7 @@ const ALL_ATTRIBUTES = {{ all_attributes | tojson | safe }};
                             <input type="number" step="any" class="form-control" name="${fieldName}-${currentCount}-value" id="${fieldName}-${currentCount}-value" value="1">
                             <small class="form-text text-muted modifier-value-hint" style="display:none">Decimal (0.1 = 10%)</small>
                         </td>
+                        <td>${scalingSelect}</td>
                         <td><input type="number" class="form-control" name="${fieldName}-${currentCount}-duration" id="${fieldName}-${currentCount}-duration" value="-1"></td>
                         <td><input type="text" class="form-control" name="${fieldName}-${currentCount}-source" id="${fieldName}-${currentCount}-source"></td>
                         <td>

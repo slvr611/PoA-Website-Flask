@@ -1,0 +1,47 @@
+{% extends "layout.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<style>
+  .dce-form { max-width: 520px; }
+  .dce-section { background: #1a1a1a; border: 1px solid #333; border-radius: 6px; padding: 1rem 1.25rem; margin-bottom: 1rem; }
+  .dce-section h3 { margin: 0 0 0.75rem 0; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; color: #aaa; border-bottom: 1px solid #333; padding-bottom: 0.4rem; }
+  .dce-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }
+  .dce-row label { font-size: 0.82rem; color: #bbb; min-width: 100px; }
+  .dce-row .form-control { flex: 1; }
+  .btn-save { background: #2a5a2a; border: 1px solid #4a8a4a; color: #8f8; border-radius: 5px; padding: 0.4rem 1.1rem; cursor: pointer; font-size: 0.88rem; }
+  .btn-save:hover { background: #3a6a3a; }
+</style>
+
+<a href="/district-categories" style="font-size:0.85rem; color:#8af;">← Back to Categories</a>
+<h1 style="margin: 0.75rem 0 1rem 0;">{{ title }}</h1>
+
+<form method="POST" action="{{ '/district-categories/new/save' if not item else '/district-categories/' + item.key + '/edit/save' }}" class="dce-form">
+  <div class="dce-section">
+    <h3>Basic Info</h3>
+
+    {% if not item %}
+    <div class="dce-row">
+      <label>Key</label>
+      <input name="key" class="form-control" required placeholder="e.g. economic" value="{{ item.key if item else '' }}">
+    </div>
+    {% endif %}
+
+    <div class="dce-row">
+      <label>Display Name</label>
+      <input name="display_name" class="form-control" required placeholder="e.g. Economic" value="{{ item.display_name if item else '' }}">
+    </div>
+
+    <div class="dce-row">
+      <label>Sort Order</label>
+      <input name="sort_order" type="number" class="form-control" value="{{ item.sort_order if item else 0 }}" style="max-width:80px;">
+    </div>
+
+    <div class="dce-row" style="align-items:flex-start;">
+      <label style="padding-top:0.3rem;">Description</label>
+      <textarea name="description" class="form-control" rows="3">{{ item.description if item else '' }}</textarea>
+    </div>
+  </div>
+
+  <button type="submit" class="btn-save">Save Category</button>
+</form>
+{% endblock %}

@@ -1,4 +1,5 @@
 {% extends "layout.html" %}
+{% from "_modifier_macros.html" import modifier_table with context %}
 
 {% block title %}New {{ title }}{% endblock %}
 
@@ -41,114 +42,12 @@
 							</table>
 							<button type="button" class="btn btn-primary" onclick="addModifier('{{ field.name }}')">Add Modifier</button>
 						{% elif field.type == 'FieldList' and field.name == 'modifiers' %}
-							<table class="modifiers-table">
-								<thead>
-									<tr>
-										<th>Modifier Type</th>
-										<th>Scope</th>
-										<th>Value</th>
-										<th>Duration</th>
-										<th>Source</th>
-										<th>Actions</th>
-									</tr>
-								</thead>
-								<tbody id="{{ field.name }}-tbody">
-									{% set _default_scope_map = {'nation': 'nation_self', 'character': 'character_self', 'merchant': 'merchant_self', 'mercenary': 'mercenary_self', 'artifact': 'artifact_owner', 'wonder': 'wonder_owner_nation', 'region': 'region_nations', 'global': 'global_nations'} %}
-									{% for modifier_field in field %}
-										{% set idx = loop.index0 %}
-										{% set mod_type = modifier_field.form.modifier_type.data or '' %}
-										{% set type_def = modifier_types.get(mod_type, {}) %}
-										{% set extra_fields = type_def.get('extra_fields', []) %}
-										{% set cur_scope = modifier_field.form.scope.data or '' %}
-										{% set effective_scope = cur_scope or (_default_scope_map.get(entity_source_type, '') if entity_source_type else '') %}
-										{% set scope_target_type = scope_definitions.get(effective_scope, {}).get('target_type', '') %}
-										<tr>
-											<td>
-												{{ modifier_field.form.item_id() }}
-												<select class="form-control modifier-type-select"
-														name="{{ modifier_field.form.modifier_type.name }}"
-														id="{{ modifier_field.form.modifier_type.id }}"
-														data-field="{{ field.name }}"
-														data-idx="{{ idx }}"
-														onchange="onModifierTypeChange(this)">
-													<option value="">-- Select Modifier --</option>
-													{% for mt_key, mt_data in sorted_modifier_types %}
-														{% if not scope_target_type or scope_target_type in mt_data.get('applicable_to', []) %}
-															<option value="{{ mt_key }}" {% if mt_key == mod_type %}selected{% endif %}>{{ mt_data.name }}</option>
-														{% endif %}
-													{% endfor %}
-												</select>
-												<div class="modifier-extra-fields mt-1">
-													{% set used_keys = extra_fields | map(attribute='key') | list %}
-													{% for extra in extra_fields %}
-														{% set ef = modifier_field.form[extra.key] %}
-														<div class="extra-field-group mt-1">
-															<label class="small">{{ extra.label }}:</label>
-															{% if extra.source == 'all_resources' %}
-																{% set cur = ef.data or '' %}
-																<select class="form-control" name="{{ ef.name }}" id="{{ ef.id }}">
-																	<option value="">-- Select Resource --</option>
-																	{% for res in all_resources %}
-																		<option value="{{ res.key }}" {% if res.key == cur %}selected{% endif %}>{{ res.name }}</option>
-																	{% endfor %}
-																</select>
-															{% elif extra.source == 'jobs' %}
-																{% set cur = ef.data or '' %}
-																<select class="form-control" name="{{ ef.name }}" id="{{ ef.id }}">
-																	<option value="">-- Select Job --</option>
-																	{% for job in all_jobs %}
-																		<option value="{{ job.key }}" {% if job.key == cur %}selected{% endif %}>{{ job.name }}</option>
-																	{% endfor %}
-																</select>
-															{% elif extra.source == 'attributes' %}
-																{% set cur = ef.data or '' %}
-																<select class="form-control" name="{{ ef.name }}" id="{{ ef.id }}">
-																	<option value="">-- Select Attribute --</option>
-																	{% for attr in all_attributes %}
-																		<option value="{{ attr.key }}" {% if attr.key == cur %}selected{% endif %}>{{ attr.name }}</option>
-																	{% endfor %}
-																</select>
-															{% endif %}
-														</div>
-													{% endfor %}
-													{% for fkey in ['resource', 'resource_from', 'resource_to', 'job', 'attribute'] %}
-														{% if fkey not in used_keys %}
-														<input type="hidden" name="{{ modifier_field.form[fkey].name }}" value="">
-														{% endif %}
-													{% endfor %}
-												</div>
-											</td>
-											<td>
-												<select class="form-control modifier-scope-select"
-														name="{{ modifier_field.form.scope.name }}"
-														id="{{ modifier_field.form.scope.id }}"
-														data-field="{{ field.name }}"
-														data-idx="{{ idx }}"
-														onchange="onScopeChange(this)">
-													{% if entity_source_type %}
-														{% for scope_opt in scopes_by_source_type.get(entity_source_type, []) %}
-															<option value="{{ scope_opt.key }}" {% if scope_opt.key == effective_scope %}selected{% endif %}>{{ scope_opt.name }}</option>
-														{% endfor %}
-													{% else %}
-														<option value="">-- No Scope --</option>
-														{% for scope_key, scope_data in scope_definitions.items() %}
-															<option value="{{ scope_key }}" {% if scope_key == cur_scope %}selected{% endif %}>{{ scope_data.name }}</option>
-														{% endfor %}
-													{% endif %}
-												</select>
-											</td>
-											<td>
-												{{ modifier_field.form.value(class="form-control") }}
-												<small class="form-text text-muted modifier-value-hint"{% if type_def.get('value_format') != 'percentage' %} style="display:none"{% endif %}>Decimal (0.1 = 10%)</small>
-											</td>
-											<td>{{ modifier_field.form.duration(class="form-control") }}</td>
-											<td>{{ modifier_field.form.source(class="form-control") }}</td>
-											<td><button type="button" class="btn btn-danger" onclick="removeModifier(this, '{{ field.name }}')">Remove</button></td>
-										</tr>
-									{% endfor %}
-								</tbody>
-							</table>
-							<button type="button" class="btn btn-primary" onclick="addModifier('{{ field.name }}')">Add Modifier</button>
+							{{ modifier_table(field,
+							                  scopes_by_source_type.get(entity_source_type, []) if entity_source_type else [],
+							                  field_name=field.name,
+							                  entity_source_type=entity_source_type,
+							                  show_scaling=True, show_drag=True,
+							                  remove_fn='removeFromArray', add_fn='addToArray') }}
 						{% else %}
 							{{ field(class="form-control") }}
 						{% endif %}
@@ -178,12 +77,19 @@
     </form>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 <script>
 	const MODIFIER_TYPES = {{ modifier_types | tojson | safe }};
 	const SORTED_MODIFIER_KEYS = {{ sorted_modifier_types | map(attribute=0) | list | tojson | safe }};
+	const SCALING_TYPES = {{ scaling_types | tojson | safe }};
+	const SORTED_SCALING_KEYS = {{ sorted_scaling_type_keys | tojson | safe }};
 	const ALL_RESOURCES = {{ all_resources | tojson | safe }};
 	const ALL_JOBS = {{ all_jobs | tojson | safe }};
-const ALL_ATTRIBUTES = {{ all_attributes | tojson | safe }};
+	const ALL_ATTRIBUTES = {{ all_attributes | tojson | safe }};
+	const ALL_UNIT_CATEGORIES = {{ all_unit_categories | tojson | safe }};
+	const ALL_UNIT_STATS = {{ all_unit_stats | tojson | safe }};
+	const ALL_PROGRESS_TIERS = {{ all_progress_tiers | tojson | safe }};
+	const ALL_TECH_CATEGORIES = {{ all_tech_categories | tojson | safe }};
 	const SCOPE_DEFINITIONS = {{ scope_definitions | tojson | safe }};
 	const ENTITY_SOURCE_TYPE = {{ entity_source_type | default("") | tojson | safe }};
 	const SCOPE_OPTIONS = {{ scopes_by_source_type.get(entity_source_type, []) | tojson | safe }};
@@ -213,6 +119,16 @@ const ALL_ATTRIBUTES = {{ all_attributes | tojson | safe }};
 		return options;
 	}
 
+	function buildScalingOptions(selectedValue) {
+		const sel = selectedValue || 'flat';
+		let opts = '';
+		for (const key of SORTED_SCALING_KEYS) {
+			const st = SCALING_TYPES[key];
+			opts += '<option value="' + key + '" ' + (key === sel ? 'selected' : '') + '>' + st.name + '</option>';
+		}
+		return opts;
+	}
+
 	function onScopeChange(select) {
 		const row = select.closest('tr');
 		const scopeKey = select.value;
@@ -228,7 +144,7 @@ const ALL_ATTRIBUTES = {{ all_attributes | tojson | safe }};
 	function buildExtraFieldsHTML(fieldName, index, modifierType, currentData) {
 		const typeDef = MODIFIER_TYPES[modifierType] || {};
 		const extraFields = typeDef.extra_fields || [];
-		const ALL_EXTRA_KEYS = ['resource', 'resource_from', 'resource_to', 'job', 'attribute'];
+		const ALL_EXTRA_KEYS = ['resource', 'resource_from', 'resource_to', 'job', 'attribute', 'unit_category', 'unit_stat', 'tier', 'tech_category'];
 		const renderedKeys = new Set();
 		let html = '';
 		for (const extra of extraFields) {
@@ -252,6 +168,34 @@ const ALL_ATTRIBUTES = {{ all_attributes | tojson | safe }};
 				let opts = '<option value="">-- Select Attribute --</option>';
 				for (const attr of ALL_ATTRIBUTES) {
 					opts += `<option value="${attr.key}" ${attr.key === cur ? 'selected' : ''}>${attr.name}</option>`;
+				}
+				html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
+					<select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+			} else if (extra.source === 'unit_categories') {
+				let opts = '<option value="">-- Select Category --</option>';
+				for (const uc of ALL_UNIT_CATEGORIES) {
+					opts += `<option value="${uc.key}" ${uc.key === cur ? 'selected' : ''}>${uc.name}</option>`;
+				}
+				html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
+					<select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+			} else if (extra.source === 'unit_stats') {
+				let opts = '<option value="">-- Select Stat --</option>';
+				for (const us of ALL_UNIT_STATS) {
+					opts += `<option value="${us.key}" ${us.key === cur ? 'selected' : ''}>${us.name}</option>`;
+				}
+				html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
+					<select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+			} else if (extra.source === 'progress_tiers') {
+				let opts = '<option value="">-- Select Tier --</option>';
+				for (const pt of ALL_PROGRESS_TIERS) {
+					opts += `<option value="${pt.key}" ${pt.key === cur ? 'selected' : ''}>${pt.name}</option>`;
+				}
+				html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
+					<select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+			} else if (extra.source === 'tech_categories') {
+				let opts = '<option value="">-- Select Category --</option>';
+				for (const tc of ALL_TECH_CATEGORIES) {
+					opts += `<option value="${tc.key}" ${tc.key === cur ? 'selected' : ''}>${tc.name}</option>`;
 				}
 				html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
 					<select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
@@ -289,18 +233,44 @@ const ALL_ATTRIBUTES = {{ all_attributes | tojson | safe }};
 		}
 	}
 
-	function addModifier(fieldName) {
+	document.addEventListener('DOMContentLoaded', function() {
+		const modifiersTbody = document.getElementById('modifiers-tbody');
+		if (modifiersTbody) {
+			new Sortable(modifiersTbody, {
+				handle: '.drag-handle', animation: 150,
+				onEnd: function() { reindexModifiers(); }
+			});
+		}
+	});
+
+	function reindexModifiers() {
+		const tbody = document.getElementById('modifiers-tbody');
+		Array.from(tbody.children).forEach((row, index) => {
+			row.querySelectorAll('input, select').forEach(input => {
+				const parts     = input.name.split('-');
+				const fieldPart = parts.slice(2).join('-');
+				input.name = `modifiers-${index}-${fieldPart}`;
+				input.id   = `modifiers-${index}-${fieldPart}`;
+			});
+			const typeSelect = row.querySelector('.modifier-type-select');
+			if (typeSelect) typeSelect.dataset.idx = index;
+			const scopeSelect = row.querySelector('.modifier-scope-select');
+			if (scopeSelect) scopeSelect.dataset.idx = index;
+		});
+	}
+
+	function addToArray(fieldName) {
 		const tbody = document.getElementById(`${fieldName}-tbody`);
 		const currentCount = tbody.children.length;
 		const newRow = document.createElement('tr');
 
-		if (fieldName === "external_modifiers") {
+		if (fieldName === 'external_modifiers') {
 			const typeOptions = ["nation", "character"].map(v => `<option value="${v}">${v}</option>`).join('');
 			newRow.innerHTML = `
 				<td><select class="form-control" name="${fieldName}-${currentCount}-type" id="${fieldName}-${currentCount}-type">${typeOptions}</select></td>
 				<td><input type="text" class="form-control" name="${fieldName}-${currentCount}-modifier" id="${fieldName}-${currentCount}-modifier"></td>
 				<td><input type="number" class="form-control" name="${fieldName}-${currentCount}-value" id="${fieldName}-${currentCount}-value"></td>
-				<td><button type="button" class="btn btn-danger" onclick="removeModifier(this, '${fieldName}')">Remove</button></td>
+				<td><button type="button" class="btn btn-danger" onclick="removeFromArray(this, '${fieldName}')">Remove</button></td>
 			`;
 		} else {
 			const defaultScope = (SELF_SCOPE_MAP[ENTITY_SOURCE_TYPE]) || (SCOPE_OPTIONS.length ? SCOPE_OPTIONS[0].key : '');
@@ -320,6 +290,12 @@ const ALL_ATTRIBUTES = {{ all_attributes | tojson | safe }};
 				${buildScopeOptions(defaultScope)}
 			</select>`;
 			const extraFields = buildExtraFieldsHTML(fieldName, currentCount, '', {});
+			const scalingSelect = `<select class="form-control modifier-scaling-select"
+				name="${fieldName}-${currentCount}-scaling"
+				id="${fieldName}-${currentCount}-scaling"
+				onchange="onScalingChange(this)">
+				${buildScalingOptions('flat')}
+			</select><small class="form-text text-muted modifier-max-field" style="display:none">Max: <input type="number" step="any" class="form-control d-inline" style="width:80px" placeholder="None" name="${fieldName}-${currentCount}-max_value" id="${fieldName}-${currentCount}-max_value"></small>`;
 			newRow.innerHTML = `
 				<td>
 					${typeSelect}
@@ -330,31 +306,30 @@ const ALL_ATTRIBUTES = {{ all_attributes | tojson | safe }};
 					<input type="number" step="any" class="form-control" name="${fieldName}-${currentCount}-value" id="${fieldName}-${currentCount}-value" value="1">
 					<small class="form-text text-muted modifier-value-hint" style="display:none">Decimal (0.1 = 10%)</small>
 				</td>
+				<td>${scalingSelect}</td>
 				<td><input type="number" class="form-control" name="${fieldName}-${currentCount}-duration" id="${fieldName}-${currentCount}-duration" value="-1"></td>
 				<td><input type="text" class="form-control" name="${fieldName}-${currentCount}-source" id="${fieldName}-${currentCount}-source"></td>
-				<td><button type="button" class="btn btn-danger" onclick="removeModifier(this, '${fieldName}')">Remove</button></td>
+				<td><span class="drag-handle">&#8942;&#8942;</span>
+				    <button type="button" class="btn btn-danger" onclick="removeFromArray(this,'${fieldName}')">Remove</button></td>
 			`;
 		}
 		tbody.appendChild(newRow);
 	}
 
-	function removeModifier(button, categoryName) {
+	function removeFromArray(button, categoryName) {
 		button.closest('tr').remove();
-		const tbody = document.getElementById(`${categoryName}-tbody`);
-		Array.from(tbody.children).forEach((row, index) => {
-			row.querySelectorAll('input, select').forEach(input => {
-				const parts = input.name.split('-');
-				const fieldPart = parts.slice(2).join('-');
-				input.name = `${categoryName}-${index}-${fieldPart}`;
-				input.id   = `${categoryName}-${index}-${fieldPart}`;
+		if (categoryName === 'modifiers') reindexModifiers();
+		else {
+			const tbody = document.getElementById(`${categoryName}-tbody`);
+			Array.from(tbody.children).forEach((row, index) => {
+				row.querySelectorAll('input, select').forEach(input => {
+					const parts = input.name.split('-');
+					const fieldPart = parts.slice(2).join('-');
+					input.name = `${categoryName}-${index}-${fieldPart}`;
+					input.id   = `${categoryName}-${index}-${fieldPart}`;
+				});
 			});
-			if (categoryName === 'modifiers') {
-				const typeSelect = row.querySelector('.modifier-type-select');
-				if (typeSelect) typeSelect.dataset.idx = index;
-				const scopeSelect = row.querySelector('.modifier-scope-select');
-				if (scopeSelect) scopeSelect.dataset.idx = index;
-			}
-		});
+		}
 	}
 </script>
 

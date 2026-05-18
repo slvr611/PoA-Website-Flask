@@ -99,6 +99,39 @@ def unit_upload_image():
     else:
         return jsonify({"success": False, "error": result}), 500
 
+@data_item_routes.route("/api/wonders/default-image")
+def wonder_default_image():
+    """Returns {url} for the global default wonder map icon."""
+    doc = mongo.db.global_modifiers.find_one({"name": "wonder_default_image"}) or {}
+    return jsonify({"url": doc.get("url", "")})
+
+
+@data_item_routes.route("/wonders/upload-default-image", methods=["POST"])
+@admin_required
+def wonder_upload_default_image():
+    if "image" not in request.files:
+        return jsonify({"success": False, "error": "No file provided"}), 400
+    file = request.files["image"]
+    if not file.filename:
+        return jsonify({"success": False, "error": "No file selected"}), 400
+
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in ALLOWED_IMAGE_EXTENSIONS:
+        return jsonify({"success": False, "error": f"File type '{ext}' not allowed"}), 400
+
+    file_bytes   = file.read()
+    content_type = file.content_type or "image/jpeg"
+
+    success, result = upload_bytes_to_s3(file_bytes, f"wonder_images/default{ext}", content_type)
+    if success:
+        mongo.db.global_modifiers.update_one(
+            {"name": "wonder_default_image"}, {"$set": {"url": result}}, upsert=True
+        )
+        return jsonify({"success": True, "url": result})
+    else:
+        return jsonify({"success": False, "error": result}), 500
+
+
 @data_item_routes.route("/<data_type>")
 def data_list(data_type):
     schema, db = get_data_on_category(data_type)

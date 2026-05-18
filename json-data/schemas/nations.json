@@ -730,7 +730,7 @@
         "label": "District Slots",
         "description": "The amount of districts the nation can have",
         "calculated": true,
-        "base_value": 3
+        "base_value": 5
       },
       "government_type": {
         "bsonType": "enum",
@@ -1712,12 +1712,25 @@
             "type": {
               "bsonType": "json_district_enum",
               "label": "District Type",
-              "description": "The type of the district"
+              "description": "The type of the district (legacy JSON districts)"
+            },
+            "def_key": {
+              "bsonType": "string",
+              "label": "District Def Key",
+              "description": "Key into district_defs collection (DB-driven districts)"
             },
             "node": {
               "bsonType": "string",
               "label": "District Node",
               "description": "The node under the district"
+            },
+            "upgrades": {
+              "bsonType": "array",
+              "label": "Unlocked Upgrades",
+              "description": "Keys of upgrades unlocked for this district instance",
+              "items": {
+                "bsonType": "string"
+              }
             }
           }
         }

@@ -4,8 +4,8 @@ from copy import deepcopy
 from time import perf_counter
 from app_core import mongo, json_data, category_data
 from calculations.compute_functions import compute_pop_count, compute_field
+from calculations.scaling_methods import get_scaling_multiplier
 from bson.objectid import ObjectId
-from app_core import json_data
 
 def _build_nation_calc_cache(target):
     target_id = str(target.get("_id", ""))
@@ -37,10 +37,32 @@ def _build_nation_calc_cache(target):
         if pop.get("race", "") in bloodthirsty_races:
             bloodthirsty_pop_count += 1
 
+    primary_culture_pop_count = 0
+    primary_culture = target.get("primary_culture", "")
+    if primary_culture:
+        try:
+            primary_culture_pop_count = category_data["pops"]["database"].count_documents(
+                {"culture": primary_culture}
+            )
+        except Exception:
+            pass
+    
+    primary_religion_pop_count = 0
+    primary_religion = target.get("primary_culture", "")
+    if primary_religion:
+        try:
+            primary_religion_pop_count = category_data["pops"]["database"].count_documents(
+                {"religion": primary_religion}
+            )
+        except Exception:
+            pass
+
     return {
         "pops": pops,
         "pop_count": len(pops),
         "bloodthirsty_pop_count": bloodthirsty_pop_count,
+        "primary_culture_pop_count": primary_culture_pop_count,
+        "primary_religion_pop_count": primary_religion_pop_count,
     }
 
 def calculate_all_fields(target, schema, target_data_type, return_breakdowns=False, instrumentation=None):
@@ -67,7 +89,7 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
 
     phase_start = perf_counter()
     modifiers = collect_modifiers(target, target_data_type)
-    modifier_totals = sum_modifier_totals(modifiers)
+    modifier_totals = sum_modifier_totals(modifiers, target)
     record_timing("collect_and_sum_modifiers_ms", phase_start)
 
     phase_start = perf_counter()
@@ -119,7 +141,8 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
         loose_nodes = target.get("nodes", {})
         loose_node_totals = sum_loose_node_totals(loose_nodes, modifier_totals, external_modifiers_total, law_totals, tech_totals)
 
-        territory_terrain_totals = collect_territory_terrain(target, modifier_totals, external_modifiers_total)
+        all_terrain_rules = _collect_all_terrain_rules(target)
+        territory_terrain_totals = collect_territory_terrain(target, all_terrain_rules)
 
         jobs_assigned = collect_jobs_assigned(target)
         job_details = calculate_job_details(target, district_details, modifier_totals, district_totals, tech_totals, city_totals, law_totals, external_modifiers_total)
@@ -151,6 +174,11 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
         title_modifiers = positive_title_modifiers.copy()
         for key, value in negative_title_modifiers.items():
             title_modifiers[key] = title_modifiers.get(key, 0) + value
+        # District modifiers scoped to ruling characters (e.g. nation_ruling_characters)
+        from calculations.source_adapters import DistrictAdapter as _DistrictAdapter
+        for _contrib in _DistrictAdapter.collect_for_character(target):
+            for _k, _v in _contrib.modifiers.items():
+                district_totals[_k] = district_totals.get(_k, 0) + _v
     elif target_data_type == "market":
         primary_resource = target.get("primary_resource", "")
         secondary_resource_one = target.get("secondary_resource_one", "")
@@ -620,44 +648,102 @@ def sum_loose_node_totals(loose_nodes, modifier_totals, external_modifiers_total
     return node_totals
 
 
-def collect_territory_terrain(target, modifier_totals, external_modifier_totals):
+def _collect_all_terrain_rules(target):
+    """Collect structured terrain production rules from all modifier sources on a nation."""
+    from calculations.source_adapters import _extract_terrain_rules_from_list
+
+    all_rules = []
+
+    # Direct modifiers on the nation (modifier objects)
+    direct_mods = target.get("modifiers", [])
+    if isinstance(direct_mods, list):
+        all_rules.extend(_extract_terrain_rules_from_list(direct_mods, "direct_modifiers"))
+
+    # DB-driven district modifiers (def_key districts — not covered by legacy pipeline)
+    for district in target.get("districts", []):
+        if not isinstance(district, dict) or not district.get("def_key"):
+            continue
+        dd = _resolve_def(district)
+        if not dd:
+            continue
+        label = dd.get("display_name", district["def_key"])
+        all_rules.extend(_extract_terrain_rules_from_list(dd.get("modifiers", []), label))
+        unlocked_upgrades = district.get("upgrades", [])
+        if unlocked_upgrades:
+            upgrade_map = {u["key"]: u for u in dd.get("upgrades", []) if u.get("key")}
+            for upg_key in unlocked_upgrades:
+                upg = upgrade_map.get(upg_key)
+                if upg:
+                    all_rules.extend(_extract_terrain_rules_from_list(
+                        upg.get("modifiers", []), f"{label} ({upg_key})"
+                    ))
+
+    return all_rules
+
+
+def collect_territory_terrain(target, terrain_rules):
+    """Calculate resource production contributions from terrain tiles.
+
+    terrain_rules is a list of structured rule dicts produced by
+    _collect_all_terrain_rules(). Each rule has: terrain, rule_type, value,
+    and optionally resource.
+    """
     territory_types = target.get("territory_types", {})
+    terrain_json = json_data["terrains"]
     total_modifiers = {}
-    terrain_json_data = json_data["terrains"]
 
-    terrain_resource_swap_modifiers = {} # A List of modifiers in the format: {terrain}_swap_{resource}_production: 1       Anything above 1 will swap the base resource production for that tile
+    for terrain, tile_count in territory_types.items():
+        base_terrain = terrain_json.get(terrain, {})
+        if not base_terrain:
+            continue
 
-    extra_terrain_production_modifiers = {} # A List of modifiers in the format: {terrain}_extra_{resource}_production_per: {num_tiles}
+        rules = [r for r in terrain_rules if r.get("terrain") == terrain]
 
-    for modifier, value in modifier_totals.items():
-        if modifier.endswith("_production_per") and "_extra_" in modifier:
-            extra_terrain_production_modifiers[modifier] = value
-        elif modifier.endswith("_production") and "_swap_" in modifier:
-            terrain_resource_swap_modifiers[modifier] = value
-    for modifier, value in external_modifier_totals.items():
-        if modifier.endswith("_production_per") and "_extra_" in modifier:
-            extra_terrain_production_modifiers[modifier] = value
-        elif modifier.endswith("_production") and "_swap_" in modifier:
-            terrain_resource_swap_modifiers[modifier] = value
+        # Determine which resource this terrain produces (swap_resource wins; last one)
+        resource = base_terrain.get("resource", "none")
+        for r in rules:
+            if r["rule_type"] == "swap_resource" and r.get("resource"):
+                resource = r["resource"]
+        if resource == "none":
+            continue
 
-    for terrain, value in territory_types.items():
-        terrain_modifier = terrain_json_data.get(terrain, {}).get("resource", "none") + "_production"
+        # Count required (additive deltas, clamped to ≥ 1)
+        count_required = base_terrain.get("count_required", 4)
+        for r in rules:
+            if r["rule_type"] == "count_required_delta":
+                count_required += int(r.get("value", 0))
+        count_required = max(count_required, 1)
 
-        for modifier, mod_value in terrain_resource_swap_modifiers.items():
-            if modifier.startswith(terrain + "_swap_"):
-                if mod_value > 1:
-                    resource = modifier.replace("_production", "").replace(terrain + "_swap_", "")
-                    terrain_modifier = resource + "_production"
+        base_production = tile_count // count_required
 
-        terrain_count_required = terrain_json_data.get(terrain, {}).get("count_required", 4)
-        terrain_count_required += modifier_totals.get(terrain + "_terrain_count_required", 0) + external_modifier_totals.get(terrain + "_terrain_count_required", 0)
-        total_modifiers[terrain_modifier] = total_modifiers.get(terrain_modifier, 0) + value // terrain_count_required
+        def apply_multipliers(res, base_prod):
+            m = 1.0
+            for r in rules:
+                if r["rule_type"] != "multiplier":
+                    continue
+                scoped_res = r.get("resource")
+                if scoped_res is None or scoped_res == res:
+                    m *= float(r.get("value", 1.0))
+            return int(base_prod * m)
 
-        for modifier, mod_value in extra_terrain_production_modifiers.items():
-            if modifier.startswith(terrain + "_extra_"):
-                resource = modifier.replace("_production_per", "").replace(terrain + "_extra_", "")
-                total_modifiers[resource + "_production"] = total_modifiers.get(resource + "_production", 0) + (value // mod_value)
-        
+        # Base resource contribution
+        production = apply_multipliers(resource, base_production)
+        key = resource + "_production"
+        total_modifiers[key] = total_modifiers.get(key, 0) + production
+
+        # Extra resource contributions
+        for r in rules:
+            if r["rule_type"] != "extra_resource":
+                continue
+            extra_res = r.get("resource")
+            cr = int(r.get("value", 1))
+            if not extra_res or cr < 1:
+                continue
+            extra_prod = tile_count // cr
+            extra_prod = apply_multipliers(extra_res, extra_prod)
+            key = extra_res + "_production"
+            total_modifiers[key] = total_modifiers.get(key, 0) + extra_prod
+
     return total_modifiers
 
 def collect_jobs_assigned(target):
@@ -1581,6 +1667,105 @@ def _district_key_to_category(district_key):
     return ""
 
 
+def _resolve_def(district_instance):
+    """Return the district definition dict for a nation district instance.
+
+    Checks def_key (MongoDB district_defs collection) first, then falls back
+    to the legacy type key in the JSON files.
+    """
+    if not isinstance(district_instance, dict):
+        return {}
+    def_key = district_instance.get("def_key")
+    if def_key:
+        return mongo.db.district_defs.find_one({"key": def_key}) or {}
+    legacy_type = district_instance.get("type", "")
+    if not legacy_type:
+        return {}
+    for fname in ["nation_districts", "nation_imperial_districts", "mercenary_districts",
+                  "merchant_production_districts", "merchant_specialty_districts", "merchant_luxury_districts"]:
+        data = json_data.get(fname, {}).get(legacy_type)
+        if data:
+            return data
+    return {}
+
+
+def _check_requirements_dict(nation, requirements):
+    """Evaluate a requirements dict (as produced by _db_prerequisites_to_requirements) against a nation."""
+    nation_district_keys = [d.get("type", "") for d in nation.get("districts", []) if isinstance(d, dict)]
+    nation_district_def_keys = [d.get("def_key", "") for d in nation.get("districts", []) if isinstance(d, dict)]
+    nation_district_categories_json = {_district_key_to_category(k) for k in nation_district_keys if k}
+    nation_district_categories_db = set()
+    for dk in nation_district_def_keys:
+        if dk:
+            dd = _resolve_def({"def_key": dk})
+            cat = dd.get("category", "")
+            if cat:
+                nation_district_categories_db.add(cat)
+    nation_district_categories = nation_district_categories_json | nation_district_categories_db
+
+    for requirement, value in requirements.items():
+        if requirement == "district":
+            has_district = any(
+                d in nation_district_keys or d in nation_district_def_keys or d in nation_district_categories
+                for d in value
+            )
+            if not has_district:
+                return False
+        elif requirement == "research":
+            for tech in value:
+                if not nation.get("technologies", {}).get(tech, {}).get("researched", False):
+                    return False
+        elif requirement == "race":
+            nation_id = str(nation.get("_id", ""))
+            has_race = False
+            for race_name in value:
+                race_doc = category_data["races"]["database"].find_one({"name": race_name}, {"_id": 1})
+                if race_doc:
+                    pop = category_data["pops"]["database"].find_one(
+                        {"nation": nation_id, "race": str(race_doc["_id"])}, {"_id": 1}
+                    )
+                    if pop:
+                        has_race = True
+                        break
+            if not has_race:
+                return False
+        elif requirement == "name":
+            if not any(n in nation.get("name", "") for n in value):
+                return False
+    return True
+
+
+def check_district_requirements(nation, district_def):
+    """Return True if the nation meets all requirements to build the given district definition."""
+    tier = district_def.get("tier", 1)
+    if tier > 1:
+        needed_tier = tier - 1
+        category = district_def.get("category", "")
+        has_prev = False
+        for inst in nation.get("districts", []):
+            dd = _resolve_def(inst)
+            if dd.get("category") == category and dd.get("tier") == needed_tier:
+                has_prev = True
+                break
+        if not has_prev:
+            return False
+
+    if any(
+        isinstance(inst, dict) and _resolve_def(inst).get("key") == district_def.get("key")
+        for inst in nation.get("districts", [])
+    ):
+        return False
+
+    reqs = _db_prerequisites_to_requirements(district_def.get("requirements", []))
+    return _check_requirements_dict(nation, reqs)
+
+
+def check_upgrade_requirements(nation, upgrade_def):
+    """Return True if the nation meets all requirements to unlock the given upgrade."""
+    reqs = _db_prerequisites_to_requirements(upgrade_def.get("requirements", []))
+    return _check_requirements_dict(nation, reqs)
+
+
 def check_unit_requirements(target, unit_details):
     # Imperial units require the nation to be an empire
     if "Imperial" in (unit_details.get("unit_class") or "") and not target.get("empire", False):
@@ -1932,8 +2117,10 @@ def collect_external_modifiers_from_object(object, required_fields, linked_objec
 
                 elif field_type == "array" and req_field == "modifiers":
                     _sd = json_data.get("scope_definitions", {})
-                    from calculations.source_adapters import _resolve_modifier_type as _rmt
+                    from calculations.source_adapters import _resolve_modifier_type as _rmt, _is_terrain_rule as _itr
                     for modifier in object[req_field]:
+                        if _itr(modifier):
+                            continue  # terrain rules handled separately
                         scope = modifier.get("scope", "")
                         if scope:
                             if _sd.get(scope, {}).get("target_type", "") != target_data_type:
@@ -2103,13 +2290,15 @@ def calculate_effective_pop_capacity_modifiers(target):
     
     return modifiers
 
-def sum_modifier_totals(modifiers):
+def sum_modifier_totals(modifiers, target=None):
     totals = {}
     modifier_types_data = json_data.get("modifier_types", {})
     for m in modifiers:
         modifier_type = m.get("modifier_type", "")
         if modifier_type and modifier_type in modifier_types_data:
             type_def = modifier_types_data[modifier_type]
+            if type_def.get("is_terrain_rule"):
+                continue  # terrain rules are handled separately in collect_territory_terrain
             field = type_def.get("field_template", modifier_type)
             for extra_field in type_def.get("extra_fields", []):
                 key = extra_field["key"]
@@ -2119,6 +2308,17 @@ def sum_modifier_totals(modifiers):
             # Backwards compat: old format stored with "field" or "key"
             field = m.get("field", m.get("key", modifier_type))
         value = m.get("value", 0)
+        scaling = m.get("scaling", "flat")
+        scaling_x = float(m.get("scaling_x") or 1)
+        scaling_extra = m.get("scaling_extra") or ""
+        if scaling and scaling != "flat" and target is not None:
+            value = value * get_scaling_multiplier(scaling, target, scaling_x=scaling_x, scaling_extra=scaling_extra)
+        max_value = m.get("max_value")
+        if max_value is not None:
+            try:
+                value = min(value, float(max_value))
+            except (TypeError, ValueError):
+                pass
         if field:
             totals[field] = totals.get(field, 0) + value
     return totals
@@ -2303,32 +2503,58 @@ def _build_computed_contributions(
 
     # ── Terrain production ────────────────────────────────────────────────────
     terrain_json = json_data.get("terrains", {})
+    terrain_rules = _collect_all_terrain_rules(target)
     for terrain, tile_count in target.get("territory_types", {}).items():
         td = terrain_json.get(terrain, {})
+        rules = [r for r in terrain_rules if r.get("terrain") == terrain]
+
         res_key = td.get("resource", "none")
-        for mk, mv in overall_totals.items():
-            if mk.startswith(terrain + "_swap_") and mk.endswith("_production") and mv > 1:
-                res_key = mk.replace("_production", "").replace(terrain + "_swap_", "")
-        count_req = td.get("count_required", 4) + overall_totals.get(terrain + "_terrain_count_required", 0)
-        prod = tile_count // max(count_req, 1)
-        if prod and res_key != "none":
+        for r in rules:
+            if r["rule_type"] == "swap_resource" and r.get("resource"):
+                res_key = r["resource"]
+        if res_key == "none":
+            continue
+
+        count_req = td.get("count_required", 4)
+        for r in rules:
+            if r["rule_type"] == "count_required_delta":
+                count_req += int(r.get("value", 0))
+        count_req = max(count_req, 1)
+
+        def _apply_mult(res, base):
+            m = 1.0
+            for r in rules:
+                if r["rule_type"] != "multiplier":
+                    continue
+                sr = r.get("resource")
+                if sr is None or sr == res:
+                    m *= float(r.get("value", 1.0))
+            return int(base * m)
+
+        prod = _apply_mult(res_key, tile_count // count_req)
+        if prod:
             name = td.get("display_name", terrain.replace("_", " ").title())
             contribs.append(SourceContribution(
                 label=f"Terrain: {name} ({tile_count} tiles)",
                 source_type="terrain",
                 modifiers={res_key + "_production": prod},
             ))
-        for mk, mv in overall_totals.items():
-            if mk.startswith(terrain + "_extra_") and mk.endswith("_production_per") and mv:
-                extra_res = mk.replace("_production_per", "").replace(terrain + "_extra_", "")
-                extra_prod = tile_count // max(mv, 1)
-                if extra_prod:
-                    name = td.get("display_name", terrain.replace("_", " ").title())
-                    contribs.append(SourceContribution(
-                        label=f"Terrain: {name} (extra)",
-                        source_type="terrain",
-                        modifiers={extra_res + "_production": extra_prod},
-                    ))
+
+        for r in rules:
+            if r["rule_type"] != "extra_resource":
+                continue
+            extra_res = r.get("resource")
+            cr = int(r.get("value", 1))
+            if not extra_res or cr < 1:
+                continue
+            extra_prod = _apply_mult(extra_res, tile_count // cr)
+            if extra_prod:
+                name = td.get("display_name", terrain.replace("_", " ").title())
+                contribs.append(SourceContribution(
+                    label=f"Terrain: {name} (extra {extra_res})",
+                    source_type="terrain",
+                    modifiers={extra_res + "_production": extra_prod},
+                ))
 
     # ── Node production ───────────────────────────────────────────────────────
     for resource in all_res:

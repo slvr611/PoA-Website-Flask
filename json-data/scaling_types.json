@@ -1,0 +1,94 @@
+{
+    "flat": {
+        "name": "Flat",
+        "description": "Value applied as-is (multiplier = 1). The default for all modifiers."
+    },
+    "per_x_money": {
+        "name": "Per X Money",
+        "description": "Multiplied by the nation's current money stockpile divided by X, floored.",
+        "has_x": true,
+        "default_x": 100
+    },
+    "per_x_resource": {
+        "name": "Per X Resource",
+        "description": "Multiplied by the nation's current resource stockpile divided by X, floored.",
+        "has_x": true,
+        "default_x": 1,
+        "has_dropdown": "resource"
+    },
+    "per_x_shallow_and_deep_water_tiles": {
+        "name": "Per X Shallow+Deep Water Tiles",
+        "description": "Multiplied by combined shallow and deep water tiles divided by X, floored.",
+        "has_x": true,
+        "default_x": 1
+    },
+    "per_x_magic_nodes": {
+        "name": "Per X Magic Nodes",
+        "description": "Multiplied by the number of magic nodes owned by the nation divided by X, floored.",
+        "has_x": true,
+        "default_x": 1
+    },
+    "per_x_bloodthirsty_pops": {
+        "name": "Per X Bloodthirsty Pops",
+        "description": "Multiplied by the number of bloodthirsty pops in the nation divided by X, floored.",
+        "has_x": true,
+        "default_x": 1
+    },
+    "per_x_primary_culture_pops_world": {
+        "name": "Per X Primary Culture Pops (Worldwide)",
+        "description": "Multiplied by the total number of pops worldwide that share the nation's primary culture divided by X, floored.",
+        "has_x": true,
+        "default_x": 1
+    },
+    "per_x_primary_religion_pops_world": {
+        "name": "Per X Primary Religion Pops (Worldwide)",
+        "description": "Multiplied by the total number of pops worldwide that share the nation's primary religion divided by X, floored.",
+        "has_x": true,
+        "default_x": 1
+    },
+    "per_x_naval_units": {
+        "name": "Per X Naval Units",
+        "description": "Multiplied by the nation's total naval units divided by X, floored.",
+        "has_x": true,
+        "default_x": 1
+    },
+    "per_x_land_units": {
+        "name": "Per X Land Units",
+        "description": "Multiplied by the nation's total land units divided by X, floored.",
+        "has_x": true,
+        "default_x": 1
+    },
+    "per_x_turns_library": {
+        "name": "Per X Turns with Library",
+        "description": "Multiplied by the number of turns the nation has had a library divided by X, floored.",
+        "has_x": true,
+        "default_x": 1
+    },
+    "per_x_terrain_tiles": {
+        "name": "Per X Tiles of Terrain",
+        "description": "Multiplied by the count of a specific terrain type divided by X, floored. Choose a terrain.",
+        "has_x": true,
+        "default_x": 1,
+        "has_dropdown": "terrain"
+    },
+    "per_x_district_category": {
+        "name": "Per X Districts of Category",
+        "description": "Multiplied by districts matching a specific category divided by X, floored. Choose a category.",
+        "has_x": true,
+        "default_x": 1,
+        "has_dropdown": "district_category"
+    },
+    "per_x_administration": {
+        "name": "Per X Administration",
+        "description": "Multiplied by the nation's administration value divided by X, floored.",
+        "has_x": true,
+        "default_x": 1
+    },
+    "per_x_resource_produced": {
+        "name": "Per X Resource Produced",
+        "description": "Multiplied by the nation's current production of a specific resource divided by X, floored. Uses the production value from the previous calculation.",
+        "has_x": true,
+        "default_x": 1,
+        "has_dropdown": "resource"
+    }
+}

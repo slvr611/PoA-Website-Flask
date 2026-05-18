@@ -402,14 +402,9 @@ def compute_district_slots(field, target, base_value, field_schema, overall_tota
 
     pop_count -= overall_total_modifiers.get("district_pop_requirement", 0)
 
-    district_slot_pop_requirements = json_data["district_slot_pop_requirements"]
-    overcap_pops_per_district_slot = json_data["overcap_pops_per_district_slot"]
-
-    if pop_count > district_slot_pop_requirements[len(district_slot_pop_requirements) - 1]:
-        pop_count -= district_slot_pop_requirements[len(district_slot_pop_requirements) - 1]
-        pop_value = len(district_slot_pop_requirements) + math.floor(pop_count / overcap_pops_per_district_slot)
-    else:
-        pop_value = bisect_right(district_slot_pop_requirements, pop_count)
+    pops_per_district_slot = json_data["pops_per_district_slot"]
+    
+    pop_value = math.floor(pop_count / pops_per_district_slot)
     
     value = base_value + overall_total_modifiers.get(field, 0) + pop_value
     
@@ -741,25 +736,37 @@ def compute_age_status(field, target, base_value, field_schema, overall_total_mo
     return value
 
 def compute_stat_cap(field, target, base_value, field_schema, overall_total_modifiers):
+    stat_name = field[:-4]  # Remove "_cap" suffix
     value = base_value + overall_total_modifiers.get(field, 0) + overall_total_modifiers.get("stat_cap", 0)
-
+    if stat_name in target.get("strengths", []):
+        value += 2 + overall_total_modifiers.get("stat_cap_bonus_for_strength", 0)
+    elif stat_name in target.get("weaknesses", []):
+        value -= 2 - overall_total_modifiers.get("stat_cap_bonus_for_weakness", 0)
     return int(value)
 
 def compute_stat(field, target, base_value, field_schema, overall_total_modifiers):
     value = base_value + overall_total_modifiers.get(field, 0) + overall_total_modifiers.get("stats", 0)
     ignore_elderly = overall_total_modifiers.get("ignore_elderly", 0) > 0
     ignore_elderly_strengths = overall_total_modifiers.get("ignore_elderly_strengths", 0) > 0
-    cap = target.get(field + "_cap", 6)
+    cap = target.get(field + "_cap", 4)
     strengths = target.get("strengths", [])
+    weaknesses = target.get("weaknesses", [])
+
+    if field in strengths:
+        value += overall_total_modifiers.get("stat_bonus_for_strength", 0)
+    elif field in weaknesses:
+        value += overall_total_modifiers.get("stat_bonus_for_weakness", 0)
 
     age_status = target.get("age_status", "Adult")
     if age_status == "Child":
         value -= 1
-    elif age_status == "Elderly" and not ignore_elderly and not (ignore_elderly_strengths and field in strengths):
-        value -= 1
-    
+    elif age_status == "Elderly":
+        if not ignore_elderly and not (ignore_elderly_strengths and field in strengths):
+            value -= 1
+        value += overall_total_modifiers.get(field + "_bonus_while_elderly", 0)
+
     value = min(value, cap)
-    
+
     return int(value)
 
 def compute_death_chance(field, target, base_value, field_schema, overall_total_modifiers):

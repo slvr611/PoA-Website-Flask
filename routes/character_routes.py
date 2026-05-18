@@ -10,6 +10,34 @@ from pymongo import ASCENDING
 from forms import form_generator
 import random
 
+RULER_TYPE_STATS = {
+    "Steward":          {"strength": "rulership", "weakness": "magic"},
+    "Religious Leader": {"strength": "cunning",   "weakness": "strategy"},
+    "Populist":         {"strength": "charisma",  "weakness": "prowess"},
+    "Conqueror":        {"strength": "prowess",   "weakness": "charisma"},
+    "Archmage":         {"strength": "magic",     "weakness": "rulership"},
+    "General":          {"strength": "strategy",  "weakness": "cunning"},
+}
+
+def validate_character_strengths_weaknesses(form_data):
+    """Returns an error string or None if valid."""
+    strengths = form_data.get("strengths", [])
+    weaknesses = form_data.get("weaknesses", [])
+    if len(strengths) != 2:
+        return "Character must have exactly 2 strengths."
+    if len(weaknesses) != 2:
+        return "Character must have exactly 2 weaknesses."
+    if set(strengths) & set(weaknesses):
+        return "A stat cannot be both a strength and a weakness."
+    character_type = form_data.get("character_type", "")
+    ruler = RULER_TYPE_STATS.get(character_type)
+    if ruler:
+        if ruler["strength"] not in strengths:
+            return f"{character_type} must have {ruler['strength'].capitalize()} as a strength."
+        if ruler["weakness"] not in weaknesses:
+            return f"{character_type} must have {ruler['weakness'].capitalize()} as a weakness."
+    return None
+
 character_routes = Blueprint("character_routes", __name__)
 
 @character_routes.route("/characters", methods=["GET"])
@@ -112,13 +140,18 @@ def new_character_request():
         flash("Name must be unique!")
         return redirect("/characters/new")
 
+    error = validate_character_strengths_weaknesses(form_data)
+    if error:
+        flash(f"Validation Error: {error}")
+        return redirect("/characters/new")
+
     form_data["age"] = 1
     form_data["_id"] = "None"
 
     for strength in form_data["strengths"]:
-        form_data["modifiers"].append({"field": strength, "value": random.randint(1, 2), "duration": -1, "source": "Strength"})
+        form_data["modifiers"].append({"field": strength, "value": random.randint(2, 4), "duration": -1, "source": "Strength"})
     for weakness in form_data["weaknesses"]:
-        form_data["modifiers"].append({"field": weakness, "value": random.randint(-2, -1), "duration": -1, "source": "Weakness"})
+        form_data["modifiers"].append({"field": weakness, "value": random.randint(-4, -2), "duration": -1, "source": "Weakness"})
 
     calculated_fields = calculate_all_fields(form_data, schema, "character")
 
@@ -126,19 +159,21 @@ def new_character_request():
     calculated_character.update(calculated_fields)
 
     for stat in character_stats:
-        if calculated_character[stat] > 4:
+        stat_cap = calculated_character.get(stat + "_cap", 4)
+        if calculated_character[stat] > stat_cap:
             for modifier in form_data["modifiers"]:
                 if modifier["field"] == stat:
-                    modifier["value"] -= calculated_character[stat] - 4
+                    modifier["value"] -= calculated_character[stat] - stat_cap
                     break
-    
+
     random_stats = {}
 
     while sum(random_stats.values()) < form_data["random_stats"]:
         random_stat = random.choice(character_stats)
-        if calculated_character[random_stat] + random_stats.get(random_stat, 0) < 4:
+        stat_cap = calculated_character.get(random_stat + "_cap", 4)
+        if calculated_character[random_stat] + random_stats.get(random_stat, 0) < stat_cap:
             random_stats[random_stat] = random_stats.get(random_stat, 0) + 1
-    
+
     for stat, value in random_stats.items():
         form_data["modifiers"].append({"field": stat, "value": value, "duration": -1, "source": "Random stats at character creation"})
 
@@ -157,7 +192,7 @@ def new_character_request():
         after_data=form_data,
         reason=form_data.pop("reason", "No Reason Given")
     )
-    
+
     flash(f"Change request #{change_id} created and awaits admin approval.")
     return redirect("/characters")
 
@@ -189,37 +224,44 @@ def new_character_approve():
         flash("Name must be unique!")
         return redirect("/characters/new")
 
+    error = validate_character_strengths_weaknesses(form_data)
+    if error:
+        flash(f"Validation Error: {error}")
+        return redirect("/characters/new")
+
     form_data["age"] = 1
     form_data["_id"] = "None"
 
     for strength in form_data["strengths"]:
-        form_data["modifiers"].append({"field": strength, "value": random.randint(1, 2), "duration": -1, "source": "Strength"})
+        form_data["modifiers"].append({"field": strength, "value": random.randint(2, 4), "duration": -1, "source": "Strength"})
     for weakness in form_data["weaknesses"]:
-        form_data["modifiers"].append({"field": weakness, "value": random.randint(-2, -1), "duration": -1, "source": "Weakness"})
-    
+        form_data["modifiers"].append({"field": weakness, "value": random.randint(-4, -2), "duration": -1, "source": "Weakness"})
+
     calculated_fields = calculate_all_fields(form_data, schema, "character")
 
     calculated_character = form_data.copy()
     calculated_character.update(calculated_fields)
 
     for stat in character_stats:
-        if calculated_character[stat] > 4:
+        stat_cap = calculated_character.get(stat + "_cap", 4)
+        if calculated_character[stat] > stat_cap:
             for modifier in form_data["modifiers"]:
                 if modifier["field"] == stat:
-                    modifier["value"] -= calculated_character[stat] - 4
+                    modifier["value"] -= calculated_character[stat] - stat_cap
                     break
-    
+
     random_stats = {}
 
     while sum(random_stats.values()) < form_data["random_stats"]:
         random_stat = random.choice(character_stats)
-        if calculated_character[random_stat] + random_stats.get(random_stat, 0) < 4:
+        stat_cap = calculated_character.get(random_stat + "_cap", 4)
+        if calculated_character[random_stat] + random_stats.get(random_stat, 0) < stat_cap:
             random_stats[random_stat] = random_stats.get(random_stat, 0) + 1
-    
+
     for stat, value in random_stats.items():
         form_data["modifiers"].append({"field": stat, "value": value, "duration": -1, "source": "Random stats at character creation"})
 
-    form_data["magic_points"] = min(form_data["magic_point_capacity"], form_data["magic_point_income"])
+    form_data["magic_points"] = min(form_data.get("magic_point_capacity", 0), form_data.get("magic_point_income", 0))
 
     change_id = request_change(
         data_type="characters",

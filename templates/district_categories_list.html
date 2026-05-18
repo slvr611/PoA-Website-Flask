@@ -1,0 +1,50 @@
+{% extends "layout.html" %}
+{% block title %}District Categories{% endblock %}
+{% block content %}
+<style>
+  .dc-table { width: 100%; border-collapse: collapse; max-width: 800px; }
+  .dc-table th { font-size: 0.78rem; color: #888; text-align: left; padding: 0.3rem 0.6rem; border-bottom: 1px solid #333; }
+  .dc-table td { padding: 0.4rem 0.6rem; border-bottom: 1px solid #222; font-size: 0.88rem; vertical-align: middle; }
+  .dc-table tr:hover td { background: #1e1e1e; }
+  .btn-sm { background: #222; border: 1px solid #555; border-radius: 4px; color: #aaa; cursor: pointer; padding: 0.2rem 0.6rem; font-size: 0.78rem; text-decoration: none; }
+  .btn-sm:hover { border-color: #8af; color: #8af; }
+  .btn-danger { border-color: #a44; color: #f88; }
+  .btn-danger:hover { border-color: #f66; color: #f66; }
+</style>
+
+<div style="display:flex; align-items:center; gap:1rem; margin-bottom:1rem;">
+  <h1 style="margin:0;">District Categories</h1>
+  <a href="/district-categories/new" class="btn-sm" style="border-color:#4a8a4a; color:#8f8;">+ New Category</a>
+  <a href="/district-defs" class="btn-sm">District Definitions →</a>
+</div>
+
+<table class="dc-table">
+  <thead>
+    <tr>
+      <th>Key</th>
+      <th>Display Name</th>
+      <th>Sort Order</th>
+      <th>Definitions</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for cat in categories %}
+    <tr>
+      <td><code style="font-size:0.8rem;">{{ cat.key }}</code></td>
+      <td>{{ cat.display_name }}</td>
+      <td>{{ cat.sort_order }}</td>
+      <td>{{ cat_counts.get(cat.key, 0) }}</td>
+      <td style="white-space:nowrap;">
+        <a href="/district-categories/{{ cat.key }}/edit" class="btn-sm">Edit</a>
+        <form method="POST" action="/district-categories/{{ cat.key }}/delete" style="display:inline;" onsubmit="return confirm('Delete category {{ cat.display_name }}?')">
+          <button type="submit" class="btn-sm btn-danger">Delete</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" style="color:#666; text-align:center; padding:1rem;">No categories yet.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

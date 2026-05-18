@@ -19,5 +19,6 @@
 	{% block pre_table %}{% endblock %}
 	{% block table_heading %}<h1>{{ title }}:</h1>{% endblock %}
 	{{ render_data_table(items, schema, preview_references, base_url=request.path) }}
+	{% block extra_content %}{% endblock %}
 </div>
 {% endblock %}

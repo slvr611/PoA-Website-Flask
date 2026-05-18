@@ -16,6 +16,7 @@ from calculations.field_calculations import (
     collect_jobs_assigned,
     calculate_job_details,
     sum_job_totals,
+    _resolve_def,
 )
 
 
@@ -34,14 +35,88 @@ def _resolve_modifier_type(modifier: dict) -> str:
     return modifier.get("field", modifier.get("key", mod_type))
 
 
+def _is_terrain_rule(modifier: dict) -> bool:
+    mod_type = modifier.get("modifier_type", "")
+    if not mod_type:
+        return False
+    type_def = json_data.get("modifier_types", {}).get(mod_type, {})
+    return bool(type_def.get("is_terrain_rule", False))
+
+
+def _is_visibility_modifier(modifier: dict) -> bool:
+    mod_type = modifier.get("modifier_type", "")
+    if not mod_type:
+        return False
+    type_def = json_data.get("modifier_types", {}).get(mod_type, {})
+    return bool(type_def.get("is_visibility_modifier", False))
+
+
+def _modifier_to_terrain_rule(modifier: dict, source_label: str = "") -> dict | None:
+    mod_type = modifier.get("modifier_type", "")
+    type_def = json_data.get("modifier_types", {}).get(mod_type, {})
+    rule_type = type_def.get("rule_type", "")
+    terrain = modifier.get("terrain", "")
+    if not terrain or not rule_type:
+        return None
+    rule = {
+        "terrain": terrain,
+        "rule_type": rule_type,
+        "value": modifier.get("value", 1),
+        "source": source_label,
+    }
+    resource = modifier.get("resource", "")
+    if resource:
+        rule["resource"] = resource
+    return rule
+
+
+def _extract_terrain_rules_from_list(modifiers: list, source_label: str = "") -> list:
+    rules = []
+    for m in modifiers or []:
+        if _is_terrain_rule(m):
+            rule = _modifier_to_terrain_rule(m, source_label)
+            if rule:
+                rules.append(rule)
+    return rules
+
+
 def _modifiers_list_to_dict(modifiers: list) -> dict:
     totals = {}
     for m in modifiers:
+        if _is_terrain_rule(m) or _is_visibility_modifier(m):
+            continue
         field = _resolve_modifier_type(m)
         value = m.get("value", 0)
         if field:
             totals[field] = totals.get(field, 0) + value
     return totals
+
+
+def _db_dist_mods_to_dict(mods_list, target_type: str = "nation") -> dict:
+    """Convert district modifier list to {field: value}, filtered by scope target_type.
+
+    Modifiers with no scope default to the nation. Scoped modifiers are only
+    included when their scope's target_type matches `target_type`.
+    Terrain-rule modifiers are skipped here; collect them via _extract_terrain_rules_from_list.
+    """
+    from calculations.field_calculations import sum_modifier_totals
+    scope_defs = json_data.get("scope_definitions", {})
+    normalized = []
+    for m in mods_list or []:
+        if _is_terrain_rule(m) or _is_visibility_modifier(m):
+            continue
+        scope = m.get("scope", "")
+        if scope:
+            mod_target = scope_defs.get(scope, {}).get("target_type", "nation")
+            if mod_target != target_type:
+                continue
+        elif target_type != "nation":
+            continue  # unscoped modifiers default to nation
+        if m.get("modifier_type"):
+            normalized.append(m)
+        elif m.get("modifier"):
+            normalized.append({"field": m["modifier"], "value": m.get("value", 0)})
+    return sum_modifier_totals(normalized)
 
 
 # ---------------------------------------------------------------------------
@@ -95,6 +170,52 @@ class DistrictAdapter:
         for district in target.get("districts", []):
             if not isinstance(district, dict):
                 continue
+
+            # --- DB-driven district (def_key present) ---
+            if district.get("def_key"):
+                dd = _resolve_def(district)
+                if not dd:
+                    continue
+                label = dd.get("display_name", district["def_key"])
+                district_node = district.get("node", "")
+
+                # Base modifiers — nation-scoped only
+                dd_mods_list = dd.get("modifiers", [])
+                mods = _db_dist_mods_to_dict(dd_mods_list, target_type="nation")
+                terrain_rules = _extract_terrain_rules_from_list(dd_mods_list, source_label=label)
+
+                # Synergy modifiers
+                node_bonus_applied = False
+                for syn in get_synergies(dd):
+                    if synergy_matches(district_node, syn.get("requirement", "")):
+                        syn_mods = syn.get("modifiers", {})
+                        if isinstance(syn_mods, list):
+                            syn_mods = _db_dist_mods_to_dict(syn_mods, target_type="nation")
+                        mods.update(syn_mods)
+                        if syn.get("node_active", True) and district_node and not node_bonus_applied:
+                            mods[district_node + "_nodes"] = mods.get(district_node + "_nodes", 0) + 1
+                            node_bonus_applied = True
+                if not node_bonus_applied and district_node:
+                    mods[district_node + "_nodes"] = mods.get(district_node + "_nodes", 0) + 1
+
+                # Upgrade modifiers — nation-scoped only
+                unlocked_upgrades = district.get("upgrades", [])
+                if unlocked_upgrades:
+                    upgrade_map = {u["key"]: u for u in dd.get("upgrades", []) if u.get("key")}
+                    for upg_key in unlocked_upgrades:
+                        upg = upgrade_map.get(upg_key)
+                        if upg:
+                            upg_mods_list = upg.get("modifiers", [])
+                            upg_mods = _db_dist_mods_to_dict(upg_mods_list, target_type="nation")
+                            for k, v in upg_mods.items():
+                                mods[k] = mods.get(k, 0) + v
+                            terrain_rules.extend(_extract_terrain_rules_from_list(upg_mods_list, source_label=f"{label} ({upg_key})"))
+
+                if mods or terrain_rules:
+                    contributions.append(SourceContribution(label=label, source_type=cls.source_type, modifiers=mods, terrain_rules=terrain_rules))
+                continue
+
+            # --- Legacy JSON-driven district (type field) ---
             district_type = district.get("type", "")
             if not district_type:
                 continue
@@ -111,6 +232,44 @@ class DistrictAdapter:
                         node_bonus_applied = True
             if not node_bonus_applied and district_node:
                 mods[district_node + "_nodes"] = mods.get(district_node + "_nodes", 0) + 1
+            if mods:
+                contributions.append(SourceContribution(label=label, source_type=cls.source_type, modifiers=mods))
+        return contributions
+
+    @classmethod
+    def collect_for_character(cls, character: dict) -> list:
+        """Collect district modifiers scoped to ruling characters from the character's nation."""
+        from app_core import mongo
+        from bson import ObjectId
+        nation_org_id = character.get("ruling_nation_org", "")
+        if not nation_org_id:
+            return []
+        try:
+            nation = mongo.db.nations.find_one(
+                {"_id": ObjectId(nation_org_id)},
+                {"districts": 1}
+            )
+        except Exception:
+            return []
+        if not nation:
+            return []
+
+        contributions = []
+        for district in nation.get("districts", []):
+            if not isinstance(district, dict) or not district.get("def_key"):
+                continue
+            dd = _resolve_def(district)
+            if not dd:
+                continue
+            label = dd.get("display_name", district["def_key"])
+            mods = _db_dist_mods_to_dict(dd.get("modifiers", []), target_type="character")
+
+            for upg_key in district.get("upgrades", []):
+                upg = next((u for u in dd.get("upgrades", []) if u.get("key") == upg_key), None)
+                if upg:
+                    for k, v in _db_dist_mods_to_dict(upg.get("modifiers", []), target_type="character").items():
+                        mods[k] = mods.get(k, 0) + v
+
             if mods:
                 contributions.append(SourceContribution(label=label, source_type=cls.source_type, modifiers=mods))
         return contributions

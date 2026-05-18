@@ -1,0 +1,791 @@
+{% extends "layout.html" %}
+{% from '_modifier_macros.html' import modifier_table with context %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<style>
+  .de-layout { display: grid; grid-template-columns: 1fr 240px; gap: 1.5rem; align-items: start; max-width: 1100px; margin: 0 auto; }
+  .de-form { min-width: 0; }
+  .de-sidebar { position: sticky; top: 1rem; }
+  .de-section { background: #1a1a1a; border: 1px solid #333; border-radius: 6px; padding: 1rem 1.25rem; margin-bottom: 1rem; }
+  .de-section h3 { margin: 0 0 0.75rem 0; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; color: #aaa; border-bottom: 1px solid #333; padding-bottom: 0.4rem; }
+  .de-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; flex-wrap: wrap; }
+  .de-row label { font-size: 0.82rem; color: #bbb; white-space: nowrap; min-width: 110px; }
+  .de-row .form-control { flex: 1; min-width: 80px; max-width: 280px; }
+  .de-row-block { margin-bottom: 0.5rem; }
+  .de-row-block label { font-size: 0.82rem; color: #bbb; display: block; margin-bottom: 0.25rem; }
+  .tier-radios { display: flex; gap: 1rem; }
+  .tier-radios label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.88rem; cursor: pointer; color: #ccc; min-width: unset; }
+  /* Resource cost grid */
+  .cost-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 0.35rem; }
+  .cost-grid-item { display: flex; align-items: center; gap: 0.35rem; }
+  .cost-grid-item label { font-size: 0.78rem; color: #bbb; min-width: 55px; }
+  .cost-grid-item input { width: 70px; }
+  /* Array tables */
+  .array-table { width: 100%; border-collapse: collapse; margin-bottom: 0.4rem; }
+  .array-table th { font-size: 0.72rem; color: #777; text-align: left; padding: 0.2rem 0.35rem; }
+  .array-table td { padding: 0.22rem 0.35rem; vertical-align: middle; }
+  .array-table td:last-child { width: 32px; }
+  .btn-remove { background: none; border: 1px solid #555; border-radius: 4px; color: #888; cursor: pointer; padding: 0.1rem 0.35rem; font-size: 0.75rem; }
+  .btn-remove:hover { color: #f66; border-color: #f66; }
+  .btn-add { background: #222; border: 1px solid #555; border-radius: 4px; color: #aaa; cursor: pointer; padding: 0.2rem 0.65rem; font-size: 0.78rem; margin-top: 0.2rem; }
+  .btn-add:hover { border-color: #8af; color: #8af; }
+  /* Upgrades */
+  .upg-card { background: #141420; border: 1px solid #334; border-radius: 5px; padding: 0.75rem; margin-bottom: 0.6rem; }
+  .upg-card-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }
+  .upg-card-title { font-size: 0.82rem; color: #aaf; font-weight: 600; flex: 1; }
+  .upg-remove { background: none; border: 1px solid #554; border-radius: 4px; color: #888; cursor: pointer; padding: 0.1rem 0.35rem; font-size: 0.75rem; }
+  .upg-remove:hover { color: #f66; border-color: #f66; }
+  .upg-sub-label { font-size: 0.75rem; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin: 0.5rem 0 0.2rem; }
+  /* Submit */
+  .de-submit { display: flex; gap: 0.75rem; align-items: center; margin-top: 0.5rem; }
+  .btn-save { background: #2a5a2a; border: 1px solid #4a8a4a; color: #8f8; border-radius: 5px; padding: 0.4rem 1.1rem; cursor: pointer; font-size: 0.88rem; }
+  .btn-save:hover { background: #3a6a3a; }
+  /* Sidebar */
+  .de-sidebar-box { background: #1e1e1e; border: 1px solid #444; border-radius: 8px; padding: 0.75rem 1rem; font-size: 0.82rem; }
+  .de-sidebar-box h4 { margin: 0 0 0.5rem; font-size: 0.8rem; color: #aaa; text-transform: uppercase; letter-spacing: 1px; }
+  @media (max-width: 800px) { .de-layout { grid-template-columns: 1fr; } .de-sidebar { position: static; } }
+</style>
+
+{% if item %}
+  <a href="/district-defs" style="font-size:0.85rem; color:#8af;">← Back to Definitions</a>
+{% else %}
+  <a href="/district-defs" style="font-size:0.85rem; color:#8af;">← Back to Definitions</a>
+{% endif %}
+
+<h1 style="margin: 0.75rem 0 1rem 0;">{{ title }}</h1>
+
+<form method="POST" action="{{ '/district-defs/new/save' if not item else '/district-defs/' + item.key + '/edit/save' }}" id="de-form">
+
+<div class="de-layout">
+<div class="de-form">
+
+  <!-- 1. Basic Info -->
+  <div class="de-section">
+    <h3>Basic Info</h3>
+
+    {% if not item %}
+    <div class="de-row">
+      <label>Key</label>
+      <input name="key" id="key-input" class="form-control" required placeholder="e.g. economic_market_t1"
+             value="{{ item.key if item else '' }}" style="max-width:300px;">
+    </div>
+    {% else %}
+    <div class="de-row">
+      <label>Key</label>
+      <span style="font-family:monospace; font-size:0.88rem; color:#8af;">{{ item.key }}</span>
+    </div>
+    {% endif %}
+
+    <div class="de-row">
+      <label>Display Name</label>
+      <input name="display_name" id="display-name-input" class="form-control" required
+             value="{{ item.display_name if item else '' }}" style="max-width:300px;">
+    </div>
+
+    <div class="de-row" style="align-items:flex-start;">
+      <label style="padding-top:0.3rem;">Image</label>
+      <div style="flex:1; min-width:180px;">
+        <input type="hidden" name="image" id="de-image-url" value="{{ item.image if item and item.image else '' }}">
+        <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap;">
+          <input type="file" id="de-image-file" accept="image/*" style="display:none;">
+          <button type="button" class="btn-add" onclick="document.getElementById('de-image-file').click()">Upload Image</button>
+          <span id="de-upload-status" style="font-size:0.78rem; color:#888;"></span>
+        </div>
+        <div id="de-image-preview-wrap" style="margin-top:0.4rem; {% if not (item and item.image) %}display:none;{% endif %}">
+          <img id="de-image-preview" src="{{ item.image if item and item.image else '' }}"
+               style="max-width:120px; max-height:120px; border-radius:4px; border:1px solid #444; object-fit:contain;">
+        </div>
+      </div>
+    </div>
+
+    <div class="de-row">
+      <label>Category</label>
+      <select name="category" class="form-control" style="max-width:220px;" required>
+        <option value="">— select —</option>
+        {% for cat in categories %}
+        <option value="{{ cat.key }}" {% if (item and item.category == cat.key) or (not item and pre_category == cat.key) %}selected{% endif %}>
+          {{ cat.display_name }}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="de-row">
+      <label>Tier</label>
+      <div class="tier-radios">
+        {% for t in [1, 2, 3] %}
+        <label>
+          <input type="radio" name="tier" value="{{ t }}"
+                 {% if (item and item.tier == t) or (not item and (pre_tier | int) == t) or (not item and t == 1 and not pre_tier) %}checked{% endif %}>
+          Tier {{ t }}
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="de-row-block">
+      <label>Description</label>
+      <textarea name="description" class="form-control" rows="3" style="width:100%;">{{ item.description if item else '' }}</textarea>
+    </div>
+  </div>
+
+  <!-- 2. Economy -->
+  <div class="de-section">
+    <h3>Economy</h3>
+
+    <div style="margin-bottom:0.75rem;">
+      <div style="font-size:0.78rem; color:#888; margin-bottom:0.35rem; text-transform:uppercase; letter-spacing:0.5px;">Build Cost</div>
+      <div class="cost-grid">
+        {% for res in resource_keys %}
+        <div class="cost-grid-item">
+          <label>{{ res }}</label>
+          <input type="number" name="cost_{{ res }}" min="0" class="form-control"
+                 value="{{ item.cost.get(res, '') if item and item.cost else '' }}" placeholder="0">
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div>
+      <div style="font-size:0.78rem; color:#888; margin-bottom:0.35rem; text-transform:uppercase; letter-spacing:0.5px;">Upkeep (per tick)</div>
+      <div class="cost-grid">
+        {% for res in upkeep_keys %}
+        <div class="cost-grid-item">
+          <label>{{ res }}</label>
+          <input type="number" name="upkeep_{{ res }}" min="0" class="form-control"
+                 value="{{ item.upkeep.get(res, '') if item and item.upkeep else '' }}" placeholder="0">
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. Requirements -->
+  <div class="de-section">
+    <h3>Requirements</h3>
+    <table class="array-table" id="req-table">
+      <thead><tr><th>Type</th><th>Value</th><th></th></tr></thead>
+      <tbody id="req-tbody">
+        {% for req in (item.requirements if item else []) %}
+        <tr>
+          <td>
+            <select name="req_type" class="form-control req-type-select">
+              <option value="district" {% if req.type == 'district' %}selected{% endif %}>District</option>
+              <option value="technology" {% if req.type == 'technology' %}selected{% endif %}>Technology</option>
+              <option value="race" {% if req.type == 'race' %}selected{% endif %}>Race</option>
+              <option value="nation" {% if req.type == 'nation' %}selected{% endif %}>Nation</option>
+            </select>
+          </td>
+          <td class="req-value-cell">
+            {%- if req.type == 'technology' -%}
+            <select name="req_value" class="form-control">
+              {% for t in tech_options %}<option value="{{ t.key }}" {% if t.key == req.value %}selected{% endif %}>{{ t.display_name }}</option>{% endfor %}
+            </select>
+            {%- elif req.type == 'district' -%}
+            <select name="req_value" class="form-control">
+              {% for cat in categories %}<option value="{{ cat.key }}" {% if cat.key == req.value %}selected{% endif %}>{{ cat.display_name }}</option>{% endfor %}
+            </select>
+            {%- else -%}
+            <input name="req_value" class="form-control" value="{{ req.value }}">
+            {%- endif -%}
+          </td>
+          <td><button type="button" class="btn-remove" onclick="this.closest('tr').remove()">✕</button></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <button type="button" class="btn-add" id="add-req">+ Requirement</button>
+  </div>
+
+  <!-- 4. Modifiers -->
+  <div class="de-section">
+    <h3>Modifiers</h3>
+    {{ modifier_table((item.modifiers or []) if item else [], scopes_by_source_type.get('nation', []), field_name='modifiers',
+                      entity_source_type='nation',
+                      show_scope=True, show_duration=False, show_source=False,
+                      show_scaling=True, show_drag=True,
+                      remove_fn='removeFromArray', add_fn='addToArray') }}
+  </div>
+
+  <!-- 5. Synergies -->
+  <div class="de-section">
+    <h3>Synergies</h3>
+    <div id="syn-container">
+      {% for syn in (item.synergies if item else []) %}
+      {% set syn_idx = loop.index0 %}
+      {% set syn_mod_field = 'synergies-' ~ syn_idx ~ '-modifiers' %}
+      {% set syn_req = syn.requirement if syn.requirement is string else (syn.requirement | join(',')) %}
+      <div class="upg-card">
+        <div class="upg-card-header">
+          <span class="upg-card-title">Synergy</span>
+          <button type="button" class="upg-remove" onclick="this.closest('.upg-card').remove()">✕</button>
+        </div>
+        <div class="de-row">
+          <label style="min-width:90px;">Node Req</label>
+          <input name="synergies-{{ syn_idx }}-requirement" class="form-control" value="{{ syn_req }}" placeholder="stone or stone,iron or any">
+        </div>
+        <div class="de-row">
+          <label style="min-width:90px;">Node Active</label>
+          <input type="hidden" name="synergies-{{ syn_idx }}-node_active" value="{{ '1' if syn.node_active else '0' }}">
+          <input type="checkbox" class="syn-node-active-cb" {% if syn.node_active %}checked{% endif %} onchange="this.previousElementSibling.value = this.checked ? '1' : '0'">
+          <span style="font-size:0.78rem; color:#888;">+1 node bonus</span>
+        </div>
+        <div class="upg-sub-label">Modifiers</div>
+        {{ modifier_table(syn.modifiers or [], scopes_by_source_type.get('nation', []), field_name=syn_mod_field,
+                          entity_source_type='nation',
+                          show_scope=True, show_duration=False, show_source=False,
+                          show_scaling=True, show_drag=True,
+                          remove_fn='removeFromArray', add_fn='addToArray') }}
+      </div>
+      {% endfor %}
+    </div>
+    <button type="button" class="btn-add" id="add-syn">+ Synergy</button>
+  </div>
+
+  <!-- 6. Upgrades -->
+  <div class="de-section">
+    <h3>Upgrades <span style="font-size:0.75rem; color:#888; font-weight:normal;">(cost = build cost above)</span></h3>
+    <div id="upg-container">
+      {% for upg in (item.upgrades if item else []) %}
+      {% set upg_idx = loop.index0 %}
+      {% set upg_mod_field = 'upgrades-' ~ upg_idx ~ '-modifiers' %}
+      <div class="upg-card">
+        <div class="upg-card-header">
+          <span class="upg-card-title">{{ upg.display_name or upg.key }}</span>
+          <button type="button" class="upg-remove" onclick="this.closest('.upg-card').remove()">✕ Remove Upgrade</button>
+        </div>
+        <div class="de-row">
+          <label style="min-width:90px;">Key</label>
+          <input name="upgrades-{{ upg_idx }}-key" class="form-control" value="{{ upg.key }}" placeholder="e.g. reinforced_walls"
+                 style="max-width:220px;" oninput="this.closest('.upg-card').querySelector('.upg-card-title').textContent = this.value || '(unnamed)'">
+        </div>
+        <div class="de-row">
+          <label style="min-width:90px;">Display Name</label>
+          <input name="upgrades-{{ upg_idx }}-display_name" class="form-control" value="{{ upg.display_name }}" placeholder="e.g. Reinforced Walls"
+                 style="max-width:220px;">
+        </div>
+
+        <div class="upg-sub-label">Requirements</div>
+        <table class="array-table upg-req-table">
+          <thead><tr><th>Type</th><th>Value</th><th></th></tr></thead>
+          <tbody>
+            {% for req in upg.requirements %}
+            {% set req_idx = loop.index0 %}
+            <tr>
+              <td><select name="upgrades-{{ upg_idx }}-requirements-{{ req_idx }}-type" class="form-control req-type-select">
+                <option value="technology" {% if req.type == 'technology' %}selected{% endif %}>Technology</option>
+                <option value="district" {% if req.type == 'district' %}selected{% endif %}>District</option>
+                <option value="race" {% if req.type == 'race' %}selected{% endif %}>Race</option>
+              </select></td>
+              <td class="req-value-cell">
+                {%- if req.type == 'technology' -%}
+                <select name="upgrades-{{ upg_idx }}-requirements-{{ req_idx }}-value" class="form-control">
+                  {% for t in tech_options %}<option value="{{ t.key }}" {% if t.key == req.value %}selected{% endif %}>{{ t.display_name }}</option>{% endfor %}
+                </select>
+                {%- elif req.type == 'district' -%}
+                <select name="upgrades-{{ upg_idx }}-requirements-{{ req_idx }}-value" class="form-control">
+                  {% for cat in categories %}<option value="{{ cat.key }}" {% if cat.key == req.value %}selected{% endif %}>{{ cat.display_name }}</option>{% endfor %}
+                </select>
+                {%- else -%}
+                <input name="upgrades-{{ upg_idx }}-requirements-{{ req_idx }}-value" class="form-control" value="{{ req.value }}">
+                {%- endif -%}
+              </td>
+              <td><button type="button" class="btn-remove" onclick="this.closest('tr').remove()">✕</button></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <button type="button" class="btn-add upg-add-req" data-types="technology,district,race" style="font-size:0.72rem; padding:0.15rem 0.5rem;">+ Requirement</button>
+
+        <div class="upg-sub-label">Modifiers</div>
+        {{ modifier_table(upg.modifiers or [], scopes_by_source_type.get('nation', []), field_name=upg_mod_field,
+                          entity_source_type='nation',
+                          show_scope=True, show_duration=False, show_source=False,
+                          show_scaling=True, show_drag=True,
+                          remove_fn='removeFromArray', add_fn='addToArray') }}
+      </div>
+      {% endfor %}
+    </div>
+    <button type="button" class="btn-add" id="add-upg">+ Add Upgrade</button>
+  </div>
+
+  <div class="de-submit">
+    <button type="submit" class="btn-save">Save Definition</button>
+    <a href="/district-defs" style="font-size:0.82rem; color:#888;">Cancel</a>
+  </div>
+
+</div><!-- .de-form -->
+
+<!-- Sidebar -->
+<div class="de-sidebar">
+  <div class="de-sidebar-box">
+    <h4>Tips</h4>
+    <p style="color:#888; line-height:1.5;">Tier 2 requires a Tier 1 of the same category. Tier 3 requires Tier 2.<br><br>
+    Upgrade cost is taken from the Build Cost above.<br><br>
+    Synergy node bonuses add +1 <em>resource</em>_nodes when the tile node matches.</p>
+  </div>
+</div>
+
+</div><!-- .de-layout -->
+</form>
+
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+<script>
+// Auto-slug key from display name (new only)
+const keyInput = document.getElementById('key-input');
+const displayNameInput = document.getElementById('display-name-input');
+if (keyInput && displayNameInput) {
+  let keyManuallyEdited = {{ 'true' if item else 'false' }};
+  keyInput.addEventListener('input', () => { keyManuallyEdited = true; });
+  displayNameInput.addEventListener('input', () => {
+    if (!keyManuallyEdited) {
+      keyInput.value = displayNameInput.value.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+    }
+  });
+}
+
+// ── Data constants ───────────────────────────────────────────────────────────
+const MODIFIER_TYPES = {{ modifier_types | tojson | safe }};
+const SORTED_MODIFIER_KEYS = {{ sorted_modifier_types | map(attribute=0) | list | tojson | safe }};
+const SCALING_TYPES = {{ scaling_types | tojson | safe }};
+const SORTED_SCALING_KEYS = {{ sorted_scaling_type_keys | tojson | safe }};
+const ALL_TERRAINS = {{ all_terrains | tojson | safe }};
+const ALL_DISTRICT_CATEGORIES = {{ all_district_categories | tojson | safe }};
+const ALL_RESOURCES = {{ all_resources | tojson | safe }};
+const ALL_JOBS = {{ all_jobs | tojson | safe }};
+const ALL_ATTRIBUTES = {{ all_attributes | tojson | safe }};
+const ALL_UNIT_CATEGORIES = {{ all_unit_categories | tojson | safe }};
+const ALL_UNIT_STATS = {{ all_unit_stats | tojson | safe }};
+const ALL_PROGRESS_TIERS = {{ all_progress_tiers | tojson | safe }};
+const ALL_TECH_CATEGORIES = {{ all_tech_categories | tojson | safe }};
+const ENTITY_SOURCE_TYPE = 'nation';
+const SCOPE_DEFINITIONS = {{ scope_definitions | tojson | safe }};
+const SCOPE_OPTIONS = {{ scopes_by_source_type.get('nation', []) | tojson | safe }};
+const SELF_SCOPE_MAP = {"nation": "nation_self", "character": "character_self", "merchant": "merchant_self", "mercenary": "mercenary_self", "artifact": "artifact_owner", "wonder": "wonder_owner_nation", "region": "region_nations", "global": "global_nations"};
+
+// ── Modifier helpers (used by addToArray for all modifier tables) ─────────────
+
+function buildModifierTypeOptions(selectedValue, targetType) {
+  let options = '<option value="">-- Select Modifier --</option>';
+  for (const key of SORTED_MODIFIER_KEYS) {
+    const mt = MODIFIER_TYPES[key];
+    if (targetType && mt.applicable_to && !mt.applicable_to.includes(targetType)) continue;
+    const sel = key === selectedValue ? 'selected' : '';
+    options += `<option value="${key}" ${sel}>${mt.name}</option>`;
+  }
+  return options;
+}
+
+function buildScalingOptions(selectedValue) {
+  const sel = selectedValue || 'flat';
+  let opts = '';
+  for (const key of SORTED_SCALING_KEYS) {
+    const st = SCALING_TYPES[key];
+    opts += '<option value="' + key + '" ' + (key === sel ? 'selected' : '') + '>' + st.name + '</option>';
+  }
+  return opts;
+}
+
+function buildScopeOptions(selectedValue) {
+  const effective = selectedValue || SELF_SCOPE_MAP[ENTITY_SOURCE_TYPE] || '';
+  return SCOPE_OPTIONS.map(s => `<option value="${s.key}" ${s.key === effective ? 'selected' : ''}>${s.name}</option>`).join('');
+}
+
+
+function buildExtraFieldsHTML(fieldName, index, modifierType, currentData) {
+  const typeDef = MODIFIER_TYPES[modifierType] || {};
+  const extraFields = typeDef.extra_fields || [];
+  const ALL_EXTRA_KEYS = ['resource', 'resource_from', 'resource_to', 'job', 'attribute', 'unit_category', 'unit_stat', 'tier', 'tech_category', 'terrain'];
+  const renderedKeys = new Set();
+  let html = '';
+  for (const extra of extraFields) {
+    renderedKeys.add(extra.key);
+    const cur = (currentData && currentData[extra.key]) || '';
+    if (extra.source === 'terrains') {
+      let opts = '<option value="">-- Select Terrain --</option>';
+      for (const t of ALL_TERRAINS) {
+        opts += `<option value="${t.key}" ${t.key === cur ? 'selected' : ''}>${t.name}</option>`;
+      }
+      html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
+        <select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+    } else if (extra.source === 'all_resources') {
+      let opts = '<option value="">-- Select Resource --</option>';
+      for (const res of ALL_RESOURCES) {
+        opts += `<option value="${res.key}" ${res.key === cur ? 'selected' : ''}>${res.name}</option>`;
+      }
+      html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
+        <select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+    } else if (extra.source === 'jobs') {
+      let opts = '<option value="">-- Select Job --</option>';
+      for (const job of ALL_JOBS) {
+        opts += `<option value="${job.key}" ${job.key === cur ? 'selected' : ''}>${job.name}</option>`;
+      }
+      html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
+        <select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+    } else if (extra.source === 'attributes') {
+      let opts = '<option value="">-- Select Attribute --</option>';
+      for (const attr of ALL_ATTRIBUTES) {
+        opts += `<option value="${attr.key}" ${attr.key === cur ? 'selected' : ''}>${attr.name}</option>`;
+      }
+      html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
+        <select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+    } else if (extra.source === 'unit_categories') {
+      let opts = '<option value="">-- Select Category --</option>';
+      for (const uc of ALL_UNIT_CATEGORIES) {
+        opts += `<option value="${uc.key}" ${uc.key === cur ? 'selected' : ''}>${uc.name}</option>`;
+      }
+      html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
+        <select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+    } else if (extra.source === 'unit_stats') {
+      let opts = '<option value="">-- Select Stat --</option>';
+      for (const us of ALL_UNIT_STATS) {
+        opts += `<option value="${us.key}" ${us.key === cur ? 'selected' : ''}>${us.name}</option>`;
+      }
+      html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
+        <select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+    } else if (extra.source === 'progress_tiers') {
+      let opts = '<option value="">-- Select Tier --</option>';
+      for (const pt of ALL_PROGRESS_TIERS) {
+        opts += `<option value="${pt.key}" ${pt.key === cur ? 'selected' : ''}>${pt.name}</option>`;
+      }
+      html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
+        <select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+    } else if (extra.source === 'tech_categories') {
+      let opts = '<option value="">-- Select Category --</option>';
+      for (const tc of ALL_TECH_CATEGORIES) {
+        opts += `<option value="${tc.key}" ${tc.key === cur ? 'selected' : ''}>${tc.name}</option>`;
+      }
+      html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
+        <select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+    }
+  }
+  for (const key of ALL_EXTRA_KEYS) {
+    if (!renderedKeys.has(key)) {
+      html += `<input type="hidden" name="${fieldName}-${index}-${key}" id="${fieldName}-${index}-${key}" value="">`;
+    }
+  }
+  return html;
+}
+
+function onModifierTypeChange(select) {
+  const fieldName = select.dataset.field;
+  const index     = parseInt(select.dataset.idx);
+  const modType   = select.value;
+  const cell      = select.closest('td');
+  const extraDiv  = cell ? cell.querySelector('.modifier-extra-fields') : null;
+  if (extraDiv) {
+    const currentData = {};
+    extraDiv.querySelectorAll('select, input').forEach(el => {
+      const lastDash = el.name.lastIndexOf('-');
+      const key = lastDash >= 0 ? el.name.slice(lastDash + 1) : el.name;
+      if (key) currentData[key] = el.value;
+    });
+    extraDiv.innerHTML = buildExtraFieldsHTML(fieldName, index, modType, currentData);
+  }
+  const row  = select.closest('tr');
+  const hint = row ? row.querySelector('.modifier-value-hint') : null;
+  if (hint) {
+    const typeDef = MODIFIER_TYPES[modType] || {};
+    hint.textContent = 'Decimal (0.1 = 10%)';
+    hint.style.display = typeDef.value_format === 'percentage' ? '' : 'none';
+  }
+}
+
+function onScopeChange(select) {
+  const row = select.closest('tr');
+  const scopeKey = select.value;
+  const scopeDef = SCOPE_DEFINITIONS[scopeKey] || {};
+  const targetType = scopeDef.target_type || '';
+  const typeSelect = row ? row.querySelector('.modifier-type-select') : null;
+  if (typeSelect) {
+    const currentVal = typeSelect.value;
+    typeSelect.innerHTML = buildModifierTypeOptions(currentVal, targetType);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  initSortable('modifiers');
+  document.querySelectorAll('#syn-container .upg-card, #upg-container .upg-card').forEach(card => {
+    const tbody = card.querySelector('tbody[id]');
+    if (tbody) initSortable(tbody.id.replace('-tbody', ''));
+  });
+});
+
+function addToArray(fieldName) {
+  const tbody = document.getElementById(`${fieldName}-tbody`);
+  const currentCount = tbody.children.length;
+  const newRow = document.createElement('tr');
+  const defaultScope = SELF_SCOPE_MAP[ENTITY_SOURCE_TYPE] || (SCOPE_OPTIONS.length ? SCOPE_OPTIONS[0].key : '');
+  const defaultTargetType = defaultScope ? (SCOPE_DEFINITIONS[defaultScope] || {}).target_type || '' : '';
+  const typeSelect = `<select class="form-control modifier-type-select"
+    name="${fieldName}-${currentCount}-modifier_type"
+    id="${fieldName}-${currentCount}-modifier_type"
+    data-field="${fieldName}" data-idx="${currentCount}"
+    onchange="onModifierTypeChange(this)">
+    ${buildModifierTypeOptions('', defaultTargetType)}
+  </select>`;
+  const scopeSelect = `<select class="form-control modifier-scope-select"
+    name="${fieldName}-${currentCount}-scope"
+    id="${fieldName}-${currentCount}-scope"
+    data-field="${fieldName}" data-idx="${currentCount}"
+    onchange="onScopeChange(this)">
+    ${buildScopeOptions(defaultScope)}
+  </select>`;
+  const extraFields = buildExtraFieldsHTML(fieldName, currentCount, '', {});
+  const scalingSelect = `<select class="form-control modifier-scaling-select"
+    name="${fieldName}-${currentCount}-scaling"
+    id="${fieldName}-${currentCount}-scaling"
+    onchange="onScalingChange(this)">
+    ${buildScalingOptions('flat')}
+  </select><small class="modifier-scaling-x-field" style="display:none">Per <input type="number" step="any" class="form-control d-inline" style="width:70px" placeholder="1" name="${fieldName}-${currentCount}-scaling_x" id="${fieldName}-${currentCount}-scaling_x" value=""></small><small class="modifier-scaling-extra-field" style="display:none"><input type="hidden" name="${fieldName}-${currentCount}-scaling_extra" id="${fieldName}-${currentCount}-scaling_extra" value=""></small><small class="form-text text-muted modifier-max-field" style="display:none">Max: <input type="number" step="any" class="form-control d-inline" style="width:80px" placeholder="None" name="${fieldName}-${currentCount}-max_value" id="${fieldName}-${currentCount}-max_value"></small>`;
+  newRow.innerHTML = `
+    <td>
+      ${typeSelect}
+      <div class="modifier-extra-fields mt-1">${extraFields}</div>
+    </td>
+    <td>${scopeSelect}</td>
+    <td>
+      <input type="number" step="any" class="form-control" name="${fieldName}-${currentCount}-value" id="${fieldName}-${currentCount}-value" value="0">
+      <small class="form-text text-muted modifier-value-hint" style="display:none">Decimal (0.1 = 10%)</small>
+    </td>
+    <td>${scalingSelect}</td>
+    <td><span class="drag-handle">&#8942;&#8942;</span>
+        <button type="button" class="btn btn-danger" onclick="removeFromArray(this,'${fieldName}')">Remove</button></td>`;
+  tbody.appendChild(newRow);
+}
+
+// ── Generic reindex helpers ───────────────────────────────────────────────────
+
+function reindexModifierRow(row, fieldName, modIdx) {
+  row.querySelectorAll('input, select').forEach(el => {
+    if (!el.name) return;
+    const lastDash = el.name.lastIndexOf('-');
+    if (lastDash < 0) return;
+    const subfield = el.name.slice(lastDash + 1);
+    el.name = `${fieldName}-${modIdx}-${subfield}`;
+    if (el.id) el.id = el.name;
+  });
+  const typeSelect = row.querySelector('.modifier-type-select');
+  if (typeSelect) { typeSelect.dataset.field = fieldName; typeSelect.dataset.idx = modIdx; }
+}
+
+function reindexTbody(fieldName) {
+  const tbody = document.getElementById(`${fieldName}-tbody`);
+  if (!tbody) return;
+  Array.from(tbody.children).forEach((row, i) => reindexModifierRow(row, fieldName, i));
+}
+
+function reindexModifiers() { reindexTbody('modifiers'); }
+
+function removeFromArray(button, fieldName) {
+  button.closest('tr').remove();
+  reindexTbody(fieldName);
+}
+
+function initSortable(fieldName) {
+  const tbody = document.getElementById(`${fieldName}-tbody`);
+  if (tbody) {
+    new Sortable(tbody, {
+      handle: '.drag-handle', animation: 150,
+      onEnd: function() { reindexTbody(fieldName); }
+    });
+  }
+}
+
+// Reindex all synergy/upgrade card field names to consecutive indices before submit
+function reindexAllCards() {
+  document.querySelectorAll('#syn-container .upg-card').forEach((card, synIdx) => {
+    card.querySelectorAll('input').forEach(el => {
+      if (el.name.endsWith('-requirement')) el.name = `synergies-${synIdx}-requirement`;
+      if (el.name.endsWith('-node_active') && el.type === 'hidden') el.name = `synergies-${synIdx}-node_active`;
+    });
+    const tbody = card.querySelector('tbody[id]');
+    if (tbody) {
+      const newField = `synergies-${synIdx}-modifiers`;
+      tbody.id = `${newField}-tbody`;
+      Array.from(tbody.children).forEach((row, modIdx) => reindexModifierRow(row, newField, modIdx));
+      const addBtn = card.querySelector('[onclick*="addToArray"]');
+      if (addBtn) addBtn.setAttribute('onclick', `addToArray('${newField}')`);
+    }
+  });
+  document.querySelectorAll('#upg-container .upg-card').forEach((card, upgIdx) => {
+    card.querySelectorAll('input.form-control').forEach(el => {
+      if (el.name.endsWith('-key')) el.name = `upgrades-${upgIdx}-key`;
+      if (el.name.endsWith('-display_name')) el.name = `upgrades-${upgIdx}-display_name`;
+    });
+    const reqTbody = card.querySelector('.upg-req-table tbody');
+    if (reqTbody) {
+      Array.from(reqTbody.children).forEach((row, reqIdx) => {
+        const typeSelect = row.querySelector('.req-type-select');
+        if (typeSelect) typeSelect.name = `upgrades-${upgIdx}-requirements-${reqIdx}-type`;
+        const valEl = row.querySelector('.req-value-cell [name]');
+        if (valEl) valEl.name = `upgrades-${upgIdx}-requirements-${reqIdx}-value`;
+      });
+    }
+    const tbody = card.querySelector('tbody[id]');
+    if (tbody) {
+      const newField = `upgrades-${upgIdx}-modifiers`;
+      tbody.id = `${newField}-tbody`;
+      Array.from(tbody.children).forEach((row, modIdx) => reindexModifierRow(row, newField, modIdx));
+      const addBtn = card.querySelector('[onclick*="addToArray"]');
+      if (addBtn) addBtn.setAttribute('onclick', `addToArray('${newField}')`);
+    }
+  });
+}
+
+// ── Requirement helpers ───────────────────────────────────────────────────────
+
+const techOptionsHtml = `{% for t in tech_options %}<option value="{{ t.key }}">{{ t.display_name }}</option>{% endfor %}`;
+const districtOptionsHtml = `{% for cat in categories %}<option value="{{ cat.key }}">{{ cat.display_name }}</option>{% endfor %}`;
+
+function reqValueCellHtml(namePrefix, type, val) {
+  val = val || '';
+  if (type === 'technology') return `<select name="${namePrefix}value" class="form-control">${techOptionsHtml}</select>`;
+  if (type === 'district')   return `<select name="${namePrefix}value" class="form-control">${districtOptionsHtml}</select>`;
+  return `<input name="${namePrefix}value" class="form-control" value="${val}">`;
+}
+
+function reqRowHtml(namePrefix, types) {
+  const typeOptions = (types || ['district','technology','race','nation'])
+    .map(t => `<option value="${t}">${t.charAt(0).toUpperCase()+t.slice(1)}</option>`).join('');
+  const defaultType = (types && types[0]) || 'technology';
+  return `<tr>
+    <td><select name="${namePrefix}type" class="form-control req-type-select">${typeOptions}</select></td>
+    <td class="req-value-cell">${reqValueCellHtml(namePrefix, defaultType, '')}</td>
+    <td><button type="button" class="btn-remove" onclick="this.closest('tr').remove()">✕</button></td>
+  </tr>`;
+}
+
+// Swap value cell when requirement type changes
+document.getElementById('de-form').addEventListener('change', e => {
+  if (!e.target.classList.contains('req-type-select')) return;
+  const row = e.target.closest('tr');
+  const cell = row.querySelector('.req-value-cell');
+  const nameAttr = e.target.name;
+  const lastTypeIdx = nameAttr.lastIndexOf('type');
+  const namePrefix = nameAttr.slice(0, lastTypeIdx);
+  cell.innerHTML = reqValueCellHtml(namePrefix, e.target.value, '');
+});
+
+// ── Card add handlers ─────────────────────────────────────────────────────────
+
+function modifierTableHtml(fieldName) {
+  return `<table class="modifiers-table">
+    <thead><tr><th>Modifier Type</th><th>Scope</th><th>Value</th><th>Scaling</th><th>Actions</th></tr></thead>
+    <tbody id="${fieldName}-tbody"></tbody>
+  </table>
+  <button type="button" class="btn btn-primary" onclick="addToArray('${fieldName}')">Add Modifier</button>`;
+}
+
+document.getElementById('add-req').addEventListener('click', () => {
+  document.getElementById('req-tbody').insertAdjacentHTML('beforeend', reqRowHtml('req_'));
+});
+
+document.getElementById('add-syn').addEventListener('click', () => {
+  const synIdx = document.querySelectorAll('#syn-container .upg-card').length;
+  const synField = `synergies-${synIdx}-modifiers`;
+  const card = document.createElement('div');
+  card.className = 'upg-card';
+  card.innerHTML = `
+    <div class="upg-card-header">
+      <span class="upg-card-title">Synergy</span>
+      <button type="button" class="upg-remove" onclick="this.closest('.upg-card').remove()">✕</button>
+    </div>
+    <div class="de-row">
+      <label style="min-width:90px;">Node Req</label>
+      <input name="synergies-${synIdx}-requirement" class="form-control" placeholder="stone or stone,iron or any">
+    </div>
+    <div class="de-row">
+      <label style="min-width:90px;">Node Active</label>
+      <input type="hidden" name="synergies-${synIdx}-node_active" value="1">
+      <input type="checkbox" class="syn-node-active-cb" checked onchange="this.previousElementSibling.value = this.checked ? '1' : '0'">
+      <span style="font-size:0.78rem; color:#888;">+1 node bonus</span>
+    </div>
+    <div class="upg-sub-label">Modifiers</div>
+    ${modifierTableHtml(synField)}
+  `;
+  document.getElementById('syn-container').appendChild(card);
+  initSortable(synField);
+});
+
+document.getElementById('add-upg').addEventListener('click', () => {
+  const upgIdx = document.querySelectorAll('#upg-container .upg-card').length;
+  const upgField = `upgrades-${upgIdx}-modifiers`;
+  const card = document.createElement('div');
+  card.className = 'upg-card';
+  card.innerHTML = `
+    <div class="upg-card-header">
+      <span class="upg-card-title">(unnamed)</span>
+      <button type="button" class="upg-remove" onclick="this.closest('.upg-card').remove()">✕ Remove Upgrade</button>
+    </div>
+    <div class="de-row">
+      <label style="min-width:90px;">Key</label>
+      <input name="upgrades-${upgIdx}-key" class="form-control" placeholder="e.g. reinforced_walls" style="max-width:220px;"
+             oninput="this.closest('.upg-card').querySelector('.upg-card-title').textContent = this.value || '(unnamed)'">
+    </div>
+    <div class="de-row">
+      <label style="min-width:90px;">Display Name</label>
+      <input name="upgrades-${upgIdx}-display_name" class="form-control" placeholder="e.g. Reinforced Walls" style="max-width:220px;">
+    </div>
+    <div class="upg-sub-label">Requirements</div>
+    <table class="array-table upg-req-table">
+      <thead><tr><th>Type</th><th>Value</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <button type="button" class="btn-add upg-add-req" data-types="technology,district,race" style="font-size:0.72rem; padding:0.15rem 0.5rem;">+ Requirement</button>
+    <div class="upg-sub-label">Modifiers</div>
+    ${modifierTableHtml(upgField)}
+  `;
+  document.getElementById('upg-container').appendChild(card);
+  initSortable(upgField);
+});
+
+document.getElementById('upg-container').addEventListener('click', e => {
+  if (!e.target.classList.contains('upg-add-req')) return;
+  const card = e.target.closest('.upg-card');
+  const upgIdx = Array.from(document.querySelectorAll('#upg-container .upg-card')).indexOf(card);
+  const types = (e.target.dataset.types || 'technology,district,race').split(',');
+  const reqTbody = card.querySelector('.upg-req-table tbody');
+  const reqIdx = reqTbody.children.length;
+  reqTbody.insertAdjacentHTML('beforeend', reqRowHtml(`upgrades-${upgIdx}-requirements-${reqIdx}-`, types));
+});
+
+// ── Image upload ──────────────────────────────────────────────────────────────
+(function() {
+  const urlInput   = document.getElementById('de-image-url');
+  const fileInput  = document.getElementById('de-image-file');
+  const preview    = document.getElementById('de-image-preview');
+  const previewWrap = document.getElementById('de-image-preview-wrap');
+  const status     = document.getElementById('de-upload-status');
+  const defKey = {{ ('"' + item.key + '"') | safe if item else 'null' }};
+
+  if (fileInput) {
+    fileInput.addEventListener('change', function() {
+      const file = this.files[0];
+      if (!file) return;
+      const fd = new FormData();
+      fd.append('image', file);
+      const keyVal = defKey || document.getElementById('key-input')?.value?.trim() || ('tmp_' + Date.now());
+      fd.append('def_key', keyVal);
+      status.textContent = 'Uploading…'; status.style.color = '#888';
+      fetch('/api/district-defs/upload-image', { method: 'POST', body: fd })
+        .then(r => r.json())
+        .then(data => {
+          if (data.success) {
+            urlInput.value = data.url;
+            preview.src = data.url;
+            previewWrap.style.display = '';
+            status.textContent = 'Uploaded!'; status.style.color = '#4caf50';
+          } else {
+            status.textContent = 'Error: ' + data.error; status.style.color = '#f44336';
+          }
+        })
+        .catch(() => { status.textContent = 'Upload failed.'; status.style.color = '#f44336'; });
+    });
+  }
+})();
+
+// Before submit: reindex all card field names to consecutive indices
+document.getElementById('de-form').addEventListener('submit', () => { reindexAllCards(); });
+</script>
+{% endblock %}

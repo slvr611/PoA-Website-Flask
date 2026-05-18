@@ -1,0 +1,57 @@
+{% extends "layout.html" %}
+{% block title %}City Type Images{% endblock %}
+{% block content %}
+<div class="container">
+  <h1>City Type Map Icons</h1>
+  <p style="color:#888; font-size:0.88rem;">Upload a custom image for each city type. Used on the hex map instead of the default 🏛 glyph.</p>
+
+  <div style="display:flex; flex-wrap:wrap; gap:1rem; margin-top:1.25rem;">
+    {% for ct in city_types %}
+    <div style="background:#1a1a2a; border:1px solid #334; border-radius:8px; padding:0.8rem 1rem; display:flex; align-items:center; gap:0.9rem; min-width:240px;">
+      <div id="cti-ph-{{ ct.key }}" style="width:56px;height:56px;background:#222;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#555;font-size:1.4rem;{% if ct.image %}display:none;{% endif %}">🏛</div>
+      <img id="cti-img-{{ ct.key }}" src="{{ ct.image }}" alt="{{ ct.display_name }}"
+           style="width:56px;height:56px;object-fit:contain;border-radius:6px;background:#0d0d1a;{% if not ct.image %}display:none;{% endif %}">
+      <div style="flex:1;">
+        <div style="font-weight:700; color:#ccc; margin-bottom:0.2rem;">{{ ct.display_name }}</div>
+        <label style="font-size:0.8rem;padding:0.25rem 0.6rem;background:#2a3a5a;border:1px solid #446;color:#aac;border-radius:4px;cursor:pointer;">
+          ↑ Upload
+          <input type="file" accept="image/*" style="display:none;"
+                 data-city-type="{{ ct.key }}"
+                 onchange="cityTypeUpload(this)">
+        </label>
+        <div id="cti-st-{{ ct.key }}" style="font-size:0.73rem;color:#888;margin-top:0.25rem;"></div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <p style="margin-top:2rem;"><a href="/map">← Back to map</a></p>
+</div>
+
+<script>
+function cityTypeUpload(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const key    = input.dataset.cityType;
+  const status = document.getElementById('cti-st-' + key);
+  status.textContent = 'Uploading…'; status.style.color = '#888';
+  const fd = new FormData();
+  fd.append('image', file);
+  fd.append('city_type', key);
+  fetch('/admin/city-type-images/upload', { method: 'POST', body: fd })
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) {
+        const img = document.getElementById('cti-img-' + key);
+        const ph  = document.getElementById('cti-ph-' + key);
+        img.src = data.url; img.style.display = '';
+        ph.style.display = 'none';
+        status.textContent = 'Saved!'; status.style.color = '#4c4';
+      } else {
+        status.textContent = 'Error: ' + data.error; status.style.color = '#f44';
+      }
+    })
+    .catch(() => { status.textContent = 'Upload failed.'; status.style.color = '#f44'; });
+}
+</script>
+{% endblock %}

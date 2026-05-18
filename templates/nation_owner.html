@@ -1,5 +1,6 @@
 {% extends "layout.html" %}
 {% from "macros/tech_tree.html" import render_tech_tree %}
+{% from "_modifier_macros.html" import modifier_row with context %}
 
 {% block title %}{{ nation["name"] }}{% endblock %}
 
@@ -34,6 +35,33 @@
 .pending-value { color: #f0c040; font-weight: bold; }
 .modifier-added { color: #f0c040; }
 .modifier-removed { color: #e05555; text-decoration: line-through; }
+/* District cards (shared with /districts page) */
+.dc { background:#1a1a2a; color:#ddd; border-radius:10px; overflow:hidden; border:3px solid #334; width:260px; flex-shrink:0; display:flex; flex-direction:column; font-size:0.82rem; }
+.dc--t1 { border-color:#2a6a4a; } .dc--t2 { border-color:#2a4a8a; } .dc--t3 { border-color:#6a2a4a; }
+.dc header { padding:0.6rem 0.75rem 0.5rem; display:flex; align-items:flex-start; justify-content:space-between; gap:0.5rem; border-bottom:2px solid #334; }
+.dc--t1 header { border-bottom-color:#2a6a4a; background:#0d2218; } .dc--t2 header { border-bottom-color:#2a4a8a; background:#0d1628; } .dc--t3 header { border-bottom-color:#6a2a4a; background:#280d1a; }
+.dc-title { font-size:1rem; font-weight:800; letter-spacing:0.5px; margin:0; line-height:1.2; text-transform:uppercase; font-variant:small-caps; }
+.dc-tier-badge { font-size:0.68rem; font-weight:700; padding:0.15rem 0.4rem; border-radius:999px; background:#222; border:1px solid #555; color:#bbb; flex-shrink:0; }
+.dc--t1 .dc-tier-badge { border-color:#4a8; color:#4a8; } .dc--t2 .dc-tier-badge { border-color:#8af; color:#8af; } .dc--t3 .dc-tier-badge { border-color:#f8a; color:#f8a; }
+.dc-body { padding:0.6rem 0.75rem 0.5rem; flex:1; }
+.dc-desc { color:#999; font-style:italic; font-size:0.8rem; margin:0 0 0.5rem; line-height:1.4; }
+.dc-mods { margin:0.35rem 0; } .dc-rule { height:1px; background:#334; margin:0.5rem 0; }
+.dc-mod-row { display:flex; justify-content:space-between; font-size:0.78rem; padding:0.1rem 0; }
+.dc-mod-key { color:#aaa; } .dc-mod-val { color:#8f8; font-family:monospace; } .dc-mod-val.neg { color:#f88; }
+.dc-upg-label,.dc-syn-label { color:#888; text-transform:uppercase; letter-spacing:0.5px; font-size:0.7rem; margin-bottom:0.3rem; }
+.dc-upg-item,.dc-syn-item { font-size:0.76rem; margin-bottom:0.35rem; }
+.dc-upg-name { font-weight:700; color:#ccf; } .dc-upg-req { color:#888; font-size:0.74rem; }
+.dc-syn-node { font-weight:700; color:#fa8; } .dc-syn-active { color:#4fa; font-size:0.7rem; } .dc-syn-flag { color:#666; font-size:0.7rem; font-style:italic; }
+.dc-footer { padding:0.5rem 0.75rem; border-top:1px solid #334; font-size:0.76rem; }
+.dc-cost-heading { color:#777; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:0.2rem; }
+.dc-cost-row { display:flex; align-items:center; justify-content:space-between; gap:0.4rem; }
+.dc-cost { color:#bbb; flex:1; } .dc-cost .muted { color:#666; font-style:italic; }
+.dc-image-wrap { background:#0d0d1a; display:flex; justify-content:center; align-items:center; padding:0.4rem; }
+.dc-image { max-height:80px; max-width:100%; object-fit:contain; display:block; }
+.dc-node-tag { font-size:0.72rem; color:#fa8; margin-top:0.15rem; }
+.dc-unlocked-upg { font-size:0.74rem; color:#8f8; margin-top:0.1rem; }
+.dc-dim { opacity: 0.45; }
+.visibility-locked { color: #888; font-style: italic; padding: 0.75rem 1rem; }
 </style>
 
 {# ── Pending-change display macros ─────────────────────────────────────────── #}
@@ -79,6 +107,13 @@
 		{% if user_is_owner or (g.user and g.user.get('is_admin')) %}
 			<a href="/nations/cosmetics/{{ nation.name }}" class="edit-button">Customize</a>
 		{% endif %}
+		{% if g.user and g.user.get('is_admin') %}
+		<form method="POST" action="/visibility/toggle_bypass" style="display:inline;">
+			<button type="submit" class="edit-button" style="background:{{ '#2d5a2d' if visibility_bypassed else '#5a2d2d' }}">
+				Visibility: {{ 'Bypassed' if visibility_bypassed else 'Filtered (Tier ' + visibility_level|string + ')' }}
+			</button>
+		</form>
+		{% endif %}
 		<div class="action-links">
 			<a href="{{ request.path }}/changes/pending">View Pending Changes</a>
 			<a href="{{ request.path }}/changes/archived">View Change History</a>
@@ -116,6 +151,7 @@
 				<span class="toggle-icon">▼</span>
 			</div>
 			<div class="section-content">
+			{% if visibility_level >= 2 %}
 				<div class="table-wrapper">
 					<table class="info-table">
 						<tr class="resources-header-row">
@@ -257,6 +293,9 @@
 				<div class="multiline-text">
 					{{ nation.notes }}
 				</div>
+			{% else %}
+				<p class="visibility-locked">Requires Tier 2 visibility.</p>
+			{% endif %}
 			</div>
 		</div>
 
@@ -266,6 +305,7 @@
 				<span class="toggle-icon">▼</span>
 			</div>
 			<div class="section-content">
+			{% if visibility_level >= 2 %}
 				<div class="table-wrapper">
 					<table class="info-table">
 						<tr class="resources-header-row">
@@ -313,6 +353,9 @@
 						</table>
 					{% endif %}
 				</div>
+			{% else %}
+				<p class="visibility-locked">Requires Tier 2 visibility.</p>
+			{% endif %}
 			</div>
 		</div>
 
@@ -352,11 +395,14 @@
 								None
 							{% endif %}
 						</tr>
+						{% if visibility_level >= 1 %}
 						<tr>
 							<th>{{ schema.properties.unique_minority_count.label }}:</th>
 							<td>{{ pf(nation.unique_minority_count, pn.get("unique_minority_count")) }}</td>
 						</tr>
+						{% endif %}
 					</table>
+					{% if visibility_level >= 1 %}
 					<table class="info-table">
 						<thead>
 							<tr class="resources-header-row">
@@ -415,6 +461,7 @@
 							<a href="{{ url_for('nation_routes.nation_item', item_ref=nation.name, pop_page=pop_pagination.next_page) }}">Next</a>
 						{% endif %}
 					</div>
+					{% endif %}{# visibility >= 1 pops table #}
 				</div>
 			</div>
 		</div>
@@ -425,6 +472,7 @@
 				<span class="toggle-icon">▼</span>
 			</div>
 			<div class="section-content">
+			{% if visibility_level >= 2 %}
 				<div class="table-wrapper">
 					<table class="info-table">
 						<tr class="resources-header-row">
@@ -514,16 +562,20 @@
 						</tr>
 					</table>
 				</div>
+			{% else %}
+				<p class="visibility-locked">Requires Tier 2 visibility.</p>
+			{% endif %}
 			</div>
 		</div>
 
 		{% if "overlord" in nation and nation["overlord"] is not none and nation["overlord"] != "" %}
 			<div class="expandable-section" id="vassalship-section">
-				<div class="section-header" onclick="toggleSection(this)">
+					<div class="section-header" onclick="toggleSection(this)">
 					<h2>Vassalship</h2>
 					<span class="toggle-icon">▼</span>
 				</div>
 				<div class="section-content">
+			{% if visibility_level >= 1 %}
 					<div class="table-wrapper">
 						<table class="info-table">
 							<tr class="resources-header-row">
@@ -575,7 +627,10 @@
 							</tr>
 						</table>
 					</div>
-				</div>
+				{% else %}
+				<p class="visibility-locked">Requires Tier 1 visibility.</p>
+			{% endif %}
+			</div>
 			</div>
 		{% endif %}
 		{% if "vassals" in linked_objects and linked_objects["vassals"] is not none %}
@@ -585,6 +640,7 @@
 					<span class="toggle-icon">▼</span>
 				</div>
 				<div class="section-content">
+			{% if visibility_level >= 1 %}
 					<div class="table-wrapper">
 						<table class="info-table">
 							<tr>
@@ -642,7 +698,10 @@
 							</tbody>
 						</table>
 					</div>
-				</div>
+				{% else %}
+				<p class="visibility-locked">Requires Tier 1 visibility.</p>
+			{% endif %}
+			</div>
 			</div>
 		{% endif %}
 
@@ -652,6 +711,7 @@
 				<span class="toggle-icon">▼</span>
 			</div>
 			<div class="section-content">
+			{% if visibility_level >= 1 %}
 				<div class="table-wrapper">
 					<table class="info-table">
 						<tr class="resources-header-row">
@@ -750,6 +810,9 @@
 						</tbody>
 					</table>
 				</div>
+			{% else %}
+				<p class="visibility-locked">Requires Tier 1 visibility.</p>
+			{% endif %}
 			</div>
 		</div>
 
@@ -759,6 +822,7 @@
 				<span class="toggle-icon">▼</span>
 			</div>
 			<div class="section-content">
+			{% if visibility_level >= 4 %}
 				<div class="table-wrapper">
 					{%- macro stat_cell(eff, base, stat, breakdown) -%}
 					{%- set ev = eff.get(stat) -%}
@@ -837,6 +901,9 @@
 					<p>Naval Units: {{ pf(nation.get("naval_unit_count", 0), pn.get("naval_unit_count")) }}/{{ pf(nation.get("naval_unit_capacity", 0), pn.get("naval_unit_capacity")) }}</p>
 					{{ unit_table(nation.get("naval_unit_details", {}), nation.get("naval_units", {})) }}
 				</div>
+			{% else %}
+				<p class="visibility-locked">Requires Tier 4 visibility.</p>
+			{% endif %}
 			</div>
 		</div>
 
@@ -846,6 +913,7 @@
 				<span class="toggle-icon">▼</span>
 			</div>
 			<div class="section-content">
+			{% if visibility_level >= 4 %}
 				<h2>Resources</h2>
 				<div class="table-wrapper">
 					<table class="resources-table">
@@ -1022,6 +1090,9 @@
 				{% if user_is_owner %}
 					<a href="{{ request.path.replace('item', 'edit_jobs') }}">Edit Jobs</a>
 				{% endif %}
+			{% else %}
+				<p class="visibility-locked">Requires Tier 4 visibility.</p>
+			{% endif %}
 			</div>
 		</div>
 
@@ -1031,76 +1102,135 @@
 				<span class="toggle-icon">▼</span>
 			</div>
 			<div class="section-content">
+			{% if visibility_level >= 3 %}
 				{% set has_pending = pending_nation is not none %}
 				{% set pending_districts = pn.get("districts") or [] %}
 				{% set pending_cities = pn.get("cities") or [] %}
 
 				<h2>Districts</h2>
 				<p>{{ schema.properties.district_slots.label }}: {{ pf(nation.district_slots, pn.get("district_slots")) }}</p>
-				<div class="districts-grid">
+				<div style="display:flex; flex-wrap:wrap; gap:1.25rem; margin-top:0.75rem;">
 					{% for i in range(0, nation.district_slots) %}
 						{% set cur = nation.districts[i] if (nation.districts | length > i and nation.districts[i]) else {} %}
+						{% set cur_def_key = cur.get("def_key", "") %}
 						{% set cur_type = cur.get("type", "") %}
 						{% set cur_node = cur.get("node", "") %}
+						{% set cur_upgrades = cur.get("upgrades", []) %}
 						{% set pd = pending_districts[i] if (has_pending and pending_districts | length > i) else none %}
-						{% set pend_type = pd.get("type", "") if pd is not none else cur_type %}
-						{% set pend_node = pd.get("node", "") if pd is not none else cur_node %}
-						{% set type_changed = pd is not none and pend_type != cur_type %}
-						{% set node_changed = pd is not none and pend_node != cur_node %}
-						<div class="district-slot">
-							{% if cur_type != "" %}
-								{% set district = nation.district_details.get(cur_type, {}) %}
-								{% set pend_district = json_data["nation_districts"].get(pend_type, {}) if type_changed else {} %}
-								<h3>
-									{{ district.get("display_name", "") }}
-									{% if type_changed %}
-										{% if pend_type %}
-											<span class="pending-value">→ {{ pend_district.get("display_name", pend_type) }}</span>
-										{% else %}
-											<span class="pending-value" style="color:#e05555;">→ Empty</span>
-										{% endif %}
-									{% endif %}
-								</h3>
-								<p>Type: {{ district.get("type", "") }}</p>
-								<p>
-									Cost:
-									{% for resource, cost in district.get("cost", {}).items() %}
-										{{ resource }}: {{ cost }}<br>
-									{% endfor %}
-								</p>
-								<p>
-									Modifiers:
-									{% for mod, value in district.get("modifiers", {}).items() %}
-										{{ mod }}: {{ value }}<br>
-									{% endfor %}
-									{% if type_changed and pend_type %}
-										<span class="pending-value">
-											{% for mod, value in pend_district.get("modifiers", {}).items() %}
-												→ {{ mod }}: {{ value }}<br>
-											{% endfor %}
-										</span>
-									{% endif %}
-								</p>
-								<p>
-									Node: {{ pf(cur_node if cur_node else "None", pend_node if pend_node else "None" if node_changed else none) }}
-								</p>
-							{% else %}
-								{% if type_changed and pend_type %}
-									{% set pend_district = json_data["nation_districts"].get(pend_type, {}) %}
-									<div class="empty-slot">
-										<p>Empty Slot</p>
+
+						{% if cur_def_key %}
+							{# ── DB-driven district card ── #}
+							{% set dd = district_defs_map.get(cur_def_key, {}) %}
+							{% set pend_node = pd.get("node", "") if pd is not none else cur_node %}
+							{% set node_changed = pd is not none and pend_node != cur_node %}
+							<div class="dc dc--t{{ dd.get('tier', 1) if dd else 1 }}">
+								<header>
+									<div>
+										<div class="dc-title">{{ dd.get('display_name', cur_def_key) }}</div>
+										<div class="dc-node-tag">Map node: {{ pf(cur_node or 'unset', pend_node or 'unset' if node_changed else none) }}</div>
 									</div>
-									<p class="pending-value">→ {{ pend_district.get("display_name", pend_type) }}</p>
-									{% if pend_node %}
-										<p class="pending-value">Node: {{ pend_node }}</p>
-									{% endif %}
-								{% else %}
-									<div class="empty-slot">
-										<p>Empty Slot</p>
-									</div>
+									<span class="dc-tier-badge">T{{ dd.get('tier', '?') }}</span>
+								</header>
+
+								{% if dd.get('image') %}
+								<div class="dc-image-wrap"><img class="dc-image" src="{{ dd.image }}" alt="{{ dd.get('display_name','') }}"></div>
 								{% endif %}
+
+								<div class="dc-body">
+									{% if dd.get('description') %}
+									<p class="dc-desc">{{ dd.description }}</p>
+									{% endif %}
+
+									{# Base modifiers #}
+									{% set mods = dd.get('modifiers', []) %}
+									{% if mods %}
+									<div class="dc-mods">
+										{% for mod in mods %}{{ modifier_row(mod) }}{% endfor %}
+									</div>
+									{% endif %}
+
+									{# Synergies #}
+									{% set syns = dd.get('synergies', []) %}
+									{% if syns %}
+									{% if mods %}<div class="dc-rule"></div>{% endif %}
+									<div class="dc-syn-label">Synergies</div>
+									{% for syn in syns %}
+									{% set req = syn.get('requirement','') %}
+									{% set req_list = req if (req is iterable and req is not string) else [req] %}
+									{% set is_active = 'any' in req_list or cur_node in req_list %}
+									<div class="dc-syn-item">
+										<span class="dc-syn-node">{{ req_list | join(', ') | title }}</span>
+										{% if is_active %}<span class="dc-syn-active"> ✓ active</span>{% endif %}
+										{% if syn.get('node_active') %}<span class="dc-syn-flag"> (node active)</span>{% endif %}
+										{% for mod in (syn.get('modifiers', []) if syn.get('modifiers') is iterable and syn.get('modifiers') is not mapping else []) %}
+										{{ modifier_row(mod, indent=True, dimmed=not is_active, label_color='#99a') }}
+										{% endfor %}
+									</div>
+									{% endfor %}
+									{% endif %}
+
+									{# Unlocked upgrades #}
+									{% if dd.get('upgrades') %}
+									{% if mods or syns %}<div class="dc-rule"></div>{% endif %}
+									<div class="dc-upg-label">Upgrades</div>
+									{% for upg in dd.upgrades %}
+									{% set unlocked = upg.key in cur_upgrades %}
+									<div class="dc-upg-item {% if not unlocked %}dc-dim{% endif %}">
+										<span class="dc-upg-name">{% if unlocked %}✓ {% endif %}{{ upg.display_name or upg.key }}</span>
+										{% if not unlocked and upg.requirements %}
+										<span class="dc-upg-req"> — requires {% for req in upg.requirements %}{% if req.type == 'technology' %}{{ req.value }}{% else %}{{ req.value }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}</span>
+										{% endif %}
+										{% if unlocked %}
+										{% for mod in upg.get('modifiers', []) %}{{ modifier_row(mod, indent=True, label_color='#99a') }}{% endfor %}
+										{% endif %}
+									</div>
+									{% endfor %}
+									{% endif %}
+								</div>
+
+								<div class="dc-footer">
+									<div class="dc-cost-heading">Build Cost{% if dd.get('upkeep') %} / Upkeep{% endif %}</div>
+									<span class="dc-cost">
+										{%- set cost_parts = [] -%}
+										{%- for res, amt in dd.get('cost', {}).items() -%}{%- set _ = cost_parts.append(amt|string ~ ' ' ~ res|title) -%}{%- endfor -%}
+										{%- if cost_parts -%}{{ cost_parts | join(', ') }}{%- else -%}<span class="muted">Free</span>{%- endif -%}
+										{%- if dd.get('upkeep') -%}{%- set upk = [] -%}{%- for res, amt in dd.upkeep.items() -%}{%- set _ = upk.append(amt|string ~ ' ' ~ res|title) -%}{%- endfor -%}{%- if upk %} / {{ upk | join(', ') }}/tick{%- endif -%}{%- endif -%}
+									</span>
+								</div>
+							</div>
+
+						{% elif cur_type %}
+							{# ── Legacy JSON-driven district ── #}
+							{% set district = nation.district_details.get(cur_type, {}) %}
+							{% set pd_type = pd.get("type", "") if pd is not none else cur_type %}
+							{% set pend_node = pd.get("node", "") if pd is not none else cur_node %}
+							{% set type_changed = pd is not none and pd_type != cur_type %}
+							{% set node_changed = pd is not none and pend_node != cur_node %}
+							<div class="district-slot">
+								<h3>
+									{{ district.get("display_name", cur_type) }}
+									{% if type_changed %}<span class="pending-value">→ {{ json_data["nation_districts"].get(pd_type, {}).get("display_name", pd_type) or "Empty" }}</span>{% endif %}
+								</h3>
+								<p>Node: {{ pf(cur_node or "None", pend_node or "None" if node_changed else none) }}</p>
+								<p>Modifiers: {% for mod, value in district.get("modifiers", {}).items() %}{{ mod }}: {{ value }}<br>{% endfor %}</p>
+							</div>
+
+						{% else %}
+							{# ── Empty slot ── #}
+							{% set pd_type = pd.get("type", "") if pd is not none else "" %}
+							{% set pd_def_key = pd.get("def_key", "") if pd is not none else "" %}
+							{% if pd_type or pd_def_key %}
+							<div class="district-slot">
+								<div class="empty-slot"><p>Empty Slot {{ i + 1 }}</p></div>
+								<p class="pending-value">→ {{ district_defs_map.get(pd_def_key, {}).get("display_name", pd_def_key) or json_data["nation_districts"].get(pd_type, {}).get("display_name", pd_type) }}</p>
+								{% if pd.get("node") %}<p class="pending-value">Node: {{ pd.node }}</p>{% endif %}
+							</div>
+							{% else %}
+							<div class="district-slot empty-slot" style="min-width:200px; display:flex; align-items:center; justify-content:center; min-height:80px;">
+								<p>Empty Slot {{ i + 1 }}</p>
+							</div>
 							{% endif %}
-						</div>
+						{% endif %}
 					{% endfor %}
 				</div>
 				</br>
@@ -1285,6 +1415,9 @@
 						</table>
 					</div>
 				{% endif %}
+			{% else %}
+				<p class="visibility-locked">Requires Tier 3 visibility.</p>
+			{% endif %}
 			</div>
 		</div>
 
@@ -1294,8 +1427,12 @@
 			<span class="toggle-icon">▼</span>
 		</div>
 		<div class="section-content">
+			{% if visibility_level >= 2 %}
 			{{ render_tech_tree(nation.get("technologies", {"political_philosophy": {"researched": true}}), nation.get("technology_cost_modifier", 0), nation.get("technology_cost_minimum", 2), json_data) }}
-		</div>
+		{% else %}
+				<p class="visibility-locked">Requires Tier 2 visibility.</p>
+			{% endif %}
+			</div>
 	</div>
 
 	<div class="expandable-section" id="progress-quests-section">
@@ -1304,6 +1441,7 @@
 			<span class="toggle-icon">▼</span>
 		</div>
 		<div class="section-content">
+			{% if visibility_level >= 3 %}
 			<div class="table-wrapper">
 				<h3>Progress Slots</h3>
 				<table class="info-table">
@@ -1373,7 +1511,7 @@
 							{% endif %}
 							<tr>
 								<td>{{ quest.get("quest_name", "Unknown Quest") }}</td>
-								<td>{{ json_data["slot_types"][quest.get("slot", "no_slot")]["name"] }}</td>
+								<td>{{ json_data["slot_types"].get(quest.get("slot", "no_slot"), {"name":"Unknown Slot"})["name"] }}</td>
 								<td>{{ quest.get("total_progress_per_tick", 0) }}</td>
 								<td class="{{ completed_class }}">{{ quest.get("current_progress", 0) }} / {{ quest.get("required_progress", 0) }}</td>
 								<td>{{ quest.link|format_discord_link|safe }}</td>
@@ -1382,7 +1520,10 @@
 					</tbody>
 				</table>
 			</div>
-		</div>
+		{% else %}
+				<p class="visibility-locked">Requires Tier 3 visibility.</p>
+			{% endif %}
+			</div>
 	</div>
 
 	<div class="expandable-section" id="modifiers-section">
@@ -1391,6 +1532,7 @@
 			<span class="toggle-icon">▼</span>
 		</div>
 		<div class="section-content">
+			{% if visibility_level >= 3 %}
 			<div class="table-wrapper">
 				<table class="info-table">
 					<thead>
@@ -1535,7 +1677,10 @@
 					</div>
 				{% endif %}
 			{% endif %}
-		</div>
+		{% else %}
+				<p class="visibility-locked">Requires Tier 3 visibility.</p>
+			{% endif %}
+			</div>
 	</div>
 {% endblock %}
 

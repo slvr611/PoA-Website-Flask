@@ -309,13 +309,22 @@ class ModifierForm(Form):
 
     item_id = HiddenField('_id')
     modifier_type = StringField("Modifier Type")
+    scaling = StringField("Scaling")
+    scaling_x = FloatField("Scaling X", validators=[Optional()])
+    scaling_extra = StringField("Scaling Extra")
     scope = StringField("Scope")
     resource = StringField("Resource")
     resource_from = StringField("From Resource")
     resource_to = StringField("To Resource")
     job = StringField("Job")
     attribute = StringField("Attribute")
+    unit_category = StringField("Unit Category")
+    unit_stat = StringField("Unit Stat")
+    tier = StringField("Tier")
+    tech_category = StringField("Tech Category")
+    terrain = StringField("Terrain")
     value = FloatField("Value", default=1)
+    max_value = FloatField("Max Value", validators=[Optional()])
     duration = IntegerField("Duration", validators=[NumberRange()], default=-1)
     source = StringField("Source", validators=[DataRequired()])
 
@@ -432,6 +441,7 @@ class DistrictDict(Form):
 
     item_id = HiddenField('_id')
     type = SelectField("District Type", choices=[("", "None")], default="")
+    def_key = HiddenField('def_key')
     node = SelectField("Node Type", choices=[("", "None")], default="")
 
     class Meta:

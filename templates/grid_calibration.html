@@ -1,0 +1,1025 @@
+{% extends "layout.html" %}
+
+{% block title %}Grid Calibration — Path of Ages{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width:none;padding:0.5rem 1rem 2rem;">
+
+<h2 style="margin:0.5rem 0 0.25rem;">Grid Calibration Tool</h2>
+<p style="color:#888;font-size:0.82rem;margin:0 0 0.75rem;">
+  Load the <strong>old map</strong> (with grid baked in) on the left to calibrate. Load the <strong>new map</strong>
+  on the right to verify the extension. Mark reference points on either panel to auto-solve parameters.
+  Arrow keys nudge the origin (Shift = ×10). Save the right panel's config to the server.
+</p>
+
+<!-- ===== Shared controls bar ============================================= -->
+<div style="display:flex;gap:1rem;align-items:center;flex-wrap:wrap;
+            background:#1a1f2e;border:1px solid #334;border-radius:8px;
+            padding:0.6rem 1rem;margin-bottom:0.75rem;">
+  <span style="color:#7a8;font-size:0.72rem;letter-spacing:0.05em;white-space:nowrap;font-weight:bold;">SHARED</span>
+
+  <label style="font-size:0.82rem;display:flex;align-items:center;gap:0.35rem;white-space:nowrap;">
+    Hex Size&nbsp;(px)
+    <input id="sh-hex-size" type="number" min="2" max="600" step="0.5" value="40"
+           style="width:70px;background:#111;border:1px solid #445;color:#ccd;padding:0.15rem 0.3rem;border-radius:3px;">
+  </label>
+
+  <label style="font-size:0.82rem;display:flex;align-items:center;gap:0.35rem;white-space:nowrap;">
+    Cols
+    <input id="sh-cols" type="number" min="1" max="500" step="1" value="20"
+           style="width:60px;background:#111;border:1px solid #445;color:#ccd;padding:0.15rem 0.3rem;border-radius:3px;">
+  </label>
+
+  <label style="font-size:0.82rem;display:flex;align-items:center;gap:0.35rem;white-space:nowrap;">
+    Rows
+    <input id="sh-rows" type="number" min="1" max="500" step="1" value="15"
+           style="width:60px;background:#111;border:1px solid #445;color:#ccd;padding:0.15rem 0.3rem;border-radius:3px;">
+  </label>
+
+  <label style="font-size:0.82rem;display:flex;align-items:center;gap:0.35rem;">
+    <input id="sh-show-grid" type="checkbox" checked> Grid
+  </label>
+  <label style="font-size:0.82rem;display:flex;align-items:center;gap:0.35rem;">
+    <input id="sh-show-coords" type="checkbox"> Coords
+  </label>
+
+  <span style="color:#555;font-size:0.75rem;margin-left:auto;">
+    Hex&nbsp;size and cols/rows are shared between both panels. Origins are per-panel.
+  </span>
+</div>
+
+<!-- ===== Two-panel layout ================================================= -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;align-items:start;">
+
+  <!-- ─── LEFT PANEL: Old Map ─────────────────────────────────────────────── -->
+  <div style="display:flex;flex-direction:column;gap:0.5rem;">
+
+    <!-- Controls card -->
+    <div style="background:#1a1f2e;border:1px solid #334;border-radius:8px;padding:0.75rem;font-size:0.82rem;">
+      <div style="color:#7a8;font-size:0.72rem;letter-spacing:0.05em;margin-bottom:0.5rem;font-weight:bold;">
+        OLD MAP — CALIBRATION REFERENCE
+      </div>
+
+      <!-- Image load -->
+      <div style="display:flex;gap:0.4rem;align-items:center;margin-bottom:0.35rem;flex-wrap:wrap;">
+        <input id="old-url" type="text" placeholder="Image URL (or upload below)…"
+               style="flex:1;min-width:100px;background:#111;border:1px solid #445;color:#ccd;
+                      padding:0.2rem 0.4rem;border-radius:3px;font-size:0.8rem;">
+        <label class="map-btn" style="cursor:pointer;white-space:nowrap;font-size:0.8rem;">
+          Upload file
+          <input id="old-file" type="file" accept="image/*" style="display:none;">
+        </label>
+      </div>
+      <div id="old-info" style="font-size:0.72rem;color:#666;margin-bottom:0.4rem;min-height:1em;"></div>
+
+      <!-- Origin -->
+      <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-bottom:0.4rem;">
+        <label style="display:flex;align-items:center;gap:0.3rem;">
+          Origin X
+          <input id="old-ox" type="number" step="0.5" value="0"
+                 style="width:75px;background:#111;border:1px solid #445;color:#ccd;padding:0.15rem 0.3rem;border-radius:3px;">
+        </label>
+        <label style="display:flex;align-items:center;gap:0.3rem;">
+          Origin Y
+          <input id="old-oy" type="number" step="0.5" value="0"
+                 style="width:75px;background:#111;border:1px solid #445;color:#ccd;padding:0.15rem 0.3rem;border-radius:3px;">
+        </label>
+      </div>
+
+      <!-- Image transform -->
+      <div style="display:flex;gap:0.6rem;flex-wrap:wrap;margin-bottom:0.4rem;align-items:center;">
+        <span style="color:#666;font-size:0.72rem;white-space:nowrap;">Image:</span>
+        <label style="display:flex;align-items:center;gap:0.3rem;font-size:0.8rem;">
+          Scale
+          <input id="old-img-scale" type="number" step="0.01" min="0.01" max="20" value="1.0"
+                 style="width:65px;background:#111;border:1px solid #445;color:#ccd;padding:0.15rem 0.3rem;border-radius:3px;">
+        </label>
+        <label style="display:flex;align-items:center;gap:0.3rem;font-size:0.8rem;">
+          Off X
+          <input id="old-img-offx" type="number" step="1" value="0"
+                 style="width:65px;background:#111;border:1px solid #445;color:#ccd;padding:0.15rem 0.3rem;border-radius:3px;">
+        </label>
+        <label style="display:flex;align-items:center;gap:0.3rem;font-size:0.8rem;">
+          Off Y
+          <input id="old-img-offy" type="number" step="1" value="0"
+                 style="width:65px;background:#111;border:1px solid #445;color:#ccd;padding:0.15rem 0.3rem;border-radius:3px;">
+        </label>
+      </div>
+
+      <!-- Reference points -->
+      <details style="margin-bottom:0.4rem;">
+        <summary style="cursor:pointer;color:#7a8;font-size:0.8rem;user-select:none;">
+          ▶ Reference Points (auto-solve hex size + origin)
+        </summary>
+        <div style="margin-top:0.5rem;padding:0.5rem;background:#111;border-radius:4px;border:1px solid #2a2f3e;">
+          <div id="old-reflist" style="font-size:0.75rem;min-height:1.2em;margin-bottom:0.4rem;color:#888;">
+            <em>No points — add at least 2 to solve</em>
+          </div>
+          <div style="display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap;">
+            <label style="font-size:0.78rem;">Col <input id="old-ref-col" type="number" step="1" value="0"
+                   style="width:48px;background:#1a1a1a;border:1px solid #445;color:#ccd;padding:0.1rem 0.25rem;border-radius:3px;"></label>
+            <label style="font-size:0.78rem;">Row <input id="old-ref-row" type="number" step="1" value="0"
+                   style="width:48px;background:#1a1a1a;border:1px solid #445;color:#ccd;padding:0.1rem 0.25rem;border-radius:3px;"></label>
+            <button id="old-pick-btn" class="map-btn" style="font-size:0.78rem;">Pick on map</button>
+            <button id="old-clear-btn" class="map-btn" style="font-size:0.78rem;">Clear</button>
+            <button id="old-solve-btn" class="map-btn" style="font-size:0.78rem;background:#2a3a2a;border-color:#4a7a4a;" disabled>Solve</button>
+          </div>
+          <div id="old-pick-status" style="display:none;margin-top:0.35rem;font-size:0.75rem;color:#f84;font-weight:bold;"></div>
+        </div>
+      </details>
+
+      <!-- Viewport buttons -->
+      <div style="display:flex;gap:0.4rem;flex-wrap:wrap;">
+        <button class="map-btn" onclick="oldCal.zoomIn()" style="font-size:0.8rem;">+</button>
+        <button class="map-btn" onclick="oldCal.zoomOut()" style="font-size:0.8rem;">−</button>
+        <button class="map-btn" onclick="oldCal.resetView()" style="font-size:0.8rem;">Fit</button>
+        <span style="font-size:0.72rem;color:#555;align-self:center;margin-left:0.25rem;">
+          Arrow keys nudge origin (canvas focused)
+        </span>
+      </div>
+    </div>
+
+    <!-- Canvas -->
+    <div style="position:relative;background:#0d0d0d;border:1px solid #334;border-radius:8px;
+                overflow:hidden;height:68vh;min-height:350px;">
+      <canvas id="old-canvas" style="width:100%;height:100%;display:block;outline:none;"></canvas>
+      <div id="old-coords" style="position:absolute;bottom:6px;left:6px;background:rgba(0,0,0,0.7);
+           color:#aab;font-size:0.68rem;padding:0.15rem 0.4rem;border-radius:3px;pointer-events:none;"></div>
+    </div>
+  </div>
+
+  <!-- ─── RIGHT PANEL: New Map ─────────────────────────────────────────────── -->
+  <div style="display:flex;flex-direction:column;gap:0.5rem;">
+
+    <!-- Controls card -->
+    <div style="background:#1a1f2e;border:1px solid #334;border-radius:8px;padding:0.75rem;font-size:0.82rem;">
+      <div style="color:#7a8;font-size:0.72rem;letter-spacing:0.05em;margin-bottom:0.5rem;font-weight:bold;">
+        NEW MAP — VERIFICATION &amp; EXPORT
+      </div>
+
+      <!-- Image load -->
+      <div style="display:flex;gap:0.4rem;align-items:center;margin-bottom:0.35rem;flex-wrap:wrap;">
+        <input id="new-url" type="text" placeholder="Image URL (or upload below)…"
+               style="flex:1;min-width:100px;background:#111;border:1px solid #445;color:#ccd;
+                      padding:0.2rem 0.4rem;border-radius:3px;font-size:0.8rem;">
+        <label class="map-btn" style="cursor:pointer;white-space:nowrap;font-size:0.8rem;">
+          Upload file
+          <input id="new-file" type="file" accept="image/*" style="display:none;">
+        </label>
+      </div>
+      <div id="new-info" style="font-size:0.72rem;color:#666;margin-bottom:0.4rem;min-height:1em;"></div>
+
+      <!-- Origin -->
+      <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-bottom:0.4rem;">
+        <label style="display:flex;align-items:center;gap:0.3rem;">
+          Origin X
+          <input id="new-ox" type="number" step="0.5" value="0"
+                 style="width:75px;background:#111;border:1px solid #445;color:#ccd;padding:0.15rem 0.3rem;border-radius:3px;">
+        </label>
+        <label style="display:flex;align-items:center;gap:0.3rem;">
+          Origin Y
+          <input id="new-oy" type="number" step="0.5" value="0"
+                 style="width:75px;background:#111;border:1px solid #445;color:#ccd;padding:0.15rem 0.3rem;border-radius:3px;">
+        </label>
+      </div>
+
+      <!-- Image transform -->
+      <div style="display:flex;gap:0.6rem;flex-wrap:wrap;margin-bottom:0.4rem;align-items:center;">
+        <span style="color:#666;font-size:0.72rem;white-space:nowrap;">Image:</span>
+        <label style="display:flex;align-items:center;gap:0.3rem;font-size:0.8rem;">
+          Scale
+          <input id="new-img-scale" type="number" step="0.01" min="0.01" max="20" value="1.0"
+                 style="width:65px;background:#111;border:1px solid #445;color:#ccd;padding:0.15rem 0.3rem;border-radius:3px;">
+        </label>
+        <label style="display:flex;align-items:center;gap:0.3rem;font-size:0.8rem;">
+          Off X
+          <input id="new-img-offx" type="number" step="1" value="0"
+                 style="width:65px;background:#111;border:1px solid #445;color:#ccd;padding:0.15rem 0.3rem;border-radius:3px;">
+        </label>
+        <label style="display:flex;align-items:center;gap:0.3rem;font-size:0.8rem;">
+          Off Y
+          <input id="new-img-offy" type="number" step="1" value="0"
+                 style="width:65px;background:#111;border:1px solid #445;color:#ccd;padding:0.15rem 0.3rem;border-radius:3px;">
+        </label>
+      </div>
+
+      <!-- Grid expansion helper -->
+      <details style="margin-bottom:0.4rem;">
+        <summary style="cursor:pointer;color:#7a8;font-size:0.8rem;user-select:none;">
+          ▶ Grid Expansion Helper
+        </summary>
+        <div style="margin-top:0.5rem;padding:0.5rem;background:#111;border-radius:4px;border:1px solid #2a2f3e;">
+          <p style="font-size:0.75rem;color:#888;margin:0 0 0.5rem;">
+            Extend the grid outward. Updates shared cols/rows and shifts this panel's origin
+            so all existing hexes stay in the same place on the image.
+          </p>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.4rem;font-size:0.8rem;margin-bottom:0.5rem;">
+            <label style="display:flex;align-items:center;gap:0.3rem;">
+              ← Left (cols)
+              <input id="exp-left" type="number" min="0" step="1" value="0"
+                     style="width:52px;background:#1a1a1a;border:1px solid #445;color:#ccd;padding:0.1rem 0.25rem;border-radius:3px;">
+            </label>
+            <label style="display:flex;align-items:center;gap:0.3rem;">
+              Right (cols) →
+              <input id="exp-right" type="number" min="0" step="1" value="0"
+                     style="width:52px;background:#1a1a1a;border:1px solid #445;color:#ccd;padding:0.1rem 0.25rem;border-radius:3px;">
+            </label>
+            <label style="display:flex;align-items:center;gap:0.3rem;">
+              ↑ Top (rows)
+              <input id="exp-top" type="number" min="0" step="1" value="0"
+                     style="width:52px;background:#1a1a1a;border:1px solid #445;color:#ccd;padding:0.1rem 0.25rem;border-radius:3px;">
+            </label>
+            <label style="display:flex;align-items:center;gap:0.3rem;">
+              Bottom (rows) ↓
+              <input id="exp-bottom" type="number" min="0" step="1" value="0"
+                     style="width:52px;background:#1a1a1a;border:1px solid #445;color:#ccd;padding:0.1rem 0.25rem;border-radius:3px;">
+            </label>
+          </div>
+          <button id="exp-apply" class="map-btn">Apply Expansion</button>
+          <span style="font-size:0.72rem;color:#555;margin-left:0.5rem;">inputs reset to 0 after applying</span>
+        </div>
+      </details>
+
+      <!-- Reference points (origin-only solve) -->
+      <details style="margin-bottom:0.4rem;">
+        <summary style="cursor:pointer;color:#7a8;font-size:0.8rem;user-select:none;">
+          ▶ Reference Points (auto-solve origin only)
+        </summary>
+        <div style="margin-top:0.5rem;padding:0.5rem;background:#111;border-radius:4px;border:1px solid #2a2f3e;">
+          <div id="new-reflist" style="font-size:0.75rem;min-height:1.2em;margin-bottom:0.4rem;color:#888;">
+            <em>No points added</em>
+          </div>
+          <div style="display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap;">
+            <label style="font-size:0.78rem;">Col <input id="new-ref-col" type="number" step="1" value="0"
+                   style="width:48px;background:#1a1a1a;border:1px solid #445;color:#ccd;padding:0.1rem 0.25rem;border-radius:3px;"></label>
+            <label style="font-size:0.78rem;">Row <input id="new-ref-row" type="number" step="1" value="0"
+                   style="width:48px;background:#1a1a1a;border:1px solid #445;color:#ccd;padding:0.1rem 0.25rem;border-radius:3px;"></label>
+            <button id="new-pick-btn" class="map-btn" style="font-size:0.78rem;">Pick on map</button>
+            <button id="new-clear-btn" class="map-btn" style="font-size:0.78rem;">Clear</button>
+            <button id="new-solve-btn" class="map-btn" style="font-size:0.78rem;background:#2a3a2a;border-color:#4a7a4a;" disabled>Solve Origin</button>
+          </div>
+          <div id="new-pick-status" style="display:none;margin-top:0.35rem;font-size:0.75rem;color:#f84;font-weight:bold;"></div>
+        </div>
+      </details>
+
+      <!-- Export -->
+      <div style="border-top:1px solid #334;padding-top:0.6rem;margin-top:0.2rem;">
+        <div style="color:#7a8;font-size:0.72rem;letter-spacing:0.05em;margin-bottom:0.4rem;font-weight:bold;">
+          SERVER PARAMS (new map)
+        </div>
+        <div id="export-info" style="font-size:0.76rem;color:#888;margin-bottom:0.5rem;
+             font-family:monospace;line-height:1.55;background:#111;padding:0.4rem 0.6rem;
+             border-radius:4px;border:1px solid #2a2f3e;"></div>
+        <div style="display:flex;gap:0.4rem;flex-wrap:wrap;align-items:center;">
+          <button id="copy-btn" class="map-btn">Copy JSON</button>
+          {% if g.edit_access_level >= 10 %}
+          <button id="save-btn" class="map-btn" style="background:#2a4a2a;border-color:#4a8a4a;">
+            Save to Server
+          </button>
+          {% endif %}
+          <span id="save-status" style="font-size:0.75rem;"></span>
+        </div>
+      </div>
+
+      <!-- Viewport buttons -->
+      <div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-top:0.5rem;">
+        <button class="map-btn" onclick="newCal.zoomIn()" style="font-size:0.8rem;">+</button>
+        <button class="map-btn" onclick="newCal.zoomOut()" style="font-size:0.8rem;">−</button>
+        <button class="map-btn" onclick="newCal.resetView()" style="font-size:0.8rem;">Fit</button>
+      </div>
+    </div>
+
+    <!-- Canvas -->
+    <div style="position:relative;background:#0d0d0d;border:1px solid #334;border-radius:8px;
+                overflow:hidden;height:68vh;min-height:350px;">
+      <canvas id="new-canvas" style="width:100%;height:100%;display:block;outline:none;"></canvas>
+      <div id="new-coords" style="position:absolute;bottom:6px;left:6px;background:rgba(0,0,0,0.7);
+           color:#aab;font-size:0.68rem;padding:0.15rem 0.4rem;border-radius:3px;pointer-events:none;"></div>
+    </div>
+  </div>
+
+</div><!-- /two-panel -->
+</div><!-- /container -->
+
+<script>
+'use strict';
+
+// ─── Shared state (read by both CalibrationCanvas instances) ─────────────────
+window.sharedParams = {
+    hexPxSize: 40,
+    cols:      20,
+    rows:      15,
+    showGrid:   true,
+    showCoords: false,
+};
+
+// ─── CalibrationCanvas ───────────────────────────────────────────────────────
+
+class CalibrationCanvas {
+    constructor({ canvasId, infoId, coordsId, pickStatusId, onUpdate }) {
+        this.canvas       = document.getElementById(canvasId);
+        this.ctx          = this.canvas.getContext('2d');
+        this.infoEl       = document.getElementById(infoId);
+        this.coordsEl     = document.getElementById(coordsId);
+        this.pickStatusEl = document.getElementById(pickStatusId);
+        this.onUpdate     = onUpdate || (() => {});
+
+        this.image = null;
+        this.imgW  = 0;
+        this.imgH  = 0;
+
+        this.originX  = 0;
+        this.originY  = 0;
+        this.imgScale = 1.0;
+        this.imgOffX  = 0;
+        this.imgOffY  = 0;
+
+        this.panX = 0;  this.panY = 0;  this.zoom = 1.0;
+        this.isDragging = false;  this.hasMoved = false;
+        this.dragStart  = { x: 0, y: 0 };
+        this.panStart   = { x: 0, y: 0 };
+        this._pinchDist = null;
+
+        this.refPoints  = [];
+        this.pickActive = false;
+        this.pickCol    = 0;
+        this.pickRow    = 0;
+
+        this._initCanvas();
+        this._bindEvents();
+    }
+
+    get _s() { return window.sharedParams; }
+
+    // ── Canvas sizing ──────────────────────────────────────────────────────
+
+    _initCanvas() {
+        const resize = () => {
+            const wrap = this.canvas.parentElement;
+            const rect = wrap.getBoundingClientRect();
+            this.canvas.width  = Math.max(rect.width,  200);
+            this.canvas.height = Math.max(rect.height || 350, 200);
+            this.render();
+        };
+        resize();
+        window.addEventListener('resize', resize);
+    }
+
+    // ── Image loading ──────────────────────────────────────────────────────
+
+    loadUrl(url) {
+        const img = new Image();
+        img.onload = () => {
+            this.image = img;
+            this.imgW  = img.naturalWidth;
+            this.imgH  = img.naturalHeight;
+            if (this.infoEl) this.infoEl.textContent = `${this.imgW} × ${this.imgH} px`;
+            this._fitImage();
+            this.render();
+            this.onUpdate();
+        };
+        img.onerror = () => {
+            if (this.infoEl) this.infoEl.textContent = 'Failed to load image';
+        };
+        img.src = url;
+    }
+
+    _fitImage() {
+        if (!this.image) return;
+        const cw = this.canvas.width, ch = this.canvas.height;
+        const z  = Math.min(cw / this.imgW * 0.95, ch / this.imgH * 0.95, 6);
+        this.zoom = z;
+        this.panX = (cw - this.imgW * z) / 2;
+        this.panY = (ch - this.imgH * z) / 2;
+    }
+
+    // ── Coordinate helpers ─────────────────────────────────────────────────
+
+    screenToImg(sx, sy) {
+        return { ix: (sx - this.panX) / this.zoom, iy: (sy - this.panY) / this.zoom };
+    }
+
+    hexToImg(col, row) {
+        const q = col;
+        const r = row - Math.floor(col / 2);
+        const s = this._s.hexPxSize;
+        return {
+            ix: this.originX + s * 1.5 * q,
+            iy: this.originY + s * Math.sqrt(3) * (r + q / 2),
+        };
+    }
+
+    // ── Rendering ──────────────────────────────────────────────────────────
+
+    render() {
+        const ctx = this.ctx;
+        const W = this.canvas.width, H = this.canvas.height;
+        ctx.clearRect(0, 0, W, H);
+        ctx.fillStyle = '#0d0d0d';
+        ctx.fillRect(0, 0, W, H);
+
+        ctx.save();
+        ctx.translate(this.panX, this.panY);
+        ctx.scale(this.zoom, this.zoom);
+
+        if (this.image) {
+            ctx.drawImage(this.image,
+                this.imgOffX, this.imgOffY,
+                this.imgW * this.imgScale, this.imgH * this.imgScale);
+        }
+        if (this._s.showGrid) this._drawGrid(ctx);
+        this._drawOriginMarker(ctx);
+        this._drawRefPoints(ctx);
+
+        ctx.restore();
+    }
+
+    _hexPath(ctx, cx, cy, r) {
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+            const a = Math.PI / 3 * i;
+            i === 0
+                ? ctx.moveTo(cx + r * Math.cos(a), cy + r * Math.sin(a))
+                : ctx.lineTo(cx + r * Math.cos(a), cy + r * Math.sin(a));
+        }
+        ctx.closePath();
+    }
+
+    _drawGrid(ctx) {
+        const s   = this._s.hexPxSize;
+        const sq3 = Math.sqrt(3);
+        const il  = -this.panX / this.zoom;
+        const it  = -this.panY / this.zoom;
+        const ir  = il + this.canvas.width  / this.zoom;
+        const ib  = it + this.canvas.height / this.zoom;
+        const mg  = s * 2;
+
+        const cMin = Math.max(0, Math.floor((il - mg - this.originX) / (s * 1.5)) - 1);
+        const cMax = Math.min(this._s.cols - 1, Math.ceil((ir + mg - this.originX) / (s * 1.5)) + 1);
+
+        ctx.lineWidth   = 1.5 / this.zoom;
+        ctx.strokeStyle = 'rgba(255,255,90,0.60)';
+        ctx.fillStyle   = 'rgba(255,255,90,0.05)';
+
+        for (let col = cMin; col <= cMax; col++) {
+            const baseY = this.originY + s * sq3 * (-Math.floor(col / 2) + col / 2);
+            const rMin  = Math.max(0, Math.floor((it - mg - baseY) / (s * sq3)) - 1);
+            const rMax  = Math.min(this._s.rows - 1, Math.ceil((ib + mg - baseY) / (s * sq3)) + 1);
+
+            for (let row = rMin; row <= rMax; row++) {
+                const { ix, iy } = this.hexToImg(col, row);
+                this._hexPath(ctx, ix, iy, s - 0.5);
+                ctx.fill();
+                ctx.stroke();
+
+                if (this._s.showCoords && this.zoom * s > 18) {
+                    ctx.save();
+                    ctx.fillStyle = 'rgba(255,255,180,0.9)';
+                    ctx.font      = `${Math.max(6, s * 0.24) / this.zoom}px monospace`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(`${col},${row}`, ix, iy);
+                    ctx.restore();
+                    // restore stroke/fill for hex loop
+                    ctx.lineWidth   = 1.5 / this.zoom;
+                    ctx.strokeStyle = 'rgba(255,255,90,0.60)';
+                    ctx.fillStyle   = 'rgba(255,255,90,0.05)';
+                }
+            }
+        }
+    }
+
+    _drawOriginMarker(ctx) {
+        const r  = Math.max(4, 7 / this.zoom);
+        const ox = this.originX, oy = this.originY;
+        ctx.beginPath();
+        ctx.arc(ox, oy, r, 0, Math.PI * 2);
+        ctx.fillStyle   = 'rgba(80,200,255,0.85)';
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth   = 1.5 / this.zoom;
+        ctx.fill();
+        ctx.stroke();
+        const cr = r * 2.2;
+        ctx.beginPath();
+        ctx.moveTo(ox - cr, oy); ctx.lineTo(ox + cr, oy);
+        ctx.moveTo(ox, oy - cr); ctx.lineTo(ox, oy + cr);
+        ctx.strokeStyle = 'rgba(80,200,255,0.5)';
+        ctx.lineWidth   = 1 / this.zoom;
+        ctx.stroke();
+    }
+
+    _drawRefPoints(ctx) {
+        const pr = Math.max(4, 7 / this.zoom);
+        for (const pt of this.refPoints) {
+            const { ix: cx, iy: cy } = this.hexToImg(pt.col, pt.row);
+
+            // Line from picked pixel to computed hex center
+            ctx.beginPath();
+            ctx.moveTo(pt.imgX, pt.imgY);
+            ctx.lineTo(cx, cy);
+            ctx.strokeStyle = 'rgba(255,90,90,0.55)';
+            ctx.lineWidth   = 1 / this.zoom;
+            ctx.stroke();
+
+            // Computed hex center dot
+            ctx.beginPath();
+            ctx.arc(cx, cy, pr * 0.55, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(255,90,90,0.5)';
+            ctx.fill();
+
+            // Picked image pixel dot
+            ctx.beginPath();
+            ctx.arc(pt.imgX, pt.imgY, pr, 0, Math.PI * 2);
+            ctx.fillStyle   = 'rgba(255,90,90,0.9)';
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth   = 1.5 / this.zoom;
+            ctx.fill();
+            ctx.stroke();
+
+            // Label
+            if (this.zoom > 0.12) {
+                ctx.save();
+                ctx.fillStyle    = '#ffffff';
+                ctx.font         = `bold ${12 / this.zoom}px sans-serif`;
+                ctx.textAlign    = 'left';
+                ctx.textBaseline = 'bottom';
+                ctx.fillText(`(${pt.col},${pt.row})`, pt.imgX + pr + 2 / this.zoom, pt.imgY - 1 / this.zoom);
+                ctx.restore();
+            }
+        }
+    }
+
+    // ── Reference point solving ────────────────────────────────────────────
+
+    /** Solve hexPxSize + this.origin from ref points. Returns true on success. */
+    solveAll() {
+        const pts = this.refPoints;
+        if (pts.length < 2) return false;
+        let sumH = 0, cnt = 0;
+        for (let i = 0; i < pts.length - 1; i++) {
+            const p1 = pts[i], p2 = pts[i + 1];
+            const q1 = p1.col, r1 = p1.row - Math.floor(p1.col / 2);
+            const q2 = p2.col, r2 = p2.row - Math.floor(p2.col / 2);
+            const dq = q2 - q1;
+            const dr = (r2 + q2 / 2) - (r1 + q1 / 2);
+            if (Math.abs(dq) > 0.01) { sumH += (p2.imgX - p1.imgX) / (1.5 * dq); cnt++; }
+            if (Math.abs(dr) > 0.01) { sumH += (p2.imgY - p1.imgY) / (Math.sqrt(3) * dr); cnt++; }
+        }
+        if (!cnt) return false;
+        const s = Math.round(sumH / cnt * 100) / 100;
+        if (s <= 0) return false;
+        let sumOX = 0, sumOY = 0;
+        for (const p of pts) {
+            const q = p.col, r = p.row - Math.floor(p.col / 2);
+            sumOX += p.imgX - s * 1.5 * q;
+            sumOY += p.imgY - s * Math.sqrt(3) * (r + q / 2);
+        }
+        window.sharedParams.hexPxSize = s;
+        this.originX = Math.round(sumOX / pts.length * 100) / 100;
+        this.originY = Math.round(sumOY / pts.length * 100) / 100;
+        return true;
+    }
+
+    /** Solve only this.origin using current shared hexPxSize. Needs ≥ 1 point. */
+    solveOriginOnly() {
+        const pts = this.refPoints;
+        if (!pts.length) return false;
+        const s = this._s.hexPxSize;
+        let sumOX = 0, sumOY = 0;
+        for (const p of pts) {
+            const q = p.col, r = p.row - Math.floor(p.col / 2);
+            sumOX += p.imgX - s * 1.5 * q;
+            sumOY += p.imgY - s * Math.sqrt(3) * (r + q / 2);
+        }
+        this.originX = Math.round(sumOX / pts.length * 100) / 100;
+        this.originY = Math.round(sumOY / pts.length * 100) / 100;
+        return true;
+    }
+
+    // ── Server params ──────────────────────────────────────────────────────
+
+    serverParams() {
+        const s       = this._s;
+        const hexSize = s.hexPxSize;
+        const worldW  = (s.cols * 1.5 + 0.5) * hexSize;
+        // bgScale accounts for both image resolution and any imgScale applied during calibration.
+        // bgOffsetX/Y incorporate image offset so the DZI viewport sync stays correct.
+        const bgScale = this.imgW > 0
+            ? Math.round(this.imgScale * this.imgW / worldW * 1e6) / 1e6
+            : this.imgScale;
+        return {
+            cols:        s.cols,
+            rows:        s.rows,
+            hex_size:    hexSize,
+            bg_offset_x: Math.round((this.imgOffX - this.originX) * 1e4) / 1e4,
+            bg_offset_y: Math.round((this.imgOffY - this.originY) * 1e4) / 1e4,
+            bg_scale:    bgScale,
+        };
+    }
+
+    // ── Viewport controls ──────────────────────────────────────────────────
+
+    zoomIn()    { this._zoomAround(this.canvas.width / 2, this.canvas.height / 2, 1.25); }
+    zoomOut()   { this._zoomAround(this.canvas.width / 2, this.canvas.height / 2, 0.80); }
+    resetView() { this._fitImage(); this.render(); }
+
+    _zoomAround(sx, sy, factor) {
+        const nz  = Math.max(0.005, Math.min(40, this.zoom * factor));
+        this.panX = sx - (sx - this.panX) * (nz / this.zoom);
+        this.panY = sy - (sy - this.panY) * (nz / this.zoom);
+        this.zoom = nz;
+        this.render();
+    }
+
+    // ── Events ────────────────────────────────────────────────────────────────
+
+    _bindEvents() {
+        const c = this.canvas;
+        c.setAttribute('tabindex', '0');
+        c.addEventListener('mousedown',  e => this._onDown(e));
+        c.addEventListener('mousemove',  e => this._onMove(e));
+        c.addEventListener('mouseup',    e => this._onUp(e));
+        c.addEventListener('mouseleave', () => { this.isDragging = false; });
+        c.addEventListener('wheel',      e => { e.preventDefault(); this._onWheel(e); }, { passive: false });
+        c.addEventListener('touchstart', e => this._onTouchStart(e), { passive: false });
+        c.addEventListener('touchmove',  e => this._onTouchMove(e),  { passive: false });
+        c.addEventListener('touchend',   () => { this.isDragging = false; this._pinchDist = null; });
+
+        c.addEventListener('mousemove', e => {
+            if (!this.coordsEl) return;
+            const r  = c.getBoundingClientRect();
+            const sx = (e.clientX - r.left) * (c.width  / r.width);
+            const sy = (e.clientY - r.top)  * (c.height / r.height);
+            const { ix, iy } = this.screenToImg(sx, sy);
+            this.coordsEl.textContent = `img (${Math.round(ix)}, ${Math.round(iy)})`;
+        });
+
+        c.addEventListener('keydown', e => {
+            const step = e.shiftKey ? 10 : 1;
+            let changed = true;
+            if      (e.key === 'ArrowLeft')  this.originX -= step;
+            else if (e.key === 'ArrowRight') this.originX += step;
+            else if (e.key === 'ArrowUp')    this.originY -= step;
+            else if (e.key === 'ArrowDown')  this.originY += step;
+            else changed = false;
+            if (changed) { e.preventDefault(); this.render(); this.onUpdate(); }
+        });
+    }
+
+    _clientToCanvas(e) {
+        const r = this.canvas.getBoundingClientRect();
+        return {
+            sx: (e.clientX - r.left) * (this.canvas.width  / r.width),
+            sy: (e.clientY - r.top)  * (this.canvas.height / r.height),
+        };
+    }
+
+    _onDown(e) {
+        if (this.pickActive) return;
+        const { sx, sy } = this._clientToCanvas(e);
+        this.isDragging = true;
+        this.hasMoved   = false;
+        this.dragStart  = { x: sx, y: sy };
+        this.panStart   = { x: this.panX, y: this.panY };
+        this.canvas.style.cursor = 'grabbing';
+    }
+
+    _onMove(e) {
+        if (!this.isDragging) return;
+        const { sx, sy } = this._clientToCanvas(e);
+        const dx = sx - this.dragStart.x, dy = sy - this.dragStart.y;
+        if (Math.abs(dx) > 2 || Math.abs(dy) > 2) this.hasMoved = true;
+        this.panX = this.panStart.x + dx;
+        this.panY = this.panStart.y + dy;
+        this.render();
+    }
+
+    _onUp(e) {
+        this.isDragging = false;
+        const { sx, sy } = this._clientToCanvas(e);
+        if (!this.hasMoved && this.pickActive) {
+            const { ix, iy } = this.screenToImg(sx, sy);
+            this.refPoints.push({ col: this.pickCol, row: this.pickRow, imgX: ix, imgY: iy });
+            this.pickActive = false;
+            this.canvas.style.cursor = 'default';
+            if (this.pickStatusEl) this.pickStatusEl.style.display = 'none';
+            this.render();
+            this.onUpdate();
+        } else {
+            this.canvas.style.cursor = this.pickActive ? 'crosshair' : 'default';
+        }
+    }
+
+    _onWheel(e) {
+        const { sx, sy } = this._clientToCanvas(e);
+        this._zoomAround(sx, sy, e.deltaY < 0 ? 1.12 : 1 / 1.12);
+    }
+
+    _onTouchStart(e) {
+        e.preventDefault();
+        if (e.touches.length === 1) {
+            const t = e.touches[0];
+            this._onDown({ clientX: t.clientX, clientY: t.clientY });
+        } else if (e.touches.length === 2) {
+            this.isDragging = false;
+            this._pinchDist = Math.hypot(
+                e.touches[0].clientX - e.touches[1].clientX,
+                e.touches[0].clientY - e.touches[1].clientY,
+            );
+        }
+    }
+
+    _onTouchMove(e) {
+        e.preventDefault();
+        if (e.touches.length === 1 && this.isDragging) {
+            this._onMove({ clientX: e.touches[0].clientX, clientY: e.touches[0].clientY });
+        } else if (e.touches.length === 2 && this._pinchDist !== null) {
+            const dist = Math.hypot(
+                e.touches[0].clientX - e.touches[1].clientX,
+                e.touches[0].clientY - e.touches[1].clientY,
+            );
+            const r  = this.canvas.getBoundingClientRect();
+            const mx = (e.touches[0].clientX + e.touches[1].clientX) / 2 - r.left;
+            const my = (e.touches[0].clientY + e.touches[1].clientY) / 2 - r.top;
+            this._zoomAround(mx, my, dist / this._pinchDist);
+            this._pinchDist = dist;
+        }
+    }
+
+    /** Activate pick mode — next un-dragged click places a ref point. */
+    startPick(col, row) {
+        this.pickCol    = col;
+        this.pickRow    = row;
+        this.pickActive = true;
+        this.canvas.style.cursor = 'crosshair';
+        this.canvas.focus();
+        if (this.pickStatusEl) {
+            this.pickStatusEl.textContent = `→ Click on the image at hex (${col}, ${row})`;
+            this.pickStatusEl.style.display = '';
+        }
+    }
+}
+
+
+// ─── Wiring ──────────────────────────────────────────────────────────────────
+
+let oldCal, newCal;
+
+function updateAll() {
+    // Read shared controls into window.sharedParams
+    window.sharedParams.hexPxSize = parseFloat(document.getElementById('sh-hex-size').value) || 40;
+    window.sharedParams.cols      = parseInt(document.getElementById('sh-cols').value)        || 20;
+    window.sharedParams.rows      = parseInt(document.getElementById('sh-rows').value)        || 15;
+    window.sharedParams.showGrid   = document.getElementById('sh-show-grid').checked;
+    window.sharedParams.showCoords = document.getElementById('sh-show-coords').checked;
+
+    if (oldCal) oldCal.render();
+    if (newCal) newCal.render();
+    updateExport();
+}
+
+function updateExport() {
+    if (!newCal) return;
+    const p  = newCal.serverParams();
+    const el = document.getElementById('export-info');
+    if (el) {
+        el.innerHTML = Object.entries(p).map(([k, v]) =>
+            `<span style="color:#7a8">${k}:</span> <b style="color:#eee">${
+                typeof v === 'number' ? (Number.isInteger(v) ? v : v.toFixed(6).replace(/\.?0+$/, '')) : v
+            }</b>`
+        ).join('&ensp;&nbsp;');
+    }
+}
+
+/** Wire up the controls for one panel (old or new). */
+function wirePanel({ prefix, cal, refListId, refColId, refRowId, pickBtnId, clearBtnId, solveBtnId, pickStatusId, oxId, oyId, solveAll }) {
+    // Pick button
+    document.getElementById(pickBtnId).addEventListener('click', () => {
+        const col = parseInt(document.getElementById(refColId).value) || 0;
+        const row = parseInt(document.getElementById(refRowId).value) || 0;
+        cal.startPick(col, row);
+    });
+
+    // Clear button
+    document.getElementById(clearBtnId).addEventListener('click', () => {
+        cal.refPoints = [];
+        document.getElementById(refListId).innerHTML = '<em>No points added</em>';
+        document.getElementById(solveBtnId).disabled = true;
+        cal.render();
+        updateExport();
+    });
+
+    // Solve button
+    document.getElementById(solveBtnId).addEventListener('click', () => {
+        const ok = solveAll ? cal.solveAll() : cal.solveOriginOnly();
+        if (ok) {
+            // Push solved values back to controls
+            document.getElementById(oxId).value = cal.originX;
+            document.getElementById(oyId).value = cal.originY;
+            if (solveAll) document.getElementById('sh-hex-size').value = window.sharedParams.hexPxSize;
+            if (oldCal) oldCal.render();
+            if (newCal) newCal.render();
+            updateExport();
+        }
+    });
+
+    // Origin inputs
+    document.getElementById(oxId).addEventListener('input', () => {
+        cal.originX = parseFloat(document.getElementById(oxId).value) || 0;
+        cal.render();
+        updateExport();
+    });
+    document.getElementById(oyId).addEventListener('input', () => {
+        cal.originY = parseFloat(document.getElementById(oyId).value) || 0;
+        cal.render();
+        updateExport();
+    });
+
+    // When cal.onUpdate fires after a pick, refresh the ref list + solve btn
+    cal.onUpdate = () => {
+        // Sync origin inputs (arrow key nudging etc.)
+        document.getElementById(oxId).value = Math.round(cal.originX * 100) / 100;
+        document.getElementById(oyId).value = Math.round(cal.originY * 100) / 100;
+
+        // Ref point list
+        const listEl = document.getElementById(refListId);
+        if (!cal.refPoints.length) {
+            listEl.innerHTML = '<em>No points added</em>';
+        } else {
+            listEl.innerHTML = cal.refPoints.map((p, i) =>
+                `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.2rem;">
+                    <span>Pt ${i+1}: hex&nbsp;(${p.col},${p.row})&nbsp;@&nbsp;img&nbsp;(${Math.round(p.imgX)},${Math.round(p.imgY)})</span>
+                    <button class="map-btn" style="font-size:0.68rem;padding:0.05rem 0.3rem;margin-left:0.4rem;"
+                            onclick="window._removeRef_${prefix}(${i})">✕</button>
+                </div>`
+            ).join('');
+        }
+        const minPts = solveAll ? 2 : 1;
+        document.getElementById(solveBtnId).disabled = cal.refPoints.length < minPts;
+        updateExport();
+    };
+
+    // Dynamic remove-ref callbacks
+    window[`_removeRef_${prefix}`] = (i) => {
+        cal.refPoints.splice(i, 1);
+        cal.onUpdate();
+        cal.render();
+    };
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+
+    // ── Create canvas instances ──────────────────────────────────────────────
+
+    oldCal = new CalibrationCanvas({
+        canvasId:     'old-canvas',
+        infoId:       'old-info',
+        coordsId:     'old-coords',
+        pickStatusId: 'old-pick-status',
+        onUpdate:     updateExport,
+    });
+
+    newCal = new CalibrationCanvas({
+        canvasId:     'new-canvas',
+        infoId:       'new-info',
+        coordsId:     'new-coords',
+        pickStatusId: 'new-pick-status',
+        onUpdate:     updateExport,
+    });
+
+    // ── Wire shared controls ─────────────────────────────────────────────────
+
+    ['sh-hex-size', 'sh-cols', 'sh-rows', 'sh-show-grid', 'sh-show-coords'].forEach(id => {
+        document.getElementById(id).addEventListener('input', updateAll);
+    });
+
+    // ── Wire panel controls ──────────────────────────────────────────────────
+
+    wirePanel({
+        prefix: 'old', cal: oldCal, solveAll: true,
+        refListId: 'old-reflist', refColId: 'old-ref-col', refRowId: 'old-ref-row',
+        pickBtnId: 'old-pick-btn', clearBtnId: 'old-clear-btn', solveBtnId: 'old-solve-btn',
+        pickStatusId: 'old-pick-status', oxId: 'old-ox', oyId: 'old-oy',
+    });
+
+    wirePanel({
+        prefix: 'new', cal: newCal, solveAll: false,
+        refListId: 'new-reflist', refColId: 'new-ref-col', refRowId: 'new-ref-row',
+        pickBtnId: 'new-pick-btn', clearBtnId: 'new-clear-btn', solveBtnId: 'new-solve-btn',
+        pickStatusId: 'new-pick-status', oxId: 'new-ox', oyId: 'new-oy',
+    });
+
+    // ── Image loaders ────────────────────────────────────────────────────────
+
+    function wireImageLoad(urlId, fileId, cal) {
+        document.getElementById(urlId).addEventListener('change', e => {
+            const url = e.target.value.trim();
+            if (url) cal.loadUrl(url);
+        });
+        document.getElementById(fileId).addEventListener('change', e => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = ev => {
+                document.getElementById(urlId).value = '';
+                cal.loadUrl(ev.target.result);
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    wireImageLoad('old-url', 'old-file', oldCal);
+    wireImageLoad('new-url', 'new-file', newCal);
+
+    // ── Image scale / offset controls ────────────────────────────────────────
+
+    function wireImgTransform(scaleId, offxId, offyId, cal) {
+        const update = () => {
+            cal.imgScale = parseFloat(document.getElementById(scaleId).value) || 1.0;
+            cal.imgOffX  = parseFloat(document.getElementById(offxId).value)  || 0;
+            cal.imgOffY  = parseFloat(document.getElementById(offyId).value)  || 0;
+            cal.render();
+            updateExport();
+        };
+        [scaleId, offxId, offyId].forEach(id => {
+            document.getElementById(id).addEventListener('input', update);
+        });
+    }
+
+    wireImgTransform('old-img-scale', 'old-img-offx', 'old-img-offy', oldCal);
+    wireImgTransform('new-img-scale', 'new-img-offx', 'new-img-offy', newCal);
+
+    // ── Grid expansion helper ────────────────────────────────────────────────
+
+    document.getElementById('exp-apply').addEventListener('click', () => {
+        const left   = parseInt(document.getElementById('exp-left').value)   || 0;
+        const right  = parseInt(document.getElementById('exp-right').value)  || 0;
+        const top    = parseInt(document.getElementById('exp-top').value)    || 0;
+        const bottom = parseInt(document.getElementById('exp-bottom').value) || 0;
+        if (!left && !right && !top && !bottom) return;
+
+        const s = window.sharedParams.hexPxSize;
+        window.sharedParams.cols += left + right;
+        window.sharedParams.rows += top  + bottom;
+
+        // Shift new panel origin so existing hexes stay aligned:
+        // Adding cols to the left pushes the whole grid right on the new image.
+        // Adding rows to the top pushes the grid down.
+        newCal.originX += left * s * 1.5;
+        newCal.originY += top  * s * Math.sqrt(3);
+
+        // Sync shared controls
+        document.getElementById('sh-cols').value = window.sharedParams.cols;
+        document.getElementById('sh-rows').value = window.sharedParams.rows;
+
+        // Sync new panel origin inputs
+        document.getElementById('new-ox').value = Math.round(newCal.originX * 100) / 100;
+        document.getElementById('new-oy').value = Math.round(newCal.originY * 100) / 100;
+
+        // Reset expansion inputs
+        ['exp-left', 'exp-right', 'exp-top', 'exp-bottom'].forEach(id => {
+            document.getElementById(id).value = 0;
+        });
+
+        oldCal.render();
+        newCal.render();
+        updateExport();
+    });
+
+    // ── Export buttons ───────────────────────────────────────────────────────
+
+    document.getElementById('copy-btn').addEventListener('click', () => {
+        const json = JSON.stringify(newCal.serverParams(), null, 2);
+        navigator.clipboard.writeText(json).then(() => {
+            const btn = document.getElementById('copy-btn');
+            btn.textContent = 'Copied!';
+            setTimeout(() => { btn.textContent = 'Copy JSON'; }, 2000);
+        });
+    });
+
+    const saveBtn    = document.getElementById('save-btn');
+    const saveStatus = document.getElementById('save-status');
+    if (saveBtn) {
+        saveBtn.addEventListener('click', async () => {
+            const p = newCal.serverParams();
+            saveBtn.disabled = true;
+            if (saveStatus) saveStatus.textContent = 'Saving…';
+            const r = await fetch('/api/hex-map/config', {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify(p),
+            });
+            saveBtn.disabled = false;
+            if (saveStatus) {
+                saveStatus.textContent = r.ok ? 'Saved!' : 'Save failed';
+                saveStatus.style.color = r.ok ? '#4c4' : '#f44';
+                setTimeout(() => { saveStatus.textContent = ''; }, 3000);
+            }
+        });
+    }
+
+    // Initial render
+    updateExport();
+});
+</script>
+{% endblock %}

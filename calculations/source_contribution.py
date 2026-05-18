@@ -6,3 +6,4 @@ class SourceContribution:
     label: str
     source_type: str
     modifiers: dict = field(default_factory=dict)
+    terrain_rules: list = field(default_factory=list)

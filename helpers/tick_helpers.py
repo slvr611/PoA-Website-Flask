@@ -361,6 +361,11 @@ def tick(form_data):
     archive_message = archive_old_changes(current_session)
     full_tick_summary += f"\n\nArchival: {archive_message}"
 
+    if "run_Snapshot Hex Map" in form_data:
+        from helpers.hex_map_helpers import snapshot_current_map
+        snap_message = snapshot_current_map(current_session)
+        full_tick_summary += f"\n\n{snap_message}"
+
     if "run_Give Tick Summary" in form_data:
         give_tick_summary(player_tick_summary, full_tick_summary)
 
@@ -639,7 +644,7 @@ def character_stat_gain_tick(old_character, new_character, schema):
     if stat_gain_roll <= old_character.get("stat_gain_chance", 0):
         possible_stats = []
         for stat in character_stats:
-            if old_character.get(stat, 0) < old_character.get(stat + "_cap", 6):
+            if old_character.get(stat, 0) < old_character.get(stat + "_cap", 4):
                 possible_stats.append(stat)
         if possible_stats and len(possible_stats) > 0:
             stat = random.choice(possible_stats)
@@ -1285,6 +1290,7 @@ GENERAL_TICK_FUNCTIONS = {
     "Backup Database": backup_database,
     "Give Tick Summary": give_tick_summary,
     "Tick Session Number": tick_session_number,
+    "Snapshot Hex Map": None,   # handled directly in tick() after session number is committed
 }
 
 CHARACTER_TICK_FUNCTIONS = {

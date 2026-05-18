@@ -37,7 +37,7 @@
       "node": {
         "bsonType": "json_resource_enum",
         "label": "Node",
-        "description": "The node under the wonder"
+        "description": "The node under the wonder — auto-synced from the map tile when the wonder is placed"
       },
       "effect_description": {
         "bsonType": "string",
@@ -54,7 +54,7 @@
       "owner_nation": {
         "bsonType": "linked_object",
         "label": "Owner",
-        "description": "The nation that currently controls the wonder",
+        "description": "The nation that currently controls the wonder — auto-synced from map tile ownership",
         "noneResult": "None",
         "collections": [
           "nations"

@@ -13,6 +13,8 @@ from .misc_routes import misc_routes
 from .tick_routes import tick_routes
 from .war_routes import war_routes
 from .pops_routes import pops_routes
+from .hex_map_routes import hex_map_routes
+from .district_def_routes import district_def_routes
 
 def register_routes(app, mongo, discord):
     app.register_blueprint(base_routes)
@@ -28,6 +30,8 @@ def register_routes(app, mongo, discord):
     app.register_blueprint(misc_routes)
     app.register_blueprint(tick_routes)
     app.register_blueprint(pops_routes)
+    app.register_blueprint(hex_map_routes)
+    app.register_blueprint(district_def_routes)
 
 @app.context_processor
 def inject_navbar_data():
@@ -82,6 +86,61 @@ def inject_modifier_data():
             "target_type": scope_data.get("target_type", ""),
         })
 
+    scaling_types = json_data.get("scaling_types", {})
+    # "flat" always first, remaining sorted alphabetically by display name
+    sorted_scaling_types = sorted(
+        scaling_types.items(),
+        key=lambda x: (0 if x[0] == "flat" else 1, x[1].get("name", x[0]))
+    )
+    sorted_scaling_type_keys = [k for k, _ in sorted_scaling_types]
+
+    terrains_data = json_data.get("terrains", {})
+    all_terrains = sorted(
+        [{"key": k, "name": v.get("display_name", k)} for k, v in terrains_data.items()],
+        key=lambda x: x["name"]
+    )
+
+    _db_cats = list(mongo.db.district_categories.find({}, {"_id": 0, "key": 1, "display_name": 1}).sort("sort_order", 1))
+    all_district_categories = [{"key": c["key"], "name": c.get("display_name") or c["key"]} for c in _db_cats]
+
+    all_unit_categories = [
+        {"key": "naval", "name": "Naval"},
+        {"key": "cavalry", "name": "Cavalry"},
+        {"key": "infantry", "name": "Infantry"},
+        {"key": "archer", "name": "Archer"},
+        {"key": "siege", "name": "Siege"},
+        {"key": "support", "name": "Support"},
+        {"key": "ruler", "name": "Ruler"},
+        {"key": "land", "name": "Land (All)"},
+        {"key": "all", "name": "All Units"},
+    ]
+
+    all_unit_stats = [
+        {"key": "speed", "name": "Speed"},
+        {"key": "morale", "name": "Morale"},
+        {"key": "damage", "name": "Damage"},
+        {"key": "hp", "name": "HP"},
+        {"key": "defense", "name": "Defense"},
+        {"key": "attack", "name": "Attack"},
+    ]
+
+    all_visibility_targets = [
+        {"key": "all_nations", "name": "All Nations"},
+        {"key": "region", "name": "Specific Region"},
+        {"key": "specific_nation", "name": "Specific Nation"},
+    ]
+
+    all_progress_tiers = [
+        {"key": "0", "name": "Tier 0"},
+        {"key": "1", "name": "Tier 1"},
+        {"key": "2", "name": "Tier 2"},
+        {"key": "3", "name": "Tier 3"},
+        {"key": "4", "name": "Tier 4"},
+    ]
+
+    _tech_category_keys = sorted({v.get("type", "") for v in json_data.get("tech", {}).values() if v.get("type")})
+    all_tech_categories = [{"key": k.lower(), "name": k} for k in _tech_category_keys]
+
     return {
         "modifier_types": modifier_types,
         "sorted_modifier_types": sorted_modifier_types,
@@ -90,4 +149,14 @@ def inject_modifier_data():
         "all_jobs": all_jobs,
         "scope_definitions": scope_definitions,
         "scopes_by_source_type": scopes_by_source_type,
+        "scaling_types": scaling_types,
+        "sorted_scaling_types": sorted_scaling_types,
+        "sorted_scaling_type_keys": sorted_scaling_type_keys,
+        "all_terrains": all_terrains,
+        "all_district_categories": all_district_categories,
+        "all_unit_categories": all_unit_categories,
+        "all_unit_stats": all_unit_stats,
+        "all_progress_tiers": all_progress_tiers,
+        "all_tech_categories": all_tech_categories,
+        "all_visibility_targets": all_visibility_targets,
     }

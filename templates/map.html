@@ -1,14 +1,15 @@
 {% extends "layout.html" %}
 
-{% block title %}Path of Ages - Interactive Map{% endblock %}
+{% block title %}Path of Ages - Maps{% endblock %}
 
 {% block content %}
 <div class="container">
-    <div class="map-controls">
-        <div class="button-group">
-            <button id="map1-btn" class="map-btn active">Political Map</button>
-            <button id="map2-btn" class="map-btn">Terrain Map</button>
-        </div>
+
+    <!-- ======================================================
+         Shared controls bar  (one selector drives everything)
+    ====================================================== -->
+    <div class="map-controls" id="shared-controls">
+
         <div class="session-selector">
             <label for="session-select">Session: </label>
             <select id="session-select">
@@ -20,263 +21,471 @@
                 <span id="era-age-text">Unknown | Unknown</span>
             </div>
         </div>
-        <div class="slider-container">
-            <label for="opacity-slider">Overlay Opacity: </label>
-            <input type="range" id="opacity-slider" min="0" max="100" value="0">
-            <span id="opacity-value">0%</span>
+
+        <!-- Static map controls — shown only for sessions below the hex threshold -->
+        <div id="static-controls" style="display:none" class="button-group">
+            <button id="map1-btn" class="map-btn active">Political Map</button>
+            <button id="map2-btn" class="map-btn">Terrain Map</button>
+            <div class="slider-container">
+                <label for="opacity-slider">Overlay: </label>
+                <input type="range" id="opacity-slider" min="0" max="100" value="0">
+                <span id="opacity-value">0%</span>
+            </div>
+        </div>
+
+        <!-- Hex map controls — shown only for sessions at or above the hex threshold -->
+        <div id="hex-controls" style="display:none" class="button-group">
+            <button id="hex-zoom-in"  class="map-btn">+</button>
+            <button id="hex-zoom-out" class="map-btn">−</button>
+            <button id="hex-reset"    class="map-btn">⌂ Reset</button>
+            <span class="map-btn-separator"></span>
+            <button id="layer-terrain"   class="map-btn layer-btn"          data-layer="terrain">Terrain</button>
+            <button id="layer-political" class="map-btn layer-btn active"   data-layer="political">Political</button>
+            <button id="layer-nodes"     class="map-btn layer-btn active"   data-layer="nodes">Nodes</button>
+            <button id="layer-buildings" class="map-btn layer-btn active"   data-layer="buildings">Buildings</button>
+            <button id="layer-roads"     class="map-btn layer-btn"          data-layer="roads">Roads</button>
+            {% if g.edit_access_level >= 10 %}
+            <span class="map-btn-separator"></span>
+            <button id="tool-pan" class="map-btn active" title="Pan / select">Pan</button>
+            <select id="paint-terrain-select" class="map-btn" title="Paint terrain">
+                <option value="">Terrain: off</option>
+            </select>
+            <select id="paint-nation-select" class="map-btn" title="Paint nation ownership">
+                <option value="">Nation: off</option>
+            </select>
+            <span class="map-btn-separator"></span>
+            <button id="hex-snapshot-btn" class="map-btn">Snapshot</button>
+            <button id="hex-sync-territory-btn" class="map-btn">Sync Territory</button>
+            <button id="hex-purge-oob-btn" class="map-btn" title="Delete tiles outside configured grid bounds (removes stale tiles from old coordinate systems)">Purge OOB Tiles</button>
+            <a href="/admin/grid-calibration" class="map-btn" target="_blank" style="text-decoration:none;">Grid Calibration</a>
+            {% endif %}
+        </div>
+
+    </div>
+
+    <!-- ======================================================
+         Static map viewer  (OpenSeadragon, sessions < threshold)
+    ====================================================== -->
+    <div id="map-viewer" class="map-viewer" style="display:none"></div>
+
+    <!-- ======================================================
+         Hex map viewer  (Canvas, sessions >= threshold)
+    ====================================================== -->
+    <div id="hex-section" style="display:none"
+         data-is-admin="{{ (g.edit_access_level >= 10) | tojson }}">
+        <div class="hex-map-layout">
+            <div class="hex-map-canvas-wrap">
+                <div id="hex-bg-viewer"></div>
+                <canvas id="hex-map-canvas"></canvas>
+            </div>
+            <div class="hex-map-sidebar">
+                <div id="hex-tile-details" class="hex-detail-panel">
+                    <p class="hex-detail-placeholder">Click a tile to view details</p>
+                </div>
+            </div>
         </div>
     </div>
-    <div id="map-viewer" class="map-viewer"></div>
-</div>
+
+</div><!-- /container -->
 
 <script src="https://cdn.jsdelivr.net/npm/openseadragon@3.1.0/build/openseadragon/openseadragon.min.js"></script>
+<script src="{{ url_for('static', filename='js/hex-map.js') }}"></script>
+
 <script>
+// ============================================================
+// HEX MAP THRESHOLD
+// Sessions below this number use the static OpenSeadragon viewer.
+// Sessions at or above use the interactive hex grid.
+// ============================================================
+const HEX_THRESHOLD = 76;
+
+
+// ============================================================
+// HEX MAP BACKGROUND IMAGES
+// Edit this function to configure which background image appears
+// behind the hex grid for each session (like getTerrainMapPath
+// for the static viewer).  Return null for no background.
+// Must be a plain image URL (PNG / JPG / WebP) — not a .dzi file.
+// ============================================================
+
+const base  = 'https://poa-website-static-assets.s3.us-east-1.amazonaws.com/maps/';
+
+function getHexBackgroundUrl(sessionNum) {
+    return base + 'PoA_Geographical_Map_Medieval.dzi';
+}
+
+// ============================================================
+// Main page logic
+// ============================================================
 document.addEventListener('DOMContentLoaded', function () {
-    const sessionSelect = document.getElementById('session-select');
-    const currentSession = parseInt(sessionSelect.value);
-    const maxSession = parseInt(sessionSelect.options[0].value);
-    const eraAgeText = document.getElementById('era-age-text');
-    
-    // Define eras and ages based on session numbers
+
+    // ---- DOM refs ----
+    const sessionSelect  = document.getElementById('session-select');
+    const eraAgeText     = document.getElementById('era-age-text');
+    const staticControls = document.getElementById('static-controls');
+    const hexControls    = document.getElementById('hex-controls');
+    const mapViewer      = document.getElementById('map-viewer');
+    const hexSection     = document.getElementById('hex-section');
+    const opacitySlider  = document.getElementById('opacity-slider');
+    const opacityValue   = document.getElementById('opacity-value');
+    const map1Btn        = document.getElementById('map1-btn');
+    const map2Btn        = document.getElementById('map2-btn');
+    const maxSession     = parseInt(sessionSelect.options[0].value);
+
+    // ---- Era / age display ----
     const eraData = [
-        { maxSession: 7, era: "Tribal Era", age: "Age of Stone" },
-        { maxSession: 17, era: "Tribal Era", age: "Age of Fire" },
-        { maxSession: 28, era: "Ancient Era", age: "Age of Myth" },
-        { maxSession: 42, era: "Ancient Era", age: "Age of Bronze" },
-        { maxSession: 55, era: "Classical Era", age: "Age of Wonder" },
-        { maxSession: 99, era: "Classical Era", age: "Age of Strife" }
+        { maxSession: 7,  era: 'Tribal Era',    age: 'Age of Stone'  },
+        { maxSession: 17, era: 'Tribal Era',    age: 'Age of Fire'   },
+        { maxSession: 28, era: 'Ancient Era',   age: 'Age of Myth'   },
+        { maxSession: 42, era: 'Ancient Era',   age: 'Age of Bronze' },
+        { maxSession: 55, era: 'Classical Era', age: 'Age of Wonder' },
+        { maxSession: 99, era: 'Classical Era', age: 'Age of Strife' },
     ];
-    
-    function updateEraAge(sessionNum) {
-        for (const data of eraData) {
-            if (sessionNum <= data.maxSession) {
-                eraAgeText.textContent = `${data.era} | ${data.age}`;
-                break;
+
+    function updateEraAge(n) {
+        for (const d of eraData) {
+            if (n <= d.maxSession) {
+                eraAgeText.textContent = `${d.era} | ${d.age}`;
+                return;
             }
         }
+        eraAgeText.textContent = 'Unknown | Unknown';
     }
-    
-    // Update era/age when session changes
-    sessionSelect.addEventListener('change', () => {
-        const selectedSession = parseInt(sessionSelect.value);
-        updateEraAge(selectedSession);
-        updateMapVisibility();
-    });
-    
-    // Initialize era/age display
-    updateEraAge(currentSession);
-    
+
+    // ================================================================
+    // Static map (OpenSeadragon)
+    // ================================================================
     const viewer = OpenSeadragon({
-        id: "map-viewer",
-        prefixUrl: "https://cdn.jsdelivr.net/npm/openseadragon@3.1.0/build/openseadragon/images/",
+        id:                    'map-viewer',
+        prefixUrl:             'https://cdn.jsdelivr.net/npm/openseadragon@3.1.0/build/openseadragon/images/',
         showNavigationControl: true,
-        navigatorPosition: "BOTTOM_RIGHT",
-        maxZoomPixelRatio: 2,
-        minZoomImageRatio: 0.1,
-        visibilityRatio: 0.1,
-        immediateRender: true,
-        blendTime: 0,
-        animationTime: 0.5,
-        tileCache: 1000
+        navigatorPosition:     'BOTTOM_RIGHT',
+        maxZoomPixelRatio:     2,
+        minZoomImageRatio:     0.1,
+        visibilityRatio:       0.1,
+        immediateRender:       true,
+        blendTime:             0,
+        animationTime:         0.5,
+        tileCache:             1000,
     });
 
-    const loadedSessions = {}; // { sessionNum: { political: TiledImage, terrain: TiledImage } }
-    let currentMapType = 'political';
+    const loadedSessions  = {};
     let loadingInProgress = false;
-    let loadQueue = [];
+    let loadQueue         = [];
 
-    // Track opacity slider
-    const opacitySlider = document.getElementById('opacity-slider');
-    const opacityValue = document.getElementById('opacity-value');
-
-    function updateMapVisibility() {
-        const selectedSession = parseInt(sessionSelect.value);
-        const sliderVal = parseInt(opacitySlider.value);
-
-        // Hide all maps
-        for (const session in loadedSessions) {
-            if (loadedSessions[session].political) loadedSessions[session].political.setOpacity(0);
-            if (loadedSessions[session].terrain) loadedSessions[session].terrain.setOpacity(0);
+    function updateStaticVisibility() {
+        const sel = parseInt(sessionSelect.value);
+        const slv = parseInt(opacitySlider.value);
+        for (const s in loadedSessions) {
+            if (loadedSessions[s].political) loadedSessions[s].political.setOpacity(0);
+            if (loadedSessions[s].terrain)   loadedSessions[s].terrain.setOpacity(0);
         }
-
-        // Show selected maps
-        const sessionMaps = loadedSessions[selectedSession];
-        if (sessionMaps) {
-            const politicalOpacity = 1 - (sliderVal / 100);
-            const terrainOpacity = sliderVal / 100;
-            if (sessionMaps.political) sessionMaps.political.setOpacity(politicalOpacity);
-            if (sessionMaps.terrain) sessionMaps.terrain.setOpacity(terrainOpacity);
+        const sm = loadedSessions[sel];
+        if (sm) {
+            if (sm.political) sm.political.setOpacity(1 - slv / 100);
+            if (sm.terrain)   sm.terrain.setOpacity(slv / 100);
         } else {
-            // If maps aren't loaded yet, load them
-            loadSession(selectedSession, true);
+            loadStaticSession(sel, true);
         }
     }
 
-    function getTerrainMapPath(sessionNum, basePath) { // TODO: Improve this loading so it's modular
-        if (sessionNum <= 17) {
-            return basePath + "PoA_Geographical_Map_Tribal_Session_1.dzi";
-        } else if (sessionNum <= 42) {
-            return basePath + "PoA_Terrain_Map_Ancient_Session_18.dzi";
-        } else if (sessionNum <= 53) {
-            return basePath + "PoA_Terrain_Map_Classical_Session_43.dzi";
-        } else if (sessionNum == 54) {
-            return basePath + "PoA_Terrain_Map_Classical_Session_54.dzi";
-        } else if (sessionNum == 55) {
-            return basePath + "PoA_Terrain_Map_Classical_Session_55.dzi";
-        } else if (sessionNum <= 63) {
-            return basePath + "PoA_Terrain_Map_Classical_Session_56.dzi";
-        } else if (sessionNum <= 72) {
-            return basePath + "PoA_Terrain_Map_Classical_Session_64.dzi";
-        } else {
-            return basePath + "PoA_Terrain_Map_Classical_Session_73.dzi";
-        }
+    // Configure terrain map backgrounds per session range here (same as before):
+    function getTerrainMapPath(n) {
+        if (n <= 17) return base + 'PoA_Geographical_Map_Tribal_Session_1.dzi';
+        if (n <= 42) return base + 'PoA_Terrain_Map_Ancient_Session_18.dzi';
+        if (n <= 53) return base + 'PoA_Terrain_Map_Classical_Session_43.dzi';
+        if (n === 54) return base + 'PoA_Terrain_Map_Classical_Session_54.dzi';
+        if (n === 55) return base + 'PoA_Terrain_Map_Classical_Session_55.dzi';
+        if (n <= 63) return base + 'PoA_Terrain_Map_Classical_Session_56.dzi';
+        if (n <= 72) return base + 'PoA_Terrain_Map_Classical_Session_64.dzi';
+        return base + 'PoA_Terrain_Map_Classical_Session_73.dzi';
     }
 
-    function loadSession(sessionNum, isPriority = false) {
-        // Don't load if already loaded or in queue
+    function loadStaticSession(sessionNum, isPriority) {
         if (loadedSessions[sessionNum] || loadQueue.includes(sessionNum)) return;
-        
-        // Add to queue
-        if (isPriority) {
-            loadQueue.unshift(sessionNum); // Add to front of queue
-        } else {
-            loadQueue.push(sessionNum); // Add to end of queue
-        }
-        
-        // Start processing queue if not already in progress
-        if (!loadingInProgress) {
-            processLoadQueue();
-        }
+        isPriority ? loadQueue.unshift(sessionNum) : loadQueue.push(sessionNum);
+        if (!loadingInProgress) processLoadQueue();
     }
-    
+
     function processLoadQueue() {
-        if (loadQueue.length === 0) {
-            loadingInProgress = false;
-            return;
-        }
-        
+        if (!loadQueue.length) { loadingInProgress = false; return; }
         loadingInProgress = true;
-        const sessionNum = loadQueue.shift();
-        
-        // Skip if already loaded (might have been loaded by another request)
-        if (loadedSessions[sessionNum]) {
-            processLoadQueue();
-            return;
-        }
-        
+        const sessionNum  = loadQueue.shift();
+        if (loadedSessions[sessionNum]) { processLoadQueue(); return; }
+
         loadedSessions[sessionNum] = {};
-        const basePath = "https://poa-website-static-assets.s3.us-east-1.amazonaws.com/maps/";
-        let loadedCount = 0;
-        
-        // Function to check if both maps are loaded
-        const checkBothLoaded = () => {
-            loadedCount++;
-            if (loadedCount === 2) {
-                // Both maps loaded, continue with next in queue
+        let loaded  = 0;
+        const done  = () => {
+            if (++loaded === 2) {
                 setTimeout(processLoadQueue, 100);
-                
-                // If this was the current session, update visibility
-                if (parseInt(sessionSelect.value) === sessionNum) {
-                    updateMapVisibility();
-                }
+                if (parseInt(sessionSelect.value) === sessionNum) updateStaticVisibility();
             }
         };
 
         viewer.addTiledImage({
-            tileSource: `${basePath}PoA_Political_Map_Session_${sessionNum}.dzi`,
-            buildPyramid: false,
-            opacity: 0,
-            success: ({ item }) => {
-                loadedSessions[sessionNum].political = item;
-                checkBothLoaded();
-            },
-            error: () => {
-                console.error(`Failed to load political map for session ${sessionNum}`);
-                checkBothLoaded();
-            }
+            tileSource: `${base}PoA_Political_Map_Session_${sessionNum}.dzi`,
+            buildPyramid: false, opacity: 0,
+            success: ({ item }) => { loadedSessions[sessionNum].political = item; done(); },
+            error:   () => done(),
         });
-
         viewer.addTiledImage({
-            tileSource: getTerrainMapPath(sessionNum, basePath),
-            buildPyramid: false,
-            opacity: 0,
-            success: ({ item }) => {
-                loadedSessions[sessionNum].terrain = item;
-                checkBothLoaded();
-            },
-            error: () => {
-                console.error(`Failed to load terrain map for session ${sessionNum}`);
-                checkBothLoaded();
-            }
+            tileSource: getTerrainMapPath(sessionNum),
+            buildPyramid: false, opacity: 0,
+            success: ({ item }) => { loadedSessions[sessionNum].terrain = item; done(); },
+            error:   () => done(),
         });
     }
-
-    // Load only the current session immediately
-    loadSession(currentSession, true);
-
-    // Session selector logic
-    sessionSelect.addEventListener('change', () => {
-        const selectedSession = parseInt(sessionSelect.value);
-        updateEraAge(selectedSession);
-        
-        // Load the selected session if not already loaded
-        loadSession(selectedSession, true);
-        
-        // Update visibility
-        updateMapVisibility();
-    });
-
-    // Map swap buttons
-    const map1Btn = document.getElementById('map1-btn');
-    const map2Btn = document.getElementById('map2-btn');
 
     map1Btn.addEventListener('click', () => {
-        opacitySlider.value = 0;
-        opacityValue.textContent = '0%';
-        currentMapType = 'political';
-        map1Btn.classList.add('active');
-        map2Btn.classList.remove('active');
-        updateMapVisibility();
+        opacitySlider.value = 0; opacityValue.textContent = '0%';
+        map1Btn.classList.add('active'); map2Btn.classList.remove('active');
+        updateStaticVisibility();
     });
-
     map2Btn.addEventListener('click', () => {
-        opacitySlider.value = 100;
-        opacityValue.textContent = '100%';
-        currentMapType = 'terrain';
-        map2Btn.classList.add('active');
-        map1Btn.classList.remove('active');
-        updateMapVisibility();
+        opacitySlider.value = 100; opacityValue.textContent = '100%';
+        map2Btn.classList.add('active'); map1Btn.classList.remove('active');
+        updateStaticVisibility();
     });
-
-    // Slider listener
     opacitySlider.addEventListener('input', function () {
-        const val = parseInt(this.value);
-        opacityValue.textContent = val + '%';
-        currentMapType = val < 50 ? 'political' : 'terrain';
-        map1Btn.classList.toggle('active', val < 50);
-        map2Btn.classList.toggle('active', val >= 50);
-        updateMapVisibility();
+        const v = parseInt(this.value);
+        opacityValue.textContent = v + '%';
+        map1Btn.classList.toggle('active', v < 50);
+        map2Btn.classList.toggle('active', v >= 50);
+        updateStaticVisibility();
     });
 
-    // Add preload functionality for adjacent sessions
-    function preloadAdjacentSessions() {
-        const currentSessionNum = parseInt(sessionSelect.value);
-        
-        // Preload one session before and one after the current session
-        if (currentSessionNum > 1) {
-            loadSession(currentSessionNum - 1);
+    // ================================================================
+    // Hex map DZI background
+    // ================================================================
+    let bgViewer     = null;
+    let _activeBgUrl = null;
+
+    function initBgViewer() {
+        if (bgViewer) return;
+        bgViewer = OpenSeadragon({
+            id:                    'hex-bg-viewer',
+            prefixUrl:             'https://cdn.jsdelivr.net/npm/openseadragon@3.1.0/build/openseadragon/images/',
+            showNavigationControl: false,
+            mouseNavEnabled:       false,
+            animationTime:         0,
+            blendTime:             0,
+            immediateRender:       true,
+        });
+    }
+
+    function loadHexBackground(sessionNum) {
+        const url = getHexBackgroundUrl(sessionNum);
+        if (!url) {
+            if (hexViewer) hexViewer.attachBgViewer(null);
+            _activeBgUrl = null;
+            return;
         }
-        
-        if (currentSessionNum < maxSession) {
-            loadSession(currentSessionNum + 1);
+        initBgViewer();
+        if (url !== _activeBgUrl) {
+            _activeBgUrl = url;
+            // Re-render hex canvas once OSD finishes loading the DZI manifest
+            bgViewer.addOnceHandler('open', () => {
+                if (hexViewer) hexViewer.render();
+            });
+            bgViewer.open(url);
+        }
+        if (hexViewer) hexViewer.attachBgViewer(bgViewer);
+    }
+
+    // ================================================================
+    // Hex map
+    // ================================================================
+    let hexViewer      = null;
+    let hexInitialized = false;
+
+    document.getElementById('hex-zoom-in') .addEventListener('click', () => hexViewer && hexViewer.zoomIn());
+    document.getElementById('hex-zoom-out').addEventListener('click', () => hexViewer && hexViewer.zoomOut());
+    document.getElementById('hex-reset')   .addEventListener('click', () => hexViewer && hexViewer.resetView());
+
+    // Layer toggles
+    document.querySelectorAll('.layer-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const layer = btn.dataset.layer;
+            const on    = !btn.classList.contains('active');
+            btn.classList.toggle('active', on);
+            if (hexViewer) hexViewer.setLayer(layer, on);
+        });
+    });
+
+    // ---- Tool buttons: Pan / Paint Terrain / Paint Nation ----
+    const toolPanBtn       = document.getElementById('tool-pan');
+    const terrainSel       = document.getElementById('paint-terrain-select');
+    const nationSel        = document.getElementById('paint-nation-select');
+
+    // Populate terrain options from hex-map.js constants
+    if (terrainSel) {
+        for (const key of TERRAIN_OPTIONS) {
+            const opt = document.createElement('option');
+            opt.value       = key;
+            opt.textContent = 'Terrain: ' + (TERRAIN_NAMES[key] || key);
+            terrainSel.appendChild(opt);
         }
     }
-    
-    // Preload adjacent sessions after a delay
-    setTimeout(preloadAdjacentSessions, 3000);
 
-    // Initial render update
-    setTimeout(updateMapVisibility, 500);
+    function _activatePan() {
+        if (toolPanBtn) toolPanBtn.classList.add('active');
+        if (terrainSel) { terrainSel.value = ''; terrainSel.classList.remove('active'); }
+        if (nationSel)  { nationSel.value  = ''; nationSel.classList.remove('active'); }
+        if (hexViewer)  { hexViewer.setPaintMode(null); hexViewer.setPaintNationMode(null); }
+    }
+
+    if (toolPanBtn) {
+        toolPanBtn.addEventListener('click', _activatePan);
+    }
+
+    if (terrainSel) {
+        terrainSel.addEventListener('change', () => {
+            if (!hexViewer) return;
+            if (terrainSel.value) {
+                toolPanBtn && toolPanBtn.classList.remove('active');
+                nationSel  && (nationSel.value = '');
+                nationSel  && nationSel.classList.remove('active');
+                terrainSel.classList.add('active');
+                hexViewer.setPaintNationMode(null);
+                hexViewer.setPaintMode(terrainSel.value);
+            } else {
+                _activatePan();
+            }
+        });
+    }
+
+    if (nationSel) {
+        nationSel.addEventListener('change', () => {
+            if (!hexViewer) return;
+            if (nationSel.value) {
+                toolPanBtn  && toolPanBtn.classList.remove('active');
+                terrainSel  && (terrainSel.value = '');
+                terrainSel  && terrainSel.classList.remove('active');
+                nationSel.classList.add('active');
+                hexViewer.setPaintMode(null);
+                hexViewer.setPaintNationMode(nationSel.value);
+            } else {
+                _activatePan();
+            }
+        });
+    }
+
+    function _populateNationSelect() {
+        if (!nationSel || !hexViewer) return;
+        const current = nationSel.value;
+        // Clear all but the first "off" option
+        while (nationSel.options.length > 1) nationSel.remove(1);
+        const names = Object.keys(hexViewer.nationColors).sort();
+        for (const name of names) {
+            const opt = document.createElement('option');
+            opt.value       = name;
+            opt.textContent = 'Nation: ' + name;
+            nationSel.appendChild(opt);
+        }
+        nationSel.value = current;
+    }
+
+    const snapBtn = document.getElementById('hex-snapshot-btn');
+    if (snapBtn) {
+        snapBtn.addEventListener('click', async () => {
+            const r = await fetch('/api/hex-map/snapshot', { method: 'POST' });
+            const d = await r.json();
+            snapBtn.textContent = d.message || (r.ok ? 'Snapshot taken' : 'Error');
+            setTimeout(() => { snapBtn.textContent = 'Snapshot'; }, 4000);
+        });
+    }
+
+    const syncTerritoryBtn = document.getElementById('hex-sync-territory-btn');
+    if (syncTerritoryBtn) {
+        syncTerritoryBtn.addEventListener('click', async () => {
+            syncTerritoryBtn.textContent = 'Syncing…';
+            syncTerritoryBtn.disabled = true;
+            const r = await fetch('/api/hex-map/sync-all-territory', { method: 'POST' });
+            const d = await r.json();
+            syncTerritoryBtn.textContent = d.message || (r.ok ? 'Done' : 'Error');
+            syncTerritoryBtn.disabled = false;
+            setTimeout(() => { syncTerritoryBtn.textContent = 'Sync Territory'; }, 4000);
+        });
+    }
+
+    const purgeOobBtn = document.getElementById('hex-purge-oob-btn');
+    if (purgeOobBtn) {
+        purgeOobBtn.addEventListener('click', async () => {
+            if (!confirm('Delete all tiles outside the current grid bounds? This removes stale tiles from old coordinate systems. Make sure cols/rows are configured correctly first.')) return;
+            purgeOobBtn.textContent = 'Purging…';
+            purgeOobBtn.disabled = true;
+            const r = await fetch('/api/hex-map/purge-oob-tiles', { method: 'POST' });
+            const d = await r.json();
+            purgeOobBtn.textContent = r.ok
+                ? `Deleted ${d.tiles_deleted} tiles`
+                : 'Error';
+            purgeOobBtn.disabled = false;
+            if (r.ok && hexViewer) await hexViewer.loadTiles(null);
+            setTimeout(() => { purgeOobBtn.textContent = 'Purge OOB Tiles'; }, 5000);
+        });
+    }
+
+
+    // ================================================================
+    // showSession — the single entry point for all session changes
+    // ================================================================
+    async function showSession(sessionNum) {
+        const isHex = sessionNum >= HEX_THRESHOLD;
+        updateEraAge(sessionNum);
+
+        // Toggle sections and their controls
+        mapViewer     .style.display = isHex ? 'none'  : 'block';
+        hexSection    .style.display = isHex ? 'block' : 'none';
+        staticControls.style.display = isHex ? 'none'  : '';
+        hexControls   .style.display = isHex ? ''      : 'none';
+
+        if (isHex) {
+            if (!hexInitialized) {
+                hexInitialized = true;
+                const isAdmin = hexSection.dataset.isAdmin === 'true';
+                hexViewer = new HexMapViewer('hex-map-canvas', 'hex-tile-details', isAdmin);
+                window._hexViewer = hexViewer;  // console: _hexViewer.showPerfOverlay=true  or  _hexViewer.profileRender()
+                await hexViewer.loadConfig();
+            } else {
+                hexViewer.show();
+            }
+            // Use live tiles for the most current session, snapshot for historical
+            const tileSession = (sessionNum === maxSession) ? null : sessionNum;
+            loadHexBackground(sessionNum);
+            await hexViewer.loadTiles(tileSession);
+            _populateNationSelect();
+
+        } else {
+            // Trigger an OSD resize in case it was hidden
+            setTimeout(() => viewer.viewport && viewer.forceRedraw(), 50);
+            loadStaticSession(sessionNum, true);
+            updateStaticVisibility();
+        }
+    }
+
+    // ================================================================
+    // Session selector change handler
+    // ================================================================
+    sessionSelect.addEventListener('change', () => {
+        showSession(parseInt(sessionSelect.value));
+    });
+
+    // ================================================================
+    // Initial display
+    // ================================================================
+    const initialSession = parseInt(sessionSelect.value);
+    showSession(initialSession);
+
+    // Preload adjacent static sessions after a brief delay
+    setTimeout(() => {
+        const s = parseInt(sessionSelect.value);
+        if (s < HEX_THRESHOLD) {
+            if (s > 1) loadStaticSession(s - 1);
+            const next = s + 1;
+            if (next < HEX_THRESHOLD) loadStaticSession(next);
+        }
+    }, 3000);
+
 });
 </script>
 {% endblock %}

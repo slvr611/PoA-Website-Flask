@@ -95,6 +95,47 @@ def units():
         races_names=_names("races"),
     )
 
+@misc_routes.route("/districts")
+def districts():
+    from pymongo import ASCENDING as ASC
+    defs = list(mongo.db.district_defs.find().sort([("category", ASC), ("tier", ASC), ("display_name", ASC)]))
+    categories = {c["key"]: c for c in mongo.db.district_categories.find({}, {"_id": 0}).sort("sort_order", ASC)}
+    tech_lookup = {key: data.get("display_name", key) for key, data in json_data.get("tech", {}).items()}
+    modifier_types_data = json_data.get("modifier_types", {})
+
+    def _mod_display_key(m):
+        mod_type = m.get("modifier_type", "")
+        if mod_type and mod_type in modifier_types_data:
+            type_def = modifier_types_data[mod_type]
+            field = type_def.get("field_template", mod_type)
+            for ef in type_def.get("extra_fields", []):
+                val = m.get(ef["key"], "")
+                field = field.replace("{" + ef["key"] + "}", val)
+            return field
+        return m.get("modifier", m.get("field", ""))
+
+    for d in defs:
+        for m in d.get("modifiers", []):
+            m["_display_key"] = _mod_display_key(m)
+        for upg in d.get("upgrades", []):
+            for m in upg.get("modifiers", []):
+                m["_display_key"] = _mod_display_key(m)
+
+    # Group by category then tier
+    grouped = {}
+    for d in defs:
+        cat = d.get("category", "")
+        tier = d.get("tier", 1)
+        grouped.setdefault(cat, {}).setdefault(tier, []).append(d)
+
+    return render_template(
+        "districts.html",
+        grouped=grouped,
+        categories=categories,
+        tech_lookup=tech_lookup,
+    )
+
+
 @misc_routes.route("/demographics_overview")
 def demographics_overview():
     nations = list(mongo.db.nations.find().sort("name", ASCENDING))

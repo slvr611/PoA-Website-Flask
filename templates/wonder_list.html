@@ -8,6 +8,57 @@
 
 {% block action_links %}{% endblock %}
 
+{% block extra_content %}
+{% if g.user and g.user.is_admin %}
+<h2 style="margin-top:2rem;">Map Icon</h2>
+<p style="color:#888; font-size:0.85rem;">This image is used for all wonders on the hex map. Falls back to ✦ if not set.</p>
+<div style="display:flex; align-items:center; gap:1rem; margin-top:0.5rem;">
+  <div id="wi-ph" style="width:60px;height:60px;background:#222;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#555;font-size:1.4rem;">✦</div>
+  <img id="wi-img" style="display:none;width:60px;height:60px;object-fit:contain;border-radius:6px;background:#0d0d1a;" alt="Wonder icon">
+  <div>
+    <label style="font-size:0.85rem;padding:0.3rem 0.7rem;background:#2a3a5a;border:1px solid #446;color:#aac;border-radius:4px;cursor:pointer;">
+      ↑ Upload Image
+      <input type="file" accept="image/*" style="display:none;" onchange="wonderDefaultUpload(this)">
+    </label>
+    <div id="wi-status" style="font-size:0.75rem;color:#888;margin-top:0.3rem;"></div>
+  </div>
+</div>
+<script>
+(function() {
+  fetch('/api/wonders/default-image').then(r => r.json()).then(data => {
+    if (data.url) {
+      document.getElementById('wi-img').src = data.url;
+      document.getElementById('wi-img').style.display = '';
+      document.getElementById('wi-ph').style.display = 'none';
+    }
+  }).catch(() => {});
+})();
+
+function wonderDefaultUpload(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const status = document.getElementById('wi-status');
+  status.textContent = 'Uploading…'; status.style.color = '#888';
+  const fd = new FormData();
+  fd.append('image', file);
+  fetch('/wonders/upload-default-image', { method: 'POST', body: fd })
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) {
+        document.getElementById('wi-img').src = data.url;
+        document.getElementById('wi-img').style.display = '';
+        document.getElementById('wi-ph').style.display = 'none';
+        status.textContent = 'Saved!'; status.style.color = '#4c4';
+      } else {
+        status.textContent = 'Error: ' + data.error; status.style.color = '#f44';
+      }
+    })
+    .catch(() => { status.textContent = 'Upload failed.'; status.style.color = '#f44'; });
+}
+</script>
+{% endif %}
+{% endblock %}
+
 {% block pre_table %}
 <h1>Current Wonder Cost:</h1>
 <table class="compact-table">
@@ -17,19 +68,19 @@
 			<th>Wood</th>
 			<th>Stone</th>
 			<th>Food</th>
-			<th>Bronze</th>
 			<th>Iron</th>
+			<th>Gunpowder</th>
 		</tr>
 	</thead>
 	<tbody>
 		<tr>
 			{% set wonder_count = items|length %}
-			<td>{{ 1000 + (100 * wonder_count) }}</td>
+			<td>{{ 1500 + (100 * wonder_count) }}</td>
+			<td>{{ 15 + (1 * wonder_count) }}</td>
+			<td>{{ 10 + (1 * wonder_count) }}</td>
+			<td>{{ 10 + (1 * wonder_count) }}</td>
 			<td>{{ 10 + (1 * wonder_count) }}</td>
 			<td>{{ 5 + (1 * wonder_count) }}</td>
-			<td>{{ 5 + (1 * wonder_count) }}</td>
-			<td>{{ 5 + (1 * wonder_count) }}</td>
-			<td>{{ 1 + (1 * wonder_count) }}</td>
 		</tr>
 	</tbody>
 </table>

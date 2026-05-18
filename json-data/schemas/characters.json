@@ -408,7 +408,7 @@
         "description": "The maximum Rulership stat of the character",
         "calculated": true,
         "hidden": true,
-        "base_value": 6
+        "base_value": 4
       },
       "cunning_cap": {
         "bsonType": "number",
@@ -416,7 +416,7 @@
         "description": "The maximum Cunning stat of the character",
         "calculated": true,
         "hidden": true,
-        "base_value": 6
+        "base_value": 4
       },
       "charisma_cap": {
         "bsonType": "number",
@@ -424,7 +424,7 @@
         "description": "The maximum Charisma stat of the character",
         "calculated": true,
         "hidden": true,
-        "base_value": 6
+        "base_value": 4
       },
       "prowess_cap": {
         "bsonType": "number",
@@ -432,7 +432,7 @@
         "description": "The maximum Prowess stat of the character",
         "calculated": true,
         "hidden": true,
-        "base_value": 6
+        "base_value": 4
       },
       "magic_cap": {
         "bsonType": "number",
@@ -440,7 +440,7 @@
         "description": "The maximum Magic stat of the character",
         "calculated": true,
         "hidden": true,
-        "base_value": 6
+        "base_value": 4
       },
       "strategy_cap": {
         "bsonType": "number",
@@ -448,7 +448,7 @@
         "description": "The maximum Strategy stat of the character",
         "calculated": true,
         "hidden": true,
-        "base_value": 6
+        "base_value": 4
       },
       "rulership": {
         "bsonType": "number",

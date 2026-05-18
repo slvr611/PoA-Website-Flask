@@ -1,0 +1,644 @@
+{#
+  Unified modifier macros.
+
+  ── modifier_table ──────────────────────────────────────────────────────────
+  Supports two input modes:
+  1. WTForms FieldList (nations, characters, data items) — each item is a FormField.
+  2. Dict list (district defs) — each item is a plain dict; fields rendered as
+     {field_name}-{idx}-{subfield}.
+
+  Parameters:
+    modifiers_field     WTForms FieldList or plain list of dicts
+    scope_options       list of {key, name} dicts for scope dropdown
+    field_name          form name prefix (default 'modifiers')
+    entity_source_type  used to compute default scope in WTForms mode
+    show_scaling        show Scaling + Max columns (default True)
+    show_drag           show drag handle in Actions column (default True)
+    show_scope          show Scope column (default True)
+    show_duration       show Duration column (default True)
+    show_source         show Source column (default True)
+    remove_fn           JS function called on Remove button (default 'removeFromArray')
+    add_fn              JS function called on Add Modifier button (default 'addToArray')
+
+  Usage — nation:
+    {% from '_modifier_macros.html' import modifier_table with context %}
+    {{ modifier_table(form.modifiers, scopes_by_source_type.get('nation', []),
+                      entity_source_type='nation') }}
+
+  Usage — dataItemEdit / dataItemNew:
+    {{ modifier_table(field, scopes_by_source_type.get(entity_source_type, []) if entity_source_type else [],
+                      field_name=field.name, entity_source_type=entity_source_type,
+                      show_scaling=True, show_drag=True) }}
+
+  Usage — new_character:
+    {{ modifier_table(field, scopes_by_source_type.get('character', []),
+                      field_name=field.name, entity_source_type='character',
+                      show_scaling=True, show_drag=True) }}
+
+  Usage — district defs (dict list, no scope/duration/source):
+    {{ modifier_table(item.modifiers or [], [], field_name='modifiers',
+                      show_scope=False, show_duration=False, show_source=False,
+                      show_scaling=True, show_drag=True) }}
+
+  ── modifier_section ────────────────────────────────────────────────────────
+  Legacy parallel-array modifier editing macro. Currently unused — kept for
+  reference. District defs now use modifier_table in dict mode instead.
+#}
+
+
+{# ═══════════════════════════════════════════════════════════════════════════
+   WTForms modifier table
+   ═══════════════════════════════════════════════════════════════════════════ #}
+{% macro modifier_table(modifiers_field, scope_options=[], field_name='modifiers',
+                         entity_source_type='', show_scaling=True, show_drag=True,
+                         show_scope=True, show_duration=True, show_source=True,
+                         remove_fn='removeFromArray', add_fn='addToArray') %}
+{% set _scope_map = {
+  'nation':    'nation_self',
+  'character': 'character_self',
+  'merchant':  'merchant_self',
+  'mercenary': 'mercenary_self',
+  'artifact':  'artifact_owner',
+  'wonder':    'wonder_owner_nation',
+  'region':    'region_nations',
+  'global':    'global_nations'
+} %}
+<table class="modifiers-table">
+  <thead>
+    <tr>
+      <th>Modifier Type</th>
+      {% if show_scope %}<th>Scope</th>{% endif %}
+      <th>Value</th>
+      {% if show_scaling %}<th>Scaling</th>{% endif %}
+      {% if show_duration %}<th>Duration</th>{% endif %}
+      {% if show_source %}<th>Source</th>{% endif %}
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody id="{{ field_name }}-tbody">
+    {% for item in modifiers_field %}
+      {% set idx = loop.index0 %}
+      {# Dict mode: plain dict (district defs). WTForms mode: FormField object. #}
+      {% if item is mapping %}
+        {% set mod_type = item.get('modifier_type') or item.get('modifier', '') %}
+        {% set cur_scope = item.get('scope', '') %}
+        {% set effective_scope = cur_scope or (_scope_map.get(entity_source_type, '') if entity_source_type else '') %}
+        {% set scope_target_type = scope_definitions.get(effective_scope, {}).get('target_type', '') %}
+        {% set type_def = modifier_types.get(mod_type, {}) %}
+        {% set extra_fields = type_def.get('extra_fields', []) %}
+        {% set used_keys = extra_fields | map(attribute='key') | list %}
+        <tr>
+          <td>
+            <select class="form-control modifier-type-select"
+                    name="{{ field_name }}-{{ idx }}-modifier_type"
+                    id="{{ field_name }}-{{ idx }}-modifier_type"
+                    data-field="{{ field_name }}"
+                    data-idx="{{ idx }}"
+                    onchange="onModifierTypeChange(this)">
+              <option value="">-- Select Modifier --</option>
+              {% for mt_key, mt_data in sorted_modifier_types %}
+                {% if not scope_target_type or scope_target_type in mt_data.get('applicable_to', []) %}
+                  <option value="{{ mt_key }}" {% if mt_key == mod_type %}selected{% endif %}>{{ mt_data.name }}</option>
+                {% endif %}
+              {% endfor %}
+            </select>
+            <div class="modifier-extra-fields mt-1">
+              {% for extra in extra_fields %}
+                {% set ef_val = item.get(extra.key, '') %}
+                <div class="extra-field-group mt-1">
+                  <label class="small">{{ extra.label }}:</label>
+                  {% if extra.source == 'terrains' %}
+                    <select class="form-control" name="{{ field_name }}-{{ idx }}-{{ extra.key }}" id="{{ field_name }}-{{ idx }}-{{ extra.key }}">
+                      <option value="">-- Select Terrain --</option>
+                      {% for terrain in all_terrains %}
+                        <option value="{{ terrain.key }}" {% if terrain.key == ef_val %}selected{% endif %}>{{ terrain.name }}</option>
+                      {% endfor %}
+                    </select>
+                  {% elif extra.source == 'all_resources' %}
+                    <select class="form-control" name="{{ field_name }}-{{ idx }}-{{ extra.key }}" id="{{ field_name }}-{{ idx }}-{{ extra.key }}">
+                      <option value="">-- Select Resource --</option>
+                      {% for res in all_resources %}
+                        <option value="{{ res.key }}" {% if res.key == ef_val %}selected{% endif %}>{{ res.name }}</option>
+                      {% endfor %}
+                    </select>
+                  {% elif extra.source == 'jobs' %}
+                    <select class="form-control" name="{{ field_name }}-{{ idx }}-{{ extra.key }}" id="{{ field_name }}-{{ idx }}-{{ extra.key }}">
+                      <option value="">-- Select Job --</option>
+                      {% for job in all_jobs %}
+                        <option value="{{ job.key }}" {% if job.key == ef_val %}selected{% endif %}>{{ job.name }}</option>
+                      {% endfor %}
+                    </select>
+                  {% elif extra.source == 'attributes' %}
+                    <select class="form-control" name="{{ field_name }}-{{ idx }}-{{ extra.key }}" id="{{ field_name }}-{{ idx }}-{{ extra.key }}">
+                      <option value="">-- Select Attribute --</option>
+                      {% for attr in all_attributes %}
+                        <option value="{{ attr.key }}" {% if attr.key == ef_val %}selected{% endif %}>{{ attr.name }}</option>
+                      {% endfor %}
+                    </select>
+                  {% elif extra.source == 'unit_categories' %}
+                    <select class="form-control" name="{{ field_name }}-{{ idx }}-{{ extra.key }}" id="{{ field_name }}-{{ idx }}-{{ extra.key }}">
+                      <option value="">-- Select Category --</option>
+                      {% for uc in all_unit_categories %}
+                        <option value="{{ uc.key }}" {% if uc.key == ef_val %}selected{% endif %}>{{ uc.name }}</option>
+                      {% endfor %}
+                    </select>
+                  {% elif extra.source == 'unit_stats' %}
+                    <select class="form-control" name="{{ field_name }}-{{ idx }}-{{ extra.key }}" id="{{ field_name }}-{{ idx }}-{{ extra.key }}">
+                      <option value="">-- Select Stat --</option>
+                      {% for us in all_unit_stats %}
+                        <option value="{{ us.key }}" {% if us.key == ef_val %}selected{% endif %}>{{ us.name }}</option>
+                      {% endfor %}
+                    </select>
+                  {% elif extra.source == 'progress_tiers' %}
+                    <select class="form-control" name="{{ field_name }}-{{ idx }}-{{ extra.key }}" id="{{ field_name }}-{{ idx }}-{{ extra.key }}">
+                      <option value="">-- Select Tier --</option>
+                      {% for pt in all_progress_tiers %}
+                        <option value="{{ pt.key }}" {% if pt.key == ef_val %}selected{% endif %}>{{ pt.name }}</option>
+                      {% endfor %}
+                    </select>
+                  {% elif extra.source == 'tech_categories' %}
+                    <select class="form-control" name="{{ field_name }}-{{ idx }}-{{ extra.key }}" id="{{ field_name }}-{{ idx }}-{{ extra.key }}">
+                      <option value="">-- Select Category --</option>
+                      {% for tc in all_tech_categories %}
+                        <option value="{{ tc.key }}" {% if tc.key == ef_val %}selected{% endif %}>{{ tc.name }}</option>
+                      {% endfor %}
+                    </select>
+                  {% endif %}
+                </div>
+              {% endfor %}
+              {% for fkey in ['resource', 'resource_from', 'resource_to', 'job', 'attribute', 'unit_category', 'unit_stat', 'tier', 'tech_category', 'terrain'] %}
+                {% if fkey not in used_keys %}
+                  <input type="hidden" name="{{ field_name }}-{{ idx }}-{{ fkey }}" id="{{ field_name }}-{{ idx }}-{{ fkey }}" value="">
+                {% endif %}
+              {% endfor %}
+            </div>
+          </td>
+          {% if show_scope %}
+          <td>
+            <select class="form-control modifier-scope-select"
+                    name="{{ field_name }}-{{ idx }}-scope"
+                    id="{{ field_name }}-{{ idx }}-scope"
+                    data-field="{{ field_name }}"
+                    data-idx="{{ idx }}"
+                    onchange="onScopeChange(this)">
+              {% if scope_options %}
+                {% for scope_opt in scope_options %}
+                  <option value="{{ scope_opt.key }}" {% if scope_opt.key == effective_scope %}selected{% endif %}>{{ scope_opt.name }}</option>
+                {% endfor %}
+              {% else %}
+                <option value="">-- No Scope --</option>
+                {% for scope_key, scope_data in scope_definitions.items() %}
+                  <option value="{{ scope_key }}" {% if scope_key == effective_scope %}selected{% endif %}>{{ scope_data.name }}</option>
+                {% endfor %}
+              {% endif %}
+            </select>
+          </td>
+          {% endif %}
+          <td>
+            <input type="number" step="any" class="form-control" name="{{ field_name }}-{{ idx }}-value" id="{{ field_name }}-{{ idx }}-value" value="{{ item.get('value', '') }}">
+            <small class="form-text text-muted modifier-value-hint"{% if type_def.get('value_format') != 'percentage' %} style="display:none"{% endif %}>Decimal (0.1 = 10%)</small>
+          </td>
+          {% if show_scaling %}
+          {% set cur_scaling = item.get('scaling', 'flat') %}
+          {% set scaling_meta = scaling_types.get(cur_scaling, {}) %}
+          {% set cur_extra = item.get('scaling_extra', '') %}
+          <td>
+            <select class="form-control modifier-scaling-select" name="{{ field_name }}-{{ idx }}-scaling" id="{{ field_name }}-{{ idx }}-scaling" onchange="onScalingChange(this)">
+              {% for st_key, st_data in sorted_scaling_types %}
+                <option value="{{ st_key }}" {% if st_key == cur_scaling %}selected{% endif %}>{{ st_data.name }}</option>
+              {% endfor %}
+            </select>
+            <small class="modifier-scaling-x-field"{% if not scaling_meta.get('has_x') %} style="display:none"{% endif %}>Per <input type="number" step="any" class="form-control d-inline" style="width:70px" name="{{ field_name }}-{{ idx }}-scaling_x" id="{{ field_name }}-{{ idx }}-scaling_x" value="{{ item.get('scaling_x', '') }}" placeholder="{{ scaling_meta.get('default_x', 1) }}"></small>
+            <small class="modifier-scaling-extra-field"{% if not scaling_meta.get('has_dropdown') %} style="display:none"{% endif %}>
+              {% if scaling_meta.get('has_dropdown') == 'terrain' %}
+                <select class="form-control" name="{{ field_name }}-{{ idx }}-scaling_extra" id="{{ field_name }}-{{ idx }}-scaling_extra">
+                  <option value="">-- Terrain --</option>
+                  {% for terrain in all_terrains %}<option value="{{ terrain.key }}" {% if terrain.key == cur_extra %}selected{% endif %}>{{ terrain.name }}</option>{% endfor %}
+                </select>
+              {% elif scaling_meta.get('has_dropdown') == 'district_category' %}
+                <select class="form-control" name="{{ field_name }}-{{ idx }}-scaling_extra" id="{{ field_name }}-{{ idx }}-scaling_extra">
+                  <option value="">-- Category --</option>
+                  {% for cat in all_district_categories %}<option value="{{ cat.key }}" {% if cat.key == cur_extra %}selected{% endif %}>{{ cat.name }}</option>{% endfor %}
+                </select>
+              {% elif scaling_meta.get('has_dropdown') == 'resource' %}
+                <select class="form-control" name="{{ field_name }}-{{ idx }}-scaling_extra" id="{{ field_name }}-{{ idx }}-scaling_extra">
+                  <option value="">-- Resource --</option>
+                  {% for resource in all_resources %}<option value="{{ resource.key }}" {% if resource.key == cur_extra %}selected{% endif %}>{{ resource.name }}</option>{% endfor %}
+                </select>
+              {% else %}
+                <input type="hidden" name="{{ field_name }}-{{ idx }}-scaling_extra" id="{{ field_name }}-{{ idx }}-scaling_extra" value="{{ cur_extra }}">
+              {% endif %}
+            </small>
+            <small class="form-text text-muted modifier-max-field"{% if cur_scaling == 'flat' %} style="display:none"{% endif %}>Max: <input type="number" step="any" class="form-control d-inline" style="width:80px" placeholder="None" name="{{ field_name }}-{{ idx }}-max_value" id="{{ field_name }}-{{ idx }}-max_value" value="{{ item.get('max_value', '') }}"></small>
+          </td>
+          {% endif %}
+          {% if show_duration %}<td><input type="number" class="form-control" name="{{ field_name }}-{{ idx }}-duration" id="{{ field_name }}-{{ idx }}-duration" value="{{ item.get('duration', -1) }}"></td>{% endif %}
+          {% if show_source %}<td><input type="text" class="form-control" name="{{ field_name }}-{{ idx }}-source" id="{{ field_name }}-{{ idx }}-source" value="{{ item.get('source', '') }}"></td>{% endif %}
+          <td>
+            {% if show_drag %}<span class="drag-handle">⋮⋮</span>{% endif %}
+            <button type="button" class="btn btn-danger" onclick="{{ remove_fn }}(this, '{{ field_name }}')">Remove</button>
+          </td>
+        </tr>
+      {% else %}
+        {# WTForms FormField mode #}
+        {% set modifier_field = item %}
+        {% set mod_type = modifier_field.form.modifier_type.data or '' %}
+        {% set type_def = modifier_types.get(mod_type, {}) %}
+        {% set extra_fields = type_def.get('extra_fields', []) %}
+        {% set cur_scope = modifier_field.form.scope.data or '' %}
+        {% set effective_scope = cur_scope or (_scope_map.get(entity_source_type, '') if entity_source_type else '') %}
+        {% set scope_target_type = scope_definitions.get(effective_scope, {}).get('target_type', '') %}
+        <tr>
+          <td>
+            {{ modifier_field.form.item_id() }}
+            <select class="form-control modifier-type-select"
+                    name="{{ modifier_field.form.modifier_type.name }}"
+                    id="{{ modifier_field.form.modifier_type.id }}"
+                    data-field="{{ field_name }}"
+                    data-idx="{{ idx }}"
+                    onchange="onModifierTypeChange(this)">
+              <option value="">-- Select Modifier --</option>
+              {% for mt_key, mt_data in sorted_modifier_types %}
+                {% if not scope_target_type or scope_target_type in mt_data.get('applicable_to', []) %}
+                  <option value="{{ mt_key }}" {% if mt_key == mod_type %}selected{% endif %}>{{ mt_data.name }}</option>
+                {% endif %}
+              {% endfor %}
+            </select>
+            <div class="modifier-extra-fields mt-1">
+              {% set used_keys = extra_fields | map(attribute='key') | list %}
+              {% for extra in extra_fields %}
+                {% set ef = modifier_field.form[extra.key] %}
+                <div class="extra-field-group mt-1">
+                  <label class="small">{{ extra.label }}:</label>
+                  {% if extra.source == 'terrains' %}
+                    {% set cur = ef.data or '' %}
+                    <select class="form-control" name="{{ ef.name }}" id="{{ ef.id }}">
+                      <option value="">-- Select Terrain --</option>
+                      {% for terrain in all_terrains %}
+                        <option value="{{ terrain.key }}" {% if terrain.key == cur %}selected{% endif %}>{{ terrain.name }}</option>
+                      {% endfor %}
+                    </select>
+                  {% elif extra.source == 'all_resources' %}
+                    {% set cur = ef.data or '' %}
+                    <select class="form-control" name="{{ ef.name }}" id="{{ ef.id }}">
+                      <option value="">-- Select Resource --</option>
+                      {% for res in all_resources %}
+                        <option value="{{ res.key }}" {% if res.key == cur %}selected{% endif %}>{{ res.name }}</option>
+                      {% endfor %}
+                    </select>
+                  {% elif extra.source == 'jobs' %}
+                    {% set cur = ef.data or '' %}
+                    <select class="form-control" name="{{ ef.name }}" id="{{ ef.id }}">
+                      <option value="">-- Select Job --</option>
+                      {% for job in all_jobs %}
+                        <option value="{{ job.key }}" {% if job.key == cur %}selected{% endif %}>{{ job.name }}</option>
+                      {% endfor %}
+                    </select>
+                  {% elif extra.source == 'attributes' %}
+                    {% set cur = ef.data or '' %}
+                    <select class="form-control" name="{{ ef.name }}" id="{{ ef.id }}">
+                      <option value="">-- Select Attribute --</option>
+                      {% for attr in all_attributes %}
+                        <option value="{{ attr.key }}" {% if attr.key == cur %}selected{% endif %}>{{ attr.name }}</option>
+                      {% endfor %}
+                    </select>
+                  {% elif extra.source == 'unit_categories' %}
+                    {% set cur = ef.data or '' %}
+                    <select class="form-control" name="{{ ef.name }}" id="{{ ef.id }}">
+                      <option value="">-- Select Category --</option>
+                      {% for uc in all_unit_categories %}
+                        <option value="{{ uc.key }}" {% if uc.key == cur %}selected{% endif %}>{{ uc.name }}</option>
+                      {% endfor %}
+                    </select>
+                  {% elif extra.source == 'unit_stats' %}
+                    {% set cur = ef.data or '' %}
+                    <select class="form-control" name="{{ ef.name }}" id="{{ ef.id }}">
+                      <option value="">-- Select Stat --</option>
+                      {% for us in all_unit_stats %}
+                        <option value="{{ us.key }}" {% if us.key == cur %}selected{% endif %}>{{ us.name }}</option>
+                      {% endfor %}
+                    </select>
+                  {% elif extra.source == 'progress_tiers' %}
+                    {% set cur = ef.data or '' %}
+                    <select class="form-control" name="{{ ef.name }}" id="{{ ef.id }}">
+                      <option value="">-- Select Tier --</option>
+                      {% for pt in all_progress_tiers %}
+                        <option value="{{ pt.key }}" {% if pt.key == cur %}selected{% endif %}>{{ pt.name }}</option>
+                      {% endfor %}
+                    </select>
+                  {% elif extra.source == 'tech_categories' %}
+                    {% set cur = ef.data or '' %}
+                    <select class="form-control" name="{{ ef.name }}" id="{{ ef.id }}">
+                      <option value="">-- Select Category --</option>
+                      {% for tc in all_tech_categories %}
+                        <option value="{{ tc.key }}" {% if tc.key == cur %}selected{% endif %}>{{ tc.name }}</option>
+                      {% endfor %}
+                    </select>
+                  {% endif %}
+                </div>
+              {% endfor %}
+              {% for fkey in ['resource', 'resource_from', 'resource_to', 'job', 'attribute', 'unit_category', 'unit_stat', 'tier', 'tech_category', 'terrain'] %}
+                {% if fkey not in used_keys %}
+                <input type="hidden" name="{{ modifier_field.form[fkey].name }}" value="">
+                {% endif %}
+              {% endfor %}
+            </div>
+          </td>
+          {% if show_scope %}
+          <td>
+            <select class="form-control modifier-scope-select"
+                    name="{{ modifier_field.form.scope.name }}"
+                    id="{{ modifier_field.form.scope.id }}"
+                    data-field="{{ field_name }}"
+                    data-idx="{{ idx }}"
+                    onchange="onScopeChange(this)">
+              {% if scope_options %}
+                {% for scope_opt in scope_options %}
+                  <option value="{{ scope_opt.key }}" {% if scope_opt.key == effective_scope %}selected{% endif %}>{{ scope_opt.name }}</option>
+                {% endfor %}
+              {% else %}
+                <option value="">-- No Scope --</option>
+                {% for scope_key, scope_data in scope_definitions.items() %}
+                  <option value="{{ scope_key }}" {% if scope_key == cur_scope %}selected{% endif %}>{{ scope_data.name }}</option>
+                {% endfor %}
+              {% endif %}
+            </select>
+          </td>
+          {% endif %}
+          <td>
+            {{ modifier_field.form.value(class="form-control") }}
+            <small class="form-text text-muted modifier-value-hint"{% if type_def.get('value_format') != 'percentage' %} style="display:none"{% endif %}>Decimal (0.1 = 10%)</small>
+          </td>
+          {% if show_scaling %}
+          {% set cur_scaling = modifier_field.form.scaling.data or 'flat' %}
+          {% set scaling_meta = scaling_types.get(cur_scaling, {}) %}
+          {% set cur_extra = modifier_field.form.scaling_extra.data or '' %}
+          <td>
+            <select class="form-control modifier-scaling-select"
+                    name="{{ modifier_field.form.scaling.name }}"
+                    id="{{ modifier_field.form.scaling.id }}"
+                    onchange="onScalingChange(this)">
+              {% for st_key, st_data in sorted_scaling_types %}
+                <option value="{{ st_key }}" {% if st_key == cur_scaling %}selected{% endif %}>{{ st_data.name }}</option>
+              {% endfor %}
+            </select>
+            <small class="modifier-scaling-x-field"{% if not scaling_meta.get('has_x') %} style="display:none"{% endif %}>Per <input type="number" step="any" class="form-control d-inline" style="width:70px" name="{{ modifier_field.form.scaling_x.name }}" id="{{ modifier_field.form.scaling_x.id }}" value="{{ modifier_field.form.scaling_x.data if modifier_field.form.scaling_x.data is not none else '' }}" placeholder="{{ scaling_meta.get('default_x', 1) }}"></small>
+            <small class="modifier-scaling-extra-field"{% if not scaling_meta.get('has_dropdown') %} style="display:none"{% endif %}>
+              {% if scaling_meta.get('has_dropdown') == 'terrain' %}
+                <select class="form-control" name="{{ modifier_field.form.scaling_extra.name }}" id="{{ modifier_field.form.scaling_extra.id }}">
+                  <option value="">-- Terrain --</option>
+                  {% for terrain in all_terrains %}<option value="{{ terrain.key }}" {% if terrain.key == cur_extra %}selected{% endif %}>{{ terrain.name }}</option>{% endfor %}
+                </select>
+              {% elif scaling_meta.get('has_dropdown') == 'district_category' %}
+                <select class="form-control" name="{{ modifier_field.form.scaling_extra.name }}" id="{{ modifier_field.form.scaling_extra.id }}">
+                  <option value="">-- Category --</option>
+                  {% for cat in all_district_categories %}<option value="{{ cat.key }}" {% if cat.key == cur_extra %}selected{% endif %}>{{ cat.name }}</option>{% endfor %}
+                </select>
+              {% elif scaling_meta.get('has_dropdown') == 'resource' %}
+                <select class="form-control" name="{{ modifier_field.form.scaling_extra.name }}" id="{{ modifier_field.form.scaling_extra.id }}">
+                  <option value="">-- Resource --</option>
+                  {% for resource in all_resources %}<option value="{{ resource.key }}" {% if resource.key == cur_extra %}selected{% endif %}>{{ resource.name }}</option>{% endfor %}
+                </select>
+              {% else %}
+                <input type="hidden" name="{{ modifier_field.form.scaling_extra.name }}" id="{{ modifier_field.form.scaling_extra.id }}" value="{{ cur_extra }}">
+              {% endif %}
+            </small>
+            <small class="form-text text-muted modifier-max-field"{% if cur_scaling == 'flat' %} style="display:none"{% endif %}>Max: {{ modifier_field.form.max_value(class="form-control d-inline", style="width:80px", placeholder="None") }}</small>
+          </td>
+          {% endif %}
+          {% if show_duration %}<td>{{ modifier_field.form.duration(class="form-control") }}</td>{% endif %}
+          {% if show_source %}<td>{{ modifier_field.form.source(class="form-control") }}</td>{% endif %}
+          <td>
+            {% if show_drag %}<span class="drag-handle">⋮⋮</span>{% endif %}
+            <button type="button" class="btn btn-danger" onclick="{{ remove_fn }}(this, '{{ field_name }}')">Remove</button>
+          </td>
+        </tr>
+      {% endif %}
+    {% endfor %}
+  </tbody>
+</table>
+<button type="button" class="btn btn-primary" onclick="{{ add_fn }}('{{ field_name }}')">Add Modifier</button>
+<script>
+if(!window.buildScalingExtraHTML){window.buildScalingExtraHTML=function(dt,n,id,sel){var T=(typeof ALL_TERRAINS!=='undefined'?ALL_TERRAINS:[]);var C=(typeof ALL_DISTRICT_CATEGORIES!=='undefined'?ALL_DISTRICT_CATEGORIES:[]);var R=(typeof ALL_RESOURCES!=='undefined'?ALL_RESOURCES:[]);if(dt==='terrain'){var o='<option value="">-- Terrain --</option>';T.forEach(function(t){o+='<option value="'+t.key+'"'+(t.key===sel?' selected':'')+'>'+t.name+'</option>';});return'<select class="form-control" name="'+n+'" id="'+id+'">'+o+'</select>';}if(dt==='district_category'){var o2='<option value="">-- Category --</option>';C.forEach(function(c){o2+='<option value="'+c.key+'"'+(c.key===sel?' selected':'')+'>'+c.name+'</option>';});return'<select class="form-control" name="'+n+'" id="'+id+'">'+o2+'</select>';}if(dt==='resource'){var o3='<option value="">-- Resource --</option>';R.forEach(function(r){o3+='<option value="'+r.key+'"'+(r.key===sel?' selected':'')+'>'+r.name+'</option>';});return'<select class="form-control" name="'+n+'" id="'+id+'">'+o3+'</select>';}return'<input type="hidden" name="'+n+'" id="'+id+'" value="">';};}
+if(!window.onScalingChange){window.onScalingChange=function(s){var row=s.closest('tr');var _st=(typeof SCALING_TYPES!=='undefined'?SCALING_TYPES:{});var st=_st[s.value]||{};var m=row?row.querySelector('.modifier-max-field'):null;if(m)m.style.display=s.value==='flat'?'none':'';var x=row?row.querySelector('.modifier-scaling-x-field'):null;if(x)x.style.display=st.has_x?'':'none';var ef=row?row.querySelector('.modifier-scaling-extra-field'):null;if(ef){if(st.has_dropdown){var el=ef.querySelector('select,input');var cv=el?el.value:'';var nm=el?el.name:'';var eid=el?el.id:'';ef.innerHTML=window.buildScalingExtraHTML(st.has_dropdown,nm,eid,cv);ef.style.display='';}else{var el2=ef.querySelector('select,input');if(el2)ef.innerHTML='<input type="hidden" name="'+el2.name+'" id="'+el2.id+'" value="">';ef.style.display='none';}}};}
+</script>
+{% endmacro %}
+
+
+{# ═══════════════════════════════════════════════════════════════════════════
+   Parallel-array modifier section (district defs, synergies, upgrades)
+   ═══════════════════════════════════════════════════════════════════════════ #}
+{% macro modifier_section(mods, prefix, table_extra_class='', btn_class='btn-add', btn_id='', btn_style='') %}
+<table class="array-table {{ table_extra_class }}" style="table-layout:fixed; width:100%;">
+  <colgroup>
+    <col>
+    <col style="width:80px;">
+    <col style="width:130px;">
+    <col style="width:70px;">
+    <col style="width:30px;">
+  </colgroup>
+  <thead>
+    <tr><th>Modifier</th><th>Value</th><th>Scaling</th><th>Max</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for mod in (mods or []) %}
+    {% set mod_type_key = mod.get('modifier_type') or mod.get('modifier', '') %}
+    {% set mod_type_def = modifier_types_dict.get(mod_type_key, {}) %}
+    {% set extra_fields = mod_type_def.get('extra_fields', []) %}
+    {% set rendered_extra = [] %}
+    <tr>
+      <td>
+        <select name="{{ prefix }}key" class="form-control mod-type-select" onchange="onDistModTypeChange(this)">
+          {% for key, mt in sorted_modifier_types %}
+          <option value="{{ key }}" {% if mod_type_key == key %}selected{% endif %}>{{ mt.name }}</option>
+          {% endfor %}
+        </select>
+        <div class="mod-extra-fields" style="margin-top:3px;">
+          {% for ef in extra_fields %}
+          {% set ef_val = mod.get(ef.key, '') %}
+          {% if rendered_extra.append(ef.key) %}{% endif %}
+          <div style="display:flex; align-items:center; gap:4px; margin-top:3px;">
+            <label style="font-size:0.72rem; color:#888; white-space:nowrap; min-width:55px;">{{ ef.label }}:</label>
+            {% if ef.source == 'all_resources' %}
+            <select name="{{ prefix }}extra_{{ ef.key }}" class="form-control" style="font-size:0.8rem;">
+              <option value="">--</option>
+              {% for res in all_resources %}
+              <option value="{{ res.key }}" {% if res.key == ef_val %}selected{% endif %}>{{ res.name }}</option>
+              {% endfor %}
+            </select>
+            {% else %}
+            <input name="{{ prefix }}extra_{{ ef.key }}" class="form-control" value="{{ ef_val }}" style="font-size:0.8rem;">
+            {% endif %}
+          </div>
+          {% endfor %}
+          {% for ek in all_extra_keys %}{% if ek not in rendered_extra %}
+          <input type="hidden" name="{{ prefix }}extra_{{ ek }}" value="">
+          {% endif %}{% endfor %}
+        </div>
+      </td>
+      <td><input name="{{ prefix }}value" type="number" step="any" class="form-control" value="{{ mod.value }}"></td>
+      <td>
+        <select name="{{ prefix }}scaling" class="form-control" style="font-size:0.8rem;">
+          {% for sc_key, sc_data in scaling_types.items() %}
+          <option value="{{ sc_key }}" {% if mod.get('scaling', 'flat') == sc_key %}selected{% endif %}>{{ sc_data.name }}</option>
+          {% endfor %}
+        </select>
+      </td>
+      <td><input name="{{ prefix }}max" type="number" step="any" class="form-control"
+                 value="{{ mod.max_value if 'max_value' in mod else '' }}" placeholder="∞"></td>
+      <td><button type="button" class="btn-remove" onclick="this.closest('tr').remove()">✕</button></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+<button type="button" class="{{ btn_class }}" {% if btn_id %}id="{{ btn_id }}"{% endif %} {% if btn_style %}style="{{ btn_style }}"{% endif %}>+ Modifier</button>
+{% endmacro %}
+
+
+{# ═══════════════════════════════════════════════════════════════════════════
+   modifier_row(mod, indent, dimmed, label_color)
+
+   Renders a single .dc-mod-row div for any modifier dict.
+   Handles terrain rule types (multiplier / count_required_delta /
+   extra_resource / swap_resource) with appropriate labels and value formats,
+   and falls back to the standard label + value + scaling_suffix for all
+   other modifier types.
+
+   Parameters:
+     mod          – modifier dict (modifier_type, value, terrain, resource, …)
+     indent       – add left-padding for upgrade/synergy sub-rows (default False)
+     dimmed       – add dc-dim class for inactive rows (default False)
+     label_color  – optional CSS color string for the label (default None)
+
+   Usage:
+     {% from '_modifier_macros.html' import modifier_row with context %}
+     {{ modifier_row(mod) }}
+     {{ modifier_row(mod, indent=True, label_color='#99a') }}
+═══════════════════════════════════════════════════════════════════════════ #}
+{%- macro modifier_row(mod, indent=False, dimmed=False, label_color=None,
+                       row_class='dc-mod-row', key_class='dc-mod-key', val_class='dc-mod-val') -%}
+  {%- set mod_type  = mod.get('modifier_type', '') -%}
+  {%- set type_def  = modifier_types.get(mod_type, {}) -%}
+  {%- set rule_type = type_def.get('rule_type', '') if type_def.get('is_terrain_rule') else '' -%}
+  {%- set val       = mod.value -%}
+  {%- set scope     = mod.get('scope', '') -%}
+
+  {# ── Build label ─────────────────────────────────────────────────────── #}
+  {%- if rule_type -%}
+    {%- set terrain_key  = mod.get('terrain', '') -%}
+    {%- set resource_key = mod.get('resource', '') -%}
+    {%- set ns = namespace(terrain_name=terrain_key | replace('_',' ') | title, resource_name=resource_key | replace('_',' ') | title) -%}
+    {%- for t in all_terrains  -%}{%- if t.key == terrain_key  -%}{%- set ns.terrain_name  = t.name -%}{%- endif -%}{%- endfor -%}
+    {%- for r in all_resources -%}{%- if r.key == resource_key -%}{%- set ns.resource_name = r.name -%}{%- endif -%}{%- endfor -%}
+    {%- if   rule_type == 'multiplier'           -%}{%- set label = ns.terrain_name ~ ' Production Multiplier' ~ ((' (' ~ ns.resource_name ~ ')') if resource_key else '') -%}
+    {%- elif rule_type == 'count_required_delta' -%}{%- set label = ns.terrain_name ~ ' Tiles Required' -%}
+    {%- elif rule_type == 'extra_resource'       -%}{%- set label = ns.terrain_name ~ ' → Extra ' ~ ns.resource_name -%}
+    {%- elif rule_type == 'swap_resource'        -%}{%- set label = ns.terrain_name ~ ' → ' ~ ns.resource_name -%}
+    {%- else                                     -%}{%- set label = type_def.get('name', mod_type | replace('_',' ') | title) -%}
+    {%- endif -%}
+  {%- elif type_def -%}
+    {%- set ns = namespace(parts=[]) -%}
+    {%- for ef in type_def.get('extra_fields', []) -%}
+      {%- set ef_val = mod.get(ef.key, '') -%}
+      {%- if ef_val -%}
+        {%- set ns2 = namespace(found=ef_val | replace('_',' ') | title) -%}
+        {%- if   ef.source == 'all_resources'  -%}{%- for x in all_resources     -%}{%- if x.key == ef_val -%}{%- set ns2.found = x.name -%}{%- endif -%}{%- endfor -%}
+        {%- elif ef.source == 'terrains'        -%}{%- for x in all_terrains      -%}{%- if x.key == ef_val -%}{%- set ns2.found = x.name -%}{%- endif -%}{%- endfor -%}
+        {%- elif ef.source == 'attributes'      -%}{%- for x in all_attributes    -%}{%- if x.key == ef_val -%}{%- set ns2.found = x.name -%}{%- endif -%}{%- endfor -%}
+        {%- elif ef.source == 'jobs'            -%}{%- for x in all_jobs          -%}{%- if x.key == ef_val -%}{%- set ns2.found = x.name -%}{%- endif -%}{%- endfor -%}
+        {%- elif ef.source == 'unit_categories' -%}{%- for x in all_unit_categories -%}{%- if x.key == ef_val -%}{%- set ns2.found = x.name -%}{%- endif -%}{%- endfor -%}
+        {%- elif ef.source == 'unit_stats'      -%}{%- for x in all_unit_stats    -%}{%- if x.key == ef_val -%}{%- set ns2.found = x.name -%}{%- endif -%}{%- endfor -%}
+        {%- elif ef.source == 'progress_tiers'  -%}{%- for x in all_progress_tiers -%}{%- if x.key == ef_val -%}{%- set ns2.found = x.name -%}{%- endif -%}{%- endfor -%}
+        {%- elif ef.source == 'tech_categories' -%}{%- for x in all_tech_categories -%}{%- if x.key == ef_val -%}{%- set ns2.found = x.name -%}{%- endif -%}{%- endfor -%}
+        {%- endif -%}
+        {%- set ns.parts = ns.parts + [ns2.found] -%}
+      {%- endif -%}
+    {%- endfor -%}
+    {%- set label = type_def.get('name', mod_type | replace('_',' ') | title) ~ ((' (' ~ ns.parts | join(', ') ~ ')') if ns.parts else '') -%}
+  {%- else -%}
+    {%- set label = (mod.get('_display_key') or mod.get('modifier', mod_type)) | replace('_',' ') | title -%}
+  {%- endif -%}
+
+  {# ── Build value display ──────────────────────────────────────────────── #}
+  {%- if rule_type == 'multiplier' -%}
+    {%- set val_html = '<span class="' ~ val_class ~ '">&times;' ~ (val | int if val == val | int else val) ~ '</span>' -%}
+  {%- elif rule_type == 'extra_resource' -%}
+    {%- set val_html = '<span class="' ~ val_class ~ '">1 / ' ~ (val | int if val == val | int else val) ~ ' tiles</span>' -%}
+  {%- elif rule_type == 'swap_resource' -%}
+    {%- set val_html = '<span class="' ~ val_class ~ '" style="color:#88a;">active</span>' -%}
+  {%- else -%}
+    {%- set sign = '+' if val > 0 else '' -%}
+    {%- if type_def.get('value_format') == 'percentage' -%}
+      {%- set pct = (val * 100) | round(1) -%}
+      {%- set val_str = (pct | int | string ~ '%') if pct == pct | int else (pct | string ~ '%') -%}
+    {%- else -%}
+      {%- set val_str = (val | int | string) if val == val | int else (val | string) -%}
+    {%- endif -%}
+    {%- set val_html = '<span class="' ~ val_class ~ (' neg' if val < 0 else '') ~ '">' ~ sign ~ val_str ~ '</span>' -%}
+  {%- endif -%}
+
+  {# ── Render row ───────────────────────────────────────────────────────── #}
+  <div class="{{ row_class }}{% if dimmed %} dc-dim{% endif %}"{% if indent %} style="padding-left:0.75rem;"{% endif %}>
+    <span class="{{ key_class }}"{% if label_color %} style="color:{{ label_color }};"{% endif %}>
+      {{- label -}}
+      {%- if scope and scope != 'nation_self' %} <span style="color:#88a;font-size:0.7rem;">({{ scope_definitions.get(scope,{}).get('name', scope) }})</span>{%- endif -%}
+    </span>
+    <span style="display:inline-flex;align-items:baseline;flex-shrink:0;">
+      {{ val_html | safe }}{% if not rule_type %}{{ scaling_suffix(mod) }}{% endif %}
+    </span>
+  </div>
+{%- endmacro -%}
+
+
+{# ═══════════════════════════════════════════════════════════════════════════
+   scaling_suffix(mod)
+   Renders a small muted "per N Label" span for a modifier dict that has
+   a non-flat scaling type.  Import with context so all_terrains,
+   all_district_categories, and all_resources are accessible.
+   Usage: {% from '_modifier_macros.html' import scaling_suffix with context %}
+          {{ scaling_suffix(mod) }}
+═══════════════════════════════════════════════════════════════════════════ #}
+{% macro scaling_suffix(mod) %}
+{%- set sc = mod.get('scaling', '') or '' -%}
+{%- if sc and sc != 'flat' -%}
+  {%- set sx = (mod.get('scaling_x') or 1) | float -%}
+  {%- set se = mod.get('scaling_extra', '') or '' -%}
+  {%- set ns = namespace(label='') -%}
+  {%- if sc == 'per_x_money' -%}
+    {%- set ns.label = 'Gold' -%}
+  {%- elif sc == 'per_x_resource' -%}
+    {%- set ns.label = se | replace('_', ' ') | title -%}
+    {%- for r in all_resources -%}{%- if r.key == se -%}{%- set ns.label = r.name -%}{%- endif -%}{%- endfor -%}
+  {%- elif sc == 'per_x_shallow_and_deep_water_tiles' -%}
+    {%- set ns.label = 'Water Tile' -%}
+  {%- elif sc == 'per_x_magic_nodes' -%}
+    {%- set ns.label = 'Magic Node' -%}
+  {%- elif sc == 'per_x_bloodthirsty_pops' -%}
+    {%- set ns.label = 'Bloodthirsty Pop' -%}
+  {%- elif sc == 'per_x_primary_culture_pops_world' -%}
+    {%- set ns.label = 'Primary Culture Pop' -%}
+  {%- elif sc == 'per_x_primary_religion_pops_world' -%}
+    {%- set ns.label = 'Primary Religion Pop' -%}
+  {%- elif sc == 'per_x_naval_units' -%}
+    {%- set ns.label = 'Naval Unit' -%}
+  {%- elif sc == 'per_x_land_units' -%}
+    {%- set ns.label = 'Land Unit' -%}
+  {%- elif sc == 'per_x_turns_library' -%}
+    {%- set ns.label = 'Library Turn' -%}
+  {%- elif sc == 'per_x_terrain_tiles' -%}
+    {%- set ns.label = se | replace('_', ' ') | title ~ ' Tile' -%}
+    {%- for t in all_terrains -%}{%- if t.key == se -%}{%- set ns.label = t.name ~ ' Tile' -%}{%- endif -%}{%- endfor -%}
+  {%- elif sc == 'per_x_district_category' -%}
+    {%- set ns.label = se | replace('_', ' ') | title ~ ' District' -%}
+    {%- for c in all_district_categories -%}{%- if c.key == se -%}{%- set ns.label = c.name ~ ' District' -%}{%- endif -%}{%- endfor -%}
+  {%- elif sc == 'per_x_administration' -%}
+    {%- set ns.label = 'Administration' -%}
+  {%- elif sc == 'per_x_resource_produced' -%}
+    {%- set ns.label = se | replace('_', ' ') | title ~ ' Produced' -%}
+    {%- for r in all_resources -%}{%- if r.key == se -%}{%- set ns.label = r.name ~ ' Produced' -%}{%- endif -%}{%- endfor -%}
+  {%- endif -%}
+  {%- if ns.label -%}
+<span class="mod-scale-suffix">per {% if sx != 1 %}{{ sx | int if sx == sx | int else sx }} {% endif %}{{ ns.label }}</span>
+  {%- endif -%}
+{%- endif -%}
+{% endmacro %}

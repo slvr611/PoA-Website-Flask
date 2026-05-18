@@ -1,0 +1,234 @@
+{% extends "layout.html" %}
+{% from "_modifier_macros.html" import modifier_row with context %}
+{% block title %}Districts{% endblock %}
+{% block content %}
+<style>
+  .dist-page { max-width: 1400px; margin: 0 auto; padding: 0 2rem; }
+  .dist-page-header { display: flex; align-items: baseline; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
+  .dist-page-header h1 { margin: 0; }
+  .dist-cat-section { margin-bottom: 3rem; }
+  .dist-cat-heading { font-size: 1.4rem; font-weight: 800; border-bottom: 2px solid #444; padding-bottom: 0.3rem; margin-bottom: 1.25rem; }
+  .dist-tier-group { margin-bottom: 1.5rem; }
+  .dist-tier-heading { font-size: 1rem; letter-spacing: 1px; text-transform: uppercase; color: #888; margin: 0 0 0.75rem 0; }
+  .dist-card-grid { display: flex; flex-wrap: wrap; gap: 1.25rem; }
+
+  /* District card */
+  .dc { background: #1a1a2a; color: #ddd; border-radius: 10px; overflow: hidden;
+        border: 3px solid #334; width: 260px; flex-shrink: 0; display: flex; flex-direction: column; font-size: 0.82rem; }
+  .dc--t1 { border-color: #2a6a4a; }
+  .dc--t2 { border-color: #2a4a8a; }
+  .dc--t3 { border-color: #6a2a4a; }
+  .dc header { padding: 0.6rem 0.75rem 0.5rem; display: flex; align-items: flex-start;
+               justify-content: space-between; gap: 0.5rem; border-bottom: 2px solid #334; }
+  .dc--t1 header { border-bottom-color: #2a6a4a; background: #0d2218; }
+  .dc--t2 header { border-bottom-color: #2a4a8a; background: #0d1628; }
+  .dc--t3 header { border-bottom-color: #6a2a4a; background: #280d1a; }
+  .dc-title { font-size: 1rem; font-weight: 800; letter-spacing: 0.5px; margin: 0; line-height: 1.2;
+              text-transform: uppercase; font-variant: small-caps; }
+  .dc-tier-badge { font-size: 0.68rem; font-weight: 700; padding: 0.15rem 0.4rem; border-radius: 999px;
+                   background: #222; border: 1px solid #555; color: #bbb; flex-shrink: 0; }
+  .dc--t1 .dc-tier-badge { border-color: #4a8; color: #4a8; }
+  .dc--t2 .dc-tier-badge { border-color: #8af; color: #8af; }
+  .dc--t3 .dc-tier-badge { border-color: #f8a; color: #f8a; }
+  .dc-body { padding: 0.6rem 0.75rem 0.5rem; flex: 1; }
+  .dc-desc { color: #999; font-style: italic; font-size: 0.8rem; margin: 0 0 0.5rem; line-height: 1.4; }
+  .dc-prereq { font-size: 0.78rem; color: #aaa; margin-bottom: 0.4rem; }
+  .dc-mods { margin: 0.35rem 0; }
+  .dc-mod-row { display: flex; justify-content: space-between; font-size: 0.78rem; padding: 0.1rem 0; }
+  .dc-mod-key { color: #aaa; }
+  .dc-mod-val { color: #8f8; font-family: monospace; }
+  .dc-mod-val.neg { color: #f88; }
+  .dc-rule { height: 1px; background: #334; margin: 0.5rem 0; }
+  .dc-upgrades { font-size: 0.78rem; }
+  .dc-upg-label { color: #888; text-transform: uppercase; letter-spacing: 0.5px; font-size: 0.7rem; margin-bottom: 0.3rem; }
+  .dc-upg-item { margin-bottom: 0.35rem; }
+  .dc-upg-name { font-weight: 700; color: #ccf; }
+  .dc-upg-req { color: #888; font-size: 0.74rem; }
+  .dc-footer { padding: 0.5rem 0.75rem; border-top: 1px solid #334; font-size: 0.76rem; }
+  .dc-cost-heading { color: #777; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.2rem; }
+  .dc-cost-row { display: flex; align-items: center; justify-content: space-between; gap: 0.4rem; }
+  .dc-cost { color: #bbb; flex: 1; }
+  .dc-cost .muted { color: #666; font-style: italic; }
+  .dc-edit-link { background: #222; color: #8af; border: 1px solid #446; border-radius: 4px;
+                  padding: 0.15rem 0.5rem; text-decoration: none; font-size: 0.72rem; white-space: nowrap; flex-shrink: 0; }
+  .dc-edit-link:hover { background: #334; }
+  .no-defs { color: #666; margin-top: 2rem; }
+  .dc-image-wrap { background: #0d0d1a; display: flex; justify-content: center; align-items: center; padding: 0.4rem; }
+  .dc-image { max-height: 80px; max-width: 100%; object-fit: contain; display: block; }
+  .dc-syn-label { color: #888; text-transform: uppercase; letter-spacing: 0.5px; font-size: 0.7rem; margin-bottom: 0.3rem; }
+  .dc-syn-item { font-size: 0.76rem; margin-bottom: 0.3rem; }
+  .dc-syn-node { color: #fa8; font-weight: 700; }
+  .dc-syn-flag { color: #666; font-size: 0.7rem; font-style: italic; }
+  .mod-scale-suffix { color: #666; font-size: 0.7rem; font-family: inherit; margin-left: 0.25rem; }
+</style>
+
+<div class="dist-page">
+<div class="dist-page-header">
+  <h1>Districts</h1>
+  {% if g.user and g.user.is_admin %}
+    <a href="/district-defs/new" style="font-size:0.85rem; color:#8f8;">+ New Definition</a>
+    <a href="/district-categories" style="font-size:0.85rem; color:#8af;">Manage Categories</a>
+  {% endif %}
+</div>
+
+{% if not grouped %}
+  <p class="no-defs">No district definitions yet.
+    {% if g.user and g.user.is_admin %}
+      <a href="/district-categories/new">Add a category</a> to get started.
+    {% endif %}
+  </p>
+{% endif %}
+
+{% for cat_key, tier_groups in grouped.items() %}
+{% set cat_info = categories.get(cat_key, {}) %}
+<div class="dist-cat-section">
+  <h2 class="dist-cat-heading">
+    {{ cat_info.get('display_name', cat_key) or cat_key }}
+    {% if cat_info.get('description') %}
+      <span style="font-size:0.85rem; color:#888; font-weight:400; margin-left:0.75rem;">{{ cat_info.description }}</span>
+    {% endif %}
+    {% if g.user and g.user.is_admin %}
+      <a href="/district-categories/{{ cat_key }}/edit" style="font-size:0.75rem; color:#8af; margin-left:0.75rem; font-weight:400;">Edit Category</a>
+      <a href="/district-defs/new?category={{ cat_key }}" style="font-size:0.75rem; color:#8f8; margin-left:0.5rem; font-weight:400;">+ Add</a>
+    {% endif %}
+  </h2>
+
+  {% for tier in [1, 2, 3] %}
+  {% if tier in tier_groups %}
+  <div class="dist-tier-group">
+    <h3 class="dist-tier-heading">Tier {{ tier }}</h3>
+    <div class="dist-card-grid">
+      {% for d in tier_groups[tier] %}
+      <div class="dc dc--t{{ d.tier }}">
+        <header>
+          <h2 class="dc-title">{{ d.display_name }}</h2>
+          <span class="dc-tier-badge">T{{ d.tier }}</span>
+        </header>
+
+        {% if d.get('image') %}
+        <div class="dc-image-wrap">
+          <img class="dc-image" src="{{ d.image }}" alt="{{ d.display_name }}">
+        </div>
+        {% endif %}
+
+        <div class="dc-body">
+          {% if d.description %}
+          <p class="dc-desc">{{ d.description }}</p>
+          {% endif %}
+
+          {# Requirements #}
+          {% if d.tier > 1 or d.requirements %}
+          <div class="dc-prereq">
+            <b>Requires:</b>
+            {% if d.tier > 1 %}
+              Tier {{ d.tier - 1 }} {{ cat_info.get('display_name', cat_key) }}
+              {% if d.requirements %}, {% endif %}
+            {% endif %}
+            {% for req in d.requirements %}
+              {%- if req.type == 'technology' -%}
+                {{ tech_lookup.get(req.value, req.value) }}
+              {%- elif req.type == 'district' -%}
+                {{ req.value | replace('_', ' ') | title }}
+              {%- elif req.type == 'race' -%}
+                Has {{ req.value }} pop
+              {%- elif req.type == 'nation' -%}
+                Nation: {{ req.value }}
+              {%- else -%}
+                {{ req.value }}
+              {%- endif -%}
+              {%- if not loop.last %}, {% endif %}
+            {% endfor %}
+          </div>
+          {% endif %}
+
+          {# Modifiers #}
+          {% set mods = d.get('modifiers', []) %}
+          {% if mods %}
+          <div class="dc-mods">
+            {% for mod in mods %}{{ modifier_row(mod) }}{% endfor %}
+          </div>
+          {% endif %}
+
+          {# Upgrades #}
+          {% if d.upgrades %}
+          {% if mods %}<div class="dc-rule"></div>{% endif %}
+          <div class="dc-upgrades">
+            <div class="dc-upg-label">Upgrades</div>
+            {% for upg in d.upgrades %}
+            <div class="dc-upg-item">
+              <span class="dc-upg-name">{{ upg.display_name or upg.key }}</span>
+              {% if upg.requirements %}
+                <span class="dc-upg-req">
+                  — requires
+                  {% for req in upg.requirements %}
+                    {%- if req.type == 'technology' -%}{{ tech_lookup.get(req.value, req.value) }}
+                    {%- else -%}{{ req.value }}{%- endif -%}
+                    {%- if not loop.last %}, {% endif %}
+                  {% endfor %}
+                </span>
+              {% endif %}
+              {% for mod in upg.modifiers %}{{ modifier_row(mod, indent=True, label_color='#99a') }}{% endfor %}
+            </div>
+            {% endfor %}
+          </div>
+          {% endif %}
+
+          {# Synergies #}
+          {% set syns = d.get('synergies', []) %}
+          {% if syns %}
+          {% if mods or d.upgrades %}<div class="dc-rule"></div>{% endif %}
+          <div class="dc-upgrades">
+            <div class="dc-syn-label">Synergies</div>
+            {% for syn in syns %}
+            {% set req = syn.get('requirement', '') %}
+            {% set req_list = req if req is iterable and req is not string else [req] %}
+            <div class="dc-syn-item">
+              <span class="dc-syn-node">{{ req_list | join(', ') | title }}</span>
+              {% if syn.get('node_active') %}<span class="dc-syn-flag"> (node active)</span>{% endif %}
+              {% for synmod in syn.get('modifiers', []) %}
+              {% if synmod is mapping %}
+                {% set mk = synmod.get('modifier_type') or synmod.get('modifier', '') %}
+                {% set mv = synmod.get('value', 0) %}
+              {% else %}
+                {% set mk = synmod %}
+                {% set mv = 0 %}
+              {% endif %}
+              {% if mk %}{{ modifier_row(synmod if synmod is mapping else {'modifier': mk, 'value': mv}, indent=True, label_color='#99a') }}{% endif %}
+              {% endfor %}
+            </div>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+
+        <div class="dc-footer">
+          <div class="dc-cost-heading">Build Cost{% if d.upkeep %} / Upkeep{% endif %}</div>
+          <div class="dc-cost-row">
+            <span class="dc-cost">
+              {%- set cost_parts = [] -%}
+              {%- for res, amt in d.get('cost', {}).items() -%}
+                {%- set _ = cost_parts.append(amt|string ~ ' ' ~ res|title) -%}
+              {%- endfor -%}
+              {%- if cost_parts -%}{{ cost_parts | join(', ') }}
+              {%- else -%}<span class="muted">Free</span>{%- endif -%}
+              {%- if d.upkeep -%}
+                {%- set upk = [] -%}
+                {%- for res, amt in d.upkeep.items() -%}{%- set _ = upk.append(amt|string ~ ' ' ~ res|title) -%}{%- endfor -%}
+                {%- if upk %} / {{ upk | join(', ') }}/tick{%- endif -%}
+              {%- endif -%}
+            </span>
+            {% if g.user and g.user.is_admin %}
+              <a class="dc-edit-link" href="/district-defs/{{ d.key }}/edit">Edit</a>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+  {% endfor %}
+</div>
+{% endfor %}
+</div>
+{% endblock %}
