@@ -323,6 +323,8 @@ class ModifierForm(Form):
     tier = StringField("Tier")
     tech_category = StringField("Tech Category")
     terrain = StringField("Terrain")
+    node_resource = StringField("Node Resource")
+    terrain_as = StringField("Terrain As")
     value = FloatField("Value", default=1)
     max_value = FloatField("Max Value", validators=[Optional()])
     duration = IntegerField("Duration", validators=[NumberRange()], default=-1)

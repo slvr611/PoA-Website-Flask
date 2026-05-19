@@ -26,9 +26,20 @@ def per_x_shallow_and_deep_water_tiles(target, scaling_x=1, scaling_extra="", co
 
 
 def per_x_magic_nodes(target, scaling_x=1, scaling_extra="", context=None):
-    nodes = target.get("nodes", {}) or {}
+    loose = (target.get("nodes") or {}).get("magic", 0)
+    territory = (target.get("_calc_cache") or {}).get("territory_node_counts", {}).get("magic", 0)
     divisor = float(scaling_x) if scaling_x else 1
-    return int(nodes.get("magic", 0) / divisor)
+    return int((loose + territory) / divisor)
+
+
+def per_x_resource_nodes(target, scaling_x=1, scaling_extra="", context=None):
+    """Total territory nodes (active + inactive) for any resource type via scaling_extra."""
+    if not scaling_extra:
+        return 0
+    loose = (target.get("nodes") or {}).get(scaling_extra, 0)
+    territory = (target.get("_calc_cache") or {}).get("territory_node_counts", {}).get(scaling_extra, 0)
+    divisor = float(scaling_x) if scaling_x else 1
+    return int((loose + territory) / divisor)
 
 
 def per_x_bloodthirsty_pops(target, scaling_x=1, scaling_extra="", context=None):
@@ -133,6 +144,7 @@ SCALING_METHODS = {
     "per_x_district_category": per_x_district_category,
     "per_x_administration": per_x_administration,
     "per_x_resource_produced": per_x_resource_produced,
+    "per_x_resource_nodes": per_x_resource_nodes,
 }
 
 

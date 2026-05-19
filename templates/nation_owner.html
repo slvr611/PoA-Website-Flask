@@ -108,11 +108,15 @@
 			<a href="/nations/cosmetics/{{ nation.name }}" class="edit-button">Customize</a>
 		{% endif %}
 		{% if g.user and g.user.get('is_admin') %}
-		<form method="POST" action="/visibility/toggle_bypass" style="display:inline;">
-			<button type="submit" class="edit-button" style="background:{{ '#2d5a2d' if visibility_bypassed else '#5a2d2d' }}">
-				Visibility: {{ 'Bypassed' if visibility_bypassed else 'Filtered (Tier ' + visibility_level|string + ')' }}
-			</button>
-		</form>
+			{% if visibility_bypassed %}
+				<a href="{{ request.path }}" class="edit-button" style="background:#2d5a2d">Visibility: Bypassed</a>
+			{% else %}
+				<form method="POST" action="/visibility/toggle_bypass" style="display:inline;">
+					<input type="hidden" name="page_url" value="{{ request.full_path }}">
+					<input type="hidden" name="nation_name" value="{{ nation.name }}">
+					<button type="submit" class="edit-button" style="background:#5a2d2d">Visibility: Filtered (Tier {{ visibility_level }})</button>
+				</form>
+			{% endif %}
 		{% endif %}
 		<div class="action-links">
 			<a href="{{ request.path }}/changes/pending">View Pending Changes</a>

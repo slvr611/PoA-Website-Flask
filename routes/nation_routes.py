@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, flash, g, current_app, jsonify, session, abort
+from flask import Blueprint, render_template, request, redirect, flash, g, current_app, jsonify, abort
 import os
 import re
 from copy import deepcopy
@@ -201,10 +201,11 @@ def nation_item(item_ref):
             {"$set": {"visibility_modifiers": nation["visibility_modifiers"]}}
         )
 
-    visibility_bypassed = False
-    if g.user and g.user.get("is_admin") and session.get("bypass_visibility", False):
+    visibility_bypassed = bool(
+        g.user and g.user.get("is_admin") and request.args.get("bypass_visibility") == "1"
+    )
+    if visibility_bypassed:
         visibility_level = 4
-        visibility_bypassed = True
     elif user_is_owner:
         visibility_level = 4
     else:
@@ -653,5 +654,15 @@ def nation_upload_flag(item_ref):
 def toggle_visibility_bypass():
     if not (g.user and g.user.get("is_admin")):
         abort(403)
-    session["bypass_visibility"] = not session.get("bypass_visibility", False)
-    return redirect(request.referrer or "/")
+    from datetime import datetime, timezone
+    page_url = request.form.get("page_url", "/")
+    nation_name = request.form.get("nation_name", "")
+    mongo.db.admin_visibility_logs.insert_one({
+        "admin_id": g.user.get("id"),
+        "admin_username": g.user.get("username", "unknown"),
+        "timestamp": datetime.now(timezone.utc),
+        "page_url": page_url,
+        "nation": nation_name,
+    })
+    base_path = page_url.split("?")[0]
+    return redirect(base_path + "?bypass_visibility=1")

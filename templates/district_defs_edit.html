@@ -395,7 +395,7 @@ function buildScopeOptions(selectedValue) {
 function buildExtraFieldsHTML(fieldName, index, modifierType, currentData) {
   const typeDef = MODIFIER_TYPES[modifierType] || {};
   const extraFields = typeDef.extra_fields || [];
-  const ALL_EXTRA_KEYS = ['resource', 'resource_from', 'resource_to', 'job', 'attribute', 'unit_category', 'unit_stat', 'tier', 'tech_category', 'terrain'];
+  const ALL_EXTRA_KEYS = ['resource', 'resource_from', 'resource_to', 'job', 'attribute', 'unit_category', 'unit_stat', 'tier', 'tech_category', 'terrain', 'node_resource', 'terrain_as'];
   const renderedKeys = new Set();
   let html = '';
   for (const extra of extraFields) {

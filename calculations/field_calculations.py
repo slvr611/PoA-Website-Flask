@@ -57,12 +57,31 @@ def _build_nation_calc_cache(target):
         except Exception:
             pass
 
+    territory_node_counts = {}
+    active_node_counts = {}
+    nation_name = target.get("name", "")
+    if nation_name:
+        tiles = list(mongo.db.hex_map_tiles.find(
+            {"owner": nation_name, "node.resource_type": {"$exists": True}},
+            {"node.resource_type": 1, "city": 1, "district": 1, "wonder": 1, "_id": 0}
+        ))
+        for tile in tiles:
+            rt = tile.get("node", {}).get("resource_type")
+            if not rt:
+                continue
+            territory_node_counts[rt] = territory_node_counts.get(rt, 0) + 1
+            has_building = bool(tile.get("city") or tile.get("district") or tile.get("wonder"))
+            if has_building:
+                active_node_counts[rt] = active_node_counts.get(rt, 0) + 1
+
     return {
         "pops": pops,
         "pop_count": len(pops),
         "bloodthirsty_pop_count": bloodthirsty_pop_count,
         "primary_culture_pop_count": primary_culture_pop_count,
         "primary_religion_pop_count": primary_religion_pop_count,
+        "territory_node_counts": territory_node_counts,
+        "active_node_counts": active_node_counts,
     }
 
 def calculate_all_fields(target, schema, target_data_type, return_breakdowns=False, instrumentation=None):
@@ -144,8 +163,12 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
         all_terrain_rules = _collect_all_terrain_rules(target)
         proximity_rules = _collect_all_proximity_rules(target)
         if proximity_rules:
-            target["territory_types"] = apply_proximity_terrain_overrides(target, proximity_rules)
-        territory_terrain_totals = collect_territory_terrain(target, all_terrain_rules)
+            effective_territory_types = apply_proximity_terrain_overrides(target, proximity_rules)
+        else:
+            effective_territory_types = target.get("territory_types", {})
+        # Store for use in breakdown tooltips (same data as the calculation)
+        target["_calc_cache"]["effective_territory_types"] = effective_territory_types
+        territory_terrain_totals = collect_territory_terrain(effective_territory_types, all_terrain_rules)
 
         jobs_assigned = collect_jobs_assigned(target)
         job_details = calculate_job_details(target, district_details, modifier_totals, district_totals, tech_totals, city_totals, law_totals, external_modifiers_total)
@@ -199,6 +222,26 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
     for d in [external_modifiers_total, modifier_totals, district_totals, tech_totals, loose_node_totals, territory_terrain_totals, city_totals, law_totals, job_totals, unit_totals, prestige_modifiers, title_modifiers]:
         for key, value in d.items():
             overall_total_modifiers[key] = overall_total_modifiers.get(key, 0) + value
+
+    # Correct {resource}_nodes counts using tile-based truth.
+    # Multiple buildings on one tile still activate its node only once. For
+    # nomadic nations every territory node tile is automatically active.
+    _cache = target.get("_calc_cache") or {}
+    _territory_node_counts = _cache.get("territory_node_counts", {})
+    if _territory_node_counts:
+        _active_node_counts = _cache.get("active_node_counts", {})
+        _is_nomadic = law_totals.get("nomadic", 0) > 0
+        for _res, _territory_count in _territory_node_counts.items():
+            _key = _res + "_nodes"
+            _current = overall_total_modifiers.get(_key, 0)
+            if _is_nomadic:
+                _corrected = _territory_count
+            else:
+                # Cap at distinct activated tiles (not territory count, not building count)
+                _corrected = _active_node_counts.get(_res, 0)
+            if _corrected != _current:
+                overall_total_modifiers[_key] = _corrected
+
     record_timing("build_overall_modifiers_ms", phase_start)
     
     phase_start = perf_counter()
@@ -719,18 +762,29 @@ def _collect_all_proximity_rules(target):
 
 
 def apply_proximity_terrain_overrides(target, proximity_rules):
-    """Return a modified territory_types dict reflecting node proximity terrain overrides.
+    """Return a territory_types dict with node proximity terrain overrides applied.
 
-    For each node_proximity_terrain_override rule, tiles owned by the nation that fall
-    within `distance` hexes of any node producing `node_resource` are counted as
-    `terrain_as` instead of their actual terrain type.
+    Always derives the starting counts from actual tile data (idempotent — never
+    reads from the stored territory_types, so repeated calls never accumulate).
+    Tiles within `distance` hexes of any node producing `node_resource` are
+    counted as `terrain_as` instead of their actual terrain type.
     """
     from helpers.hex_map_helpers import hex_distance, get_node_resource_positions
 
-    territory_types = dict(target.get("territory_types", {}))
     nation_name = target.get("name", "")
     if not nation_name or not proximity_rules:
-        return territory_types
+        return dict(target.get("territory_types", {}))
+
+    owned_tiles = list(mongo.db.hex_map_tiles.find(
+        {"owner": nation_name}, {"q": 1, "r": 1, "terrain": 1, "_id": 0}
+    ))
+
+    # Build fresh counts from actual tile terrain (not from stored territory_types)
+    territory_types = {}
+    for tile in owned_tiles:
+        t = tile.get("terrain", "")
+        if t:
+            territory_types[t] = territory_types.get(t, 0) + 1
 
     for rule in proximity_rules:
         if rule.get("rule_type") != "node_proximity_terrain_override":
@@ -745,9 +799,6 @@ def apply_proximity_terrain_overrides(target, proximity_rules):
         if not node_positions:
             continue
 
-        owned_tiles = list(mongo.db.hex_map_tiles.find(
-            {"owner": nation_name}, {"q": 1, "r": 1, "terrain": 1, "_id": 0}
-        ))
         for tile in owned_tiles:
             terrain = tile.get("terrain", "")
             if not terrain or terrain == terrain_as:
@@ -760,14 +811,13 @@ def apply_proximity_terrain_overrides(target, proximity_rules):
     return {k: v for k, v in territory_types.items() if v > 0}
 
 
-def collect_territory_terrain(target, terrain_rules):
+def collect_territory_terrain(territory_types, terrain_rules):
     """Calculate resource production contributions from terrain tiles.
 
-    terrain_rules is a list of structured rule dicts produced by
-    _collect_all_terrain_rules(). Each rule has: terrain, rule_type, value,
-    and optionally resource.
+    territory_types is a {terrain: count} dict (already with any proximity
+    overrides applied). terrain_rules is a list of structured rule dicts
+    produced by _collect_all_terrain_rules().
     """
-    territory_types = target.get("territory_types", {})
     terrain_json = json_data["terrains"]
     total_modifiers = {}
 
@@ -2583,7 +2633,8 @@ def _build_computed_contributions(
     # ── Terrain production ────────────────────────────────────────────────────
     terrain_json = json_data.get("terrains", {})
     terrain_rules = _collect_all_terrain_rules(target)
-    for terrain, tile_count in target.get("territory_types", {}).items():
+    _eff_tt = (target.get("_calc_cache") or {}).get("effective_territory_types") or target.get("territory_types", {})
+    for terrain, tile_count in _eff_tt.items():
         td = terrain_json.get(terrain, {})
         rules = [r for r in terrain_rules if r.get("terrain") == terrain]
 

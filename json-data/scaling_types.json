@@ -90,5 +90,12 @@
         "has_x": true,
         "default_x": 1,
         "has_dropdown": "resource"
+    },
+    "per_x_resource_nodes": {
+        "name": "Per X Resource Nodes (All)",
+        "description": "Multiplied by all nodes of a specific resource type in the nation's territory (active and inactive) divided by X, floored.",
+        "has_x": true,
+        "default_x": 1,
+        "has_dropdown": "resource"
     }
 }

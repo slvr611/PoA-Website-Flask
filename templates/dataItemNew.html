@@ -144,7 +144,7 @@
 	function buildExtraFieldsHTML(fieldName, index, modifierType, currentData) {
 		const typeDef = MODIFIER_TYPES[modifierType] || {};
 		const extraFields = typeDef.extra_fields || [];
-		const ALL_EXTRA_KEYS = ['resource', 'resource_from', 'resource_to', 'job', 'attribute', 'unit_category', 'unit_stat', 'tier', 'tech_category'];
+		const ALL_EXTRA_KEYS = ['resource', 'resource_from', 'resource_to', 'job', 'attribute', 'unit_category', 'unit_stat', 'tier', 'tech_category', 'terrain', 'node_resource', 'terrain_as'];
 		const renderedKeys = new Set();
 		let html = '';
 		for (const extra of extraFields) {
@@ -196,6 +196,13 @@
 				let opts = '<option value="">-- Select Category --</option>';
 				for (const tc of ALL_TECH_CATEGORIES) {
 					opts += `<option value="${tc.key}" ${tc.key === cur ? 'selected' : ''}>${tc.name}</option>`;
+				}
+				html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
+					<select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+			} else if (extra.source === 'terrains') {
+				let opts = '<option value="">-- Select Terrain --</option>';
+				for (const t of ALL_TERRAINS) {
+					opts += `<option value="${t.key}" ${t.key === cur ? 'selected' : ''}>${t.name}</option>`;
 				}
 				html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
 					<select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
