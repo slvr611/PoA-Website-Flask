@@ -459,6 +459,29 @@
         "field_template": "vassal_slots",
         "applicable_to": ["nation"]
     },
+    "territory_node_proximity_limit": {
+        "name": "Territory Node Proximity Limit",
+        "description": "Nation can only control tiles within the specified number of hexes of a node with a specific resource type. Value = max distance in hexes.",
+        "value_format": "number",
+        "is_map_restriction": true,
+        "rule_type": "node_proximity_limit",
+        "extra_fields": [
+            {"key": "node_resource", "label": "Node Resource Type", "source": "all_resources"}
+        ],
+        "applicable_to": ["nation"]
+    },
+    "node_proximity_terrain_override": {
+        "name": "Node Proximity Terrain Override",
+        "description": "Tiles within the specified number of hexes of a node producing a given resource type are treated as a different terrain type for calculation purposes. Value = distance in hexes.",
+        "value_format": "number",
+        "is_proximity_rule": true,
+        "rule_type": "node_proximity_terrain_override",
+        "extra_fields": [
+            {"key": "node_resource", "label": "Node Resource Type", "source": "all_resources"},
+            {"key": "terrain_as", "label": "Treat As Terrain", "source": "terrains"}
+        ],
+        "applicable_to": ["nation"]
+    },
     "terrain_production_multiplier": {
         "name": "Terrain Production Multiplier",
         "description": "Multiplies production from a terrain type. 1.5 = x1.5. Stacks multiplicatively.",

@@ -1,8 +1,70 @@
-from app_core import mongo
+from app_core import mongo, category_data
+from bson import ObjectId
 import datetime
 from collections import deque
 
 AXIAL_DIRECTIONS = [(1, 0), (-1, 0), (0, 1), (0, -1), (1, -1), (-1, 1)]
+
+
+def hex_distance(q1, r1, q2, r2):
+    """Axial hex grid distance (equivalent to cube coordinate Chebyshev distance)."""
+    dq, dr = q2 - q1, r2 - r1
+    return max(abs(dq), abs(dr), abs(dq + dr))
+
+
+def get_node_resource_positions(resource_type):
+    """Return list of (q, r) for all tiles whose node produces resource_type."""
+    tiles = mongo.db.hex_map_tiles.find(
+        {"node.resource_type": resource_type}, {"q": 1, "r": 1, "_id": 0}
+    )
+    return [(t["q"], t["r"]) for t in tiles]
+
+
+def is_within_distance_of_node_resource(q, r, resource_type, max_distance, node_positions=None):
+    """Return True if (q, r) is within max_distance hexes of any node producing resource_type.
+
+    If node_positions is pre-fetched pass it to avoid a redundant DB query.
+    Returns True (unrestricted) when no nodes of that type exist on the map.
+    """
+    if node_positions is None:
+        node_positions = get_node_resource_positions(resource_type)
+    if not node_positions:
+        return True
+    return any(hex_distance(q, r, nq, nr) <= max_distance for nq, nr in node_positions)
+
+
+def get_nation_node_proximity_restrictions(nation_name):
+    """Return [(resource_type, max_distance)] territory restrictions for the nation's race trait.
+
+    Reads the race's negative_trait laws from the JSON schema looking for keys of the
+    form nation_territory_max_{resource}_node_distance.
+    """
+    restrictions = []
+    nation = mongo.db.nations.find_one({"name": nation_name}, {"primary_race": 1, "_id": 0})
+    if not nation or not nation.get("primary_race"):
+        return restrictions
+    try:
+        race = mongo.db.races.find_one(
+            {"_id": ObjectId(nation["primary_race"])}, {"negative_trait": 1, "_id": 0}
+        )
+    except Exception:
+        return restrictions
+    if not race or not race.get("negative_trait"):
+        return restrictions
+    trait = race["negative_trait"]
+    race_schema = category_data["races"]["schema"]
+    trait_laws = race_schema.get("properties", {}).get("negative_trait", {}).get("laws", {})
+    laws = trait_laws.get(trait, {})
+    prefix = "nation_territory_max_"
+    suffix = "_node_distance"
+    for key, value in laws.items():
+        if key.startswith(prefix) and key.endswith(suffix):
+            resource = key[len(prefix):-len(suffix)]
+            try:
+                restrictions.append((resource, int(value)))
+            except (ValueError, TypeError):
+                pass
+    return restrictions
 
 
 def name_to_color(name):
@@ -82,15 +144,22 @@ def get_nation_connected_tiles(nation_name):
 
 
 def is_tile_legally_controllable(q, r, nation_name):
-    """
-    Returns True if nation_name can legally claim tile (q, r).
-    Requires the tile to be adjacent to the nation's connected territory.
+    """Return True if nation_name can legally claim tile (q, r).
+
+    Checks two conditions:
+    1. The tile must be adjacent to the nation's connected territory.
+    2. The tile must satisfy any node proximity restrictions from the nation's race trait
+       (e.g. Ethereal races can only own tiles within 1 hex of a magic node).
     """
     connected = get_nation_connected_tiles(nation_name)
-    for nq, nr in axial_neighbors(q, r):
-        if (nq, nr) in connected:
-            return True
-    return False
+    adjacent = any((nq, nr) in connected for nq, nr in axial_neighbors(q, r))
+    if not adjacent:
+        return False
+    for resource_type, max_distance in get_nation_node_proximity_restrictions(nation_name):
+        node_positions = get_node_resource_positions(resource_type)
+        if not is_within_distance_of_node_resource(q, r, resource_type, max_distance, node_positions):
+            return False
+    return True
 
 
 def get_nation_tile_stats(nation_name):

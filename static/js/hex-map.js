@@ -87,7 +87,7 @@ function _resourceColor(key) {
 const RESOURCE_COLORS = Object.fromEntries(ALL_RESOURCES.map(r => [r.key, _resourceColor(r.key)]));
 
 // Alpha applied to all terrain fills so the background image shows through.
-const TERRAIN_FILL_ALPHA = 0.28;
+const TERRAIN_FILL_ALPHA = 0.40;
 
 // Precomputed flat-top hex corner trig (0°, 60°, 120°, 180°, 240°, 300°).
 const _HEX_COS = Array.from({ length: 6 }, (_, i) => Math.cos(Math.PI / 3 * i));
@@ -866,8 +866,10 @@ class HexMapViewer {
 
         // Draw order: wonder (bottom) → city (top) → district
         if (tile.wonder)   _drawImg(this._wonderDefaultImage, '✦', szWond);
+        if (tile.city || tile.district) ctx.globalAlpha = 0.6;
         if (tile.city)     _drawImg(tile.city.type ? this._cityTypeImages[tile.city.type] : undefined, '🏛', szCity);
         if (tile.district) _drawImg(tile.district.def_key ? this._districtImages[tile.district.def_key] : undefined, '⬡', szDist);
+        ctx.globalAlpha = 1;
 
         ctx.shadowBlur = 0;
     }

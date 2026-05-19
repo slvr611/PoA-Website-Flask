@@ -35,6 +35,41 @@ def _resolve_modifier_type(modifier: dict) -> str:
     return modifier.get("field", modifier.get("key", mod_type))
 
 
+def _is_proximity_rule(modifier: dict) -> bool:
+    mod_type = modifier.get("modifier_type", "")
+    if not mod_type:
+        return False
+    type_def = json_data.get("modifier_types", {}).get(mod_type, {})
+    return bool(type_def.get("is_proximity_rule", False))
+
+
+def _modifier_to_proximity_rule(modifier: dict, source_label: str = "") -> dict | None:
+    mod_type = modifier.get("modifier_type", "")
+    type_def = json_data.get("modifier_types", {}).get(mod_type, {})
+    rule_type = type_def.get("rule_type", "")
+    node_resource = modifier.get("node_resource", "")
+    terrain_as = modifier.get("terrain_as", "")
+    if not node_resource or not terrain_as or not rule_type:
+        return None
+    return {
+        "rule_type": rule_type,
+        "node_resource": node_resource,
+        "terrain_as": terrain_as,
+        "distance": int(modifier.get("value", 1)),
+        "source": source_label,
+    }
+
+
+def _extract_proximity_rules_from_list(modifiers: list, source_label: str = "") -> list:
+    rules = []
+    for m in modifiers or []:
+        if _is_proximity_rule(m):
+            rule = _modifier_to_proximity_rule(m, source_label)
+            if rule:
+                rules.append(rule)
+    return rules
+
+
 def _is_terrain_rule(modifier: dict) -> bool:
     mod_type = modifier.get("modifier_type", "")
     if not mod_type:
@@ -83,7 +118,7 @@ def _extract_terrain_rules_from_list(modifiers: list, source_label: str = "") ->
 def _modifiers_list_to_dict(modifiers: list) -> dict:
     totals = {}
     for m in modifiers:
-        if _is_terrain_rule(m) or _is_visibility_modifier(m):
+        if _is_terrain_rule(m) or _is_visibility_modifier(m) or _is_proximity_rule(m):
             continue
         field = _resolve_modifier_type(m)
         value = m.get("value", 0)
@@ -103,7 +138,7 @@ def _db_dist_mods_to_dict(mods_list, target_type: str = "nation") -> dict:
     scope_defs = json_data.get("scope_definitions", {})
     normalized = []
     for m in mods_list or []:
-        if _is_terrain_rule(m) or _is_visibility_modifier(m):
+        if _is_terrain_rule(m) or _is_visibility_modifier(m) or _is_proximity_rule(m):
             continue
         scope = m.get("scope", "")
         if scope:

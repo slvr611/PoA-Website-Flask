@@ -142,6 +142,9 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
         loose_node_totals = sum_loose_node_totals(loose_nodes, modifier_totals, external_modifiers_total, law_totals, tech_totals)
 
         all_terrain_rules = _collect_all_terrain_rules(target)
+        proximity_rules = _collect_all_proximity_rules(target)
+        if proximity_rules:
+            target["territory_types"] = apply_proximity_terrain_overrides(target, proximity_rules)
         territory_terrain_totals = collect_territory_terrain(target, all_terrain_rules)
 
         jobs_assigned = collect_jobs_assigned(target)
@@ -679,6 +682,82 @@ def _collect_all_terrain_rules(target):
                     ))
 
     return all_rules
+
+
+def _collect_all_proximity_rules(target):
+    """Collect node_proximity_terrain_override rules from all sources for a nation.
+
+    Sources checked:
+    - The nation's own modifiers[] array.
+    - modifiers[] on artifacts equipped by the nation's ruler characters.
+    """
+    from calculations.source_adapters import _extract_proximity_rules_from_list
+
+    all_rules = []
+
+    direct_mods = target.get("modifiers", [])
+    if isinstance(direct_mods, list):
+        all_rules.extend(_extract_proximity_rules_from_list(direct_mods, "direct_modifiers"))
+
+    target_id = str(target.get("_id", ""))
+    if target_id:
+        rulers = list(category_data["characters"]["database"].find(
+            {"ruling_nation_org": target_id}, {"_id": 1}
+        ))
+        for ruler in rulers:
+            artifacts = list(category_data["artifacts"]["database"].find(
+                {"owner": str(ruler["_id"]), "equipped": True},
+                {"modifiers": 1, "name": 1}
+            ))
+            for artifact in artifacts:
+                artifact_mods = artifact.get("modifiers", [])
+                if isinstance(artifact_mods, list):
+                    label = f"Artifact: {artifact.get('name', 'Unknown Artifact')}"
+                    all_rules.extend(_extract_proximity_rules_from_list(artifact_mods, label))
+
+    return all_rules
+
+
+def apply_proximity_terrain_overrides(target, proximity_rules):
+    """Return a modified territory_types dict reflecting node proximity terrain overrides.
+
+    For each node_proximity_terrain_override rule, tiles owned by the nation that fall
+    within `distance` hexes of any node producing `node_resource` are counted as
+    `terrain_as` instead of their actual terrain type.
+    """
+    from helpers.hex_map_helpers import hex_distance, get_node_resource_positions
+
+    territory_types = dict(target.get("territory_types", {}))
+    nation_name = target.get("name", "")
+    if not nation_name or not proximity_rules:
+        return territory_types
+
+    for rule in proximity_rules:
+        if rule.get("rule_type") != "node_proximity_terrain_override":
+            continue
+        node_resource = rule.get("node_resource", "")
+        terrain_as = rule.get("terrain_as", "")
+        distance = int(rule.get("distance", 1))
+        if not node_resource or not terrain_as:
+            continue
+
+        node_positions = get_node_resource_positions(node_resource)
+        if not node_positions:
+            continue
+
+        owned_tiles = list(mongo.db.hex_map_tiles.find(
+            {"owner": nation_name}, {"q": 1, "r": 1, "terrain": 1, "_id": 0}
+        ))
+        for tile in owned_tiles:
+            terrain = tile.get("terrain", "")
+            if not terrain or terrain == terrain_as:
+                continue
+            tq, tr = tile["q"], tile["r"]
+            if any(hex_distance(tq, tr, nq, nr) <= distance for nq, nr in node_positions):
+                territory_types[terrain] = max(0, territory_types.get(terrain, 0) - 1)
+                territory_types[terrain_as] = territory_types.get(terrain_as, 0) + 1
+
+    return {k: v for k, v in territory_types.items() if v > 0}
 
 
 def collect_territory_terrain(target, terrain_rules):
