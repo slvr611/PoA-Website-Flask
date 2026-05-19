@@ -146,15 +146,10 @@ def get_nation_connected_tiles(nation_name):
 def is_tile_legally_controllable(q, r, nation_name):
     """Return True if nation_name can legally claim tile (q, r).
 
-    Checks two conditions:
-    1. The tile must be adjacent to the nation's connected territory.
-    2. The tile must satisfy any node proximity restrictions from the nation's race trait
-       (e.g. Ethereal races can only own tiles within 1 hex of a magic node).
+    Checks node proximity restrictions from the nation's race trait only
+    (e.g. Ethereal races can only own tiles within 1 hex of a magic node).
+    Adjacency is not enforced — nations can claim disconnected tiles via naval routes.
     """
-    connected = get_nation_connected_tiles(nation_name)
-    adjacent = any((nq, nr) in connected for nq, nr in axial_neighbors(q, r))
-    if not adjacent:
-        return False
     for resource_type, max_distance in get_nation_node_proximity_restrictions(nation_name):
         node_positions = get_node_resource_positions(resource_type)
         if not is_within_distance_of_node_resource(q, r, resource_type, max_distance, node_positions):
