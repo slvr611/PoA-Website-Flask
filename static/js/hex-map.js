@@ -128,6 +128,8 @@ class HexMapViewer {
         // Paint modes — at most one active at a time
         this.paintMode       = null;  // terrain key, or null
         this.paintNationMode = null;  // nation name, or null
+        this.forbiddenTiles  = new Set();  // "q,r" keys that violate the selected nation's restrictions
+        this._paintErrorTimer = null;
         this._painting    = false;
         this._midPainting = false;  // middle-mouse unown paint
         this._lastPainted = null;  // "q,r" of last painted tile (avoids duplicate API calls)
@@ -708,6 +710,20 @@ class HexMapViewer {
             }
         }
 
+        // ── Forbidden tiles overlay (territory restriction, paint mode only) ──
+        if (this.forbiddenTiles.size && this.paintNationMode) {
+            ctx.beginPath();
+            for (const [col, row] of this._visibleCells()) {
+                const { q, r } = this._offsetToAxial(col, row);
+                if (this.forbiddenTiles.has(`${q},${r}`)) {
+                    const { x, y } = this._axialToPixel(q, r);
+                    this._hexSubpath(ctx, x, y, inner);
+                }
+            }
+            ctx.fillStyle = 'rgba(200,0,0,0.35)';
+            ctx.fill();
+        }
+
         // ── Selection highlight (single hex, drawn on top) ────────────────────
         if (this.selectedTile) {
             const { x, y } = this._axialToPixel(this.selectedTile.q, this.selectedTile.r);
@@ -723,6 +739,7 @@ class HexMapViewer {
                 const tile = allTile[i];
                 if (!tile) continue;
                 if (doNodes) this._drawNode(ctx, allX[i], allY[i], tile);
+                this._drawCapital(ctx, allX[i], allY[i], tile);
                 if (doBldgs) this._drawBuildings(ctx, allX[i], allY[i], tile);
             }
         }
@@ -895,6 +912,20 @@ class HexMapViewer {
         }
     }
 
+    _drawCapital(ctx, cx, cy, tile) {
+        if (!tile.capital) return;
+        const s  = this.hexSize;
+        const sz = Math.max(8, s * 0.75);
+        ctx.font         = `${sz}px sans-serif`;
+        ctx.textAlign    = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.shadowColor  = 'rgba(0,0,0,0.85)';
+        ctx.shadowBlur   = 4;
+        ctx.fillStyle    = '#ffd700';
+        ctx.fillText('★', cx, cy);
+        ctx.shadowBlur   = 0;
+    }
+
     // -----------------------------------------------------------------------
     // Event handling
     // -----------------------------------------------------------------------
@@ -955,13 +986,35 @@ class HexMapViewer {
     setPaintMode(terrainKey) {
         this.paintMode       = terrainKey || null;
         this.paintNationMode = null;
+        this.forbiddenTiles  = new Set();
         this._updateCursor();
+        this.render();
     }
 
-    setPaintNationMode(nationName) {
+    async setPaintNationMode(nationName) {
         this.paintNationMode = nationName || null;
         this.paintMode       = null;
+        this.forbiddenTiles  = new Set();
         this._updateCursor();
+        if (nationName && nationName !== '__unowned__') {
+            try {
+                const resp = await fetch(`/api/hex-map/nation/${encodeURIComponent(nationName)}/restriction-tiles`);
+                if (resp.ok) {
+                    const data = await resp.json();
+                    this.forbiddenTiles = new Set((data.forbidden || []).map(([q, r]) => `${q},${r}`));
+                }
+            } catch (_) {}
+        }
+        this.render();
+    }
+
+    _showPaintError(msg) {
+        const el = document.getElementById('hex-paint-error');
+        if (!el) return;
+        el.textContent = msg;
+        el.style.display = 'block';
+        clearTimeout(this._paintErrorTimer);
+        this._paintErrorTimer = setTimeout(() => { el.style.display = 'none'; }, 4000);
     }
 
     _updateCursor() {
@@ -1035,14 +1088,28 @@ class HexMapViewer {
             }).catch(() => {});
         } else if (this.paintNationMode) {
             const owner = this.paintNationMode === '__unowned__' ? null : this.paintNationMode;
+            if (owner && this.forbiddenTiles.has(key)) {
+                this._showPaintError('This tile cannot be claimed: it violates a territory restriction.');
+                return;
+            }
             this.tiles.set(key, { ...existing, owner });
             this._computeNationLabels();
             this.render();
-            await fetch(`/api/hex-map/tile/${q}/${r}`, {
-                method:  'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body:    JSON.stringify({ owner }),
-            }).catch(() => {});
+            let resp;
+            try {
+                resp = await fetch(`/api/hex-map/tile/${q}/${r}`, {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify({ owner }),
+                });
+            } catch (_) { resp = null; }
+            if (resp && !resp.ok) {
+                this.tiles.set(key, existing);
+                this._computeNationLabels();
+                this.render();
+                const data = await resp.json().catch(() => ({}));
+                this._showPaintError(data.error || 'This tile cannot be claimed.');
+            }
         }
     }
 
@@ -1177,6 +1244,9 @@ class HexMapViewer {
                     : wLabel;
                 html += row('Wonder', wLink);
             }
+            if (tile.capital) {
+                html += row('Capital', '★ Yes');
+            }
             if (tile.node) {
                 const nd   = tile.node;
                 const rKey = nd.resource_type || nd.value || nd.type;
@@ -1218,6 +1288,7 @@ class HexMapViewer {
             return `<option value="${res.key}"${res.key===rKey?' selected':''}>${res.name}${cat}</option>`;
         }).join('');
 
+        const isCapital = tile.capital ? 'checked' : '';
         return `
 <details class="hex-edit-details" id="hex-edit-${q}-${r}">
   <summary>Edit Tile</summary>
@@ -1227,6 +1298,9 @@ class HexMapViewer {
       <input name="owner" type="text" value="${_esc(own)}" placeholder="Nation name"
              list="nation-datalist-${q}-${r}" autocomplete="off">
       <datalist id="nation-datalist-${q}-${r}"></datalist>
+    </label>
+    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+      <input type="checkbox" name="capital" ${isCapital}> Capital
     </label>
     <fieldset><legend>Node</legend>
       <label>Resource<select name="node_resource"><option value="">None</option>${resOpts}</select></label>
@@ -1439,6 +1513,7 @@ class HexMapViewer {
             const wonderObj = (this._wonderList || []).find(w => w.id === wonderId);
             const wonder    = wonderId ? (wonderObj || { id: wonderId }) : null;
 
+            const capital = root.querySelector('[name="capital"]')?.checked || false;
             const update = {
                 terrain:  val('terrain') || 'disconnected',
                 owner:    val('owner'),
@@ -1446,6 +1521,7 @@ class HexMapViewer {
                 city,
                 district,
                 wonder,
+                capital,
             };
 
             const resp = await fetch(`/api/hex-map/tile/${q}/${r}`, {

@@ -11,6 +11,9 @@ from helpers.hex_map_helpers import (
     get_nation_tile_stats,
     snapshot_current_map,
     name_to_color,
+    get_nation_node_proximity_restrictions,
+    get_node_resource_positions,
+    is_within_distance_of_node_resource,
 )
 
 hex_map_routes = Blueprint("hex_map_routes", __name__)
@@ -368,10 +371,15 @@ def update_hex_map_tile(q, r):
     if getattr(g, "edit_access_level", 0) < 10:
         return jsonify({"error": "Unauthorized"}), 403
     data = request.get_json() or {}
-    allowed = {"terrain", "node", "city", "district", "wonder", "owner"}
+    allowed = {"terrain", "node", "city", "district", "wonder", "owner", "capital"}
     update = {k: v for k, v in data.items() if k in allowed}
     if not update:
         return jsonify({"ok": True})
+
+    # Enforce territory restrictions before saving
+    if "owner" in update and update["owner"]:
+        if not is_tile_legally_controllable(q, r, update["owner"]):
+            return jsonify({"error": "This tile cannot be claimed: it violates a territory restriction."}), 422
 
     # Capture current tile state before saving
     current = mongo.db.hex_map_tiles.find_one({"q": q, "r": r}) or {}
@@ -572,6 +580,25 @@ def nation_tile_stats(nation_name):
 @hex_map_routes.route("/api/hex-map/nation/<path:nation_name>/reachable/<signed_int:q>/<signed_int:r>")
 def nation_tile_reachable(nation_name, q, r):
     return jsonify({"reachable": is_tile_legally_controllable(q, r, nation_name)})
+
+
+@hex_map_routes.route("/api/hex-map/nation/<path:nation_name>/restriction-tiles")
+def nation_restriction_tiles(nation_name):
+    """Return all map tiles that violate the nation's territory proximity restrictions."""
+    restrictions = get_nation_node_proximity_restrictions(nation_name)
+    if not restrictions:
+        return jsonify({"forbidden": []})
+    all_tiles = list(mongo.db.hex_map_tiles.find({}, {"q": 1, "r": 1, "_id": 0}))
+    forbidden = set()
+    for resource_type, max_distance in restrictions:
+        node_positions = get_node_resource_positions(resource_type)
+        if not node_positions:
+            continue
+        for tile in all_tiles:
+            q, r = tile["q"], tile["r"]
+            if not is_within_distance_of_node_resource(q, r, resource_type, max_distance, node_positions):
+                forbidden.add((q, r))
+    return jsonify({"forbidden": [[q, r] for q, r in forbidden]})
 
 
 # ---------------------------------------------------------------------------

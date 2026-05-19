@@ -1351,11 +1351,27 @@ h1, h2 {
     flex-shrink: 0;
 }
 
-/* Paint-mode select styled to match buttons */
+/* Paint-mode select / input styled to match buttons */
 select.map-btn {
     appearance: none;
     padding: 0.5rem 0.6rem;
     cursor: pointer;
+}
+
+input[type="text"].map-btn {
+    width: 130px;
+    padding: 0.5rem 0.6rem;
+    cursor: text;
+    outline: none;
+}
+
+input[type="text"].map-btn::placeholder {
+    color: #999;
+}
+
+input[type="text"].map-btn:focus {
+    background-color: #3a3a3a;
+    border-color: #777;
 }
 
 .slider-container {

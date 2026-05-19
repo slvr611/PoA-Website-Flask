@@ -47,12 +47,12 @@
             {% if g.edit_access_level >= 10 %}
             <span class="map-btn-separator"></span>
             <button id="tool-pan" class="map-btn active" title="Pan / select">Pan</button>
-            <select id="paint-terrain-select" class="map-btn" title="Paint terrain">
-                <option value="">Terrain: off</option>
-            </select>
-            <select id="paint-nation-select" class="map-btn" title="Paint nation ownership">
-                <option value="">Nation: off</option>
-            </select>
+            <input type="text" id="paint-terrain-input" class="map-btn" list="paint-terrain-datalist"
+                   placeholder="Paint terrain…" autocomplete="off" title="Paint terrain">
+            <datalist id="paint-terrain-datalist"></datalist>
+            <input type="text" id="paint-nation-input" class="map-btn" list="paint-nation-datalist"
+                   placeholder="Paint nation…" autocomplete="off" title="Paint nation ownership">
+            <datalist id="paint-nation-datalist"></datalist>
             <span class="map-btn-separator"></span>
             <button id="hex-snapshot-btn" class="map-btn">Snapshot</button>
             <button id="hex-sync-territory-btn" class="map-btn">Sync Territory</button>
@@ -73,6 +73,7 @@
     ====================================================== -->
     <div id="hex-section" style="display:none"
          data-is-admin="{{ (g.edit_access_level >= 10) | tojson }}">
+        <div id="hex-paint-error" style="display:none; color:#e03030; font-size:0.85em; padding:3px 4px; min-height:1.3em;"></div>
         <div class="hex-map-layout">
             <div class="hex-map-canvas-wrap">
                 <div id="hex-bg-viewer"></div>
@@ -313,25 +314,29 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     // ---- Tool buttons: Pan / Paint Terrain / Paint Nation ----
-    const toolPanBtn       = document.getElementById('tool-pan');
-    const terrainSel       = document.getElementById('paint-terrain-select');
-    const nationSel        = document.getElementById('paint-nation-select');
+    const toolPanBtn    = document.getElementById('tool-pan');
+    const terrainInput  = document.getElementById('paint-terrain-input');
+    const terrainDL     = document.getElementById('paint-terrain-datalist');
+    const nationInput   = document.getElementById('paint-nation-input');
+    const nationDL      = document.getElementById('paint-nation-datalist');
 
-    // Populate terrain options from hex-map.js constants
-    if (terrainSel) {
+    // Populate terrain datalist from hex-map.js constants
+    const _terrainNameToKey = {};
+    if (terrainDL) {
         for (const key of TERRAIN_OPTIONS) {
+            const name = TERRAIN_NAMES[key] || key;
+            _terrainNameToKey[name.toLowerCase()] = key;
             const opt = document.createElement('option');
-            opt.value       = key;
-            opt.textContent = 'Terrain: ' + (TERRAIN_NAMES[key] || key);
-            terrainSel.appendChild(opt);
+            opt.value = name;
+            terrainDL.appendChild(opt);
         }
     }
 
     function _activatePan() {
-        if (toolPanBtn) toolPanBtn.classList.add('active');
-        if (terrainSel) { terrainSel.value = ''; terrainSel.classList.remove('active'); }
-        if (nationSel)  { nationSel.value  = ''; nationSel.classList.remove('active'); }
-        if (hexViewer)  { hexViewer.setPaintMode(null); hexViewer.setPaintNationMode(null); }
+        if (toolPanBtn)   toolPanBtn.classList.add('active');
+        if (terrainInput) { terrainInput.value = ''; terrainInput.classList.remove('active'); }
+        if (nationInput)  { nationInput.value  = ''; nationInput.classList.remove('active'); }
+        if (hexViewer)    { hexViewer.setPaintMode(null); hexViewer.setPaintNationMode(null); }
     }
 
     if (toolPanBtn) {
@@ -341,56 +346,64 @@ document.addEventListener('DOMContentLoaded', function () {
     // Escape key (fired by viewer via custom event) resets tool UI to Pan
     document.getElementById('hex-map-canvas').addEventListener('hexmap:pantool', _activatePan);
 
-    if (terrainSel) {
-        terrainSel.addEventListener('change', () => {
+    if (terrainInput) {
+        terrainInput.addEventListener('input', () => {
             if (!hexViewer) return;
-            if (terrainSel.value) {
-                toolPanBtn && toolPanBtn.classList.remove('active');
-                nationSel  && (nationSel.value = '');
-                nationSel  && nationSel.classList.remove('active');
-                terrainSel.classList.add('active');
+            const key = _terrainNameToKey[(terrainInput.value || '').toLowerCase()];
+            if (key) {
+                toolPanBtn  && toolPanBtn.classList.remove('active');
+                nationInput && (nationInput.value = '');
+                nationInput && nationInput.classList.remove('active');
+                terrainInput.classList.add('active');
                 hexViewer.setPaintNationMode(null);
-                hexViewer.setPaintMode(terrainSel.value);
-            } else {
+                hexViewer.setPaintMode(key);
+            } else if (!terrainInput.value) {
                 _activatePan();
             }
         });
+        terrainInput.addEventListener('blur', () => {
+            const key = _terrainNameToKey[(terrainInput.value || '').toLowerCase()];
+            if (!key) { terrainInput.value = ''; if (!nationInput?.value) _activatePan(); }
+        });
     }
 
-    if (nationSel) {
-        nationSel.addEventListener('change', () => {
+    if (nationInput) {
+        nationInput.addEventListener('input', () => {
             if (!hexViewer) return;
-            if (nationSel.value) {
-                toolPanBtn  && toolPanBtn.classList.remove('active');
-                terrainSel  && (terrainSel.value = '');
-                terrainSel  && terrainSel.classList.remove('active');
-                nationSel.classList.add('active');
+            const raw = nationInput.value;
+            let nationKey = null;
+            if (raw === 'Unowned') nationKey = '__unowned__';
+            else if (raw && hexViewer.nationColors[raw]) nationKey = raw;
+            if (nationKey) {
+                toolPanBtn   && toolPanBtn.classList.remove('active');
+                terrainInput && (terrainInput.value = '');
+                terrainInput && terrainInput.classList.remove('active');
+                nationInput.classList.add('active');
                 hexViewer.setPaintMode(null);
-                hexViewer.setPaintNationMode(nationSel.value);
-            } else {
+                hexViewer.setPaintNationMode(nationKey);
+            } else if (!raw) {
                 _activatePan();
             }
+        });
+        nationInput.addEventListener('blur', () => {
+            const raw   = nationInput.value;
+            const valid = raw === 'Unowned' || (raw && hexViewer && hexViewer.nationColors[raw]);
+            if (!valid) { nationInput.value = ''; if (!terrainInput?.value) _activatePan(); }
         });
     }
 
     function _populateNationSelect() {
-        if (!nationSel || !hexViewer) return;
-        const current = nationSel.value;
-        // Clear all but the first "off" option
-        while (nationSel.options.length > 1) nationSel.remove(1);
-        // Always keep Unowned as the first selectable option
+        if (!nationDL || !hexViewer) return;
+        while (nationDL.firstChild) nationDL.removeChild(nationDL.firstChild);
         const unownedOpt = document.createElement('option');
-        unownedOpt.value       = '__unowned__';
-        unownedOpt.textContent = 'Unowned';
-        nationSel.appendChild(unownedOpt);
+        unownedOpt.value = 'Unowned';
+        nationDL.appendChild(unownedOpt);
         const names = Object.keys(hexViewer.nationColors).sort();
         for (const name of names) {
             const opt = document.createElement('option');
-            opt.value       = name;
-            opt.textContent = 'Nation: ' + name;
-            nationSel.appendChild(opt);
+            opt.value = name;
+            nationDL.appendChild(opt);
         }
-        nationSel.value = current;
     }
 
     const snapBtn = document.getElementById('hex-snapshot-btn');
