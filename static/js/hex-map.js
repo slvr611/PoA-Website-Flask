@@ -120,6 +120,7 @@ class HexMapViewer {
         this.layers = {
             terrain:   false,
             political: true,
+            regions:   false,
             nodes:     true,
             buildings: true,
             roads:     false,
@@ -128,6 +129,7 @@ class HexMapViewer {
         // Paint modes — at most one active at a time
         this.paintMode       = null;  // terrain key, or null
         this.paintNationMode = null;  // nation name, or null
+        this.paintRegionMode = null;  // region name, or null
         this.forbiddenTiles  = new Set();  // "q,r" keys that violate the selected nation's restrictions
         this._paintErrorTimer = null;
         this._painting    = false;
@@ -153,6 +155,7 @@ class HexMapViewer {
         // Tile data
         this.tiles        = new Map();   // "q,r" -> tile object
         this.nationColors = {};
+        this.regionColors = {};          // region name -> hex color
 
         // Render caches — invalidated when colors change
         this._terrainFillCache = {};  // terrain key  → rgba string
@@ -355,6 +358,15 @@ class HexMapViewer {
         this._ensureNationList().then(() => { this._computeNationLabels(); this.render(); });
 
         this.render();
+    }
+
+    async loadRegions() {
+        try {
+            const data = await (await fetch('/api/hex-map/region-list')).json();
+            this.regionColors = {};
+            for (const r of (data.regions || [])) this.regionColors[r.name] = r.color;
+            this._rgbaCache = {};
+        } catch (_) {}
     }
 
     _loadDistrictImages(imgMap) {
@@ -571,6 +583,13 @@ class HexMapViewer {
                 this._hexToRgba(this.nationColors[name] || '#888888', alpha));
     }
 
+    _regionRgba(name, alpha) {
+        const key = `region:${name}:${alpha}`;
+        return this._rgbaCache[key]
+            || (this._rgbaCache[key] =
+                this._hexToRgba(this.regionColors[name] || '#888888', alpha));
+    }
+
     // -----------------------------------------------------------------------
     // Viewport culling — returns iterator over [col, row] pairs in view
     // -----------------------------------------------------------------------
@@ -626,9 +645,11 @@ class HexMapViewer {
 
         const hasTerrain   = this.layers.terrain;
         const hasPolitical = this.layers.political;
+        const hasRegions   = this.layers.regions;
 
         // Flat x/y arrays per fill style — push(x, y) pairs to avoid per-hex object allocation.
         const terrainBuckets = {};  // fillStyle → Float64Array-like flat [x,y,x,y,…]
+        const regionBuckets  = {};
         const nationBuckets  = {};
 
         // Parallel flat arrays for all visible hexes (used for outline pass and icons).
@@ -650,6 +671,12 @@ class HexMapViewer {
                 const fill = this._terrainFill(tile ? (tile.terrain || 'disconnected') : 'disconnected');
                 if (!terrainBuckets[fill]) terrainBuckets[fill] = [];
                 terrainBuckets[fill].push(x, y);
+            }
+
+            if (hasRegions && tile && tile.region) {
+                const fill = this._regionRgba(tile.region, 0.45);
+                if (!regionBuckets[fill]) regionBuckets[fill] = [];
+                regionBuckets[fill].push(x, y);
             }
 
             if (hasPolitical && tile && tile.owner) {
@@ -678,6 +705,15 @@ class HexMapViewer {
                     ctx.fill();
                 }
             }
+        }
+
+        // ── Region fills ──────────────────────────────────────────────────────
+        for (const fill in regionBuckets) {
+            const pts = regionBuckets[fill];
+            ctx.beginPath();
+            for (let i = 0; i < pts.length; i += 2) this._hexSubpath(ctx, pts[i], pts[i + 1], inner);
+            ctx.fillStyle = fill;
+            ctx.fill();
         }
 
         // ── Nation fills: one beginPath+fill per nation ───────────────────────
@@ -739,7 +775,6 @@ class HexMapViewer {
                 const tile = allTile[i];
                 if (!tile) continue;
                 if (doNodes) this._drawNode(ctx, allX[i], allY[i], tile);
-                this._drawCapital(ctx, allX[i], allY[i], tile);
                 if (doBldgs) this._drawBuildings(ctx, allX[i], allY[i], tile);
             }
         }
@@ -881,7 +916,8 @@ class HexMapViewer {
             }
         };
 
-        // Draw order: wonder (bottom) → city (top) → district
+        // Draw order: capital (bottom) → wonder → city (top) → district
+        if (tile.capital) this._drawCapital(ctx, cx, cy, tile);
         if (tile.wonder)   _drawImg(this._wonderDefaultImage, '✦', szWond);
         if (tile.city || tile.district) ctx.globalAlpha = 0.6;
         if (tile.city)     _drawImg(tile.city.type ? this._cityTypeImages[tile.city.type] : undefined, '🏛', szCity);
@@ -915,7 +951,7 @@ class HexMapViewer {
     _drawCapital(ctx, cx, cy, tile) {
         if (!tile.capital) return;
         const s  = this.hexSize;
-        const sz = Math.max(8, s * 0.75);
+        const sz = Math.max(10, s * 1.5);
         ctx.font         = `${sz}px sans-serif`;
         ctx.textAlign    = 'center';
         ctx.textBaseline = 'middle';
@@ -986,6 +1022,16 @@ class HexMapViewer {
     setPaintMode(terrainKey) {
         this.paintMode       = terrainKey || null;
         this.paintNationMode = null;
+        this.paintRegionMode = null;
+        this.forbiddenTiles  = new Set();
+        this._updateCursor();
+        this.render();
+    }
+
+    setPaintRegionMode(regionName) {
+        this.paintRegionMode = regionName || null;
+        this.paintMode       = null;
+        this.paintNationMode = null;
         this.forbiddenTiles  = new Set();
         this._updateCursor();
         this.render();
@@ -994,6 +1040,7 @@ class HexMapViewer {
     async setPaintNationMode(nationName) {
         this.paintNationMode = nationName || null;
         this.paintMode       = null;
+        this.paintRegionMode = null;
         this.forbiddenTiles  = new Set();
         this._updateCursor();
         if (nationName && nationName !== '__unowned__') {
@@ -1018,7 +1065,7 @@ class HexMapViewer {
     }
 
     _updateCursor() {
-        this.canvas.style.cursor = (this.paintMode || this.paintNationMode) ? 'crosshair' : 'grab';
+        this.canvas.style.cursor = (this.paintMode || this.paintNationMode || this.paintRegionMode) ? 'crosshair' : 'grab';
     }
 
     _startPan(cx, cy) {
@@ -1030,7 +1077,7 @@ class HexMapViewer {
     }
 
     _onDown(cx, cy) {
-        if (this.paintMode || this.paintNationMode) {
+        if (this.paintMode || this.paintNationMode || this.paintRegionMode) {
             this._painting    = true;
             this._lastPainted = null;
             this._paintAt(cx, cy);
@@ -1040,7 +1087,7 @@ class HexMapViewer {
     }
 
     _onMove(cx, cy) {
-        if (this._painting && (this.paintMode || this.paintNationMode)) {
+        if (this._painting && (this.paintMode || this.paintNationMode || this.paintRegionMode)) {
             this._paintAt(cx, cy);
             return;
         }
@@ -1110,6 +1157,15 @@ class HexMapViewer {
                 const data = await resp.json().catch(() => ({}));
                 this._showPaintError(data.error || 'This tile cannot be claimed.');
             }
+        } else if (this.paintRegionMode) {
+            const region = this.paintRegionMode === '__unregioned__' ? null : this.paintRegionMode;
+            this.tiles.set(key, { ...existing, region });
+            this.render();
+            await fetch(`/api/hex-map/tile/${q}/${r}`, {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify({ region }),
+            }).catch(() => {});
         }
     }
 
@@ -1243,6 +1299,9 @@ class HexMapViewer {
                     ? `<a href="/wonders/item/${encodeURIComponent(tile.wonder.name)}" target="_blank">${wLabel}</a>`
                     : wLabel;
                 html += row('Wonder', wLink);
+            }
+            if (tile.region) {
+                html += row('Region', _esc(tile.region));
             }
             if (tile.capital) {
                 html += row('Capital', '★ Yes');

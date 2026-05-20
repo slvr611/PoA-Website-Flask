@@ -41,6 +41,7 @@
             <span class="map-btn-separator"></span>
             <button id="layer-terrain"   class="map-btn layer-btn"          data-layer="terrain">Terrain</button>
             <button id="layer-political" class="map-btn layer-btn active"   data-layer="political">Political</button>
+            <button id="layer-regions"   class="map-btn layer-btn"          data-layer="regions">Regions</button>
             <button id="layer-nodes"     class="map-btn layer-btn active"   data-layer="nodes">Nodes</button>
             <button id="layer-buildings" class="map-btn layer-btn active"   data-layer="buildings">Buildings</button>
             <button id="layer-roads"     class="map-btn layer-btn"          data-layer="roads">Roads</button>
@@ -53,6 +54,9 @@
             <input type="text" id="paint-nation-input" class="map-btn" list="paint-nation-datalist"
                    placeholder="Paint nation…" autocomplete="off" title="Paint nation ownership">
             <datalist id="paint-nation-datalist"></datalist>
+            <input type="text" id="paint-region-input" class="map-btn" list="paint-region-datalist"
+                   placeholder="Paint region…" autocomplete="off" title="Paint region">
+            <datalist id="paint-region-datalist"></datalist>
             <span class="map-btn-separator"></span>
             <button id="hex-snapshot-btn" class="map-btn">Snapshot</button>
             <button id="hex-sync-territory-btn" class="map-btn">Sync Territory</button>
@@ -86,6 +90,19 @@
             </div>
         </div>
     </div>
+
+    {% if g.edit_access_level >= 10 %}
+    <div id="hex-region-manager" class="mt-3" style="display:none">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px;">
+            <h5 style="margin:0;">Region Map Colors</h5>
+            <a href="/regions" target="_blank" class="btn btn-sm btn-secondary">Manage Regions ↗</a>
+        </div>
+        <table class="info-table" id="hex-region-table">
+            <thead><tr><th>Region</th><th>Map Color</th><th></th></tr></thead>
+            <tbody id="hex-region-tbody"></tbody>
+        </table>
+    </div>
+    {% endif %}
 
 </div><!-- /container -->
 
@@ -313,12 +330,14 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 
-    // ---- Tool buttons: Pan / Paint Terrain / Paint Nation ----
+    // ---- Tool buttons: Pan / Paint Terrain / Paint Nation / Paint Region ----
     const toolPanBtn    = document.getElementById('tool-pan');
     const terrainInput  = document.getElementById('paint-terrain-input');
     const terrainDL     = document.getElementById('paint-terrain-datalist');
     const nationInput   = document.getElementById('paint-nation-input');
     const nationDL      = document.getElementById('paint-nation-datalist');
+    const regionInput   = document.getElementById('paint-region-input');
+    const regionDL      = document.getElementById('paint-region-datalist');
 
     // Populate terrain datalist from hex-map.js constants
     const _terrainNameToKey = {};
@@ -336,7 +355,8 @@ document.addEventListener('DOMContentLoaded', function () {
         if (toolPanBtn)   toolPanBtn.classList.add('active');
         if (terrainInput) { terrainInput.value = ''; terrainInput.classList.remove('active'); }
         if (nationInput)  { nationInput.value  = ''; nationInput.classList.remove('active'); }
-        if (hexViewer)    { hexViewer.setPaintMode(null); hexViewer.setPaintNationMode(null); }
+        if (regionInput)  { regionInput.value  = ''; regionInput.classList.remove('active'); }
+        if (hexViewer)    { hexViewer.setPaintMode(null); hexViewer.setPaintNationMode(null); hexViewer.setPaintRegionMode(null); }
     }
 
     if (toolPanBtn) {
@@ -354,8 +374,11 @@ document.addEventListener('DOMContentLoaded', function () {
                 toolPanBtn  && toolPanBtn.classList.remove('active');
                 nationInput && (nationInput.value = '');
                 nationInput && nationInput.classList.remove('active');
+                regionInput && (regionInput.value = '');
+                regionInput && regionInput.classList.remove('active');
                 terrainInput.classList.add('active');
                 hexViewer.setPaintNationMode(null);
+                hexViewer.setPaintRegionMode(null);
                 hexViewer.setPaintMode(key);
             } else if (!terrainInput.value) {
                 _activatePan();
@@ -363,7 +386,7 @@ document.addEventListener('DOMContentLoaded', function () {
         });
         terrainInput.addEventListener('blur', () => {
             const key = _terrainNameToKey[(terrainInput.value || '').toLowerCase()];
-            if (!key) { terrainInput.value = ''; if (!nationInput?.value) _activatePan(); }
+            if (!key) { terrainInput.value = ''; if (!nationInput?.value && !regionInput?.value) _activatePan(); }
         });
     }
 
@@ -378,8 +401,11 @@ document.addEventListener('DOMContentLoaded', function () {
                 toolPanBtn   && toolPanBtn.classList.remove('active');
                 terrainInput && (terrainInput.value = '');
                 terrainInput && terrainInput.classList.remove('active');
+                regionInput  && (regionInput.value = '');
+                regionInput  && regionInput.classList.remove('active');
                 nationInput.classList.add('active');
                 hexViewer.setPaintMode(null);
+                hexViewer.setPaintRegionMode(null);
                 hexViewer.setPaintNationMode(nationKey);
             } else if (!raw) {
                 _activatePan();
@@ -388,7 +414,35 @@ document.addEventListener('DOMContentLoaded', function () {
         nationInput.addEventListener('blur', () => {
             const raw   = nationInput.value;
             const valid = raw === 'Unowned' || (raw && hexViewer && hexViewer.nationColors[raw]);
-            if (!valid) { nationInput.value = ''; if (!terrainInput?.value) _activatePan(); }
+            if (!valid) { nationInput.value = ''; if (!terrainInput?.value && !regionInput?.value) _activatePan(); }
+        });
+    }
+
+    if (regionInput) {
+        regionInput.addEventListener('input', () => {
+            if (!hexViewer) return;
+            const raw = regionInput.value;
+            let regionKey = null;
+            if (raw === 'None (Unregion)') regionKey = '__unregioned__';
+            else if (raw && hexViewer.regionColors[raw]) regionKey = raw;
+            if (regionKey) {
+                toolPanBtn   && toolPanBtn.classList.remove('active');
+                terrainInput && (terrainInput.value = '');
+                terrainInput && terrainInput.classList.remove('active');
+                nationInput  && (nationInput.value = '');
+                nationInput  && nationInput.classList.remove('active');
+                regionInput.classList.add('active');
+                hexViewer.setPaintMode(null);
+                hexViewer.setPaintNationMode(null);
+                hexViewer.setPaintRegionMode(regionKey);
+            } else if (!raw) {
+                _activatePan();
+            }
+        });
+        regionInput.addEventListener('blur', () => {
+            const raw   = regionInput.value;
+            const valid = raw === 'None (Unregion)' || (raw && hexViewer && hexViewer.regionColors[raw]);
+            if (!valid) { regionInput.value = ''; if (!terrainInput?.value && !nationInput?.value) _activatePan(); }
         });
     }
 
@@ -404,6 +458,67 @@ document.addEventListener('DOMContentLoaded', function () {
             opt.value = name;
             nationDL.appendChild(opt);
         }
+    }
+
+    function _populateRegionSelect() {
+        if (!regionDL || !hexViewer) return;
+        while (regionDL.firstChild) regionDL.removeChild(regionDL.firstChild);
+        const noneOpt = document.createElement('option');
+        noneOpt.value = 'None (Unregion)';
+        regionDL.appendChild(noneOpt);
+        const names = Object.keys(hexViewer.regionColors).sort();
+        for (const name of names) {
+            const opt = document.createElement('option');
+            opt.value = name;
+            regionDL.appendChild(opt);
+        }
+    }
+
+    // ---- Region manager panel ----
+    const regionManager = document.getElementById('hex-region-manager');
+    const regionTbody   = document.getElementById('hex-region-tbody');
+
+    function _renderRegionTable() {
+        if (!regionTbody || !hexViewer) return;
+        regionTbody.innerHTML = '';
+        const entries = Object.entries(hexViewer.regionColors).sort(([a], [b]) => a.localeCompare(b));
+        if (!entries.length) {
+            regionTbody.innerHTML = '<tr><td colspan="3" style="color:#888;">No regions found. Create them at <a href="/regions" target="_blank">Manage Regions</a>.</td></tr>';
+            return;
+        }
+        for (const [name, color] of entries) {
+            const tr = document.createElement('tr');
+            const safeColor = /^#[0-9a-fA-F]{6}$/.test(color) ? color : '#888888';
+            tr.innerHTML = `
+                <td><a href="/regions/item/${encodeURIComponent(name)}" target="_blank">${name}</a></td>
+                <td><input type="color" value="${safeColor}" data-region="${name}" class="region-color-picker" title="Map color for ${name}"></td>
+                <td><button class="btn btn-xs btn-primary btn-region-save" data-region="${name}" disabled>Save</button></td>`;
+            regionTbody.appendChild(tr);
+        }
+        regionTbody.querySelectorAll('.region-color-picker').forEach(picker => {
+            picker.addEventListener('input', () => {
+                const saveBtn = picker.closest('tr').querySelector('.btn-region-save');
+                saveBtn.disabled = false;
+            });
+            picker.addEventListener('change', async () => {
+                const regionName = picker.dataset.region;
+                const saveBtn = picker.closest('tr').querySelector('.btn-region-save');
+                await fetch(`/api/hex-map/region/${encodeURIComponent(regionName)}/color`, {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify({ color: picker.value }),
+                });
+                await hexViewer.loadRegions();
+                _populateRegionSelect();
+                hexViewer.render();
+                saveBtn.disabled = true;
+            });
+        });
+        regionTbody.querySelectorAll('.btn-region-save').forEach(btn => {
+            btn.addEventListener('click', () => {
+                btn.closest('tr').querySelector('.region-color-picker').dispatchEvent(new Event('change'));
+            });
+        });
     }
 
     const snapBtn = document.getElementById('hex-snapshot-btn');
@@ -474,7 +589,11 @@ document.addEventListener('DOMContentLoaded', function () {
             const tileSession = (sessionNum === maxSession) ? null : sessionNum;
             loadHexBackground(sessionNum);
             await hexViewer.loadTiles(tileSession);
+            await hexViewer.loadRegions();
             _populateNationSelect();
+            _populateRegionSelect();
+            if (regionManager) regionManager.style.display = '';
+            _renderRegionTable();
 
         } else {
             // Trigger an OSD resize in case it was hidden

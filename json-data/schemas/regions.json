@@ -10,6 +10,11 @@
         "label": "Name",
         "description": "The name of the region"
       },
+      "map_color": {
+        "bsonType": "string",
+        "label": "Map Color",
+        "description": "Hex color code used to display this region on the hex map (e.g. #4488cc)"
+      },
       "nations": {
         "bsonType": "array",
         "label": "Nations",

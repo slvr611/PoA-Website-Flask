@@ -1282,6 +1282,49 @@ def era_relations_decay_tick():
     return f"Decayed {count} relation(s) toward Neutral.\n"
 
 
+def _era_pop_growth_tick_impl(skip_infertile=False):
+    from helpers.admin_tool_helpers import grow_population
+    from helpers.hex_map_helpers import get_nations_within_distance
+
+    _, db = get_data_on_category("nations")
+    nations = list(db.find().sort("name", ASCENDING))
+    count = 0
+
+    for nation in nations:
+        if skip_infertile:
+            race_id = nation.get("primary_race")
+            if race_id:
+                try:
+                    race = mongo.db.races.find_one(
+                        {"_id": ObjectId(race_id)}, {"negative_trait": 1, "_id": 0}
+                    )
+                    if race and race.get("negative_trait") == "Infertile":
+                        continue
+                except Exception:
+                    pass
+
+        nearby_names = get_nations_within_distance(nation["name"], max_distance=10)
+        foreign_nation = None
+        if nearby_names:
+            chosen_name = random.choice(nearby_names)
+            foreign_nation = db.find_one({"name": chosen_name})
+
+        grow_population(nation, foreign_nation)
+        count += 1
+
+    return count
+
+
+def era_pop_growth_tick():
+    count = _era_pop_growth_tick_impl(skip_infertile=False)
+    return f"Era Pop Growth: grew {count} nation(s).\n"
+
+
+def age_pop_growth_tick():
+    count = _era_pop_growth_tick_impl(skip_infertile=True)
+    return f"Age Pop Growth: grew {count} nation(s) (infertile races skipped).\n"
+
+
 ###########################################################
 # Tick Function Constants
 ###########################################################
@@ -1364,6 +1407,8 @@ ERA_NATION_TICK_FUNCTIONS = {
 
 ERA_GENERAL_TICK_FUNCTIONS = {
     "Era Relations Decay to Neutral": era_relations_decay_tick,
+    "Era Pop Growth (All Nations)": era_pop_growth_tick,
+    "Age Pop Growth (Skip Infertile Races)": age_pop_growth_tick,
 }
 
 def era_tick(form_data):

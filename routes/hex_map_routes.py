@@ -371,7 +371,7 @@ def update_hex_map_tile(q, r):
     if getattr(g, "edit_access_level", 0) < 10:
         return jsonify({"error": "Unauthorized"}), 403
     data = request.get_json() or {}
-    allowed = {"terrain", "node", "city", "district", "wonder", "owner", "capital"}
+    allowed = {"terrain", "node", "city", "district", "wonder", "owner", "capital", "region"}
     update = {k: v for k, v in data.items() if k in allowed}
     if not update:
         return jsonify({"ok": True})
@@ -599,6 +599,32 @@ def nation_restriction_tiles(nation_name):
             if not is_within_distance_of_node_resource(q, r, resource_type, max_distance, node_positions):
                 forbidden.add((q, r))
     return jsonify({"forbidden": [[q, r] for q, r in forbidden]})
+
+
+# ---------------------------------------------------------------------------
+# Region endpoints
+# ---------------------------------------------------------------------------
+
+@hex_map_routes.route("/api/hex-map/region-list")
+def hex_region_list():
+    """Return all regions with their map colors, pulled from the regions collection."""
+    regions = list(mongo.db.regions.find({}, {"name": 1, "map_color": 1, "_id": 0}))
+    return jsonify({"regions": [
+        {"name": r["name"], "color": r.get("map_color") or "#888888"}
+        for r in regions if r.get("name")
+    ]})
+
+
+@hex_map_routes.route("/api/hex-map/region/<path:region_name>/color", methods=["POST"])
+@admin_required
+def update_region_map_color(region_name):
+    """Update just the map_color field on an existing region."""
+    data  = request.get_json() or {}
+    color = (data.get("color") or "#888888").strip()
+    result = mongo.db.regions.update_one({"name": region_name}, {"$set": {"map_color": color}})
+    if result.matched_count == 0:
+        return jsonify({"error": "Region not found"}), 404
+    return jsonify({"ok": True})
 
 
 # ---------------------------------------------------------------------------

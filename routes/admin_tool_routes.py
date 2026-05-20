@@ -88,13 +88,8 @@ def roll_events():
 @admin_required
 def pop_growth_helper():
     schema, db = get_data_on_category("nations")
-    nations = list(db.find().sort("name", ASCENDING))
-
-    dropdown_options = {}
-    for nation in nations:
-        dropdown_options[nation["name"]] = nation["_id"]
-
-    return render_template("pop_growth_helper.html", dropdown_options=dropdown_options)
+    nations = list(db.find({}, {"name": 1, "_id": 1}).sort("name", ASCENDING))
+    return render_template("pop_growth_helper.html", nations=nations)
 
 @admin_tool_routes.route("/pop_growth_helper/process", methods=["POST"])
 @admin_required

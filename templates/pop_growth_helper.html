@@ -5,33 +5,23 @@
 {% block content %}
 <div class="container">
     <h1>Pop Growth Helper</h1>
+    <p class="text-muted">Foreign pop source is automatically selected from nations within 10 tiles.</p>
     <form method="post" action="/pop_growth_helper/process">
         <table class="info-table">
             <thead>
                 <tr>
                     <th>Nation</th>
-                    <th>Foreign Pop Source</th>
                     <th>Include in Growth</th>
                 </tr>
             </thead>
             <tbody>
-                {% for nation_name, nation_id in dropdown_options.items() %}
+                {% for nation in nations %}
                     <tr>
                         <td>
-                            <a href="/nations/item/{{ nation_name }}">{{ nation_name }}</a>
+                            <a href="/nations/item/{{ nation.name }}">{{ nation.name }}</a>
                         </td>
                         <td>
-                            <select name="foreign_source_{{ nation_id }}" class="form-control">
-                                <option value="">None</option>
-                                {% for other_name, other_id in dropdown_options.items() %}
-                                    {% if other_id != nation_id %}
-                                        <option value="{{ other_id }}">{{ other_name }}</option>
-                                    {% endif %}
-                                {% endfor %}
-                            </select>
-                        </td>
-                        <td>
-                            <input type="checkbox" name="include_{{ nation_id }}">
+                            <input type="checkbox" name="include_{{ nation._id }}">
                         </td>
                     </tr>
                 {% endfor %}

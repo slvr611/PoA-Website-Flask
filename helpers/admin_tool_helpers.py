@@ -2,6 +2,7 @@ from bson import ObjectId
 from app_core import mongo, category_data
 from helpers.change_helpers import system_request_change, system_approve_change, recalculate_object, recalculate_all_objects
 from helpers.data_helpers import get_data_on_category
+from helpers.hex_map_helpers import get_nations_within_distance
 from pymongo import ASCENDING
 from threading import Thread
 from copy import deepcopy
@@ -16,31 +17,26 @@ def grow_all_population_async(form_data):
 def grow_all_population(form_data):
     schema, db = get_data_on_category("nations")
     nations = list(db.find().sort("name", ASCENDING))
-    
+
     changes = []
     for nation in nations:
         nation_id = str(nation["_id"])
-        include_key = f"include_{nation_id}"
-        foreign_source_key = f"foreign_source_{nation_id}"
-        
-        # Check if this nation should be included in growth
-        if include_key in form_data:
-            foreign_nation_id = form_data.get(foreign_source_key)
-            
-            # Only process if a foreign nation was selected
-            if foreign_nation_id:
-                try:
-                    foreign_nation = db.find_one({"_id": ObjectId(foreign_nation_id)})
-                except:
-                    foreign_nation = None
-                if foreign_nation:
-                    change_id = grow_population(nation, foreign_nation)
-                    changes.append({
-                        "nation": nation["name"],
-                        "foreign_nation": foreign_nation["name"],
-                        "change_id": change_id
-                    })
-    return changes    
+        if f"include_{nation_id}" not in form_data:
+            continue
+
+        nearby_names = get_nations_within_distance(nation["name"], max_distance=10)
+        foreign_nation = None
+        if nearby_names:
+            chosen_name = random.choice(nearby_names)
+            foreign_nation = db.find_one({"name": chosen_name})
+
+        change_id = grow_population(nation, foreign_nation)
+        changes.append({
+            "nation": nation["name"],
+            "foreign_nation": foreign_nation["name"] if foreign_nation else None,
+            "change_id": change_id,
+        })
+    return changes
 
 def grow_population(nation, foreign_nation):
     pop_roll = random.randint(1, 10)
@@ -93,7 +89,7 @@ def grow_population(nation, foreign_nation):
                 pops = [{"race": pacted_ally.get("primary_race", ""), "culture": pacted_ally.get("primary_culture", ""), "religion": pacted_ally.get("primary_religion", "")}]
         except:
             pass
-    elif pop_roll + roll_modifier + len(pacted_allies) >= 9:
+    elif pop_roll + roll_modifier + len(pacted_allies) >= 9 and foreign_nation:
         try:
             pops = list(mongo.db.pops.find({"nation": ObjectId(foreign_nation["_id"])}, {"_id": 1, "race": 1, "culture": 1, "religion": 1}))
             if len(pops) == 0:

@@ -157,6 +157,38 @@ def is_tile_legally_controllable(q, r, nation_name):
     return True
 
 
+def get_nations_within_distance(nation_name, max_distance=10):
+    """Return a list of nation names whose territory contains at least one tile
+    within max_distance hexes of any tile owned by nation_name.
+
+    Excludes nation_name itself. Returns an empty list if the nation owns no tiles.
+    """
+    own_tiles = [
+        (t["q"], t["r"])
+        for t in mongo.db.hex_map_tiles.find(
+            {"owner": nation_name}, {"q": 1, "r": 1, "_id": 0}
+        )
+    ]
+    if not own_tiles:
+        return []
+
+    other_tiles = mongo.db.hex_map_tiles.find(
+        {"owner": {"$nin": [None, "", nation_name]}},
+        {"q": 1, "r": 1, "owner": 1, "_id": 0},
+    )
+
+    nearby_nations = set()
+    for tile in other_tiles:
+        owner = tile.get("owner")
+        if not owner or owner in nearby_nations:
+            continue
+        tq, tr = tile["q"], tile["r"]
+        if any(hex_distance(tq, tr, oq, or_) <= max_distance for oq, or_ in own_tiles):
+            nearby_nations.add(owner)
+
+    return sorted(nearby_nations)
+
+
 def get_nation_tile_stats(nation_name):
     """Returns terrain and node type counts for all tiles owned by a nation."""
     tiles = list(mongo.db.hex_map_tiles.find({"owner": nation_name}, {"_id": 0}))
