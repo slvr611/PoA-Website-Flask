@@ -136,6 +136,10 @@ class HexMapViewer {
         this._midPainting = false;  // middle-mouse unown paint
         this._lastPainted = null;  // "q,r" of last painted tile (avoids duplicate API calls)
 
+        // Undo stack — each entry is {type, tiles: Map(key → originalValue)}
+        this._undoStack        = [];
+        this._currentUndoBatch = null;
+
         // Nation cache for owner autocomplete and buildings
         this._nationList      = null;  // [{name, color, overlord}]
         this._nationOverlords = {};   // name -> overlord name string
@@ -975,6 +979,7 @@ class HexMapViewer {
                 e.preventDefault();
                 this._midPainting = true;
                 this._lastPainted = null;
+                this._currentUndoBatch = { type: 'unown', tiles: new Map() };
                 this._paintUnownedAt(e.clientX, e.clientY);
                 return;
             }
@@ -985,20 +990,31 @@ class HexMapViewer {
             this._onMove(e.clientX, e.clientY);
         });
         c.addEventListener('mouseup', e => {
-            if (e.button === 1) { this._midPainting = false; this._lastPainted = null; return; }
+            if (e.button === 1) {
+                this._midPainting = false;
+                this._lastPainted = null;
+                this._finalizeUndoBatch();
+                return;
+            }
             this._onUp(e.clientX, e.clientY);
         });
         c.addEventListener('mouseleave', () => {
-            this.isDragging = false;
-            this._painting  = false;
+            this.isDragging   = false;
+            this._painting    = false;
             this._midPainting = false;
+            this._finalizeUndoBatch();
             this._updateCursor();
         });
         document.addEventListener('keydown', e => {
             if (e.key === 'Escape') {
                 this.setPaintMode(null);
                 this.setPaintNationMode(null);
+                this.setPaintRegionMode(null);
                 this.canvas.dispatchEvent(new CustomEvent('hexmap:pantool', { bubbles: true }));
+            }
+            if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+                e.preventDefault();
+                this.undo();
             }
         });
         c.addEventListener('wheel',      e => this._onWheel(e), { passive: false });
@@ -1080,6 +1096,8 @@ class HexMapViewer {
         if (this.paintMode || this.paintNationMode || this.paintRegionMode) {
             this._painting    = true;
             this._lastPainted = null;
+            const type = this.paintNationMode ? 'nation' : this.paintRegionMode ? 'region' : 'terrain';
+            this._currentUndoBatch = { type, tiles: new Map() };
             this._paintAt(cx, cy);
         } else {
             this._startPan(cx, cy);
@@ -1103,11 +1121,49 @@ class HexMapViewer {
         if (this._painting) {
             this._painting    = false;
             this._lastPainted = null;
+            this._finalizeUndoBatch();
             return;
         }
         this.isDragging = false;
         this._updateCursor();
         if (!this.hasMoved) this._onClickWorld(cx, cy);
+    }
+
+    _finalizeUndoBatch() {
+        if (this._currentUndoBatch && this._currentUndoBatch.tiles.size > 0) {
+            this._undoStack.push(this._currentUndoBatch);
+            if (this._undoStack.length > 50) this._undoStack.shift();
+        }
+        this._currentUndoBatch = null;
+    }
+
+    undo() {
+        if (!this._undoStack.length) return;
+        const batch = this._undoStack.pop();
+        for (const [key, originalValue] of batch.tiles) {
+            const [q, r] = key.split(',').map(Number);
+            const existing = this.tiles.get(key) || { q, r };
+            let field, apiPayload;
+            if (batch.type === 'terrain') {
+                field      = { terrain: originalValue };
+                apiPayload = { terrain: originalValue };
+            } else if (batch.type === 'nation' || batch.type === 'unown') {
+                field      = { owner: originalValue };
+                apiPayload = { owner: originalValue };
+            } else if (batch.type === 'region') {
+                field      = { region: originalValue };
+                apiPayload = { region: originalValue };
+            }
+            this.tiles.set(key, { ...existing, ...field });
+            fetch(`/api/hex-map/tile/${q}/${r}`, {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify(apiPayload),
+            }).catch(() => {});
+        }
+        if (batch.type === 'terrain') this._scheduleTerrainRebuild();
+        if (batch.type === 'nation' || batch.type === 'unown') this._computeNationLabels();
+        this.render();
     }
 
     async _paintAt(screenX, screenY) {
@@ -1125,6 +1181,8 @@ class HexMapViewer {
 
         if (this.paintMode) {
             const terrain = this.paintMode;
+            if (this._currentUndoBatch && !this._currentUndoBatch.tiles.has(key))
+                this._currentUndoBatch.tiles.set(key, existing.terrain || 'disconnected');
             this.tiles.set(key, { ...existing, terrain });
             this._scheduleTerrainRebuild();
             this.render();
@@ -1139,6 +1197,8 @@ class HexMapViewer {
                 this._showPaintError('This tile cannot be claimed: it violates a territory restriction.');
                 return;
             }
+            if (this._currentUndoBatch && !this._currentUndoBatch.tiles.has(key))
+                this._currentUndoBatch.tiles.set(key, existing.owner || null);
             this.tiles.set(key, { ...existing, owner });
             this._computeNationLabels();
             this.render();
@@ -1151,6 +1211,8 @@ class HexMapViewer {
                 });
             } catch (_) { resp = null; }
             if (resp && !resp.ok) {
+                // Server rejected — roll back the local change and remove from undo batch
+                if (this._currentUndoBatch) this._currentUndoBatch.tiles.delete(key);
                 this.tiles.set(key, existing);
                 this._computeNationLabels();
                 this.render();
@@ -1159,6 +1221,8 @@ class HexMapViewer {
             }
         } else if (this.paintRegionMode) {
             const region = this.paintRegionMode === '__unregioned__' ? null : this.paintRegionMode;
+            if (this._currentUndoBatch && !this._currentUndoBatch.tiles.has(key))
+                this._currentUndoBatch.tiles.set(key, existing.region || null);
             this.tiles.set(key, { ...existing, region });
             this.render();
             await fetch(`/api/hex-map/tile/${q}/${r}`, {
@@ -1180,6 +1244,8 @@ class HexMapViewer {
         if (key === this._lastPainted) return;
         this._lastPainted = key;
         const existing = this.tiles.get(key) || { q, r };
+        if (this._currentUndoBatch && !this._currentUndoBatch.tiles.has(key))
+            this._currentUndoBatch.tiles.set(key, existing.owner || null);
         this.tiles.set(key, { ...existing, owner: null });
         this._computeNationLabels();
         this.render();
