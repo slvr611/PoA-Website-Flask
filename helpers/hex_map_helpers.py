@@ -168,10 +168,20 @@ def compute_admin_range_out_of_range(nation_name, admin, nomadic=False, all_tile
     if all_tiles is None:
         all_tiles = list(mongo.db.hex_map_tiles.find(
             {},
-            {"q": 1, "r": 1, "terrain": 1, "city": 1, "district": 1, "wonder": 1, "capital": 1, "owner": 1, "_id": 0},
+            {"q": 1, "r": 1, "terrain": 1, "city": 1, "district": 1, "wonder": 1, "capital": 1, "owner": 1, "portal": 1, "_id": 0},
         ))
 
     tile_map = {(t["q"], t["r"]): t for t in all_tiles}
+
+    # Build portal map: color → [(q, r)] for all portal tiles on the map.
+    portal_map = {}
+    for t in all_tiles:
+        portal = t.get("portal")
+        if portal and portal.get("color"):
+            color = portal["color"]
+            if color not in portal_map:
+                portal_map[color] = []
+            portal_map[color].append((t["q"], t["r"]))
 
     owned_coords = frozenset(
         (t["q"], t["r"]) for t in all_tiles if t.get("owner") == nation_name
@@ -213,16 +223,36 @@ def compute_admin_range_out_of_range(nation_name, admin, nomadic=False, all_tile
         d, q, r = heapq.heappop(heap)
         if d > dist.get((q, r), INF):
             continue
+        # Normal hex neighbors
         for nq, nr in axial_neighbors(q, r):
             tile = tile_map.get((nq, nr))
             terrain = tile.get("terrain", "disconnected") if tile else "disconnected"
             cost = move_cost.get(terrain, IMPASSABLE)
             if cost >= IMPASSABLE:
                 continue
+            if tile and (tile.get("route") or {}).get("tier") == 3:
+                cost = max(1, cost - 1)
             new_dist = d + cost
             if new_dist < dist.get((nq, nr), INF):
                 dist[(nq, nr)] = new_dist
                 heapq.heappush(heap, (new_dist, nq, nr))
+        # Portal virtual neighbors — same-color portal pairs are treated as adjacent
+        cur_tile = tile_map.get((q, r))
+        if cur_tile:
+            portal = cur_tile.get("portal")
+            if portal and portal.get("color"):
+                for pq, pr in portal_map.get(portal["color"], []):
+                    if (pq, pr) == (q, r):
+                        continue
+                    p_tile = tile_map.get((pq, pr))
+                    terrain = p_tile.get("terrain", "disconnected") if p_tile else "disconnected"
+                    cost = move_cost.get(terrain, IMPASSABLE)
+                    if cost >= IMPASSABLE:
+                        continue
+                    new_dist = d + cost
+                    if new_dist < dist.get((pq, pr), INF):
+                        dist[(pq, pr)] = new_dist
+                        heapq.heappush(heap, (new_dist, pq, pr))
 
     out_of_range = set()
     for coord in owned_coords:
@@ -232,6 +262,8 @@ def compute_admin_range_out_of_range(nation_name, admin, nomadic=False, all_tile
         tile = tile_map.get(coord)
         terrain = tile.get("terrain", "disconnected") if tile else "disconnected"
         cost = move_cost.get(terrain, IMPASSABLE)
+        if tile and (tile.get("route") or {}).get("tier") == 3:
+            cost = max(1, cost - 1)
         d = dist.get(coord, INF)
         if d == INF or (d - cost) > limit:
             out_of_range.add(coord)

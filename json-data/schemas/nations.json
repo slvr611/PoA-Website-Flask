@@ -232,8 +232,8 @@
         "label": "Effective Territory",
         "description": "The nation's maximum territory they can hold before they start suffering penalties",
         "calculated": true,
-        "effective_territory_per_admin": 5,
-        "base_value": 10
+        "effective_territory_per_admin": 10,
+        "base_value": 20
       },
       "current_territory": {
         "bsonType": "number",

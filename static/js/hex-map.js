@@ -109,6 +109,29 @@ const TERRAIN_MOVE_COST = {
 };
 const _TERRAIN_MOVE_IMPASSABLE = 9999;
 
+// Portal colors — each color identifies a pair (or group) of connected portal tiles.
+const PORTAL_COLORS = {
+    red:    '#e04444',
+    blue:   '#4466e0',
+    green:  '#38b050',
+    yellow: '#d4b020',
+    purple: '#9040d0',
+    orange: '#d06020',
+    cyan:   '#18a8c8',
+    white:  '#c8c8c8',
+    pink:   '#e060b0',
+    teal:   '#28a898',
+};
+const PORTAL_COLOR_NAMES = Object.keys(PORTAL_COLORS);
+
+// Dash patterns per route tier.
+const ROUTE_DASHES = [
+    null,              // index 0 unused
+    [4, 7],            // tier 1 — small dots
+    [14, 4, 3, 4],     // tier 2 — long-short alternating
+    [17, 6],           // tier 3 — long dashes
+];
+
 // Axial hex neighbor directions (flat-top).
 const _AXIAL_DIRS = [[1,0],[-1,0],[0,1],[0,-1],[1,-1],[-1,1]];
 
@@ -187,6 +210,7 @@ class HexMapViewer {
         this.paintMode       = null;  // terrain key, or null
         this.paintNationMode = null;  // nation name, or null
         this.paintRegionMode = null;  // region name, or null
+        this.paintRouteMode  = null;  // {owner, tier} or {erase:true}, or null
         this.forbiddenTiles  = new Set();  // "q,r" keys that violate the selected nation's restrictions
         this._paintErrorTimer = null;
         this._painting    = false;
@@ -724,6 +748,7 @@ class HexMapViewer {
         const terrainBuckets = {};  // fillStyle → Float64Array-like flat [x,y,x,y,…]
         const regionBuckets  = {};
         const nationBuckets  = {};
+        const portalBuckets  = {};  // portal hex color → [x,y,…]
 
         // Parallel flat arrays for all visible hexes (used for outline pass and icons).
         const allX    = [];
@@ -735,11 +760,12 @@ class HexMapViewer {
         for (const [col, row] of this._visibleCells()) {
             const { q, r } = this._offsetToAxial(col, row);
             const { x, y } = this._axialToPixel(q, r);
-            const tile      = this.tiles.get(`${q},${r}`);
+            const key       = `${q},${r}`;
+            const tile      = this.tiles.get(key);
 
             allX.push(x);
             allY.push(y);
-            allKey.push(`${q},${r}`);
+            allKey.push(key);
             allTile.push(tile);
 
             if (hasTerrain && !this._terrainPaths) {
@@ -758,6 +784,12 @@ class HexMapViewer {
                 const fill = this._nationRgba(tile.owner, 0.38);
                 if (!nationBuckets[fill]) nationBuckets[fill] = [];
                 nationBuckets[fill].push(x, y);
+            }
+
+            if (tile && tile.portal?.color) {
+                const portalHex = PORTAL_COLORS[tile.portal.color] || tile.portal.color;
+                if (!portalBuckets[portalHex]) portalBuckets[portalHex] = [];
+                portalBuckets[portalHex].push(x, y);
             }
         }
 
@@ -801,18 +833,21 @@ class HexMapViewer {
             ctx.fill();
         }
 
-        // ── Admin range overlay: darken owned tiles beyond admin movement range ─
-        if (hasPolitical && this._outOfRangeTiles.size > 0) {
-            const pts = [];
-            for (let i = 0; i < allKey.length; i++) {
-                if (allTile[i]?.owner && this._outOfRangeTiles.has(allKey[i]))
-                    pts.push(allX[i], allY[i]);
-            }
-            if (pts.length > 0) {
-                ctx.beginPath();
-                for (let i = 0; i < pts.length; i += 2) this._hexSubpath(ctx, pts[i], pts[i+1], inner);
-                ctx.fillStyle = 'rgba(15,15,20,0.58)';
-                ctx.fill();
+        // ── Portal ovals ─────────────────────────────────────────────────────
+        if (this.layers.buildings) {
+            const lw  = Math.max(2, 3.5 / this.zoom);
+            const rx  = inner * 0.48;
+            const ry  = inner * 0.24;
+            const rot = Math.PI / 8;   // ~22.5° tilt
+            for (const color in portalBuckets) {
+                const pts = portalBuckets[color];
+                ctx.strokeStyle = color;
+                ctx.lineWidth   = lw;
+                for (let i = 0; i < pts.length; i += 2) {
+                    ctx.beginPath();
+                    ctx.ellipse(pts[i], pts[i+1], rx, ry, rot, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
             }
         }
 
@@ -834,6 +869,68 @@ class HexMapViewer {
                 for (let i = 0; i < allX.length; i++) this._hexSubpath(ctx, allX[i], allY[i], inner);
                 ctx.stroke();
             }
+        }
+
+        // ── Out-of-range overlay (dark tint over owned tiles beyond admin range) ──
+        if (hasPolitical && this._outOfRangeTiles.size) {
+            ctx.beginPath();
+            for (let i = 0; i < allX.length; i++) {
+                if (this._outOfRangeTiles.has(allKey[i])) {
+                    this._hexSubpath(ctx, allX[i], allY[i], inner);
+                }
+            }
+            ctx.fillStyle = 'rgba(0,0,0,0.45)';
+            ctx.fill();
+        }
+
+        // ── Routes (dashed lines connecting route tiles and adjacent cities) ────
+        // Line width scales with zoom: 3.5 screen-px at zoom ≥ 0.875, thinner when zoomed out.
+        if (hasPolitical) {
+            const routeLW    = Math.max(0.8, Math.min(4, 3.5 / this.zoom));
+            const drawnEdges = new Set();
+            ctx.save();
+            ctx.lineCap  = 'round';
+            ctx.lineWidth = routeLW;
+            for (let i = 0; i < allTile.length; i++) {
+                const tile = allTile[i];
+                if (!tile?.route?.owner) continue;
+                const q     = tile.q, r = tile.r;
+                const sx    = allX[i], sy = allY[i];
+                const tier  = Math.min(3, Math.max(1, tile.route.tier || 1));
+                const color = this._nationRgba(tile.route.owner, 1.0);
+                const dash  = ROUTE_DASHES[tier];
+                for (const [dq, dr] of _AXIAL_DIRS) {
+                    const nq   = q + dq, nr = r + dr;
+                    const nkey = `${nq},${nr}`;
+                    const ekey = allKey[i] < nkey ? `${allKey[i]}|${nkey}` : `${nkey}|${allKey[i]}`;
+                    if (drawnEdges.has(ekey)) continue;
+                    const nb = this.tiles.get(nkey);
+                    if (!nb?.route?.owner && !nb?.city && !nb?.capital) continue;
+                    drawnEdges.add(ekey);
+                    const { x: nx, y: ny } = this._axialToPixel(nq, nr);
+
+                    const nbTier  = nb?.route?.tier ? Math.min(3, Math.max(1, nb.route.tier)) : 0;
+                    const nbOwner = nb?.route?.owner || null;
+                    const split   = nbTier && (nbTier !== tier || nbOwner !== tile.route.owner);
+                    if (split) {
+                        // Different tier or owner — draw each half in its own style
+                        const mx = (sx + nx) / 2, my = (sy + ny) / 2;
+                        ctx.setLineDash(dash);
+                        ctx.strokeStyle = color;
+                        ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(mx, my); ctx.stroke();
+                        ctx.setLineDash(ROUTE_DASHES[nbTier]);
+                        ctx.strokeStyle = this._nationRgba(nbOwner, 1.0);
+                        ctx.beginPath(); ctx.moveTo(mx, my); ctx.lineTo(nx, ny); ctx.stroke();
+                    } else {
+                        // Same tier + owner, or endpoint is city/capital — full line in this tile's style
+                        ctx.setLineDash(dash);
+                        ctx.strokeStyle = color;
+                        ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(nx, ny); ctx.stroke();
+                    }
+                }
+            }
+            ctx.setLineDash([]);
+            ctx.restore();
         }
 
         // ── Forbidden tiles overlay (territory restriction, paint mode only) ──
@@ -1125,6 +1222,7 @@ class HexMapViewer {
         this.paintMode       = terrainKey || null;
         this.paintNationMode = null;
         this.paintRegionMode = null;
+        this.paintRouteMode  = null;
         this.forbiddenTiles  = new Set();
         this._updateCursor();
         this.render();
@@ -1134,6 +1232,23 @@ class HexMapViewer {
         this.paintRegionMode = regionName || null;
         this.paintMode       = null;
         this.paintNationMode = null;
+        this.paintRouteMode  = null;
+        this.forbiddenTiles  = new Set();
+        this._updateCursor();
+        this.render();
+    }
+
+    setPaintRouteMode(owner, tier) {
+        if (tier === 'erase') {
+            this.paintRouteMode = { erase: true };
+        } else if (owner && tier) {
+            this.paintRouteMode = { owner, tier: parseInt(tier) };
+        } else {
+            this.paintRouteMode = null;
+        }
+        this.paintMode       = null;
+        this.paintNationMode = null;
+        this.paintRegionMode = null;
         this.forbiddenTiles  = new Set();
         this._updateCursor();
         this.render();
@@ -1143,6 +1258,7 @@ class HexMapViewer {
         this.paintNationMode = nationName || null;
         this.paintMode       = null;
         this.paintRegionMode = null;
+        this.paintRouteMode  = null;
         this.forbiddenTiles  = new Set();
         this._updateCursor();
         if (nationName && nationName !== '__unowned__') {
@@ -1167,7 +1283,7 @@ class HexMapViewer {
     }
 
     _updateCursor() {
-        this.canvas.style.cursor = (this.paintMode || this.paintNationMode || this.paintRegionMode) ? 'crosshair' : 'grab';
+        this.canvas.style.cursor = (this.paintMode || this.paintNationMode || this.paintRegionMode || this.paintRouteMode) ? 'crosshair' : 'grab';
     }
 
     _startPan(cx, cy) {
@@ -1179,10 +1295,10 @@ class HexMapViewer {
     }
 
     _onDown(cx, cy) {
-        if (this.paintMode || this.paintNationMode || this.paintRegionMode) {
+        if (this.paintMode || this.paintNationMode || this.paintRegionMode || this.paintRouteMode) {
             this._painting    = true;
             this._lastPainted = null;
-            const type = this.paintNationMode ? 'nation' : this.paintRegionMode ? 'region' : 'terrain';
+            const type = this.paintNationMode ? 'nation' : this.paintRegionMode ? 'region' : this.paintRouteMode ? 'route' : 'terrain';
             this._currentUndoBatch = { type, tiles: new Map() };
             this._paintAt(cx, cy);
         } else {
@@ -1191,7 +1307,7 @@ class HexMapViewer {
     }
 
     _onMove(cx, cy) {
-        if (this._painting && (this.paintMode || this.paintNationMode || this.paintRegionMode)) {
+        if (this._painting && (this.paintMode || this.paintNationMode || this.paintRegionMode || this.paintRouteMode)) {
             this._paintAt(cx, cy);
             return;
         }
@@ -1239,6 +1355,9 @@ class HexMapViewer {
             } else if (batch.type === 'region') {
                 field      = { region: originalValue };
                 apiPayload = { region: originalValue };
+            } else if (batch.type === 'route') {
+                field      = { route: originalValue };
+                apiPayload = { route: originalValue };
             }
             this.tiles.set(key, { ...existing, ...field });
             fetch(`/api/hex-map/tile/${q}/${r}`, {
@@ -1325,6 +1444,38 @@ class HexMapViewer {
                 this.render();
                 const data = await resp.json().catch(() => ({}));
                 this._showPaintError(data.error || 'Could not set region on this tile.');
+            }
+        } else if (this.paintRouteMode) {
+            const route = this.paintRouteMode.erase ? null
+                : { owner: this.paintRouteMode.owner, tier: this.paintRouteMode.tier };
+            if (route) {
+                const terrain = existing.terrain || 'disconnected';
+                const blocked12 = new Set(['hazardous_land','hazardous_water','mountain','deep_water']);
+                const blocked3  = new Set(['deep_water']);
+                const blocked   = route.tier === 3 ? blocked3 : blocked12;
+                if (blocked.has(terrain)) {
+                    this._showPaintError(`Tier ${route.tier} routes cannot be built on ${TERRAIN_NAMES[terrain] || terrain} terrain.`);
+                    return;
+                }
+            }
+            if (this._currentUndoBatch && !this._currentUndoBatch.tiles.has(key))
+                this._currentUndoBatch.tiles.set(key, existing.route || null);
+            this.tiles.set(key, { ...existing, route });
+            this.render();
+            let resp;
+            try {
+                resp = await fetch(`/api/hex-map/tile/${q}/${r}`, {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify({ route }),
+                });
+            } catch (_) { resp = null; }
+            if (resp && !resp.ok) {
+                if (this._currentUndoBatch) this._currentUndoBatch.tiles.delete(key);
+                this.tiles.set(key, existing);
+                this.render();
+                const data = await resp.json().catch(() => ({}));
+                this._showPaintError(data.error || 'Could not set route on this tile.');
             }
         }
     }
@@ -1509,7 +1660,17 @@ class HexMapViewer {
             return `<option value="${res.key}"${res.key===rKey?' selected':''}>${res.name}${cat}</option>`;
         }).join('');
 
-        const isCapital = tile.capital ? 'checked' : '';
+        const isCapital    = tile.capital ? 'checked' : '';
+        const curPortal    = tile.portal?.color || '';
+        const portalOpts   = PORTAL_COLOR_NAMES.map(c =>
+            `<option value="${c}"${c===curPortal?' selected':''}>${c.charAt(0).toUpperCase()+c.slice(1)}</option>`
+        ).join('');
+        const curRouteOwner = tile.route?.owner || '';
+        const curRouteTier  = tile.route?.tier  || '';
+        const routeTierOpts = [1,2,3].map(t =>
+            `<option value="${t}"${t==curRouteTier?' selected':''}>${t}</option>`
+        ).join('');
+
         return `
 <details class="hex-edit-details" id="hex-edit-${q}-${r}">
   <summary>Edit Tile</summary>
@@ -1525,6 +1686,17 @@ class HexMapViewer {
     </label>
     <fieldset><legend>Node</legend>
       <label>Resource<select name="node_resource"><option value="">None</option>${resOpts}</select></label>
+    </fieldset>
+    <fieldset><legend>Portal</legend>
+      <label>Color<select name="portal_color"><option value="">None</option>${portalOpts}</select></label>
+    </fieldset>
+    <fieldset><legend>Route</legend>
+      <label>Owner
+        <input name="route_owner" type="text" value="${_esc(curRouteOwner)}" placeholder="Nation name"
+               list="route-nation-datalist-${q}-${r}" autocomplete="off">
+        <datalist id="route-nation-datalist-${q}-${r}"></datalist>
+      </label>
+      <label>Tier<select name="route_tier"><option value="">None</option>${routeTierOpts}</select></label>
     </fieldset>
     <fieldset><legend>City</legend>
       <select name="city_id" data-current="${_esc(curCityId)}">
@@ -1573,6 +1745,15 @@ class HexMapViewer {
         this._outOfRangeTiles = new Set();
         if (!this.nationAdmin || this.nationAdmin.size === 0) return;
 
+        // Build portal map: color → [{q,r,key,terrain}] for all portal tiles on the map.
+        const portalMap = new Map();
+        for (const [key, tile] of this.tiles) {
+            const color = tile.portal?.color;
+            if (!color) continue;
+            if (!portalMap.has(color)) portalMap.set(color, []);
+            portalMap.get(color).push({ q: tile.q, r: tile.r, key, terrain: tile.terrain || 'disconnected' });
+        }
+
         // Group owned tiles by nation, tracking capital and building flags
         const nationTiles = new Map();
         for (const [key, tile] of this.tiles) {
@@ -1583,6 +1764,7 @@ class HexMapViewer {
                 terrain: tile.terrain || 'disconnected',
                 hasBuilding: !!(tile.city || tile.district || tile.wonder),
                 isCapital: !!tile.capital,
+                routeTier: tile.route?.tier || 0,
             });
         }
 
@@ -1621,17 +1803,34 @@ class HexMapViewer {
                 const [d, q, r] = heap.pop();
                 const key = `${q},${r}`;
                 if (d > (dist.get(key) ?? INF)) continue;
+                // Normal hex neighbors
                 for (const [dq, dr] of _AXIAL_DIRS) {
                     const nq = q + dq, nr = r + dr;
                     const nkey = `${nq},${nr}`;
                     const ntile = this.tiles.get(nkey);
                     const terrain = ntile ? (ntile.terrain || 'disconnected') : 'disconnected';
-                    const cost = TERRAIN_MOVE_COST[terrain] ?? _TERRAIN_MOVE_IMPASSABLE;
+                    let cost = TERRAIN_MOVE_COST[terrain] ?? _TERRAIN_MOVE_IMPASSABLE;
                     if (cost >= _TERRAIN_MOVE_IMPASSABLE) continue;
+                    if (ntile?.route?.tier === 3) cost = Math.max(1, cost - 1);
                     const nd = d + cost;
                     if (nd < (dist.get(nkey) ?? INF)) {
                         dist.set(nkey, nd);
                         heap.push([nd, nq, nr]);
+                    }
+                }
+                // Portal virtual neighbors — treat same-color portal pairs as adjacent
+                const curTile = this.tiles.get(key);
+                const pColor  = curTile?.portal?.color;
+                if (pColor) {
+                    for (const partner of (portalMap.get(pColor) || [])) {
+                        if (partner.key === key) continue;
+                        const cost = TERRAIN_MOVE_COST[partner.terrain] ?? _TERRAIN_MOVE_IMPASSABLE;
+                        if (cost >= _TERRAIN_MOVE_IMPASSABLE) continue;
+                        const nd = d + cost;
+                        if (nd < (dist.get(partner.key) ?? INF)) {
+                            dist.set(partner.key, nd);
+                            heap.push([nd, partner.q, partner.r]);
+                        }
                     }
                 }
             }
@@ -1643,7 +1842,8 @@ class HexMapViewer {
                 if (d === INF) {
                     this._outOfRangeTiles.add(t.key);
                 } else {
-                    const tileCost = TERRAIN_MOVE_COST[t.terrain] ?? _TERRAIN_MOVE_IMPASSABLE;
+                    let tileCost = TERRAIN_MOVE_COST[t.terrain] ?? _TERRAIN_MOVE_IMPASSABLE;
+                    if (t.routeTier === 3) tileCost = Math.max(1, tileCost - 1);
                     if ((d - tileCost) > limit) this._outOfRangeTiles.add(t.key);
                 }
             }
@@ -1776,12 +1976,14 @@ class HexMapViewer {
         const curDistId    = distSelect?.dataset.current  || '';
         const curWonderId  = root.querySelector('[name="wonder_id"]')?.dataset.current || '';
 
-        // Populate nation datalist
+        // Populate nation datalists (owner + route owner)
         this._ensureNationList().then(() => {
-            const dl = root.querySelector(`#nation-datalist-${q}-${r}`);
-            if (dl && this._nationList) {
-                dl.innerHTML = this._nationList.map(n => `<option value="${_esc(n.name)}">`).join('');
-            }
+            if (!this._nationList) return;
+            const opts = this._nationList.map(n => `<option value="${_esc(n.name)}">`).join('');
+            const dl  = root.querySelector(`#nation-datalist-${q}-${r}`);
+            const rdl = root.querySelector(`#route-nation-datalist-${q}-${r}`);
+            if (dl)  dl.innerHTML  = opts;
+            if (rdl) rdl.innerHTML = opts;
         });
 
         // Populate building selects for current owner
@@ -1826,7 +2028,25 @@ class HexMapViewer {
             const wonderObj = (this._wonderList || []).find(w => w.id === wonderId);
             const wonder    = wonderId ? (wonderObj || { id: wonderId }) : null;
 
-            const capital = root.querySelector('[name="capital"]')?.checked || false;
+            const capital      = root.querySelector('[name="capital"]')?.checked || false;
+            const portalColor  = val('portal_color');
+            const portal       = portalColor ? { color: portalColor } : null;
+            const routeOwner   = val('route_owner');
+            const routeTierStr = val('route_tier');
+            const route        = (routeOwner && routeTierStr) ? { owner: routeOwner, tier: parseInt(routeTierStr) } : null;
+
+            // Validate route terrain restrictions before hitting the server
+            if (route) {
+                const terrain = val('terrain') || 'disconnected';
+                const blocked12 = new Set(['hazardous_land','hazardous_water','mountain','deep_water']);
+                const blocked3  = new Set(['deep_water']);
+                const blocked   = route.tier === 3 ? blocked3 : blocked12;
+                if (blocked.has(terrain)) {
+                    this._showPaintError(`Tier ${route.tier} routes cannot be built on ${TERRAIN_NAMES[terrain] || terrain} terrain.`);
+                    return;
+                }
+            }
+
             const update = {
                 terrain:  val('terrain') || 'disconnected',
                 owner:    val('owner'),
@@ -1835,6 +2055,8 @@ class HexMapViewer {
                 district,
                 wonder,
                 capital,
+                portal,
+                route,
             };
 
             const resp = await fetch(`/api/hex-map/tile/${q}/${r}`, {
@@ -1863,7 +2085,7 @@ class HexMapViewer {
                 this.tiles.set(key, { ...(old || { q, r }), ...update });
                 this._computeNationLabels();
                 // Recompute admin ranges if a building was added or removed
-                if ('city' in update || 'district' in update || 'wonder' in update || 'owner' in update || 'capital' in update)
+                if ('city' in update || 'district' in update || 'wonder' in update || 'owner' in update || 'capital' in update || 'portal' in update)
                     this._computeAllAdminRanges();
                 this._showDetails(q, r);
                 this.render();

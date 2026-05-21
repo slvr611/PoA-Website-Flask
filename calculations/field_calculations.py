@@ -405,7 +405,12 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
             #Nation is Sated
             pass
     record_timing("food_state_adjustments_ms", phase_start)
-    
+
+    if target_data_type == "nation":
+        _etypes = (target.get("_calc_cache") or {}).get("effective_territory_types")
+        if _etypes is not None:
+            calculated_values["effective_territory_types"] = _etypes
+
     phase_start = perf_counter()
     if return_breakdowns and target_data_type == "nation":
         component_sources = {

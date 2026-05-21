@@ -57,12 +57,23 @@
             <input type="text" id="paint-region-input" class="map-btn" list="paint-region-datalist"
                    placeholder="Paint region…" autocomplete="off" title="Paint region">
             <datalist id="paint-region-datalist"></datalist>
+            <input type="text" id="paint-route-owner" class="map-btn" list="paint-route-owner-datalist"
+                   placeholder="Route owner…" autocomplete="off" title="Route owner nation">
+            <datalist id="paint-route-owner-datalist"></datalist>
+            <select id="paint-route-tier" class="map-btn" title="Route tier">
+                <option value="">Tier…</option>
+                <option value="erase">Erase</option>
+                <option value="1">Tier 1</option>
+                <option value="2">Tier 2</option>
+                <option value="3">Tier 3</option>
+            </select>
             <span class="map-btn-separator"></span>
             <button id="hex-snapshot-btn" class="map-btn">Snapshot</button>
             <div class="map-tools-dropdown" id="map-tools-dropdown">
                 <button class="map-btn map-tools-toggle" id="map-tools-toggle" title="Admin utilities">Tools ▾</button>
                 <div class="map-tools-menu" id="map-tools-menu">
                     <button id="hex-sync-territory-btn" class="map-tools-item">Sync Territory</button>
+                    <button id="hex-sync-routes-btn" class="map-tools-item" title="Recount route tiles per nation and update road usage">Sync Routes</button>
                     <button id="hex-sync-regions-btn" class="map-tools-item" title="Set each nation's region based on their capital tile's region, or the region covering most of their territory">Sync Nation Regions</button>
                     <button id="hex-purge-oob-btn" class="map-tools-item" title="Delete tiles outside configured grid bounds (removes stale tiles from old coordinate systems)">Purge OOB Tiles</button>
                     <button id="hex-normalize-coords-btn" class="map-tools-item" title="Convert any tiles with float q/r coordinates to integers (fixes tiles that revert after saving)">Fix Tile Coords</button>
@@ -358,12 +369,37 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
+    const routeOwnerInput = document.getElementById('paint-route-owner');
+    const routeOwnerDL    = document.getElementById('paint-route-owner-datalist');
+    const routeTierSelect = document.getElementById('paint-route-tier');
+
     function _activatePan() {
-        if (toolPanBtn)   toolPanBtn.classList.add('active');
-        if (terrainInput) { terrainInput.value = ''; terrainInput.classList.remove('active'); }
-        if (nationInput)  { nationInput.value  = ''; nationInput.classList.remove('active'); }
-        if (regionInput)  { regionInput.value  = ''; regionInput.classList.remove('active'); }
-        if (hexViewer)    { hexViewer.setPaintMode(null); hexViewer.setPaintNationMode(null); hexViewer.setPaintRegionMode(null); }
+        if (toolPanBtn)      toolPanBtn.classList.add('active');
+        if (terrainInput)    { terrainInput.value = ''; terrainInput.classList.remove('active'); }
+        if (nationInput)     { nationInput.value  = ''; nationInput.classList.remove('active'); }
+        if (regionInput)     { regionInput.value  = ''; regionInput.classList.remove('active'); }
+        if (routeOwnerInput) { routeOwnerInput.value = ''; routeOwnerInput.classList.remove('active'); }
+        if (routeTierSelect) { routeTierSelect.value  = ''; routeTierSelect.classList.remove('active'); }
+        if (hexViewer)       { hexViewer.setPaintMode(null); hexViewer.setPaintNationMode(null); hexViewer.setPaintRegionMode(null); hexViewer.setPaintRouteMode(null, null); }
+    }
+
+    function _tryActivateRoutePaint() {
+        if (!hexViewer) return;
+        const owner = routeOwnerInput?.value?.trim() || '';
+        const tier  = routeTierSelect?.value || '';
+        const validOwner = owner && (hexViewer.nationColors[owner] !== undefined);
+        const validTier  = tier === 'erase' || tier === '1' || tier === '2' || tier === '3';
+        if ((tier === 'erase' || validOwner) && validTier) {
+            toolPanBtn   && toolPanBtn.classList.remove('active');
+            terrainInput && (terrainInput.value = '') && terrainInput.classList.remove('active');
+            nationInput  && (nationInput.value  = '') && nationInput.classList.remove('active');
+            regionInput  && (regionInput.value  = '') && regionInput.classList.remove('active');
+            routeOwnerInput.classList.add('active');
+            routeTierSelect.classList.add('active');
+            hexViewer.setPaintRouteMode(owner, tier);
+        } else if (!owner && !tier) {
+            _activatePan();
+        }
     }
 
     if (toolPanBtn) {
@@ -465,6 +501,28 @@ document.addEventListener('DOMContentLoaded', function () {
             opt.value = name;
             nationDL.appendChild(opt);
         }
+        // Also populate route owner datalist
+        if (routeOwnerDL) {
+            while (routeOwnerDL.firstChild) routeOwnerDL.removeChild(routeOwnerDL.firstChild);
+            for (const name of names) {
+                const opt = document.createElement('option');
+                opt.value = name;
+                routeOwnerDL.appendChild(opt);
+            }
+        }
+    }
+
+    if (routeOwnerInput) {
+        routeOwnerInput.addEventListener('input', _tryActivateRoutePaint);
+        routeOwnerInput.addEventListener('blur', () => {
+            const owner = routeOwnerInput.value?.trim() || '';
+            if (owner && !hexViewer?.nationColors[owner]) {
+                routeOwnerInput.value = '';
+            }
+        });
+    }
+    if (routeTierSelect) {
+        routeTierSelect.addEventListener('change', _tryActivateRoutePaint);
     }
 
     function _populateRegionSelect() {
@@ -548,6 +606,19 @@ document.addEventListener('DOMContentLoaded', function () {
             syncTerritoryBtn.textContent = d.message || (r.ok ? 'Done' : 'Error');
             syncTerritoryBtn.disabled = false;
             setTimeout(() => { syncTerritoryBtn.textContent = 'Sync Territory'; }, 4000);
+        });
+    }
+
+    const syncRoutesBtn = document.getElementById('hex-sync-routes-btn');
+    if (syncRoutesBtn) {
+        syncRoutesBtn.addEventListener('click', async () => {
+            syncRoutesBtn.textContent = 'Syncing…';
+            syncRoutesBtn.disabled = true;
+            const r = await fetch('/api/hex-map/sync-all-routes', { method: 'POST' });
+            const d = await r.json();
+            syncRoutesBtn.textContent = r.ok ? `Done (${d.nations_updated} updated)` : 'Error';
+            syncRoutesBtn.disabled = false;
+            setTimeout(() => { syncRoutesBtn.textContent = 'Sync Routes'; }, 4000);
         });
     }
 

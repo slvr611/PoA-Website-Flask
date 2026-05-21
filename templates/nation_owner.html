@@ -336,12 +336,19 @@
 						<tr class="resources-header-row">
 							<th colspan="2" class="resources-header">Territory Holdings</th>
 						</tr>
+						{% set eff_territory = nation.get("effective_territory_types", nation.get("territory_types", {})) %}
 						{% for terrain, details in json_data["terrains"].items() %}
 							<tr>
 								<th>{{ details["display_name"] }}</th>
-								<td>{{ nation.get("territory_types", {}).get(terrain, 0) }}</td>
+								<td>{{ eff_territory.get(terrain, 0) }}</td>
 							</tr>
 						{% endfor %}
+						{% if eff_territory.get("disconnected", 0) > 0 %}
+							<tr>
+								<th>Disconnected</th>
+								<td>{{ eff_territory.get("disconnected", 0) }}</td>
+							</tr>
+						{% endif %}
 					</table>
 					{% if nation.nomadic > 0 %}
 						<table class="info-table">

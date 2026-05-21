@@ -351,6 +351,14 @@ def _resync_nation_territory(nation_name):
     mongo.db.nations.update_one({"name": nation_name}, {"$set": {"territory_types": counts}})
 
 
+def _resync_nation_routes(nation_name):
+    """Recount route tiles owned by nation_name and write to nations.road_usage."""
+    if not nation_name:
+        return
+    count = mongo.db.hex_map_tiles.count_documents({"route.owner": nation_name})
+    mongo.db.nations.update_one({"name": nation_name}, {"$set": {"road_usage": count}})
+
+
 def _sync_wonder(wonder_ref, owner_name, node_resource):
     """Update a wonder's owner_nation (string _id) and node from tile data."""
     if not isinstance(wonder_ref, dict) or not wonder_ref.get("id"):
@@ -373,10 +381,24 @@ def update_hex_map_tile(q, r):
     if getattr(g, "edit_access_level", 0) < 10:
         return jsonify({"error": "Unauthorized"}), 403
     data = request.get_json() or {}
-    allowed = {"terrain", "node", "city", "district", "wonder", "owner", "capital", "region"}
+    allowed = {"terrain", "node", "city", "district", "wonder", "owner", "capital", "region", "portal", "route"}
     update = {k: v for k, v in data.items() if k in allowed}
     if not update:
         return jsonify({"ok": True})
+
+    # Enforce route terrain restrictions
+    _ROUTE_BLOCKED = {
+        1: {"hazardous_land", "hazardous_water", "mountain", "deep_water"},
+        2: {"hazardous_land", "hazardous_water", "mountain", "deep_water"},
+        3: {"deep_water"},
+    }
+    if "route" in update and update["route"]:
+        route_tier    = update["route"].get("tier")
+        tile_terrain  = update.get("terrain") or (mongo.db.hex_map_tiles.find_one(
+            {"q": {"$in": [q, float(q)]}, "r": {"$in": [r, float(r)]}}, {"terrain": 1, "_id": 0}
+        ) or {}).get("terrain", "")
+        if tile_terrain in _ROUTE_BLOCKED.get(route_tier, set()):
+            return jsonify({"error": f"Tier {route_tier} routes cannot be built on {tile_terrain} terrain."}), 422
 
     # Enforce territory restrictions before saving
     if "owner" in update and update["owner"]:
@@ -446,6 +468,14 @@ def update_hex_map_tile(q, r):
         _resync_nation_territory(eff_owner)
         if "owner" in update and prev_owner and prev_owner != eff_owner:
             _resync_nation_territory(prev_owner)
+
+    # ── Route capacity sync ───────────────────────────────────────────────────
+    if "route" in update:
+        eff_route_owner  = (effective.get("route") or {}).get("owner", "")
+        prev_route_owner = (current.get("route") or {}).get("owner", "")
+        _resync_nation_routes(eff_route_owner)
+        if prev_route_owner and prev_route_owner != eff_route_owner:
+            _resync_nation_routes(prev_route_owner)
 
     return jsonify({"ok": True})
 
@@ -560,6 +590,30 @@ def sync_all_territory():
     mongo.db.nations.update_many(
         {"name": {"$nin": list(owned_nations)}, "territory_types": {"$exists": True}},
         {"$set": {"territory_types": {}}},
+    )
+    return jsonify({"ok": True, "nations_updated": updated})
+
+
+@hex_map_routes.route("/api/hex-map/sync-all-routes", methods=["POST"])
+@admin_required
+def sync_all_routes():
+    """Recount route tiles per nation and write to road_usage on each nation."""
+    pipeline = [
+        {"$match": {"route.owner": {"$exists": True, "$ne": None, "$ne": ""}}},
+        {"$group": {"_id": "$route.owner", "count": {"$sum": 1}}},
+    ]
+    route_counts = {doc["_id"]: doc["count"] for doc in mongo.db.hex_map_tiles.aggregate(pipeline)}
+
+    updated = 0
+    for nation_name, count in route_counts.items():
+        result = mongo.db.nations.update_one({"name": nation_name}, {"$set": {"road_usage": count}})
+        if result.matched_count:
+            updated += 1
+
+    owned = set(route_counts.keys())
+    mongo.db.nations.update_many(
+        {"name": {"$nin": list(owned)}, "road_usage": {"$gt": 0}},
+        {"$set": {"road_usage": 0}},
     )
     return jsonify({"ok": True, "nations_updated": updated})
 
