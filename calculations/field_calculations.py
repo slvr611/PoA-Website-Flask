@@ -57,22 +57,22 @@ def _build_nation_calc_cache(target):
         except Exception:
             pass
 
-    territory_node_counts = {}
-    active_node_counts = {}
     nation_name = target.get("name", "")
+
+    # Load raw node tiles — admin-range filtering happens later in calculate_all_fields
+    # once law_totals are available (needed for the nomadic multiplier check).
+    node_tiles = []
     if nation_name:
-        tiles = list(mongo.db.hex_map_tiles.find(
+        for tile in mongo.db.hex_map_tiles.find(
             {"owner": nation_name, "node.resource_type": {"$exists": True}},
-            {"node.resource_type": 1, "city": 1, "district": 1, "wonder": 1, "_id": 0}
-        ))
-        for tile in tiles:
+            {"q": 1, "r": 1, "node.resource_type": 1, "city": 1, "district": 1, "wonder": 1, "_id": 0}
+        ):
             rt = tile.get("node", {}).get("resource_type")
-            if not rt:
-                continue
-            territory_node_counts[rt] = territory_node_counts.get(rt, 0) + 1
-            has_building = bool(tile.get("city") or tile.get("district") or tile.get("wonder"))
-            if has_building:
-                active_node_counts[rt] = active_node_counts.get(rt, 0) + 1
+            if rt:
+                node_tiles.append({
+                    "q": tile.get("q"), "r": tile.get("r"), "rt": rt,
+                    "has_building": bool(tile.get("city") or tile.get("district") or tile.get("wonder")),
+                })
 
     return {
         "pops": pops,
@@ -80,8 +80,9 @@ def _build_nation_calc_cache(target):
         "bloodthirsty_pop_count": bloodthirsty_pop_count,
         "primary_culture_pop_count": primary_culture_pop_count,
         "primary_religion_pop_count": primary_religion_pop_count,
-        "territory_node_counts": territory_node_counts,
-        "active_node_counts": active_node_counts,
+        "_node_tiles": node_tiles,
+        # territory_node_counts, active_node_counts, and out_of_range_tiles are
+        # populated by calculate_all_fields after law_totals are available.
     }
 
 def calculate_all_fields(target, schema, target_data_type, return_breakdowns=False, instrumentation=None):
@@ -162,8 +163,34 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
 
         all_terrain_rules = _collect_all_terrain_rules(target)
         proximity_rules = _collect_all_proximity_rules(target)
-        if proximity_rules:
-            effective_territory_types = apply_proximity_terrain_overrides(target, proximity_rules)
+
+        # Compute admin range now that law_totals is available for nomadic detection.
+        _is_nomadic = law_totals.get("nomadic", 0) > 0
+        target["is_nomadic"] = _is_nomadic
+        _admin_val = target.get("administration", 1) or 1
+        from helpers.hex_map_helpers import compute_admin_range_out_of_range as _compute_oor
+        _nation_name = target.get("name", "")
+        out_of_range = _compute_oor(_nation_name, _admin_val, nomadic=_is_nomadic) if _nation_name else set()
+        # Filter cached node tiles by admin range and populate counts for node correction below.
+        _node_tiles = (target.get("_calc_cache") or {}).get("_node_tiles", [])
+        _oor_set = out_of_range
+        territory_node_counts = {}
+        active_node_counts = {}
+        for _nt in _node_tiles:
+            _coord = (_nt["q"], _nt["r"])
+            if _coord in _oor_set:
+                continue
+            _res = _nt["rt"]
+            territory_node_counts[_res] = territory_node_counts.get(_res, 0) + 1
+            if _nt.get("has_building"):
+                active_node_counts[_res] = active_node_counts.get(_res, 0) + 1
+        _cache = target.setdefault("_calc_cache", {})
+        _cache["out_of_range_tiles"] = out_of_range
+        _cache["territory_node_counts"] = territory_node_counts
+        _cache["active_node_counts"] = active_node_counts
+
+        if proximity_rules or out_of_range:
+            effective_territory_types = apply_proximity_terrain_overrides(target, proximity_rules, out_of_range)
         else:
             effective_territory_types = target.get("territory_types", {})
         # Store for use in breakdown tooltips (same data as the calculation)
@@ -761,52 +788,64 @@ def _collect_all_proximity_rules(target):
     return all_rules
 
 
-def apply_proximity_terrain_overrides(target, proximity_rules):
-    """Return a territory_types dict with node proximity terrain overrides applied.
+def apply_proximity_terrain_overrides(target, proximity_rules, out_of_range=None):
+    """Return a territory_types dict with node proximity and admin-range overrides applied.
 
-    Always derives the starting counts from actual tile data (idempotent — never
-    reads from the stored territory_types, so repeated calls never accumulate).
-    Tiles within `distance` hexes of any node producing `node_resource` are
-    counted as `terrain_as` instead of their actual terrain type.
+    Always derives starting counts from actual tile data (idempotent).
+    Works per-tile so multiple overlapping rules never double-count a tile.
+
+    - proximity_rules: tiles near specific node resources count as a different terrain
+    - out_of_range: tiles beyond the nation's admin range count as disconnected
     """
     from helpers.hex_map_helpers import hex_distance, get_node_resource_positions
 
     nation_name = target.get("name", "")
-    if not nation_name or not proximity_rules:
+    if not nation_name:
+        return dict(target.get("territory_types", {}))
+
+    has_proximity = bool(proximity_rules)
+    has_range     = bool(out_of_range)
+    if not has_proximity and not has_range:
         return dict(target.get("territory_types", {}))
 
     owned_tiles = list(mongo.db.hex_map_tiles.find(
         {"owner": nation_name}, {"q": 1, "r": 1, "terrain": 1, "_id": 0}
     ))
 
-    # Build fresh counts from actual tile terrain (not from stored territory_types)
-    territory_types = {}
+    # Per-tile effective terrain (starts as actual terrain, then overridden)
+    tile_terrain = {}
     for tile in owned_tiles:
-        t = tile.get("terrain", "")
-        if t:
-            territory_types[t] = territory_types.get(t, 0) + 1
+        terrain = tile.get("terrain", "")
+        if terrain:
+            tile_terrain[(tile["q"], tile["r"])] = terrain
 
-    for rule in proximity_rules:
+    # Proximity overrides — last matching rule wins for each tile
+    for rule in (proximity_rules or []):
         if rule.get("rule_type") != "node_proximity_terrain_override":
             continue
         node_resource = rule.get("node_resource", "")
-        terrain_as = rule.get("terrain_as", "")
-        distance = int(rule.get("distance", 1))
+        terrain_as    = rule.get("terrain_as", "")
+        distance      = int(rule.get("distance", 1))
         if not node_resource or not terrain_as:
             continue
-
         node_positions = get_node_resource_positions(node_resource)
         if not node_positions:
             continue
-
-        for tile in owned_tiles:
-            terrain = tile.get("terrain", "")
-            if not terrain or terrain == terrain_as:
+        for (tq, tr), terrain in list(tile_terrain.items()):
+            if terrain == terrain_as:
                 continue
-            tq, tr = tile["q"], tile["r"]
             if any(hex_distance(tq, tr, nq, nr) <= distance for nq, nr in node_positions):
-                territory_types[terrain] = max(0, territory_types.get(terrain, 0) - 1)
-                territory_types[terrain_as] = territory_types.get(terrain_as, 0) + 1
+                tile_terrain[(tq, tr)] = terrain_as
+
+    # Admin range override — out-of-range tiles count as disconnected (no resources)
+    if has_range:
+        for coord in out_of_range:
+            if coord in tile_terrain:
+                tile_terrain[coord] = "disconnected"
+
+    territory_types = {}
+    for terrain in tile_terrain.values():
+        territory_types[terrain] = territory_types.get(terrain, 0) + 1
 
     return {k: v for k, v in territory_types.items() if v > 0}
 

@@ -1351,6 +1351,50 @@ h1, h2 {
     flex-shrink: 0;
 }
 
+/* Admin tools dropdown */
+.map-tools-dropdown {
+    position: relative;
+    flex-shrink: 0;
+}
+
+.map-tools-menu {
+    display: none;
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    background: #2a2a2a;
+    border: 1px solid #555;
+    border-radius: 4px;
+    min-width: 170px;
+    z-index: 200;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    flex-direction: column;
+    padding: 4px 0;
+}
+
+.map-tools-dropdown.open .map-tools-menu {
+    display: flex;
+}
+
+.map-tools-item {
+    display: block;
+    width: 100%;
+    padding: 0.45rem 1rem;
+    background: none;
+    border: none;
+    color: #ccc;
+    font-size: 0.85rem;
+    text-align: left;
+    cursor: pointer;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.map-tools-item:hover {
+    background: #3a3a3a;
+    color: #fff;
+}
+
 /* Paint-mode select / input styled to match buttons */
 select.map-btn {
     appearance: none;

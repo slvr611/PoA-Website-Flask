@@ -1,6 +1,7 @@
-from app_core import mongo, category_data
+from app_core import mongo, category_data, json_data
 from bson import ObjectId
 import datetime
+import heapq
 from collections import deque
 
 AXIAL_DIRECTIONS = [(1, 0), (-1, 0), (0, 1), (0, -1), (1, -1), (-1, 1)]
@@ -141,6 +142,102 @@ def get_nation_connected_tiles(nation_name):
             if (nq, nr) in owned and (nq, nr) not in visited:
                 queue.append((nq, nr))
     return visited
+
+
+def compute_admin_range_out_of_range(nation_name, admin, nomadic=False, all_tiles=None):
+    """Return a set of (q, r) owned by nation_name that exceed admin movement range.
+
+    Non-nomadic: limit = admin * 2, measured from building tiles (city/district/wonder);
+    falls back to capital tile if no buildings exist.
+    Nomadic: limit = admin * 4, always measured from capital tile only (no buildings).
+    If no source tile is found, all owned tiles are returned as out-of-range.
+
+    "Entering a tile is sufficient" rule: a tile T is in-range when the cost to
+    reach T's entrance — dist[T] minus T's own movement cost — is ≤ limit.
+    Building tiles themselves are always in range.
+    """
+    IMPASSABLE = 9999
+    limit = admin * (4 if nomadic else 2)
+
+    terrain_data = json_data.get("terrains", {})
+    move_cost = {
+        k: v.get("speed_cost") or v.get("naval_speed_cost") or IMPASSABLE
+        for k, v in terrain_data.items()
+    }
+
+    if all_tiles is None:
+        all_tiles = list(mongo.db.hex_map_tiles.find(
+            {},
+            {"q": 1, "r": 1, "terrain": 1, "city": 1, "district": 1, "wonder": 1, "capital": 1, "owner": 1, "_id": 0},
+        ))
+
+    tile_map = {(t["q"], t["r"]): t for t in all_tiles}
+
+    owned_coords = frozenset(
+        (t["q"], t["r"]) for t in all_tiles if t.get("owner") == nation_name
+    )
+    if not owned_coords:
+        return set()
+
+    if nomadic:
+        # Nomadic nations always measure from capital only
+        capital_coords = frozenset(
+            (t["q"], t["r"]) for t in all_tiles
+            if t.get("owner") == nation_name and t.get("capital")
+        )
+        sources = capital_coords
+    else:
+        building_coords = frozenset(
+            (t["q"], t["r"]) for t in all_tiles
+            if t.get("owner") == nation_name and (t.get("city") or t.get("district") or t.get("wonder"))
+        )
+        if building_coords:
+            sources = building_coords
+        else:
+            # Fall back to capital tile when no buildings exist
+            capital_coords = frozenset(
+                (t["q"], t["r"]) for t in all_tiles
+                if t.get("owner") == nation_name and t.get("capital")
+            )
+            sources = capital_coords
+
+    if not sources:
+        return set(owned_coords)
+
+    INF = float("inf")
+    dist = {coord: 0.0 for coord in sources}
+    heap = [(0, q, r) for q, r in sources]
+    heapq.heapify(heap)
+
+    while heap:
+        d, q, r = heapq.heappop(heap)
+        if d > dist.get((q, r), INF):
+            continue
+        for nq, nr in axial_neighbors(q, r):
+            tile = tile_map.get((nq, nr))
+            terrain = tile.get("terrain", "disconnected") if tile else "disconnected"
+            cost = move_cost.get(terrain, IMPASSABLE)
+            if cost >= IMPASSABLE:
+                continue
+            new_dist = d + cost
+            if new_dist < dist.get((nq, nr), INF):
+                dist[(nq, nr)] = new_dist
+                heapq.heappush(heap, (new_dist, nq, nr))
+
+    out_of_range = set()
+    for coord in owned_coords:
+        if coord in sources:
+            continue
+        q, r = coord
+        tile = tile_map.get(coord)
+        terrain = tile.get("terrain", "disconnected") if tile else "disconnected"
+        cost = move_cost.get(terrain, IMPASSABLE)
+        d = dist.get(coord, INF)
+        if d == INF or (d - cost) > limit:
+            out_of_range.add(coord)
+
+    return out_of_range
+
 
 
 def is_tile_legally_controllable(q, r, nation_name):

@@ -59,9 +59,16 @@
             <datalist id="paint-region-datalist"></datalist>
             <span class="map-btn-separator"></span>
             <button id="hex-snapshot-btn" class="map-btn">Snapshot</button>
-            <button id="hex-sync-territory-btn" class="map-btn">Sync Territory</button>
-            <button id="hex-purge-oob-btn" class="map-btn" title="Delete tiles outside configured grid bounds (removes stale tiles from old coordinate systems)">Purge OOB Tiles</button>
-            <a href="/admin/grid-calibration" class="map-btn" target="_blank" style="text-decoration:none;">Grid Calibration</a>
+            <div class="map-tools-dropdown" id="map-tools-dropdown">
+                <button class="map-btn map-tools-toggle" id="map-tools-toggle" title="Admin utilities">Tools ▾</button>
+                <div class="map-tools-menu" id="map-tools-menu">
+                    <button id="hex-sync-territory-btn" class="map-tools-item">Sync Territory</button>
+                    <button id="hex-sync-regions-btn" class="map-tools-item" title="Set each nation's region based on their capital tile's region, or the region covering most of their territory">Sync Nation Regions</button>
+                    <button id="hex-purge-oob-btn" class="map-tools-item" title="Delete tiles outside configured grid bounds (removes stale tiles from old coordinate systems)">Purge OOB Tiles</button>
+                    <button id="hex-normalize-coords-btn" class="map-tools-item" title="Convert any tiles with float q/r coordinates to integers (fixes tiles that revert after saving)">Fix Tile Coords</button>
+                    <a href="/admin/grid-calibration" class="map-tools-item" target="_blank">Grid Calibration ↗</a>
+                </div>
+            </div>
             {% endif %}
         </div>
 
@@ -544,6 +551,20 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    const syncRegionsBtn = document.getElementById('hex-sync-regions-btn');
+    if (syncRegionsBtn) {
+        syncRegionsBtn.addEventListener('click', async () => {
+            if (!confirm('Set each nation\'s region field based on their capital tile\'s region (or most-common tile region as fallback)? This overwrites existing region assignments.')) return;
+            syncRegionsBtn.textContent = 'Syncing…';
+            syncRegionsBtn.disabled = true;
+            const r = await fetch('/api/hex-map/sync-nation-regions', { method: 'POST' });
+            const d = await r.json();
+            syncRegionsBtn.textContent = r.ok ? `Done (${d.updated} updated, ${d.skipped} skipped)` : 'Error';
+            syncRegionsBtn.disabled = false;
+            setTimeout(() => { syncRegionsBtn.textContent = 'Sync Nation Regions'; }, 6000);
+        });
+    }
+
     const purgeOobBtn = document.getElementById('hex-purge-oob-btn');
     if (purgeOobBtn) {
         purgeOobBtn.addEventListener('click', async () => {
@@ -558,6 +579,38 @@ document.addEventListener('DOMContentLoaded', function () {
             purgeOobBtn.disabled = false;
             if (r.ok && hexViewer) await hexViewer.loadTiles(null);
             setTimeout(() => { purgeOobBtn.textContent = 'Purge OOB Tiles'; }, 5000);
+        });
+    }
+
+    const normCoordsBtn = document.getElementById('hex-normalize-coords-btn');
+    if (normCoordsBtn) {
+        normCoordsBtn.addEventListener('click', async () => {
+            normCoordsBtn.textContent = 'Fixing…';
+            normCoordsBtn.disabled = true;
+            const r = await fetch('/api/hex-map/normalize-tile-coords', { method: 'POST' });
+            const d = await r.json();
+            normCoordsBtn.textContent = r.ok
+                ? `Fixed ${d.tiles_normalized} tiles`
+                : 'Error';
+            normCoordsBtn.disabled = false;
+            setTimeout(() => { normCoordsBtn.textContent = 'Fix Tile Coords'; }, 5000);
+        });
+    }
+
+    // Tools dropdown toggle
+    const toolsDropdown = document.getElementById('map-tools-dropdown');
+    const toolsToggle   = document.getElementById('map-tools-toggle');
+    if (toolsToggle && toolsDropdown) {
+        toolsToggle.addEventListener('click', (e) => {
+            e.stopPropagation();
+            toolsDropdown.classList.toggle('open');
+        });
+        document.addEventListener('click', () => {
+            toolsDropdown.classList.remove('open');
+        });
+        // Clicking inside the menu closes it after action
+        document.getElementById('map-tools-menu')?.addEventListener('click', () => {
+            toolsDropdown.classList.remove('open');
         });
     }
 

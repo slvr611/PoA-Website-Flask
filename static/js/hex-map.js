@@ -89,6 +89,63 @@ const RESOURCE_COLORS = Object.fromEntries(ALL_RESOURCES.map(r => [r.key, _resou
 // Alpha applied to all terrain fills so the background image shows through.
 const TERRAIN_FILL_ALPHA = 0.40;
 
+// Land movement costs per terrain (mirrors terrains.json speed_cost).
+// Terrain with no entry → treated as impassable by the admin-range Dijkstra.
+const TERRAIN_MOVE_COST = {
+    plains:         1,
+    urban:          1,
+    desert:         1,
+    tundra:         1,
+    forest:         2,
+    hill:           2,
+    marsh:          2,
+    hazardous_land: 2,
+    dense_forest:    3,
+    mountain:        3,
+    river:           3,
+    shallow_water:   2,
+    deep_water:      3,
+    hazardous_water: 2,
+};
+const _TERRAIN_MOVE_IMPASSABLE = 9999;
+
+// Axial hex neighbor directions (flat-top).
+const _AXIAL_DIRS = [[1,0],[-1,0],[0,1],[0,-1],[1,-1],[-1,1]];
+
+// Minimal binary min-heap used by the admin-range Dijkstra.
+// Each element is [priority, ...data].
+class _MinHeap {
+    constructor() { this._h = []; }
+    get size() { return this._h.length; }
+    push(v) {
+        this._h.push(v);
+        let i = this._h.length - 1;
+        while (i > 0) {
+            const p = (i - 1) >> 1;
+            if (this._h[p][0] <= this._h[i][0]) break;
+            [this._h[p], this._h[i]] = [this._h[i], this._h[p]];
+            i = p;
+        }
+    }
+    pop() {
+        const top = this._h[0];
+        const last = this._h.pop();
+        if (this._h.length > 0) {
+            this._h[0] = last;
+            let i = 0;
+            for (;;) {
+                let s = i, l = 2*i+1, r = 2*i+2;
+                if (l < this._h.length && this._h[l][0] < this._h[s][0]) s = l;
+                if (r < this._h.length && this._h[r][0] < this._h[s][0]) s = r;
+                if (s === i) break;
+                [this._h[s], this._h[i]] = [this._h[i], this._h[s]];
+                i = s;
+            }
+        }
+        return top;
+    }
+}
+
 // Precomputed flat-top hex corner trig (0°, 60°, 120°, 180°, 240°, 300°).
 const _HEX_COS = Array.from({ length: 6 }, (_, i) => Math.cos(Math.PI / 3 * i));
 const _HEX_SIN = Array.from({ length: 6 }, (_, i) => Math.sin(Math.PI / 3 * i));
@@ -160,6 +217,11 @@ class HexMapViewer {
         this.tiles        = new Map();   // "q,r" -> tile object
         this.nationColors = {};
         this.regionColors = {};          // region name -> hex color
+
+        // Admin range
+        this.nationAdmin      = new Map();  // nation name -> stored administration value
+        this.nationNomadic    = new Map();  // nation name -> boolean (is nomadic)
+        this._outOfRangeTiles = new Set();  // "q,r" keys of owned tiles beyond admin range
 
         // Render caches — invalidated when colors change
         this._terrainFillCache = {};  // terrain key  → rgba string
@@ -359,7 +421,14 @@ class HexMapViewer {
         this._scheduleOutlineRebuild();
         this._scheduleTerrainRebuild();
         this._nationLabels = null;
-        this._ensureNationList().then(() => { this._computeNationLabels(); this.render(); });
+        this.nationAdmin      = new Map();
+        this.nationNomadic    = new Map();
+        this._outOfRangeTiles = new Set();
+        this._ensureNationList().then(() => {
+            this._computeNationLabels();
+            this._computeAllAdminRanges();
+            this.render();
+        });
 
         this.render();
     }
@@ -659,6 +728,7 @@ class HexMapViewer {
         // Parallel flat arrays for all visible hexes (used for outline pass and icons).
         const allX    = [];
         const allY    = [];
+        const allKey  = [];
         const allTile = [];
 
         const _t1 = performance.now();
@@ -669,6 +739,7 @@ class HexMapViewer {
 
             allX.push(x);
             allY.push(y);
+            allKey.push(`${q},${r}`);
             allTile.push(tile);
 
             if (hasTerrain && !this._terrainPaths) {
@@ -728,6 +799,21 @@ class HexMapViewer {
             for (let i = 0; i < pts.length; i += 2) this._hexSubpath(ctx, pts[i], pts[i + 1], inner);
             ctx.fillStyle = fill;
             ctx.fill();
+        }
+
+        // ── Admin range overlay: darken owned tiles beyond admin movement range ─
+        if (hasPolitical && this._outOfRangeTiles.size > 0) {
+            const pts = [];
+            for (let i = 0; i < allKey.length; i++) {
+                if (allTile[i]?.owner && this._outOfRangeTiles.has(allKey[i]))
+                    pts.push(allX[i], allY[i]);
+            }
+            if (pts.length > 0) {
+                ctx.beginPath();
+                for (let i = 0; i < pts.length; i += 2) this._hexSubpath(ctx, pts[i], pts[i+1], inner);
+                ctx.fillStyle = 'rgba(15,15,20,0.58)';
+                ctx.fill();
+            }
         }
 
         // ── Grid outlines ─────────────────────────────────────────────────────
@@ -1225,11 +1311,21 @@ class HexMapViewer {
                 this._currentUndoBatch.tiles.set(key, existing.region || null);
             this.tiles.set(key, { ...existing, region });
             this.render();
-            await fetch(`/api/hex-map/tile/${q}/${r}`, {
-                method:  'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body:    JSON.stringify({ region }),
-            }).catch(() => {});
+            let resp;
+            try {
+                resp = await fetch(`/api/hex-map/tile/${q}/${r}`, {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify({ region }),
+                });
+            } catch (_) { resp = null; }
+            if (resp && !resp.ok) {
+                if (this._currentUndoBatch) this._currentUndoBatch.tiles.delete(key);
+                this.tiles.set(key, existing);
+                this.render();
+                const data = await resp.json().catch(() => ({}));
+                this._showPaintError(data.error || 'Could not set region on this tile.');
+            }
         }
     }
 
@@ -1451,15 +1547,107 @@ class HexMapViewer {
     }
 
     async _ensureNationList() {
-        if (this._nationList) return;
+        if (this._nationList) {
+            // List cached — re-populate nation maps if they were reset (e.g. loadTiles)
+            if (this.nationAdmin.size === 0) {
+                for (const n of this._nationList) {
+                    this.nationAdmin.set(n.name, n.admin || 1);
+                    this.nationNomadic.set(n.name, !!n.nomadic);
+                }
+            }
+            return;
+        }
         try {
             const resp = await fetch('/api/hex-map/nation-list');
             this._nationList = (await resp.json()).nations || [];
             this._nationOverlords = {};
             for (const n of this._nationList) {
                 if (n.overlord) this._nationOverlords[n.name] = n.overlord;
+                this.nationAdmin.set(n.name, n.admin || 1);
+                this.nationNomadic.set(n.name, !!n.nomadic);
             }
         } catch (_) { this._nationList = []; }
+    }
+
+    _computeAllAdminRanges() {
+        this._outOfRangeTiles = new Set();
+        if (!this.nationAdmin || this.nationAdmin.size === 0) return;
+
+        // Group owned tiles by nation, tracking capital and building flags
+        const nationTiles = new Map();
+        for (const [key, tile] of this.tiles) {
+            if (!tile.owner) continue;
+            if (!nationTiles.has(tile.owner)) nationTiles.set(tile.owner, []);
+            nationTiles.get(tile.owner).push({
+                q: tile.q, r: tile.r, key,
+                terrain: tile.terrain || 'disconnected',
+                hasBuilding: !!(tile.city || tile.district || tile.wonder),
+                isCapital: !!tile.capital,
+            });
+        }
+
+        const INF = Infinity;
+
+        for (const [nationName, ownedTiles] of nationTiles) {
+            const admin    = this.nationAdmin.get(nationName) || 1;
+            const isNomadic = this.nationNomadic.get(nationName) || false;
+            const limit    = admin * (isNomadic ? 4 : 2);
+
+            // Determine sources: nomadic → capital only; non-nomadic → buildings, fall back to capital
+            let sources;
+            if (isNomadic) {
+                sources = ownedTiles.filter(t => t.isCapital);
+            } else {
+                const buildings = ownedTiles.filter(t => t.hasBuilding);
+                sources = buildings.length > 0 ? buildings : ownedTiles.filter(t => t.isCapital);
+            }
+
+            if (sources.length === 0) {
+                for (const t of ownedTiles) this._outOfRangeTiles.add(t.key);
+                continue;
+            }
+
+            const sourceKeys = new Set(sources.map(s => s.key));
+
+            // Multi-source Dijkstra — entry-cost semantics
+            const dist = new Map();
+            const heap = new _MinHeap();
+            for (const s of sources) {
+                dist.set(s.key, 0);
+                heap.push([0, s.q, s.r]);
+            }
+
+            while (heap.size > 0) {
+                const [d, q, r] = heap.pop();
+                const key = `${q},${r}`;
+                if (d > (dist.get(key) ?? INF)) continue;
+                for (const [dq, dr] of _AXIAL_DIRS) {
+                    const nq = q + dq, nr = r + dr;
+                    const nkey = `${nq},${nr}`;
+                    const ntile = this.tiles.get(nkey);
+                    const terrain = ntile ? (ntile.terrain || 'disconnected') : 'disconnected';
+                    const cost = TERRAIN_MOVE_COST[terrain] ?? _TERRAIN_MOVE_IMPASSABLE;
+                    if (cost >= _TERRAIN_MOVE_IMPASSABLE) continue;
+                    const nd = d + cost;
+                    if (nd < (dist.get(nkey) ?? INF)) {
+                        dist.set(nkey, nd);
+                        heap.push([nd, nq, nr]);
+                    }
+                }
+            }
+
+            // "Entering a tile is sufficient" — check cost-to-entrance ≤ limit
+            for (const t of ownedTiles) {
+                if (sourceKeys.has(t.key)) continue;
+                const d = dist.get(t.key) ?? INF;
+                if (d === INF) {
+                    this._outOfRangeTiles.add(t.key);
+                } else {
+                    const tileCost = TERRAIN_MOVE_COST[t.terrain] ?? _TERRAIN_MOVE_IMPASSABLE;
+                    if ((d - tileCost) > limit) this._outOfRangeTiles.add(t.key);
+                }
+            }
+        }
     }
 
     async _ensureWonderList() {
@@ -1616,7 +1804,7 @@ class HexMapViewer {
 
         const btn = root.querySelector('.hex-save-btn');
         if (!btn) return;
-        btn.addEventListener('click', async () => {
+        btn.addEventListener('click', async () => { try {
             const val = name => root.querySelector(`[name="${name}"]`)?.value?.trim() || null;
 
             const rKey = val('node_resource');
@@ -1666,16 +1854,26 @@ class HexMapViewer {
                             for (const n of nc.nations) {
                                 this.nationColors[n.name] = n.color;
                                 if (n.overlord) this._nationOverlords[n.name] = n.overlord;
+                                this.nationAdmin.set(n.name, n.admin || 1);
+                                this.nationNomadic.set(n.name, !!n.nomadic);
                             }
                         }
                     } catch (_) {}
                 }
                 this.tiles.set(key, { ...(old || { q, r }), ...update });
                 this._computeNationLabels();
+                // Recompute admin ranges if a building was added or removed
+                if ('city' in update || 'district' in update || 'wonder' in update || 'owner' in update || 'capital' in update)
+                    this._computeAllAdminRanges();
                 this._showDetails(q, r);
                 this.render();
+            } else {
+                const data = await resp.json().catch(() => ({}));
+                this._showPaintError(data.error || `Save failed (HTTP ${resp.status}).`);
             }
-        });
+        } catch (err) {
+            this._showPaintError(`Save failed: ${err.message}`);
+        } });
     }
 
     // -----------------------------------------------------------------------

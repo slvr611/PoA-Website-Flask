@@ -33,8 +33,8 @@ def _get_nation_colors():
 
 
 def _get_nation_list():
-    """Returns [{name, color, overlord}] for all nations — used for autocomplete, color lookup, and map labels."""
-    nations = list(mongo.db.nations.find({}, {"name": 1, "accent_color": 1, "overlord": 1, "_id": 1}))
+    """Returns [{name, color, overlord, admin, nomadic}] for all nations — used for autocomplete, color lookup, map labels, and admin range display."""
+    nations = list(mongo.db.nations.find({}, {"name": 1, "accent_color": 1, "overlord": 1, "administration": 1, "is_nomadic": 1, "_id": 1}))
 
     overlord_ids = set()
     for n in nations:
@@ -55,6 +55,8 @@ def _get_nation_list():
             "name": n["name"],
             "color": n.get("accent_color") or _name_to_color(n["name"]),
             "overlord": overlord_names.get(str(n.get("overlord") or ""), ""),
+            "admin": n.get("administration", 1),
+            "nomadic": bool(n.get("is_nomadic", False)),
         }
         for n in nations
         if n.get("name")
@@ -381,12 +383,25 @@ def update_hex_map_tile(q, r):
         if not is_tile_legally_controllable(q, r, update["owner"]):
             return jsonify({"error": "This tile cannot be claimed: it violates a territory restriction."}), 422
 
-    # Capture current tile state before saving
-    current = mongo.db.hex_map_tiles.find_one({"q": q, "r": r}) or {}
+    # Find the existing tile using a type-flexible query (q/r may be stored as int or float)
+    # to avoid a silent upsert-creates-duplicate bug when types don't match exactly.
+    current = mongo.db.hex_map_tiles.find_one(
+        {"q": {"$in": [q, float(q)]}, "r": {"$in": [r, float(r)]}}
+    ) or {}
 
     update["q"] = q
     update["r"] = r
-    mongo.db.hex_map_tiles.update_one({"q": q, "r": r}, {"$set": update}, upsert=True)
+    if current.get("_id"):
+        mongo.db.hex_map_tiles.update_one({"_id": current["_id"]}, {"$set": update})
+        # Remove any duplicate documents at the same coordinate so stale copies
+        # don't win on the next page load.
+        mongo.db.hex_map_tiles.delete_many({
+            "q": {"$in": [q, float(q)]},
+            "r": {"$in": [r, float(r)]},
+            "_id": {"$ne": current["_id"]},
+        })
+    else:
+        mongo.db.hex_map_tiles.insert_one(update)
 
     # Effective state after update
     effective = {**current, **update}
@@ -460,6 +475,59 @@ def purge_oob_tiles():
         {"$set": {"territory_types": {}}},
     )
     return jsonify({"ok": True, "tiles_deleted": deleted, "nations_resynced": len(nation_counts)})
+
+
+@hex_map_routes.route("/api/hex-map/normalize-tile-coords", methods=["POST"])
+@admin_required
+def normalize_tile_coords():
+    """Fix tile coordinate types and remove duplicate tiles at the same position.
+
+    Two problems are fixed in one pass:
+    1. Float q/r (e.g. 5.0) converted to integer (5).
+    2. Duplicate documents at the same (q, r) — the one with the most fields
+       (most data) is kept; all others are deleted.
+
+    Safe to run multiple times.
+    """
+    from collections import defaultdict
+    all_tiles = list(mongo.db.hex_map_tiles.find({}, {"_id": 1, "q": 1, "r": 1}))
+
+    # Step 1: normalise float coords to int
+    type_fixed = 0
+    for tile in all_tiles:
+        q_val, r_val = tile.get("q"), tile.get("r")
+        if not isinstance(q_val, int) or not isinstance(r_val, int):
+            try:
+                mongo.db.hex_map_tiles.update_one(
+                    {"_id": tile["_id"]},
+                    {"$set": {"q": int(q_val), "r": int(r_val)}},
+                )
+                tile["q"] = int(q_val)
+                tile["r"] = int(r_val)
+                type_fixed += 1
+            except (TypeError, ValueError):
+                pass
+
+    # Step 2: find and remove duplicates — group by (q, r), keep richest doc
+    coord_groups = defaultdict(list)
+    for tile in all_tiles:
+        try:
+            coord_groups[(int(tile["q"]), int(tile["r"]))].append(tile["_id"])
+        except (TypeError, ValueError, KeyError):
+            pass
+
+    dupes_removed = 0
+    for (q_int, r_int), ids in coord_groups.items():
+        if len(ids) <= 1:
+            continue
+        # Fetch full docs to pick the one with the most fields (most complete data)
+        docs = list(mongo.db.hex_map_tiles.find({"_id": {"$in": ids}}))
+        best = max(docs, key=lambda d: len(d))
+        stale_ids = [d["_id"] for d in docs if d["_id"] != best["_id"]]
+        mongo.db.hex_map_tiles.delete_many({"_id": {"$in": stale_ids}})
+        dupes_removed += len(stale_ids)
+
+    return jsonify({"ok": True, "types_fixed": type_fixed, "duplicates_removed": dupes_removed})
 
 
 @hex_map_routes.route("/api/hex-map/sync-all-territory", methods=["POST"])
@@ -625,6 +693,63 @@ def update_region_map_color(region_name):
     if result.matched_count == 0:
         return jsonify({"error": "Region not found"}), 404
     return jsonify({"ok": True})
+
+
+# ---------------------------------------------------------------------------
+# Sync nation regions
+# ---------------------------------------------------------------------------
+
+@hex_map_routes.route("/api/hex-map/sync-nation-regions", methods=["POST"])
+@admin_required
+def sync_nation_regions():
+    """Set each nation's region field based on their capital tile's region.
+
+    Falls back to the region covering the majority of the nation's tiles if
+    no capital tile exists or the capital has no region assigned.
+    """
+    region_id_map = {
+        r["name"]: str(r["_id"])
+        for r in mongo.db.regions.find({}, {"name": 1})
+        if r.get("name")
+    }
+
+    updated = 0
+    skipped = 0
+
+    for nation in mongo.db.nations.find({}, {"name": 1}):
+        name = nation.get("name")
+        if not name:
+            continue
+
+        region_id = None
+
+        # Prefer capital tile's region
+        capital_tile = mongo.db.hex_map_tiles.find_one(
+            {"owner": name, "capital": True},
+            {"region": 1}
+        )
+        if capital_tile and capital_tile.get("region"):
+            region_id = region_id_map.get(capital_tile["region"])
+
+        # Fallback: region with the most owned tiles
+        if not region_id:
+            pipeline = [
+                {"$match": {"owner": name, "region": {"$exists": True, "$ne": None, "$ne": ""}}},
+                {"$group": {"_id": "$region", "count": {"$sum": 1}}},
+                {"$sort": {"count": -1}},
+                {"$limit": 1},
+            ]
+            result = list(mongo.db.hex_map_tiles.aggregate(pipeline))
+            if result:
+                region_id = region_id_map.get(result[0]["_id"])
+
+        if region_id:
+            mongo.db.nations.update_one({"name": name}, {"$set": {"region": region_id}})
+            updated += 1
+        else:
+            skipped += 1
+
+    return jsonify({"ok": True, "updated": updated, "skipped": skipped})
 
 
 # ---------------------------------------------------------------------------
