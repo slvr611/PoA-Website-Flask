@@ -1,6 +1,7 @@
 {% extends "layout.html" %}
 {% from "macros/tech_tree.html" import render_tech_tree %}
 {% from "_modifier_macros.html" import modifier_row with context %}
+{% from "_district_macros.html" import district_card %}
 
 {% block title %}{{ nation["name"] }}{% endblock %}
 
@@ -131,7 +132,7 @@
 					None
 				{% endif %}
 			</span>
-			<span>{{ schema.properties.pop_count.label }}: {{ pf(nation.pop_count, pn.get("pop_count")) }} / {{ pf(nation.effective_pop_capacity, pn.get("effective_pop_capacity")) }}</span>
+			<span>{{ schema.properties.pop_count.label }}: {{ pf(nation.pop_count, pn.get("pop_count")) }} / {{ pfbd(nation.effective_pop_capacity, pn.get("effective_pop_capacity"), breakdowns.get("effective_pop_capacity", []), pbd.get("effective_pop_capacity", []), "Effective Pop Capacity") }}</span>
 			{% if nation.empire %}
 				<span>Empire</span>
 				<span>{{ schema.properties.prestige.label }}: {{ pf(nation.prestige, pn.get("prestige")) }}</span>
@@ -271,8 +272,8 @@
 							<td>{{ pf(nation.remaining_export_slots, pn.get("remaining_export_slots")) }}</td>
 						</tr>
 						<tr>
-							<th>{{ schema.properties.trade_distance.label }}:</th>
-							<td>{{ pf(nation.trade_distance, pn.get("trade_distance")) }}</td>
+							<th>{{ schema.properties.trade_speed.label }}:</th>
+							<td>{{ pf(nation.trade_speed, pn.get("trade_speed")) }}</td>
 						</tr>
 					</table>
 				</div>
@@ -325,11 +326,11 @@
 						</tr>
 						<tr>
 							<th>Territory:</th>
-							<td>{{ pf(nation.current_territory, pn.get("current_territory")) }} / {{ pf(nation.effective_territory, pn.get("effective_territory")) }}</td>
+							<td>{{ pf(nation.current_territory, pn.get("current_territory")) }} / {{ pfbd(nation.effective_territory, pn.get("effective_territory"), breakdowns.get("effective_territory", []), pbd.get("effective_territory", []), "Effective Territory") }}</td>
 						</tr>
 						<tr>
-							<th>Roads:</th>
-							<td>{{ pf(nation.road_usage, pn.get("road_usage")) }} / {{ pf(nation.road_capacity, pn.get("road_capacity")) }}</td>
+							<th>Routes:</th>
+							<td>{{ pf(nation.road_usage, pn.get("road_usage")) }} / {{ pfbd(nation.route_capacity, pn.get("route_capacity"), breakdowns.get("route_capacity", []), pbd.get("route_capacity", []), "Route Capacity") }}</td>
 						</tr>
 					</table>
 					<table class="info-table">
@@ -343,12 +344,6 @@
 								<td>{{ eff_territory.get(terrain, 0) }}</td>
 							</tr>
 						{% endfor %}
-						{% if eff_territory.get("disconnected", 0) > 0 %}
-							<tr>
-								<th>Disconnected</th>
-								<td>{{ eff_territory.get("disconnected", 0) }}</td>
-							</tr>
-						{% endif %}
 					</table>
 					{% if nation.nomadic > 0 %}
 						<table class="info-table">
@@ -1134,81 +1129,7 @@
 							{% set dd = district_defs_map.get(cur_def_key, {}) %}
 							{% set pend_node = pd.get("node", "") if pd is not none else cur_node %}
 							{% set node_changed = pd is not none and pend_node != cur_node %}
-							<div class="dc dc--t{{ dd.get('tier', 1) if dd else 1 }}">
-								<header>
-									<div>
-										<div class="dc-title">{{ dd.get('display_name', cur_def_key) }}</div>
-										<div class="dc-node-tag">Map node: {{ pf(cur_node or 'unset', pend_node or 'unset' if node_changed else none) }}</div>
-									</div>
-									<span class="dc-tier-badge">T{{ dd.get('tier', '?') }}</span>
-								</header>
-
-								{% if dd.get('image') %}
-								<div class="dc-image-wrap"><img class="dc-image" src="{{ dd.image }}" alt="{{ dd.get('display_name','') }}"></div>
-								{% endif %}
-
-								<div class="dc-body">
-									{% if dd.get('description') %}
-									<p class="dc-desc">{{ dd.description }}</p>
-									{% endif %}
-
-									{# Base modifiers #}
-									{% set mods = dd.get('modifiers', []) %}
-									{% if mods %}
-									<div class="dc-mods">
-										{% for mod in mods %}{{ modifier_row(mod) }}{% endfor %}
-									</div>
-									{% endif %}
-
-									{# Synergies #}
-									{% set syns = dd.get('synergies', []) %}
-									{% if syns %}
-									{% if mods %}<div class="dc-rule"></div>{% endif %}
-									<div class="dc-syn-label">Synergies</div>
-									{% for syn in syns %}
-									{% set req = syn.get('requirement','') %}
-									{% set req_list = req if (req is iterable and req is not string) else [req] %}
-									{% set is_active = 'any' in req_list or cur_node in req_list %}
-									<div class="dc-syn-item">
-										<span class="dc-syn-node">{{ req_list | join(', ') | title }}</span>
-										{% if is_active %}<span class="dc-syn-active"> ✓ active</span>{% endif %}
-										{% if syn.get('node_active') %}<span class="dc-syn-flag"> (node active)</span>{% endif %}
-										{% for mod in (syn.get('modifiers', []) if syn.get('modifiers') is iterable and syn.get('modifiers') is not mapping else []) %}
-										{{ modifier_row(mod, indent=True, dimmed=not is_active, label_color='#99a') }}
-										{% endfor %}
-									</div>
-									{% endfor %}
-									{% endif %}
-
-									{# Unlocked upgrades #}
-									{% if dd.get('upgrades') %}
-									{% if mods or syns %}<div class="dc-rule"></div>{% endif %}
-									<div class="dc-upg-label">Upgrades</div>
-									{% for upg in dd.upgrades %}
-									{% set unlocked = upg.key in cur_upgrades %}
-									<div class="dc-upg-item {% if not unlocked %}dc-dim{% endif %}">
-										<span class="dc-upg-name">{% if unlocked %}✓ {% endif %}{{ upg.display_name or upg.key }}</span>
-										{% if not unlocked and upg.requirements %}
-										<span class="dc-upg-req"> — requires {% for req in upg.requirements %}{% if req.type == 'technology' %}{{ req.value }}{% else %}{{ req.value }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}</span>
-										{% endif %}
-										{% if unlocked %}
-										{% for mod in upg.get('modifiers', []) %}{{ modifier_row(mod, indent=True, label_color='#99a') }}{% endfor %}
-										{% endif %}
-									</div>
-									{% endfor %}
-									{% endif %}
-								</div>
-
-								<div class="dc-footer">
-									<div class="dc-cost-heading">Build Cost{% if dd.get('upkeep') %} / Upkeep{% endif %}</div>
-									<span class="dc-cost">
-										{%- set cost_parts = [] -%}
-										{%- for res, amt in dd.get('cost', {}).items() -%}{%- set _ = cost_parts.append(amt|string ~ ' ' ~ res|title) -%}{%- endfor -%}
-										{%- if cost_parts -%}{{ cost_parts | join(', ') }}{%- else -%}<span class="muted">Free</span>{%- endif -%}
-										{%- if dd.get('upkeep') -%}{%- set upk = [] -%}{%- for res, amt in dd.upkeep.items() -%}{%- set _ = upk.append(amt|string ~ ' ' ~ res|title) -%}{%- endfor -%}{%- if upk %} / {{ upk | join(', ') }}/tick{%- endif -%}{%- endif -%}
-									</span>
-								</div>
-							</div>
+							{{ district_card(dd, cur_node, cur_upgrades, pend_node=pend_node if node_changed else none) }}
 
 						{% elif cur_type %}
 							{# ── Legacy JSON-driven district ── #}

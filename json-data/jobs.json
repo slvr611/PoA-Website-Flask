@@ -26,6 +26,15 @@
 			"stability_gain_chance": 0.05
 		}
 	},
+	"banker": {
+		"display_name": "Banker",
+		"upkeep": {
+			"mounts": 1
+		},
+		"production": {
+			"money_income": 150
+		}
+	},
 	"brewer": {
 		"display_name": "Brewer",
 		"requirements":{
@@ -36,15 +45,6 @@
 		},
 		"production": {
 			"stability_gain_chance": 0.15
-		}
-	},
-	"bureaucrat": {
-		"display_name": "Bureaucrat",
-		"upkeep": {
-			"wood": 2
-		},
-		"production": {
-			"administration": 1
 		}
 	},
 	"entertainer": {
@@ -112,7 +112,7 @@
 			"stone": 1
 		},
 		"production": {
-			"wood": 3
+			"wood": 2
 		}
 	},
 	"hunter": {
@@ -121,23 +121,13 @@
 			"food": 2
 		}
 	},
-	"merchant": {
-		"display_name": "Merchant",
-		"upkeep": {
-			"mounts": 1
-		},
-		"production": {
-			"trade_distance": 4,
-			"trade_slots": 2
-		}
-	},
 	"metallurgist": {
 		"display_name": "Metallurgist",
 		"upkeep": {
 			"stone": 1
 		},
 		"production": {
-			"bronze": 1
+			"iron": 1
 		}
 	},
 	"miner": {
@@ -146,7 +136,7 @@
 			"wood": 1
 		},
 		"production": {
-			"stone": 3
+			"stone": 2
 		}
 	},
 	"missionary": {
@@ -168,8 +158,7 @@
 	"researcher": {
 		"display_name": "Researcher",
 		"upkeep": {
-			"stone": 1,
-			"bronze": 1
+			"iron": 2
 		},
 		"production": {
 			"research": 1

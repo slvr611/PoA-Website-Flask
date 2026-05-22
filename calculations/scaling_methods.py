@@ -60,6 +60,12 @@ def per_x_primary_religion_pops_world(target, scaling_x=1, scaling_extra="", con
     return int(cache.get("primary_religion_pop_count", 0) / divisor)
 
 
+def per_x_pops(target, scaling_x=1, scaling_extra="", context=None):
+    pops = target.get("pop_count", 0) or 0
+    divisor = float(scaling_x) if scaling_x else 1
+    return int(pops / divisor)
+
+
 def per_x_naval_units(target, scaling_x=1, scaling_extra="", context=None):
     units = target.get("naval_units", []) or []
     divisor = float(scaling_x) if scaling_x else 1
@@ -137,6 +143,7 @@ SCALING_METHODS = {
     "per_x_bloodthirsty_pops": per_x_bloodthirsty_pops,
     "per_x_primary_culture_pops_world": per_x_primary_culture_pops_world,
     "per_x_primary_religion_pops_world": per_x_primary_religion_pops_world,
+    "per_x_pops": per_x_pops,
     "per_x_naval_units": per_x_naval_units,
     "per_x_land_units": per_x_land_units,
     "per_x_turns_library": per_x_turns_library,

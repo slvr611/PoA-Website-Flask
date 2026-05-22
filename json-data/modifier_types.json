@@ -126,6 +126,15 @@
         "field_template": "infamy",
         "applicable_to": ["nation"]
     },
+    "lock_job": {
+        "name": "Lock Job",
+        "value_format": "number",
+        "field_template": "locks_{job}",
+        "extra_fields": [
+            {"key": "job", "label": "Job", "source": "jobs"}
+        ],
+        "applicable_to": ["nation"]
+    },
     "job_resource_production": {
         "name": "Job Resource Production",
         "value_format": "number",
@@ -284,10 +293,10 @@
         ],
         "applicable_to": ["nation"]
     },
-    "road_capacity": {
-        "name": "Road Capacity",
+    "route_capacity": {
+        "name": "Route Capacity",
         "value_format": "number",
-        "field_template": "road_capacity",
+        "field_template": "route_capacity",
         "applicable_to": ["nation"]
     },
     "units_per_trade_slot": {
@@ -411,10 +420,10 @@
         "field_template": "strength",
         "applicable_to": ["nation"]
     },
-    "trade_distance": {
-        "name": "Trade Distance",
+    "trade_speed": {
+        "name": "Trade Speed",
         "value_format": "number",
-        "field_template": "trade_distance",
+        "field_template": "trade_speed",
         "applicable_to": ["nation", "merchant"]
     },
     "trade_slots": {

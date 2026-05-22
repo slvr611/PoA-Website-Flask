@@ -1,6 +1,7 @@
 from flask import Blueprint, render_template, request, redirect, flash, jsonify, abort
 from app_core import mongo, category_data
 from helpers.auth_helpers import admin_required
+from helpers.hex_map_helpers import get_all_tiles
 from bson import ObjectId
 from pymongo import ASCENDING
 
@@ -302,6 +303,35 @@ def _unit_types_for_nation(nation, nation_id_str):
     return unit_types
 
 
+def _build_hex_map_data():
+    """Collect the current world map config and all tile data for the war payload."""
+    cfg = mongo.db.global_modifiers.find_one({"name": "hex_map_config"}) or {}
+    tiles_raw = get_all_tiles()
+
+    tiles = []
+    for t in tiles_raw:
+        entry = {"q": t.get("q"), "r": t.get("r")}
+        for field in ("owner", "terrain", "region", "capital", "portal"):
+            val = t.get(field)
+            if val is not None and val != "" and val is not False:
+                entry[field] = val
+        for obj_field in ("city", "district", "wonder"):
+            obj = t.get(obj_field)
+            if obj and isinstance(obj, dict) and obj.get("id"):
+                entry[obj_field] = {"id": obj["id"], "name": obj.get("name", ""), "type": obj.get("type", "")}
+        tiles.append(entry)
+
+    return {
+        "cols":      cfg.get("cols",        20),
+        "rows":      cfg.get("rows",        15),
+        "hexSize":   cfg.get("hex_size",    40),
+        "bgOffsetX": cfg.get("bg_offset_x",  0),
+        "bgOffsetY": cfg.get("bg_offset_y",  0),
+        "bgScale":   cfg.get("bg_scale",    1.0),
+        "tiles":     tiles,
+    }
+
+
 def _build_war_payload(war_id_strings):
     """Build the WarPayload dict for one or more war IDs."""
     wars_dto = []
@@ -389,6 +419,7 @@ def _build_war_payload(war_id_strings):
         "nations": nations_dto,
         "rulers": rulers_dto,
         "unitTypes": unit_types_dto,
+        "hexMap": _build_hex_map_data(),
     }
     return payload, None
 

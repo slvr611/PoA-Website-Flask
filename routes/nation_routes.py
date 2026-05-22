@@ -324,11 +324,13 @@ def _render_nation_edit(item_ref, form=None):
         "religions": _opts("religions"),
     }
 
-    # District defs grouped by category for the district type picker
+    # District defs grouped by category for the district type picker and card display
     from pymongo import ASCENDING as _ASC
-    district_defs = list(mongo.db.district_defs.find(
-        {}, {"key": 1, "display_name": 1, "category": 1, "tier": 1, "_id": 0}
+    district_defs_full = list(mongo.db.district_defs.find(
+        {}, {"_id": 0}
     ).sort([("category", _ASC), ("tier", _ASC), ("display_name", _ASC)]))
+    district_defs = district_defs_full
+    district_defs_map = {d["key"]: d for d in district_defs_full if "key" in d}
     district_categories = {
         c["key"]: c.get("display_name", c["key"])
         for c in mongo.db.district_categories.find({}, {"key": 1, "display_name": 1, "_id": 0})
@@ -347,6 +349,7 @@ def _render_nation_edit(item_ref, form=None):
         find_dict_in_list=find_dict_in_list,
         bulk_edit_options=bulk_edit_options,
         district_defs=district_defs,
+        district_defs_map=district_defs_map,
         district_categories=district_categories,
     )
 
@@ -381,6 +384,14 @@ def nation_edit_request(item_ref):
                 form_data['concessions'] = json.loads(form_data['concessions'])
         except (json.JSONDecodeError, TypeError):
             form_data['concessions'] = {}
+
+    # Deserialize upgrades JSON strings back to lists for each district
+    for dist in form_data.get('districts', []):
+        if isinstance(dist.get('upgrades'), str):
+            try:
+                dist['upgrades'] = json.loads(dist['upgrades'])
+            except (json.JSONDecodeError, TypeError):
+                dist['upgrades'] = []
 
     valid, error = validate_form_with_jsonschema(form, schema)
     if not valid:
@@ -434,6 +445,14 @@ def nation_edit_approve(item_ref):
                 form_data['concessions'] = json.loads(form_data['concessions'])
         except (json.JSONDecodeError, TypeError):
             form_data['concessions'] = {}
+
+    # Deserialize upgrades JSON strings back to lists for each district
+    for dist in form_data.get('districts', []):
+        if isinstance(dist.get('upgrades'), str):
+            try:
+                dist['upgrades'] = json.loads(dist['upgrades'])
+            except (json.JSONDecodeError, TypeError):
+                dist['upgrades'] = []
 
     valid, error = validate_form_with_jsonschema(form, schema)
     if not valid:

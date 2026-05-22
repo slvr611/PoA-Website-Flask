@@ -46,6 +46,12 @@
         "has_x": true,
         "default_x": 1
     },
+    "per_x_pops": {
+        "name": "Per X Pops In Nation",
+        "description": "Multiplied by the total number of pops in the nation divided by X, floored.",
+        "has_x": true,
+        "default_x": 1
+    },
     "per_x_naval_units": {
         "name": "Per X Naval Units",
         "description": "Multiplied by the nation's total naval units divided by X, floored.",

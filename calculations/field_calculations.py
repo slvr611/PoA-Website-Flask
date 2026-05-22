@@ -227,9 +227,12 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
         title_modifiers = positive_title_modifiers.copy()
         for key, value in negative_title_modifiers.items():
             title_modifiers[key] = title_modifiers.get(key, 0) + value
-        # District modifiers scoped to ruling characters (e.g. nation_ruling_characters)
-        from calculations.source_adapters import DistrictAdapter as _DistrictAdapter
+        # District and law modifiers scoped to ruling characters
+        from calculations.source_adapters import DistrictAdapter as _DistrictAdapter, LawAdapter as _LawAdapter
         for _contrib in _DistrictAdapter.collect_for_character(target):
+            for _k, _v in _contrib.modifiers.items():
+                district_totals[_k] = district_totals.get(_k, 0) + _v
+        for _contrib in _LawAdapter.collect_for_character(target):
             for _k, _v in _contrib.modifiers.items():
                 district_totals[_k] = district_totals.get(_k, 0) + _v
     elif target_data_type == "market":
@@ -241,7 +244,7 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
         law_totals[secondary_resource_two + "_production"] = law_totals.get("secondary_resource_production", 0)
     record_timing("target_specific_calculations_ms", phase_start)
 
-    attributes_to_precalculate = ["administration", "effective_territory", "current_territory", "road_capacity", "effective_pop_capacity", "pop_count", "land_unit_capacity"]
+    attributes_to_precalculate = ["administration", "effective_territory", "current_territory", "route_capacity", "effective_pop_capacity", "pop_count", "land_unit_capacity"]
 
     phase_start = perf_counter()
     overall_total_modifiers = {}
@@ -284,11 +287,11 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
     phase_start = perf_counter()
     effective_territory_modifiers = calculate_effective_territory_modifiers(target, schema_properties)
 
-    road_capacity_modifiers = calculate_road_capacity_modifiers(target)
+    route_capacity_modifiers = calculate_route_capacity_modifiers(target)
 
     effective_pop_capacity_modifiers = calculate_effective_pop_capacity_modifiers(target)
 
-    for d in [effective_territory_modifiers, road_capacity_modifiers, effective_pop_capacity_modifiers]:
+    for d in [effective_territory_modifiers, route_capacity_modifiers, effective_pop_capacity_modifiers]:
         for key, value in d.items():
             overall_total_modifiers[key] = overall_total_modifiers.get(key, 0) + value
     
@@ -297,6 +300,9 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
     if target_data_type == "nation" and target.get("infamy", 0) >= 50:
         overall_total_modifiers["defensive_pact_slots"] = overall_total_modifiers.get("defensive_pact_slots", 0) - 1
         overall_total_modifiers["military_alliance_slots"] = overall_total_modifiers.get("military_alliance_slots", 0) - 1
+
+    if target_data_type == "nation":
+        _apply_vassal_tribute_modifiers(target, overall_total_modifiers)
 
     record_timing("capacity_and_meta_modifiers_ms", phase_start)
 
@@ -1023,6 +1029,9 @@ def check_job_requirements(target, job_details, overall_total_modifiers):
     except:
         region_name = ""
 
+    # Collect def_keys from DB-driven districts for requirement checks
+    def_keys = [d.get("def_key", "") for d in target.get("districts", []) if d.get("def_key")]
+
     for requirement, value in requirements.items():
         if requirement == "district":
             has_district = False
@@ -1030,6 +1039,11 @@ def check_job_requirements(target, job_details, overall_total_modifiers):
             for district in district_types:
                 if district.get("type", "") in value and district.get("era", 0) >= required_district_era:
                     has_district = True
+            if not has_district:
+                for def_key in def_keys:
+                    if def_key in value:
+                        has_district = True
+                        break
             if not has_district:
                 meets_requirements = False
         elif requirement == "region":
@@ -1214,7 +1228,7 @@ def _apply_special_mod_multipliers(stripped_key, val, obj, linked_schema):
 
 
 def _extract_labeled_from_object(obj, required_fields, linked_schema, target_data_type,
-                                  modifier_prefix, base_label, field_name=""):
+                                  modifier_prefix, base_label, field_name="", target=None):
     """Extract labeled modifier entries from a single linked object.
 
     Returns [{"label": str, "modifiers": dict}].
@@ -1249,6 +1263,11 @@ def _extract_labeled_from_object(obj, required_fields, linked_schema, target_dat
                 key = modifier.get("modifier", "")
                 val = modifier.get("value", 0)
                 if key and val:
+                    scaling = modifier.get("scaling", "flat")
+                    scaling_x = float(modifier.get("scaling_x") or 1)
+                    scaling_extra = modifier.get("scaling_extra") or ""
+                    if scaling and scaling != "flat" and target is not None:
+                        val = val * get_scaling_multiplier(scaling, target, scaling_x=scaling_x, scaling_extra=scaling_extra)
                     plain_mods[key] = plain_mods.get(key, 0) + val
 
         # ── enum field with laws (stances, traits, types …) ──────────────
@@ -1283,12 +1302,22 @@ def _extract_labeled_from_object(obj, required_fields, linked_schema, target_dat
                     mod_field = _res_mod_type_ext(modifier)
                     mod_val = modifier.get("value", 0)
                     if mod_field and mod_val:
+                        scaling = modifier.get("scaling", "flat")
+                        scaling_x = float(modifier.get("scaling_x") or 1)
+                        scaling_extra = modifier.get("scaling_extra") or ""
+                        if scaling and scaling != "flat" and target is not None:
+                            mod_val = mod_val * get_scaling_multiplier(scaling, target, scaling_x=scaling_x, scaling_extra=scaling_extra)
                         plain_mods[mod_field] = plain_mods.get(mod_field, 0) + mod_val
                 else:
                     mod_field = modifier.get("field", "")
                     mod_val = modifier.get("value", 0)
                     stripped, matched = _strip_modifier_key(mod_field, target_data_type, modifier_prefix)
                     if matched and mod_val:
+                        scaling = modifier.get("scaling", "flat")
+                        scaling_x = float(modifier.get("scaling_x") or 1)
+                        scaling_extra = modifier.get("scaling_extra") or ""
+                        if scaling and scaling != "flat" and target is not None:
+                            mod_val = mod_val * get_scaling_multiplier(scaling, target, scaling_x=scaling_x, scaling_extra=scaling_extra)
                         plain_mods[stripped] = plain_mods.get(stripped, 0) + mod_val
 
         # ── title arrays ──────────────────────────────────────────────────
@@ -1416,13 +1445,13 @@ def _collect_external_labeled(target, schema, target_data_type):
                         # Extract from the link row itself
                         tagged.extend(_extract_labeled_from_object(
                             link, plain_required, link_schema,
-                            target_data_type, modifier_prefix, obj_label, field_name,
+                            target_data_type, modifier_prefix, obj_label, field_name, target=target,
                         ))
                         # Extract from the target object
                         if tgt_obj is not None:
                             tagged.extend(_extract_labeled_from_object(
                                 tgt_obj, plain_required, linked_schema,
-                                target_data_type, modifier_prefix, obj_label, field_name,
+                                target_data_type, modifier_prefix, obj_label, field_name, target=target,
                             ))
 
                 # ── queryTargetAttribute pattern (wonders, vassals, owned_markets) ──
@@ -1440,7 +1469,7 @@ def _collect_external_labeled(target, schema, target_data_type):
                         obj_label = f"{label_prefix}: {obj_name}"
                         tagged.extend(_extract_labeled_from_object(
                             obj, plain_required, linked_schema,
-                            target_data_type, modifier_prefix, obj_label, field_name,
+                            target_data_type, modifier_prefix, obj_label, field_name, target=target,
                         ))
 
                 # ── simple direct-link pattern (overlord, religion, region) ──
@@ -1455,7 +1484,7 @@ def _collect_external_labeled(target, schema, target_data_type):
                     obj_label = f"{label_prefix}: {obj_name}"
                     tagged.extend(_extract_labeled_from_object(
                         obj, plain_required, linked_schema,
-                        target_data_type, modifier_prefix, obj_label, field_name,
+                        target_data_type, modifier_prefix, obj_label, field_name, target=target,
                     ))
 
             except Exception as exc:
@@ -1575,6 +1604,11 @@ def _build_unit_tagged_sources(target, schema, district_details):
         field = _res_mod_type(mod)
         value = mod.get("value", 0)
         if field and value:
+            scaling = mod.get("scaling", "flat")
+            scaling_x = float(mod.get("scaling_x") or 1)
+            scaling_extra = mod.get("scaling_extra") or ""
+            if scaling and scaling != "flat":
+                value = value * get_scaling_multiplier(scaling, target, scaling_x=scaling_x, scaling_extra=scaling_extra)
             source = mod.get("source", "")
             label = f"Modifier: {source}" if source else "Modifier"
             tagged.append({"label": label, "modifiers": {field: value}})
@@ -1607,6 +1641,11 @@ def _build_unit_tagged_sources(target, schema, district_details):
                     field = raw[len("nation_"):]
                 value = mod.get("value", 0)
                 if field and value:
+                    scaling = mod.get("scaling", "flat")
+                    scaling_x = float(mod.get("scaling_x") or 1)
+                    scaling_extra = mod.get("scaling_extra") or ""
+                    if scaling and scaling != "flat":
+                        value = value * get_scaling_multiplier(scaling, target, scaling_x=scaling_x, scaling_extra=scaling_extra)
                     tagged.append({
                         "label": f"Ruler: {ruler_name}",
                         "modifiers": {field: value},
@@ -2157,12 +2196,24 @@ def collect_external_requirements(target, schema, target_data_type):
     for global_mod in global_modifiers:
         for modifier in global_mod.get("external_modifiers", []):
             if modifier.get("type") == target_data_type:
-                collected_modifiers.append({modifier.get("modifier", ""): modifier.get("value", 0)})
+                key = modifier.get("modifier", "")
+                val = modifier.get("value", 0)
+                scaling = modifier.get("scaling", "flat")
+                scaling_x = float(modifier.get("scaling_x") or 1)
+                scaling_extra = modifier.get("scaling_extra") or ""
+                if scaling and scaling != "flat":
+                    val = val * get_scaling_multiplier(scaling, target, scaling_x=scaling_x, scaling_extra=scaling_extra)
+                collected_modifiers.append({key: val})
         for modifier in global_mod.get("modifiers", []):
             scope = modifier.get("scope", "")
             if scope and _gm_sd.get(scope, {}).get("target_type", "") == target_data_type:
                 field = _rmt_gm(modifier)
                 val = modifier.get("value", 0)
+                scaling = modifier.get("scaling", "flat")
+                scaling_x = float(modifier.get("scaling_x") or 1)
+                scaling_extra = modifier.get("scaling_extra") or ""
+                if scaling and scaling != "flat":
+                    val = val * get_scaling_multiplier(scaling, target, scaling_x=scaling_x, scaling_extra=scaling_extra)
                 if field and val:
                     collected_modifiers.append({field: val})
 
@@ -2205,38 +2256,38 @@ def collect_external_requirements(target, schema, target_data_type):
                     
                     for link in links:
                         # Check the link object itself for modifiers
-                        collected_modifiers.extend(collect_external_modifiers_from_object(link, required_fields, category_data.get(link_collection, {}).get("schema", {}), target_data_type, modifier_prefix, fields_as_modifiers))
-                        
+                        collected_modifiers.extend(collect_external_modifiers_from_object(link, required_fields, category_data.get(link_collection, {}).get("schema", {}), target_data_type, modifier_prefix, fields_as_modifiers, target=target))
+
                         # Get the target object and check it too
                         if query_target in link:
                             target_id = link[query_target]
                             target_object = mongo.db[collection].find_one({"_id": ObjectId(target_id)})
                             if target_object:
-                                collected_modifiers.extend(collect_external_modifiers_from_object(target_object, required_fields, linked_object_schema, target_data_type, modifier_prefix, fields_as_modifiers))
-            
+                                collected_modifiers.extend(collect_external_modifiers_from_object(target_object, required_fields, linked_object_schema, target_data_type, modifier_prefix, fields_as_modifiers, target=target))
+
             elif field_schema.get("queryTargetAttribute"):
                 query_target = field_schema["queryTargetAttribute"]
                 linked_objects = []
 
                 if "_id" in target:
                     linked_objects = list(mongo.db[collection].find({query_target: str(target.get("_id", ""))}))
-                
+
                 for object in linked_objects:
                     if object.get("equipped", True):
-                        collected_modifiers.extend(collect_external_modifiers_from_object(object, required_fields, linked_object_schema, target_data_type, modifier_prefix, fields_as_modifiers))
+                        collected_modifiers.extend(collect_external_modifiers_from_object(object, required_fields, linked_object_schema, target_data_type, modifier_prefix, fields_as_modifiers, target=target))
             else:
                 object_id = target.get(field)
                 if not object_id:
                     continue
-                
+
                 object = mongo.db[collection].find_one({"_id": ObjectId(object_id)})
                 if not object:
                     continue
-                collected_modifiers.extend(collect_external_modifiers_from_object(object, required_fields, linked_object_schema, target_data_type, modifier_prefix, fields_as_modifiers))
+                collected_modifiers.extend(collect_external_modifiers_from_object(object, required_fields, linked_object_schema, target_data_type, modifier_prefix, fields_as_modifiers, target=target))
 
     return collected_modifiers
 
-def collect_external_modifiers_from_object(object, required_fields, linked_object_schema, target_data_type, modifier_prefix=None, fields_as_modifiers=[]):
+def collect_external_modifiers_from_object(object, required_fields, linked_object_schema, target_data_type, modifier_prefix=None, fields_as_modifiers=[], target=None):
     collected_modifiers = []
 
     for req_field in required_fields:
@@ -2262,21 +2313,21 @@ def collect_external_modifiers_from_object(object, required_fields, linked_objec
                             
                             for link in links:
                                 # Check the link object itself for modifiers
-                                collected_modifiers.extend(collect_external_modifiers_from_object(link, value, category_data.get(link_collection, {}).get("schema", {}), target_data_type, modifier_prefix))
-                                
+                                collected_modifiers.extend(collect_external_modifiers_from_object(link, value, category_data.get(link_collection, {}).get("schema", {}), target_data_type, modifier_prefix, target=target))
+
                                 # Get the target object and check it too
                                 if query_target in link:
                                     target_id = link[query_target]
                                     target_object = mongo.db[collection].find_one({"_id": ObjectId(target_id)})
                                     if target_object:
-                                        collected_modifiers.extend(collect_external_modifiers_from_object(target_object, value, linked_object_schema, target_data_type, modifier_prefix))
-                    
+                                        collected_modifiers.extend(collect_external_modifiers_from_object(target_object, value, linked_object_schema, target_data_type, modifier_prefix, target=target))
+
                     elif req_field_schema.get("queryTargetAttribute"):
                         query_target = req_field_schema["queryTargetAttribute"]
                         linked_objects = list(mongo.db[collection].find({query_target: str(object["_id"])}))
                         for object in linked_objects:
                             if object.get("equipped", True):
-                                collected_modifiers.extend(collect_external_modifiers_from_object(object, value, linked_object_schema, target_data_type, modifier_prefix))
+                                collected_modifiers.extend(collect_external_modifiers_from_object(object, value, linked_object_schema, target_data_type, modifier_prefix, target=target))
             continue
         else:
             req_field_schema = linked_object_schema["properties"].get(req_field, {})
@@ -2286,7 +2337,14 @@ def collect_external_modifiers_from_object(object, required_fields, linked_objec
                 if field_type == "array" and req_field == "external_modifiers":
                     for modifier in object[req_field]:
                         if modifier.get("type") == target_data_type:
-                            collected_modifiers.append({modifier.get("modifier", ""): modifier.get("value", 0)})
+                            key = modifier.get("modifier", "")
+                            val = modifier.get("value", 0)
+                            scaling = modifier.get("scaling", "flat")
+                            scaling_x = float(modifier.get("scaling_x") or 1)
+                            scaling_extra = modifier.get("scaling_extra") or ""
+                            if scaling and scaling != "flat" and target is not None:
+                                val = val * get_scaling_multiplier(scaling, target, scaling_x=scaling_x, scaling_extra=scaling_extra)
+                            collected_modifiers.append({key: val})
 
                 elif field_type == "array" and req_field == "modifiers":
                     _sd = json_data.get("scope_definitions", {})
@@ -2301,6 +2359,11 @@ def collect_external_modifiers_from_object(object, required_fields, linked_objec
                             field = _rmt(modifier)
                             val = modifier.get("value", 0)
                             if field and val:
+                                scaling = modifier.get("scaling", "flat")
+                                scaling_x = float(modifier.get("scaling_x") or 1)
+                                scaling_extra = modifier.get("scaling_extra") or ""
+                                if scaling and scaling != "flat" and target is not None:
+                                    val = val * get_scaling_multiplier(scaling, target, scaling_x=scaling_x, scaling_extra=scaling_extra)
                                 collected_modifiers.append({field: val})
 
                 elif field_type == "enum" and req_field_schema.get("laws"):
@@ -2394,8 +2457,8 @@ def calculate_effective_territory_modifiers(target, schema_properties):
 
     return modifiers
 
-def calculate_road_capacity_modifiers(target):
-    road_capacity = int(target.get("road_capacity", 0))
+def calculate_route_capacity_modifiers(target):
+    road_capacity = int(target.get("route_capacity", 0) or target.get("road_capacity", 0))
     current_territory = int(target.get("road_usage", 0))
 
     over_capacity = current_territory - road_capacity
@@ -2463,11 +2526,14 @@ def calculate_effective_pop_capacity_modifiers(target):
     
     return modifiers
 
+_ALL_CHAR_STATS = ["rulership", "cunning", "charisma", "prowess", "magic", "strategy"]
+
 def sum_modifier_totals(modifiers, target=None):
     totals = {}
     modifier_types_data = json_data.get("modifier_types", {})
     for m in modifiers:
         modifier_type = m.get("modifier_type", "")
+        expand_all_attrs = False
         if modifier_type and modifier_type in modifier_types_data:
             type_def = modifier_types_data[modifier_type]
             if type_def.get("is_terrain_rule"):
@@ -2476,6 +2542,8 @@ def sum_modifier_totals(modifiers, target=None):
             for extra_field in type_def.get("extra_fields", []):
                 key = extra_field["key"]
                 val = m.get(key) or ""
+                if extra_field.get("source") == "attributes" and val == "attribute":
+                    expand_all_attrs = True
                 field = field.replace(f"{{{key}}}", val)
         else:
             # Backwards compat: old format stored with "field" or "key"
@@ -2492,7 +2560,12 @@ def sum_modifier_totals(modifiers, target=None):
                 value = min(value, float(max_value))
             except (TypeError, ValueError):
                 pass
-        if field:
+        if expand_all_attrs:
+            for stat in _ALL_CHAR_STATS:
+                expanded = field.replace("attribute", stat)
+                if expanded:
+                    totals[expanded] = totals.get(expanded, 0) + value
+        elif field:
             totals[field] = totals.get(field, 0) + value
     return totals
 
@@ -2500,6 +2573,8 @@ def sum_law_totals(laws):
     totals = {}
     for law in laws:
         for key, value in law.items():
+            if key.startswith('_'):
+                continue
             totals[key] = totals.get(key, 0) + value
     return totals
 
@@ -2655,6 +2730,69 @@ def parse_meta_modifiers(target, overall_total_modifiers):
             for field, value in mod_details.get("modifiers", {}).items():
                 overall_total_modifiers[field] = overall_total_modifiers.get(field, 0) + value
     return overall_total_modifiers
+
+
+_TRIBUTE_RESOURCES = ["food", "wood", "stone"]
+
+
+def _calc_tribute(pop_count, vassal_type, overall_total_modifiers):
+    """Return the per-resource tribute amount for a vassal.
+
+    Base: max(1, pops // 10).  Tributary doubles base and minimum.
+    Modifiers: vassal_tribute_flat (added before multiplier),
+               vassal_tribute_multiplier (fractional bonus, e.g. 0.5 = +50%).
+    """
+    base = max(1, pop_count // 10)
+    if vassal_type == "Tributary":
+        amount = max(2, base * 2)
+    else:
+        amount = base
+    flat   = overall_total_modifiers.get("vassal_tribute_flat", 0)
+    mult   = 1 + overall_total_modifiers.get("vassal_tribute_multiplier", 0)
+    return max(0, int(round((amount + flat) * mult)))
+
+
+def _apply_vassal_tribute_modifiers(target, overall_total_modifiers):
+    """Inject vassal tribute into overall_total_modifiers before production/consumption
+    fields are computed.
+
+    Vassals:  food/wood/stone consumption += tribute amount.
+    Overlords: food/wood/stone production += sum of all vassals' tributes.
+    """
+    # ── Vassal side (this nation pays tribute) ────────────────────────────
+    overlord_id = str(target.get("overlord") or "")
+    if overlord_id:
+        pop_count  = target.get("pop_count", 0)
+        vassal_type = target.get("vassal_type", "None")
+        tribute = _calc_tribute(pop_count, vassal_type, overall_total_modifiers)
+        for resource in _TRIBUTE_RESOURCES:
+            overall_total_modifiers[f"{resource}_consumption"] = (
+                overall_total_modifiers.get(f"{resource}_consumption", 0) + tribute
+            )
+
+    # ── Overlord side (this nation receives tribute from vassals) ─────────
+    if "_id" not in target:
+        return
+    nation_id_str = str(target["_id"])
+    try:
+        vassals = list(mongo.db.nations.find(
+            {"overlord": nation_id_str},
+            {"pop_count": 1, "vassal_type": 1, "modifiers": 1},
+        ))
+    except Exception:
+        return
+    for vassal in vassals:
+        v_pop   = vassal.get("pop_count", 0)
+        v_type  = vassal.get("vassal_type", "None")
+        # Use an empty modifiers dict for the vassal's tribute modifiers since we
+        # don't re-run the full calculation here; the per-resource formula is the
+        # canonical source of truth and additional scaling can be added via
+        # overlord_nation_* modifiers on the vassal_type law.
+        v_tribute = _calc_tribute(v_pop, v_type, {})
+        for resource in _TRIBUTE_RESOURCES:
+            overall_total_modifiers[f"{resource}_production"] = (
+                overall_total_modifiers.get(f"{resource}_production", 0) + v_tribute
+            )
 
 
 
@@ -3012,13 +3150,29 @@ def compute_nation_breakdowns(
 
     # ── Build all breakdowns ──────────────────────────────────────────────────
     breakdowns = {
-        "stability_gain_chance": _field_bd("stability_gain_chance", pct=True),
-        "stability_loss_chance": _field_bd("stability_loss_chance", pct=True),
+        "stability_gain_chance":  _field_bd("stability_gain_chance", pct=True),
+        "stability_loss_chance":  _field_bd("stability_loss_chance", pct=True),
+        "effective_pop_capacity": _field_bd("effective_pop_capacity"),
         "money_income": [],
         "karma": [],
         "resource_production": {},
         "resource_consumption": {},
     }
+
+    # effective_territory — inject Administration contribution before Total
+    eff_terr_bd = _field_bd("effective_territory")
+    admin_val = target.get("administration", 0)
+    et_per_admin = schema_properties.get("effective_territory", {}).get("effective_territory_per_admin", 0)
+    if et_per_admin and admin_val:
+        eff_terr_bd.insert(-1, {"label": "Administration", "value": et_per_admin * admin_val})
+    breakdowns["effective_territory"] = eff_terr_bd
+
+    # route_capacity — inject Administration contribution before Total
+    route_cap_bd = _field_bd("route_capacity")
+    rc_per_admin = schema_properties.get("route_capacity", {}).get("route_capacity_per_admin", 0)
+    if rc_per_admin and admin_val:
+        route_cap_bd.insert(-1, {"label": "Administration", "value": rc_per_admin * admin_val})
+    breakdowns["route_capacity"] = route_cap_bd
 
     # Karma — no schema base_value, needs rolling/temporary appended
     karma_bd = _field_bd("karma")

@@ -1,2 +1,117 @@
 {# modifier_section has moved to _modifier_macros.html #}
-{% from '_modifier_macros.html' import modifier_section %}
+{% from '_modifier_macros.html' import modifier_section, modifier_row with context %}
+
+{#
+  district_card(dd, cur_node, cur_upgrades, editable, form_district, idx, pend_node)
+    dd             – full district-def dict from district_defs_map
+    cur_node       – current node key string (empty = none)
+    cur_upgrades   – list of unlocked upgrade key strings
+    editable       – if True, render upgrade checkboxes + hidden fields
+    form_district  – WTForms DistrictDict FormField (required when editable=True)
+    idx            – district slot index used for unique element IDs (required when editable=True)
+    pend_node      – pending node value (static mode only; show diff indicator when != cur_node)
+#}
+{% macro district_card(dd, cur_node, cur_upgrades, editable=False, form_district=none, idx=none, pend_node=none) %}
+{% if dd %}
+<div class="dc dc--t{{ dd.get('tier', 1) }}">
+    <header>
+        <div>
+            <div class="dc-title">{{ dd.get('display_name', dd.get('key', '')) }}</div>
+            <div class="dc-node-tag">Map node:
+                {% if pend_node is not none and pend_node != cur_node %}
+                    <span class="current-value">{{ cur_node or 'unset' }}</span> → <span class="pending-value">{{ pend_node or 'unset' }}</span>
+                {% else %}
+                    {{ cur_node or 'unset' }}
+                {% endif %}
+            </div>
+        </div>
+        <span class="dc-tier-badge">T{{ dd.get('tier', '?') }}</span>
+    </header>
+
+    {% if dd.get('image') %}
+    <div class="dc-image-wrap"><img class="dc-image" src="{{ dd.image }}" alt="{{ dd.get('display_name','') }}"></div>
+    {% endif %}
+
+    <div class="dc-body">
+        {% if dd.get('description') %}
+        <p class="dc-desc">{{ dd.description }}</p>
+        {% endif %}
+
+        {% set mods = dd.get('modifiers', []) %}
+        {% if mods %}
+        <div class="dc-mods">
+            {% for mod in mods %}{{ modifier_row(mod) }}{% endfor %}
+        </div>
+        {% endif %}
+
+        {% set syns = dd.get('synergies', []) %}
+        {% if syns %}
+        {% if mods %}<div class="dc-rule"></div>{% endif %}
+        <div class="dc-syn-label">Synergies</div>
+        {% for syn in syns %}
+        {% set req = syn.get('requirement','') %}
+        {% set req_list = req if (req is iterable and req is not string) else [req] %}
+        {% set is_active = 'any' in req_list or cur_node in req_list %}
+        <div class="dc-syn-item">
+            <span class="dc-syn-node">{{ req_list | join(', ') | title }}</span>
+            {% if is_active %}<span class="dc-syn-active"> ✓ active</span>{% endif %}
+            {% if syn.get('node_active') %}<span class="dc-syn-flag"> (node active)</span>{% endif %}
+            {% for mod in (syn.get('modifiers', []) if syn.get('modifiers') is iterable and syn.get('modifiers') is not mapping else []) %}
+            {{ modifier_row(mod, indent=True, dimmed=not is_active, label_color='#99a') }}
+            {% endfor %}
+        </div>
+        {% endfor %}
+        {% endif %}
+
+        {% if dd.get('upgrades') %}
+        {% if mods or syns %}<div class="dc-rule"></div>{% endif %}
+        <div class="dc-upg-label">Upgrades</div>
+        {% if editable %}
+        {% for upg in dd.upgrades %}
+        {% set unlocked = upg.key in cur_upgrades %}
+        <div class="dc-upg-item">
+            <label class="dc-upg-toggle">
+                <input type="checkbox" class="upg-checkbox"
+                       data-upg-slot="{{ idx }}"
+                       data-upg-key="{{ upg.key }}"
+                       onchange="syncDistrictUpgrades({{ idx }})"
+                       {% if unlocked %}checked{% endif %}>
+                <span class="dc-upg-name">{{ upg.display_name or upg.key }}</span>
+            </label>
+            {% if upg.get('requirements') %}
+            <span class="dc-upg-req"> — requires {% for req in upg.requirements %}{{ req.value }}{% if not loop.last %}, {% endif %}{% endfor %}</span>
+            {% endif %}
+            {% if unlocked %}
+            {% for mod in upg.get('modifiers', []) %}{{ modifier_row(mod, indent=True, label_color='#99a') }}{% endfor %}
+            {% endif %}
+        </div>
+        {% endfor %}
+        {% else %}
+        {% for upg in dd.upgrades %}
+        {% set unlocked = upg.key in cur_upgrades %}
+        <div class="dc-upg-item {% if not unlocked %}dc-dim{% endif %}">
+            <span class="dc-upg-name">{% if unlocked %}✓ {% endif %}{{ upg.display_name or upg.key }}</span>
+            {% if not unlocked and upg.get('requirements') %}
+            <span class="dc-upg-req"> — requires {% for req in upg.requirements %}{% if req.type == 'technology' %}{{ req.value }}{% else %}{{ req.value }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}</span>
+            {% endif %}
+            {% if unlocked %}
+            {% for mod in upg.get('modifiers', []) %}{{ modifier_row(mod, indent=True, label_color='#99a') }}{% endfor %}
+            {% endif %}
+        </div>
+        {% endfor %}
+        {% endif %}
+        {% endif %}
+    </div>
+
+    <div class="dc-footer">
+        <div class="dc-cost-heading">Build Cost{% if dd.get('upkeep') %} / Upkeep{% endif %}</div>
+        <span class="dc-cost">
+            {%- set cost_parts = [] -%}
+            {%- for res, amt in dd.get('cost', {}).items() -%}{%- set _ = cost_parts.append(amt|string ~ ' ' ~ res|title) -%}{%- endfor -%}
+            {%- if cost_parts -%}{{ cost_parts | join(', ') }}{%- else -%}<span class="muted">Free</span>{%- endif -%}
+            {%- if dd.get('upkeep') -%}{%- set upk = [] -%}{%- for res, amt in dd.upkeep.items() -%}{%- set _ = upk.append(amt|string ~ ' ' ~ res|title) -%}{%- endfor -%}{%- if upk %} / {{ upk | join(', ') }}/tick{%- endif -%}{%- endif -%}
+        </span>
+    </div>
+</div>
+{% endif %}
+{% endmacro %}

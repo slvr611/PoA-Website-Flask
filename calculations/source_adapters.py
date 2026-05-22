@@ -6,7 +6,7 @@ against existing output they can replace the per-source totals dicts.
 """
 
 import copy
-from app_core import json_data
+from app_core import json_data, category_data
 from calculations.source_contribution import SourceContribution
 from calculations.field_calculations import (
     collect_laws,
@@ -170,10 +170,49 @@ class LawAdapter:
             target_law = target.get(law_name, "")
             law = current_law_list.get(target_law)
             if law:
+                flat = {k: v for k, v in law.items() if not k.startswith('_')}
                 contributions.append(SourceContribution(
                     label=target_law,
                     source_type=cls.source_type,
-                    modifiers=dict(law),
+                    modifiers=flat,
+                ))
+        return contributions
+
+    @classmethod
+    def collect_for_character(cls, character: dict) -> list:
+        """Collect law _modifiers scoped to ruling characters from the character's nation."""
+        from app_core import mongo
+        from bson import ObjectId
+        nation_org_id = character.get("ruling_nation_org", "")
+        if not nation_org_id:
+            return []
+        try:
+            nation = mongo.db.nations.find_one({"_id": ObjectId(nation_org_id)})
+        except Exception:
+            return []
+        if not nation:
+            return []
+
+        nation_schema = category_data.get("nations", {}).get("schema", {})
+        schema_properties = nation_schema.get("properties", {})
+        laws_list = nation_schema.get("laws", [])
+
+        contributions = []
+        for law_name in laws_list:
+            current_law_list = schema_properties.get(law_name, {}).get("laws", {})
+            target_law = nation.get(law_name, "")
+            law = current_law_list.get(target_law)
+            if not law:
+                continue
+            mods_list = law.get("_modifiers", [])
+            if not mods_list:
+                continue
+            mods = _db_dist_mods_to_dict(mods_list, target_type="character")
+            if mods:
+                contributions.append(SourceContribution(
+                    label=target_law,
+                    source_type=cls.source_type,
+                    modifiers=mods,
                 ))
         return contributions
 

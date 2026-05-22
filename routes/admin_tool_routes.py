@@ -621,3 +621,93 @@ def recalculate_all_objects_route():
     recalculate_all_items_async()
     flash("Recalculation process started in background. Check logs for results.", "info")
     return redirect("/")
+
+
+def _suffix_to_num(suffix):
+    n = 0
+    for ch in suffix:
+        n = n * 26 + (ord(ch) - ord('A') + 1)
+    return n
+
+
+def _num_to_suffix(n):
+    result = ""
+    while n > 0:
+        n -= 1
+        result = chr(ord('A') + n % 26) + result
+        n //= 26
+    return result
+
+
+@admin_tool_routes.route("/placeholder_nations", methods=["GET"])
+@admin_required
+def placeholder_nations():
+    existing = list(mongo.db.nations.find(
+        {"name": {"$regex": "^Placeholder [A-Z]+$"}},
+        {"name": 1, "_id": 1}
+    ).sort("name", ASCENDING))
+    return render_template("placeholder_nations.html", existing=existing)
+
+
+@admin_tool_routes.route("/placeholder_nations/create", methods=["POST"])
+@admin_required
+def create_placeholder_nations():
+    try:
+        count = int(request.form.get("count", 1))
+    except (ValueError, TypeError):
+        count = 1
+    count = max(1, min(count, 500))
+
+    existing_names = {
+        n["name"] for n in mongo.db.nations.find(
+            {"name": {"$regex": "^Placeholder [A-Z]+$"}},
+            {"name": 1}
+        )
+    }
+
+    max_num = 0
+    for name in existing_names:
+        suffix = name[len("Placeholder "):]
+        if suffix.isalpha() and suffix.isupper():
+            max_num = max(max_num, _suffix_to_num(suffix))
+
+    to_insert = []
+    n = max_num + 1
+    while len(to_insert) < count:
+        suffix = _num_to_suffix(n)
+        name = f"Placeholder {suffix}"
+        if name not in existing_names:
+            to_insert.append({
+                "name": name,
+                "temperament": "Neutral",
+                "government_type": "Ruthless Meritocracy",
+                "succession_type": "Inherited",
+                "foreign_acceptance": "Acceptance",
+                "origin": "Unknown",
+                "sessions_since_temperament_change": 1,
+                "money": 0,
+                "infamy": 0,
+                "rolling_karma": 0,
+                "temporary_karma": 0,
+                "road_usage": 0,
+                "storage": {},
+                "districts": [],
+                "cities": [],
+                "jobs": [],
+                "technologies": [],
+            })
+        n += 1
+
+    if to_insert:
+        mongo.db.nations.insert_many(to_insert)
+
+    flash(f"Created {len(to_insert)} placeholder nation(s).", "success")
+    return redirect(url_for("admin_tool_routes.placeholder_nations"))
+
+
+@admin_tool_routes.route("/placeholder_nations/delete", methods=["POST"])
+@admin_required
+def delete_placeholder_nations():
+    result = mongo.db.nations.delete_many({"name": {"$regex": "^Placeholder [A-Z]+$"}})
+    flash(f"Deleted {result.deleted_count} placeholder nation(s).", "success")
+    return redirect(url_for("admin_tool_routes.placeholder_nations"))

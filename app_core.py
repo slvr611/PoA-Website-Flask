@@ -39,6 +39,13 @@ app.config["MONGO_URI"] = os.getenv("MONGO_URI")
 mongo = PyMongo(app)
 discord = DiscordOAuth2Session(app)
 
+@app.template_filter('from_json')
+def from_json_filter(value):
+    try:
+        return json.loads(value) if isinstance(value, str) else (value or [])
+    except (json.JSONDecodeError, TypeError):
+        return []
+
 @app.template_filter('format_discord_link')
 def format_discord_link(text):
     # Pattern for Discord message links

@@ -246,18 +246,18 @@
         "label": "Territory Types",
         "description": "The types of territory the nation currently holds"
       },
-      "road_capacity": {
+      "route_capacity": {
         "bsonType": "number",
-        "label": "Road Capacity",
-        "description": "The nation's maximum road capacity that can be used before they start suffering penalties",
+        "label": "Route Capacity",
+        "description": "The nation's maximum route capacity that can be used before they start suffering penalties",
         "calculated": true,
-        "road_capacity_per_admin": 4,
+        "route_capacity_per_admin": 4,
         "base_value": 6
       },
       "road_usage": {
         "bsonType": "number",
-        "label": "Road Usage",
-        "description": "The amount of road capacity the nation is currently using",
+        "label": "Route Usage",
+        "description": "The amount of route capacity the nation is currently using",
         "default": 0
       },
       "passive_expansion_chance": {
@@ -525,7 +525,11 @@
           "Martial": {
             "defensive_pact_slots_maximum": 0,
             "military_pact_slots_maximum": 1,
-            "vassal_slots_maximum": 0
+            "vassal_slots_maximum": 0,
+            "land_unit_capacity": -1,
+            "naval_unit_capacity": -1,
+            "overlord_nation_land_unit_capacity": 1,
+            "overlord_nation_naval_unit_capacity": 1
           },
           "Mercantile": {
             "defensive_pact_slots_maximum": 0,
@@ -534,7 +538,7 @@
             "money_income": -75,
             "overlord_nation_money_income": 75,
             "trade_slots": 3,
-            "trade_distance": 3
+            "trade_speed": 3
           },
           "Protectorate": {
             "defensive_pact_slots_maximum": 1,
@@ -737,13 +741,13 @@
         "label": "Government Type",
         "description": "The type of government of the nation",
         "enum": [
-          "Autocracy",
-          "Representative Council",
-          "City State",
-          "Trade Federation",
+          "Fallen Monarchy",
+          "Fanatical Theocracy",
+          "Ruthless Meritocracy",
+          "Disjointed Anarchists",
           "Archivist State",
-          "Untamed Lords",
-          "Far Travelers",
+          "Chaotic Throng",
+          "Misfit Band",
           "Iron-Fisted Dictatorship",
           "Imperial Council",
           "Sacred Vicar",
@@ -751,30 +755,37 @@
           "World Warden"
         ],
         "laws": {
-          "Autocracy": {
-            "district_slots": 1,
+          "Fallen Monarchy": {
+            "unit_recruitment_discount": 0.5,
             "city_slots": 3,
-            "stability_loss_chance_on_leader_death_per_age": 0.2,
-            "max_stability_loss_chance_on_leader_death_per_age": 5
+            "_modifiers": [
+              { "modifier_type": "attribute",     "attribute": "attribute", "value": -1, "scope": "nation_ruling_characters" },
+              { "modifier_type": "attribute_cap", "attribute": "attribute", "value": -1, "scope": "nation_ruling_characters" }
+            ]
           },
-          "Representative Council": {
-            "mimimum_weaknesses": -1,
-            "maximum_weaknesses": 1,
+          "Fanatical Theocracy": {
+            "attack_during_holy_war": 1,
             "city_slots": 3
           },
-          "City State": {
-            "defensive_pact_slots": 1,
-            "effective_territory": -2,
-            "city_slots": 1
+          "Ruthless Meritocracy": {
+            "city_slots": 3,
+            "_modifiers": [
+              { "modifier_type": "attribute",     "attribute": "attribute", "value": 1, "scope": "nation_ruling_characters" },
+              { "modifier_type": "attribute_cap", "attribute": "attribute", "value": 1, "scope": "nation_ruling_characters" }
+            ]
           },
-          "Trade Federation": {
-            "trade_slots_per_admin": 1,
-            "city_slots": 4
+          "Disjointed Anarchists": {
+            "city_slots": 4,
+            "stability_loss_chance": 0.5,
+            "stability_loss_chance_cap": 0.5,
+            "_modifiers": [
+              { "modifier_type": "effective_territory", "value": 1, "scope": "nation_ruling_characters", "scaling": "per_x_pops", "scaling_x": 1 },
+              { "modifier_type": "trade_speed", "value": 1, "scope": "nation_ruling_characters", "scaling": "per_x_pops", "scaling_x": 3 }
+            ]
           },
           "Archivist State": {
             "administration_per_research_production": 3,
             "max_administration_per_research_production": 3,
-            "locks_bureaucrat": true,
             "effective_territory": -2,
             "city_slots": 1
           },
@@ -1837,9 +1848,9 @@
         "description": "The number of import slots the nation has available this session, after accounting for ongoing trades",
         "calculated": true
       },
-      "trade_distance": {
+      "trade_speed": {
         "bsonType": "number",
-        "label": "Trade Distance",
+        "label": "Trade Speed",
         "description": "The distance at which the nation can trade with other nations or merchant companies",
         "calculated": true,
         "base_value": 7

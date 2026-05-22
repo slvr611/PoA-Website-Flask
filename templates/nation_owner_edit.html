@@ -1,6 +1,7 @@
 {% extends "layout.html" %}
 {% from "macros/tech_tree.html" import render_tech_tree %}
 {% from "_modifier_macros.html" import modifier_table with context %}
+{% from "_district_macros.html" import district_card with context %}
 
 {% block title %}Edit Nation: {{ nation.name }}{% endblock %}
 
@@ -115,8 +116,8 @@
                                     <td>{{ nation.remaining_export_slots }}</td>
                                 </tr>
                                 <tr>
-                                    <th>{{ schema.properties.trade_distance.label }}:</th>
-                                    <td>{{ nation.trade_distance }}</td>
+                                    <th>{{ schema.properties.trade_speed.label }}:</th>
+                                    <td>{{ nation.trade_speed }}</td>
                                 </tr>
                             </table>
                         </div>
@@ -173,8 +174,8 @@
                                 <td>{{ nation.current_territory }} / {{ nation.effective_territory }}</td>
                             </tr>
                             <tr>
-                                <th>Roads:</th>
-                                <td>{{ form.road_usage(class="form-control") }} / {{ nation.road_capacity }}</td>
+                                <th>Routes:</th>
+                                <td>{{ form.road_usage(class="form-control") }} / {{ nation.route_capacity }}</td>
                             </tr>
                         </table>
                         <table class="info-table">
@@ -849,9 +850,21 @@
                             {% endif %}
                             {% endfor %}
                         </select>
-                        <br>
-                        <label>{{ district_field.form.node.label.text }}:</label>
-                        {{ district_field.form.node(class="form-control") }}
+                        {% set cur_def_key_edit = district_field.form.def_key.data or '' %}
+                        {% set cur_node_edit = district_field.form.node.data or '' %}
+                        {% set cur_upgrades_raw = district_field.form.upgrades.data or '[]' %}
+                        {% set cur_upgrades_edit = cur_upgrades_raw | from_json %}
+                        {{ district_field.form.node() }}
+                        {{ district_field.form.upgrades(id="district_upgrades_" ~ idx) }}
+                        <div id="district_card_preview_{{ idx }}"
+                             data-init-defkey="{{ cur_def_key_edit }}"
+                             data-init-node="{{ cur_node_edit }}"
+                             data-init-upgrades="{{ cur_upgrades_raw }}">
+                            {% set dd_edit = district_defs_map.get(cur_def_key_edit, {}) %}
+                            {% if dd_edit %}
+                            {{ district_card(dd_edit, cur_node_edit, cur_upgrades_edit, editable=True, idx=idx) }}
+                            {% endif %}
+                        </div>
                     </div>
                     {% endfor %}
                 </div>
@@ -861,7 +874,7 @@
                     <h2>Imperial District</h2>
                     <div class="district-slot">
                         {{ form.imperial_district.form.type.label }}: {{ form.imperial_district.form.type(class="form-control") }}
-                        {{ form.imperial_district.form.node.label }}: {{ form.imperial_district.form.node(class="form-control") }}
+                        {{ form.imperial_district.form.node() }}
                     </div>
                 {% endif %}
                 
@@ -875,7 +888,7 @@
                                 <label for="{{ city_field.id }}">Slot {{ loop.index }}</label></br></br>
                                 {{ city_field.form.name.label }}: {{ city_field.form.name(class="form-control") }}</br>
                                 {{ city_field.form.type.label }}: {{ city_field.form.type(class="form-control") }}
-                                {{ city_field.form.node.label }}: {{ city_field.form.node(class="form-control") }}
+                                {{ city_field.form.node() }}
                                 {{ city_field.form.wall.label }}: {{ city_field.form.wall(class="form-control") }}
                             </div>
                         {% endfor %}
@@ -1067,15 +1080,27 @@
                         var val = this.value;
                         var typeEl = document.getElementById('district_type_' + idx);
                         var defkeyEl = document.getElementById('district_defkey_' + idx);
+                        var container = document.getElementById('district_card_preview_' + idx);
+                        var initDefkey = container ? (container.dataset.initDefkey || '') : '';
+                        var initNode = container ? (container.dataset.initNode || '') : '';
                         if (val.startsWith('db:')) {
+                            var defKey = val.slice(3);
                             if (typeEl) typeEl.value = '';
-                            if (defkeyEl) defkeyEl.value = val.slice(3);
+                            if (defkeyEl) defkeyEl.value = defKey;
+                            // Restore saved upgrades if switching back to the original district
+                            var upgrades = [];
+                            if (defKey === initDefkey && container) {
+                                try { upgrades = JSON.parse(container.dataset.initUpgrades || '[]'); } catch(e) {}
+                            }
+                            updateDistrictCardPreview(parseInt(idx), defKey, initNode, upgrades);
                         } else if (val.startsWith('legacy:')) {
                             if (typeEl) typeEl.value = val.slice(7);
                             if (defkeyEl) defkeyEl.value = '';
+                            updateDistrictCardPreview(parseInt(idx), '', '', []);
                         } else {
                             if (typeEl) typeEl.value = '';
                             if (defkeyEl) defkeyEl.value = '';
+                            updateDistrictCardPreview(parseInt(idx), '', '', []);
                         }
                     });
                 });
@@ -1121,6 +1146,217 @@
             const SORTED_SCALING_KEYS = {{ sorted_scaling_type_keys | tojson | safe }};
             const ALL_TERRAINS = {{ all_terrains | tojson | safe }};
             const ALL_DISTRICT_CATEGORIES = {{ all_district_categories | tojson | safe }};
+            const DISTRICT_DEFS_MAP = {{ district_defs_map | tojson | safe }};
+
+            // ── District card preview helpers ─────────────────────────────────────
+
+            function escHtml(s) {
+                return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+            }
+            function toTitleCaseDc(s) {
+                return String(s).replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase());
+            }
+            function lookupDcName(arr, key) {
+                const found = arr.find(x => x.key === key);
+                return found ? found.name : toTitleCaseDc(key);
+            }
+
+            function buildDcScalingSuffix(mod) {
+                const sc = mod.scaling || '';
+                if (!sc || sc === 'flat') return '';
+                const sx = parseFloat(mod.scaling_x || 1);
+                const se = mod.scaling_extra || '';
+                let label = '';
+                if      (sc === 'per_x_money')                        label = 'Gold';
+                else if (sc === 'per_x_resource')                     label = lookupDcName(ALL_RESOURCES, se);
+                else if (sc === 'per_x_shallow_and_deep_water_tiles') label = 'Water Tile';
+                else if (sc === 'per_x_magic_nodes')                  label = 'Magic Node';
+                else if (sc === 'per_x_bloodthirsty_pops')            label = 'Bloodthirsty Pop';
+                else if (sc === 'per_x_primary_culture_pops_world')   label = 'Primary Culture Pop';
+                else if (sc === 'per_x_primary_religion_pops_world')  label = 'Primary Religion Pop';
+                else if (sc === 'per_x_naval_units')                  label = 'Naval Unit';
+                else if (sc === 'per_x_land_units')                   label = 'Land Unit';
+                else if (sc === 'per_x_turns_library')                label = 'Library Turn';
+                else if (sc === 'per_x_terrain_tiles')                label = lookupDcName(ALL_TERRAINS, se) + ' Tile';
+                else if (sc === 'per_x_district_category')            label = lookupDcName(ALL_DISTRICT_CATEGORIES, se) + ' District';
+                else if (sc === 'per_x_administration')               label = 'Administration';
+                else if (sc === 'per_x_resource_produced')            label = lookupDcName(ALL_RESOURCES, se) + ' Produced';
+                if (!label) return '';
+                const xStr = (sx !== 1) ? (Number.isInteger(sx) ? sx + ' ' : sx + ' ') : '';
+                return `<span class="mod-scale-suffix">per ${xStr}${label}</span>`;
+            }
+
+            function buildDcModifierRow(mod, opts) {
+                opts = opts || {};
+                const indent     = opts.indent     || false;
+                const dimmed     = opts.dimmed     || false;
+                const labelColor = opts.labelColor || null;
+                const rowClass   = opts.rowClass   || 'dc-mod-row';
+                const keyClass   = opts.keyClass   || 'dc-mod-key';
+                const valClass   = opts.valClass   || 'dc-mod-val';
+
+                const modType  = mod.modifier_type || '';
+                const typeDef  = MODIFIER_TYPES[modType] || {};
+                const ruleType = typeDef.is_terrain_rule ? (typeDef.rule_type || '') : '';
+                const val      = mod.value;
+                const scope    = mod.scope || '';
+
+                // Label
+                let label;
+                if (ruleType) {
+                    const tName = lookupDcName(ALL_TERRAINS, mod.terrain || '');
+                    const rName = lookupDcName(ALL_RESOURCES, mod.resource || '');
+                    if      (ruleType === 'multiplier')           label = tName + ' Production Multiplier' + (mod.resource ? ` (${rName})` : '');
+                    else if (ruleType === 'count_required_delta') label = tName + ' Tiles Required';
+                    else if (ruleType === 'extra_resource')       label = tName + ' → Extra ' + rName;
+                    else if (ruleType === 'swap_resource')        label = tName + ' → ' + rName;
+                    else                                          label = typeDef.name || toTitleCaseDc(modType);
+                } else if (Object.keys(typeDef).length) {
+                    const parts = (typeDef.extra_fields || []).map(ef => {
+                        const v = mod[ef.key] || '';
+                        if (!v) return null;
+                        const srcMap = {
+                            all_resources: ALL_RESOURCES, terrains: ALL_TERRAINS,
+                            attributes: ALL_ATTRIBUTES, jobs: ALL_JOBS,
+                            unit_categories: ALL_UNIT_CATEGORIES, unit_stats: ALL_UNIT_STATS,
+                            progress_tiers: ALL_PROGRESS_TIERS, tech_categories: ALL_TECH_CATEGORIES
+                        };
+                        const arr = srcMap[ef.source];
+                        return arr ? lookupDcName(arr, v) : toTitleCaseDc(v);
+                    }).filter(Boolean);
+                    label = (typeDef.name || toTitleCaseDc(modType)) + (parts.length ? ` (${parts.join(', ')})` : '');
+                } else {
+                    label = toTitleCaseDc(mod._display_key || mod.modifier || modType);
+                }
+
+                // Scope suffix
+                let scopeHtml = '';
+                if (scope && scope !== 'nation_self') {
+                    const sName = (SCOPE_DEFINITIONS[scope] || {}).name || scope;
+                    scopeHtml = `<span style="color:#88a;font-size:0.7rem;">(${escHtml(sName)})</span>`;
+                }
+
+                // Value
+                let valHtml;
+                if (ruleType === 'multiplier') {
+                    valHtml = `<span class="${valClass}">&times;${Number.isInteger(val) ? val : val}</span>`;
+                } else if (ruleType === 'extra_resource') {
+                    valHtml = `<span class="${valClass}">1 / ${Number.isInteger(val) ? val : val} tiles</span>`;
+                } else if (ruleType === 'swap_resource') {
+                    valHtml = `<span class="${valClass}" style="color:#88a;">active</span>`;
+                } else {
+                    const sign = val > 0 ? '+' : '';
+                    let valStr;
+                    if (typeDef.value_format === 'percentage') {
+                        const pct = Math.round(val * 100 * 10) / 10;
+                        valStr = (Number.isInteger(pct) ? pct : pct) + '%';
+                    } else {
+                        valStr = Number.isInteger(val) ? String(val) : String(val);
+                    }
+                    valHtml = `<span class="${valClass}${val < 0 ? ' neg' : ''}">${sign}${valStr}</span>`;
+                }
+
+                const scaleSuffix = ruleType ? '' : buildDcScalingSuffix(mod);
+                const styleAttr  = indent ? ' style="padding-left:0.75rem;"' : '';
+                const dimClass   = dimmed ? ' dc-dim' : '';
+                const colorStyle = labelColor ? ` style="color:${labelColor};"` : '';
+
+                return `<div class="${rowClass}${dimClass}"${styleAttr}><span class="${keyClass}"${colorStyle}>${escHtml(label)} ${scopeHtml}</span><span style="display:inline-flex;align-items:baseline;flex-shrink:0;">${valHtml}${scaleSuffix}</span></div>`;
+            }
+
+            function buildDistrictCard(defKey, curNode, curUpgrades, slotIdx) {
+                const dd = DISTRICT_DEFS_MAP[defKey];
+                if (!dd) return '';
+                const tier = dd.tier || 1;
+                let h = `<div class="dc dc--t${tier}">`;
+
+                // Header
+                h += `<header><div>`;
+                h += `<div class="dc-title">${escHtml(dd.display_name || defKey)}</div>`;
+                h += `<div class="dc-node-tag">Map node: ${escHtml(curNode || 'unset')}</div>`;
+                h += `</div><span class="dc-tier-badge">T${tier}</span></header>`;
+
+                if (dd.image) h += `<div class="dc-image-wrap"><img class="dc-image" src="${escHtml(dd.image)}" alt="${escHtml(dd.display_name||'')}"></div>`;
+
+                h += `<div class="dc-body">`;
+                if (dd.description) h += `<p class="dc-desc">${escHtml(dd.description)}</p>`;
+
+                // Base modifiers
+                const mods = dd.modifiers || [];
+                if (mods.length) {
+                    h += `<div class="dc-mods">`;
+                    for (const m of mods) h += buildDcModifierRow(m);
+                    h += `</div>`;
+                }
+
+                // Synergies
+                const syns = dd.synergies || [];
+                if (syns.length) {
+                    if (mods.length) h += `<div class="dc-rule"></div>`;
+                    h += `<div class="dc-syn-label">Synergies</div>`;
+                    for (const syn of syns) {
+                        const req = syn.requirement || '';
+                        const reqList = Array.isArray(req) ? req : [req];
+                        const isActive = reqList.includes('any') || reqList.includes(curNode);
+                        h += `<div class="dc-syn-item">`;
+                        h += `<span class="dc-syn-node">${reqList.map(r => toTitleCaseDc(r)).join(', ')}</span>`;
+                        if (isActive) h += `<span class="dc-syn-active"> ✓ active</span>`;
+                        if (syn.node_active) h += `<span class="dc-syn-flag"> (node active)</span>`;
+                        for (const m of (Array.isArray(syn.modifiers) ? syn.modifiers : []))
+                            h += buildDcModifierRow(m, {indent:true, dimmed:!isActive, labelColor:'#99a'});
+                        h += `</div>`;
+                    }
+                }
+
+                // Upgrades
+                const upgrades = dd.upgrades || [];
+                if (upgrades.length) {
+                    if (mods.length || syns.length) h += `<div class="dc-rule"></div>`;
+                    h += `<div class="dc-upg-label">Upgrades</div>`;
+                    for (const upg of upgrades) {
+                        const unlocked = curUpgrades.includes(upg.key);
+                        h += `<div class="dc-upg-item"><label class="dc-upg-toggle">`;
+                        h += `<input type="checkbox" class="upg-checkbox" data-upg-slot="${slotIdx}" data-upg-key="${escHtml(upg.key)}" onchange="syncDistrictUpgrades(${slotIdx})"${unlocked?' checked':''}>`;
+                        h += `<span class="dc-upg-name">${escHtml(upg.display_name || upg.key)}</span>`;
+                        h += `</label>`;
+                        if (upg.requirements && upg.requirements.length)
+                            h += `<span class="dc-upg-req"> — requires ${upg.requirements.map(r=>escHtml(r.value)).join(', ')}</span>`;
+                        if (unlocked && upg.modifiers)
+                            for (const m of upg.modifiers) h += buildDcModifierRow(m, {indent:true, labelColor:'#99a'});
+                        h += `</div>`;
+                    }
+                }
+
+                h += `</div>`; // dc-body
+
+                // Footer
+                const costParts = Object.entries(dd.cost||{}).map(([r,a])=>`${a} ${toTitleCaseDc(r)}`);
+                const upkParts  = Object.entries(dd.upkeep||{}).map(([r,a])=>`${a} ${toTitleCaseDc(r)}`);
+                h += `<div class="dc-footer"><div class="dc-cost-heading">Build Cost${upkParts.length?' / Upkeep':''}</div>`;
+                h += `<span class="dc-cost">${costParts.length ? costParts.join(', ') : '<span class="muted">Free</span>'}`;
+                if (upkParts.length) h += ` / ${upkParts.join(', ')}/tick`;
+                h += `</span></div></div>`;
+                return h;
+            }
+
+            function updateDistrictCardPreview(slotIdx, defKey, curNode, curUpgrades) {
+                const container = document.getElementById('district_card_preview_' + slotIdx);
+                if (!container) return;
+                const upgradesField = document.getElementById('district_upgrades_' + slotIdx);
+                if (upgradesField) upgradesField.value = JSON.stringify(curUpgrades);
+                container.innerHTML = defKey ? buildDistrictCard(defKey, curNode, curUpgrades, slotIdx) : '';
+            }
+
+            function syncDistrictUpgrades(slotIdx) {
+                const keys = [];
+                document.querySelectorAll('.upg-checkbox[data-upg-slot="' + slotIdx + '"]').forEach(function(cb) {
+                    if (cb.checked) keys.push(cb.dataset.upgKey);
+                });
+                const field = document.getElementById('district_upgrades_' + slotIdx);
+                if (field) field.value = JSON.stringify(keys);
+            }
+
+            // ── End district card preview helpers ─────────────────────────────────
 
             function buildScalingOptions(selectedValue) {
                 const sel = selectedValue || 'flat';

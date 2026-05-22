@@ -45,7 +45,7 @@
         "enum": ["None", "Low", "Moderate", "High", "Extreme"],
         "laws": {
           "None": {
-            "member_nation_trade_distance": 3,
+            "member_nation_trade_speed": 3,
             "member_nation_stability_gain_chance": 0.1
           },
           "Low": {
@@ -53,16 +53,16 @@
           },
           "Moderate": {
             "owner_nation_money_income_per_market_tier_per_member": 6,
-            "member_nation_trade_distance": -3
+            "member_nation_trade_speed": -3
           },
           "High": {
             "owner_nation_money_income_per_market_tier_per_member": 15,
-            "member_nation_trade_distance": -6,
+            "member_nation_trade_speed": -6,
             "member_nation_trade_slots": -3
           },
           "Extreme": {
             "owner_nation_money_income_per_market_tier_per_member": 30,
-            "member_nation_trade_distance": -9,
+            "member_nation_trade_speed": -9,
             "member_nation_trade_slots": -3,
             "member_nation_stability_loss_chance": 0.1
           }

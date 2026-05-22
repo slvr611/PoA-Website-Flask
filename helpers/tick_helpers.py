@@ -226,9 +226,8 @@ def tick(form_data):
 
 
     collect_nation_data = False
-    for tick_function_label, tick_function in NATION_TICK_FUNCTIONS.items():
-        run_key = f"run_{tick_function_label}"
-        if run_key in form_data:
+    for tick_function_label in list(NATION_TICK_FUNCTIONS) + list(NATION_CROSS_TICK_FUNCTIONS):
+        if f"run_{tick_function_label}" in form_data:
             collect_nation_data = True
             break
     
@@ -258,6 +257,12 @@ def tick(form_data):
                         except:
                             pass
                     full_tick_summary += result
+
+        for tick_function_label, tick_function in NATION_CROSS_TICK_FUNCTIONS.items():
+            if f"run_{tick_function_label}" in form_data:
+                print(tick_function_label)
+                result = tick_function(old_nations, new_nations, nation_schema)
+                full_tick_summary += result
 
 
 
@@ -1007,6 +1012,52 @@ def nation_rebellion_tick(old_nation, new_nation, schema):
 
     return result
 
+def nation_vassal_compliance_decay_tick(old_nation, new_nation, schema):
+    if not old_nation.get("overlord"):
+        return ""
+    compliance = old_nation.get("compliance", "None")
+    decay_chances = {"Loyal": 0.15, "Compliant": 0.10}
+    chance = decay_chances.get(compliance, 0)
+    if chance <= 0:
+        return ""
+    if random.random() <= chance:
+        compliance_enum = schema["properties"]["compliance"]["enum"]
+        idx = compliance_enum.index(compliance)
+        new_compliance = compliance_enum[idx - 1]
+        new_nation["compliance"] = new_compliance
+        return f"{old_nation.get('name', 'Unknown')}'s compliance fell from {compliance} to {new_compliance}.\n"
+    return ""
+
+
+def nation_enclave_compliance_tick(old_nation, new_nation, schema):
+    if not old_nation.get("overlord") or old_nation.get("vassal_type") != "Enclave":
+        return ""
+    compliance = old_nation.get("compliance", "None")
+    if compliance == "None" or compliance == "Rebellious":
+        return ""
+    try:
+        overlord = mongo.db.nations.find_one(
+            {"_id": ObjectId(old_nation["overlord"])}, {"primary_religion": 1}
+        )
+    except Exception:
+        return ""
+    if not overlord:
+        return ""
+    vassal_religion = str(old_nation.get("primary_religion") or "")
+    overlord_religion = str(overlord.get("primary_religion") or "")
+    if not overlord_religion or vassal_religion == overlord_religion:
+        return ""
+    compliance_enum = schema["properties"]["compliance"]["enum"]
+    idx = compliance_enum.index(compliance)
+    new_compliance = compliance_enum[max(1, idx - 1)]
+    new_nation["compliance"] = new_compliance
+    return (
+        f"{old_nation.get('name', 'Unknown')}'s compliance fell from {compliance} to {new_compliance}"
+        f" due to religious differences with their overlord.\n"
+    )
+
+
+
 def nation_passive_expansion_tick(old_nation, new_nation, schema):
     result = ""
     expansion_rolls = 1
@@ -1141,8 +1192,10 @@ def nation_tech_cost_reduction_tick(old_nation, new_nation, schema):
     return result
 
 def reset_rolling_karma_to_zero(old_nation, new_nation, schema):
-    new_nation["rolling_karma"] = 0
-
+    if old_nation.get("technologies", {}).get("cultural_prophecy", {}).get("researched", False):
+        new_nation["rolling_karma"] = 2
+    else:
+        new_nation["rolling_karma"] = 0
     return ""
 
 def reset_all_temperaments(old_nation, new_nation, schema):
@@ -1258,6 +1311,34 @@ def era_resource_stockpile_decay_tick(old_nation, new_nation, schema):
     return ""
 
 
+def era_formal_storage_bonus_tick(old_nation, new_nation, schema):
+    if not old_nation.get("technologies", {}).get("formal_storage", {}).get("researched", False):
+        return ""
+
+    general_resources = [r["key"] for r in json_data["general_resources"] if r["key"] != "research"]
+    unique_resources = [r["key"] for r in json_data["unique_resources"]]
+    resource_pool = general_resources + unique_resources
+
+    if not resource_pool:
+        return ""
+
+    gained = {}
+    for _ in range(5):
+        resource = random.choice(resource_pool)
+        gained[resource] = gained.get(resource, 0) + 1
+
+    storage = new_nation.get("resource_storage") or {}
+    capacity = old_nation.get("nation_resource_capacity", {})
+    for resource, amount in gained.items():
+        current = storage.get(resource, 0)
+        cap = capacity.get(resource, 0)
+        storage[resource] = min(current + amount, cap) if cap else current + amount
+    new_nation["resource_storage"] = storage
+
+    gained_str = ", ".join(f"{v} {k}" for k, v in gained.items())
+    return f"{old_nation.get('name', 'Unknown')} gained {gained_str} from Formal Storage.\n"
+
+
 def era_relations_decay_tick():
     neutral_idx = _RELATION_STEPS.index("Neutral")
     relations = list(mongo.db.diplo_relations.find())
@@ -1371,6 +1452,8 @@ MARKET_TICK_FUNCTIONS = {
 VASSAL_SPECIFIC_NATION_TICK_FUNCTIONS = [
     "Nation Concessions Tick",
     "Nation Rebellion Tick",
+    "Nation Vassal Compliance Decay Tick",
+    "Nation Enclave Compliance Tick",
 ]
 
 NATION_TICK_FUNCTIONS = {
@@ -1385,6 +1468,8 @@ NATION_TICK_FUNCTIONS = {
     "Nation Stability Tick": nation_stability_tick,
     "Nation Concessions Tick": nation_concessions_tick,
     "Nation Rebellion Tick": nation_rebellion_tick,
+    "Nation Vassal Compliance Decay Tick": nation_vassal_compliance_decay_tick,
+    "Nation Enclave Compliance Tick": nation_enclave_compliance_tick,
     "Nation Passive Expansion Tick": nation_passive_expansion_tick,
     "Nation Modifier Decay Tick": modifier_decay_tick,
     "Nation Progress Quests Tick": progress_quests_tick,
@@ -1396,6 +1481,8 @@ NATION_TICK_FUNCTIONS = {
     "Nation Library Tick": library_tick,
 }
 
+NATION_CROSS_TICK_FUNCTIONS = {}
+
 ERA_NATION_TICK_FUNCTIONS = {
     "Nation Tech Cost Reduction Tick (Generally Don't Use)": nation_tech_cost_reduction_tick,
     "Nation Reset Rolling Karma to Zero (Generally Don't Use)": reset_rolling_karma_to_zero,
@@ -1403,6 +1490,7 @@ ERA_NATION_TICK_FUNCTIONS = {
     "Era Reset Stability to Balanced": era_reset_stability_to_balanced_tick,
     "Era Compliance Decay to Neutral": era_compliance_decay_tick,
     "Era Resource Stockpile Decay": era_resource_stockpile_decay_tick,
+    "Era Formal Storage Bonus": era_formal_storage_bonus_tick,
 }
 
 ERA_GENERAL_TICK_FUNCTIONS = {

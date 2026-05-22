@@ -97,9 +97,9 @@
         "label": "Treasury",
         "description": "The amount of money the merchant company has in its coffers"
       },
-      "trade_distance": {
+      "trade_speed": {
         "bsonType": "number",
-        "label": "Trade Distance",
+        "label": "Trade Speed",
         "description": "The distance at which the merchant company can trade with other nations or merchant companies",
         "calculated": true,
         "base_value": 15

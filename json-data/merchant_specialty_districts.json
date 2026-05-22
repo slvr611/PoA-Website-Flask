@@ -17,7 +17,7 @@
 			"money": 750
 		},
 		"modifiers": {
-			"trade_distance": 9
+			"trade_speed": 9
 		},
 		"requirements": {
 			"reputation": ["Acceptable", "Great", "Flawless"]

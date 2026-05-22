@@ -444,19 +444,17 @@ class DistrictDict(Form):
     item_id = HiddenField('_id')
     type = SelectField("District Type", choices=[("", "None")], default="")
     def_key = HiddenField('def_key')
-    node = SelectField("Node Type", choices=[("", "None")], default="")
+    node = HiddenField('node', default="")
+    upgrades = HiddenField('upgrades', default='[]')
 
     class Meta:
         csrf = False
-    
-    def populate_linked_fields(self, type_options=[], node_options=[]):
+
+    def populate_linked_fields(self, type_options=[]):
         """Populates all linked fields with their options"""
         self.type.choices = []
-        self.node.choices = []
         for type in type_options:
             self.type.choices.append(type)
-        for node in node_options:
-            self.node.choices.append(node)
     
     def load_form_from_item(self, item, schema):
         """Loads form data from a database item"""
@@ -492,6 +490,8 @@ class DistrictDict(Form):
                                 field.append_entry(value)
                     elif isinstance(field, FormField):
                         field.load_form_from_item(field_value, schema)
+                    elif field_name == 'upgrades' and isinstance(field_value, list):
+                        field.data = json.dumps(field_value)
                     else:
                         field.data = field_value
 
@@ -506,21 +506,18 @@ class CityDict(Form):
     item_id = HiddenField('_id')
     name = StringField("City Name")
     type = SelectField("City Type")
-    node = SelectField("Node Type")
+    node = HiddenField('node', default="")
     wall = SelectField("Wall Type")
 
     class Meta:
         csrf = False
-    
-    def populate_linked_fields(self, type_options=[], node_options=[], wall_options=[]):
+
+    def populate_linked_fields(self, type_options=[], wall_options=[]):
         """Populates all linked fields with their options"""
         self.type.choices = []
-        self.node.choices = []
         self.wall.choices = []
         for type in type_options:
             self.type.choices.append(type)
-        for node in node_options:
-            self.node.choices.append(node)
         for wall in wall_options:
             self.wall.choices.append(wall)
 
@@ -1357,45 +1354,36 @@ class NationForm(BaseSchemaForm):
                 if hasattr(quest_field, 'slot'):
                     quest_field.slot.choices = available_slots
         
-        node_choices = [("", "None"), ("luxury", "Luxury")]
-        general_resources = json_data.get("general_resources", [])
-        for resource in general_resources:
-            node_choices.append((resource.get("key", resource), resource.get("name", resource)))
-        
-        unique_resources = json_data.get("unique_resources", [])
-        for resource in unique_resources:
-            node_choices.append((resource.get("key", resource), resource.get("name", resource)))
-
         #Handle Districts separately
         district_choices = [("", "Empty Slot")]
         districts = json_data.get("nation_districts", {})
         for district_key, district_data in districts.items():
             district_choices.append((district_key, district_data["display_name"]))
-                
+
         for district_field in self.districts:
-            district_field.form.populate_linked_fields(type_options=district_choices, node_options=node_choices)
-        
+            district_field.form.populate_linked_fields(type_options=district_choices)
+
         #Handle Imperial Districts separately
         imperial_district_choices = [("", "Empty Slot")]
         imperial_districts = json_data.get("nation_imperial_districts", {})
         for district_key, district_data in imperial_districts.items():
             imperial_district_choices.append((district_key, district_data["display_name"]))
-        
-        self.imperial_district.form.populate_linked_fields(type_options=imperial_district_choices, node_options=node_choices)
-        
-        #Handle Cities separately        
+
+        self.imperial_district.form.populate_linked_fields(type_options=imperial_district_choices)
+
+        #Handle Cities separately
         city_choices = [("", "Empty Slot")]
         cities = json_data.get("cities", {})
         for city_key, city_data in cities.items():
             city_choices.append((city_key, city_data["display_name"]))
-        
+
         wall_choices = [("", "No Walls")]
         walls = json_data.get("walls", {})
         for wall_key, wall_data in walls.items():
             wall_choices.append((wall_key, wall_data["display_name"]))
-                
+
         for city_field in self.cities:
-            city_field.form.populate_linked_fields(type_options=city_choices, node_options=node_choices, wall_options=wall_choices)
+            city_field.form.populate_linked_fields(type_options=city_choices, wall_options=wall_choices)
 
 class JobForm(BaseSchemaForm):
     """Form to change jobs without needing to request a full nation edit"""
