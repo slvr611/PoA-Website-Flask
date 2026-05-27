@@ -589,6 +589,18 @@
                 </div>
             </div>
 
+            <div class="expandable-section" id="trade-routes-section">
+                <div class="section-header" onclick="toggleSection(this)">
+                    <h2>Trade Routes</h2>
+                    <span class="toggle-icon">▼</span>
+                </div>
+                <div class="section-content">
+                {% with editable = True %}
+                {% include "trade_routes_section.html" with context %}
+                {% endwith %}
+                </div>
+            </div>
+
             <div class="expandable-section" id="war-section">
                 <div class="section-header" onclick="toggleSection(this)">
                     <h2>War</h2>
@@ -761,6 +773,46 @@
                                             <td>{{ excess_value }}</td>
                                         {% endif %}
                                         <td>{{ form.resource_storage[resource.key](class="form-control") }} / {{ nation.nation_resource_capacity[resource.key] if resource.key in nation.nation_resource_capacity else 0 }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="table-wrapper">
+                        <table class="resources-table">
+                            <thead>
+                                <tr class="resources-header-row">
+                                    <th colspan="4" class="resources-header">Luxury Resources</th>
+                                </tr>
+                                <tr>
+                                    <th>Resource</th>
+                                    <th>Production</th>
+                                    <th>Excess</th>
+                                    <th>Storage</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for resource in json_data["luxury_resources"] %}
+                                    {% set rkey = resource["key"] %}
+                                    {% set cur_prod = nation.get("resource_production", {}).get(rkey, 0) %}
+                                    {% set excess_value = nation.get("resource_excess", {}).get(rkey, 0) %}
+                                    {% set storage = nation.get("resource_storage", {}).get(rkey, 0) %}
+                                    {% set capacity = nation.get("nation_resource_capacity", {}).get(rkey, 0) %}
+                                    <tr>
+                                        <td>{{ resource.name }}</td>
+                                        <td>{{ cur_prod }}</td>
+                                        {% if excess_value + storage < 0 %}
+                                            <td class="excess-critical-negative">{{ excess_value }}</td>
+                                        {% elif excess_value < 0 %}
+                                            <td class="excess-negative">{{ excess_value }}</td>
+                                        {% elif excess_value + storage > capacity %}
+                                            <td class="excess-overflow">{{ excess_value }}</td>
+                                        {% elif excess_value > 0 %}
+                                            <td class="excess-positive">{{ excess_value }}</td>
+                                        {% else %}
+                                            <td>{{ excess_value }}</td>
+                                        {% endif %}
+                                        <td>{{ form.resource_storage[rkey](class="form-control") }} / {{ capacity }}</td>
                                     </tr>
                                 {% endfor %}
                             </tbody>

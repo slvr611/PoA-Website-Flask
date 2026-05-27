@@ -245,6 +245,15 @@ def nation_item(item_ref):
                 if _dd:
                     district_defs_map[_dk] = _dd
 
+    # Trade routes
+    nation_name = nation.get("name", item_ref)
+    trade_routes = list(mongo.db.trade_routes.find({
+        "$or": [{"nation_a": nation_name}, {"nation_b": nation_name}],
+        "status": {"$in": ["pending", "active", "ending"]}
+    }))
+    _gm = mongo.db.global_modifiers.find_one({"name": "global_modifiers"}, {"session_counter": 1})
+    current_session = _gm.get("session_counter", 0) if _gm else 0
+
     phase_start = perf_counter()
     rendered = render_template(
         "nation_owner.html",
@@ -264,6 +273,10 @@ def nation_item(item_ref):
         district_defs_map=district_defs_map,
         visibility_level=visibility_level,
         visibility_bypassed=visibility_bypassed,
+        trade_routes=trade_routes,
+        current_session=current_session,
+        editable=False,
+        connectable_nations=[],
     )
     timings["render_template_ms"] = round((perf_counter() - phase_start) * 1000, 2)
     timings["total_request_ms"] = round((perf_counter() - request_start) * 1000, 2)
@@ -336,6 +349,17 @@ def _render_nation_edit(item_ref, form=None):
         for c in mongo.db.district_categories.find({}, {"key": 1, "display_name": 1, "_id": 0})
     }
 
+    # Trade routes
+    nation_name = nation.get("name", item_ref)
+    trade_routes = list(mongo.db.trade_routes.find({
+        "$or": [{"nation_a": nation_name}, {"nation_b": nation_name}],
+        "status": {"$in": ["pending", "active", "ending"]}
+    }))
+    _gm = mongo.db.global_modifiers.find_one({"name": "global_modifiers"}, {"session_counter": 1})
+    current_session = _gm.get("session_counter", 0) if _gm else 0
+    from helpers.trade_route_helpers import get_connectable_nations
+    connectable_nations = get_connectable_nations(nation_name, nation.get("trade_speed", 1))
+
     return render_template(
         "nation_owner_edit.html",
         form=form,
@@ -351,6 +375,10 @@ def _render_nation_edit(item_ref, form=None):
         district_defs=district_defs,
         district_defs_map=district_defs_map,
         district_categories=district_categories,
+        trade_routes=trade_routes,
+        current_session=current_session,
+        editable=True,
+        connectable_nations=connectable_nations,
     )
 
 
@@ -667,6 +695,21 @@ def nation_upload_flag(item_ref):
     if not _is_nation_owner_or_admin(str(nation["_id"])):
         return jsonify({"success": False, "error": "Not authorized"}), 403
     return _upload_nation_image(nation, "flag")
+
+
+@nation_routes.route("/market_prices")
+def market_prices():
+    """Show the current dynamic resource prices for every market."""
+    from helpers.ai_decision_helpers import _base_prices
+    markets_raw = list(mongo.db.markets.find({}, {"name": 1, "resource_prices": 1}).sort("name", ASCENDING))
+    base = _base_prices()
+    all_resources = sorted(base.keys())
+    return render_template(
+        "market_prices.html",
+        markets=markets_raw,
+        base_prices=base,
+        all_resources=all_resources,
+    )
 
 
 @nation_routes.route("/visibility/toggle_bypass", methods=["POST"])

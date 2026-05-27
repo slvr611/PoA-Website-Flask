@@ -1,0 +1,97 @@
+{
+  "$jsonSchema": {
+    "bsonType": "object",
+    "properties": {
+      "nation_a": {
+        "bsonType": "string",
+        "label": "Nation A",
+        "description": "Name of the proposing nation"
+      },
+      "nation_b": {
+        "bsonType": "string",
+        "label": "Nation B",
+        "description": "Name of the accepting nation"
+      },
+      "proposer": {
+        "bsonType": "string",
+        "label": "Proposer",
+        "description": "Name of the nation that initiated the route (nation_a or nation_b)"
+      },
+      "status": {
+        "bsonType": "string",
+        "label": "Status",
+        "description": "pending | active | ending | ended | rejected",
+        "enum": ["pending", "active", "ending", "ended", "rejected"]
+      },
+      "resources_a_to_b": {
+        "bsonType": "array",
+        "label": "Resources A to B",
+        "description": "Resources sent from nation_a to nation_b each tick",
+        "items": {
+          "bsonType": "object",
+          "properties": {
+            "resource": { "bsonType": "string" },
+            "quantity": { "bsonType": "number" }
+          }
+        }
+      },
+      "resources_b_to_a": {
+        "bsonType": "array",
+        "label": "Resources B to A",
+        "description": "Resources sent from nation_b to nation_a each tick",
+        "items": {
+          "bsonType": "object",
+          "properties": {
+            "resource": { "bsonType": "string" },
+            "quantity": { "bsonType": "number" }
+          }
+        }
+      },
+      "road_distance": {
+        "bsonType": "number",
+        "label": "Road Distance",
+        "description": "Shortest road-tile path length between the two nations at time of creation"
+      },
+      "delay": {
+        "bsonType": "number",
+        "label": "Delay",
+        "description": "Transit delay tier: floor(road_distance / max(trade_speed_a, trade_speed_b))"
+      },
+      "duration_ticks": {
+        "bsonType": ["number", "null"],
+        "label": "Duration (ticks)",
+        "description": "How many ticks to run for; null means indefinite"
+      },
+      "created_session": {
+        "bsonType": "number",
+        "label": "Created Session",
+        "description": "Session counter when proposal was made"
+      },
+      "accepted_session": {
+        "bsonType": ["number", "null"],
+        "label": "Accepted Session",
+        "description": "Session counter when route was accepted"
+      },
+      "cancel_session": {
+        "bsonType": ["number", "null"],
+        "label": "Cancel Session",
+        "description": "Session counter when cancellation was requested"
+      },
+      "cancelled_by": {
+        "bsonType": ["string", "null"],
+        "label": "Cancelled By",
+        "description": "Name of the nation that cancelled the route"
+      },
+      "ended_session": {
+        "bsonType": ["number", "null"],
+        "label": "Ended Session",
+        "description": "Session counter when route fully ended"
+      },
+      "proposal_note": {
+        "bsonType": ["string", "null"],
+        "label": "Proposal Note",
+        "description": "Optional message from the proposer, visible to the accepting nation"
+      }
+    }
+  }
+}

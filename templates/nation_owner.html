@@ -822,6 +822,16 @@
 			</div>
 		</div>
 
+		<div class="expandable-section" id="trade-routes-section">
+			<div class="section-header" onclick="toggleSection(this)">
+				<h2>Trade Routes</h2>
+				<span class="toggle-icon">▼</span>
+			</div>
+			<div class="section-content">
+			{% include "trade_routes_section.html" with context %}
+			</div>
+		</div>
+
 		<div class="expandable-section" id="war-section">
 			<div class="section-header" onclick="toggleSection(this)">
 				<h2>War</h2>
@@ -1007,6 +1017,7 @@
 								{% set pend_cons = pn.get("resource_consumption", {}).get(rkey) %}
 								{% set pend_excess = pn.get("resource_excess", {}).get(rkey) %}
 								{% set pend_storage = pn.get("resource_storage", {}).get(rkey) %}
+								{% if cur_prod > 0 or storage > 0 or pend_prod or pend_storage %}
 								{% set pend_capacity = pn.get("nation_resource_capacity", {}).get(rkey) %}
 								<tr>
 									<td>{{ resource.name }}</td>
@@ -1041,9 +1052,110 @@
 									{% endif %}
 									<td>{{ pf(storage, pend_storage) }} / {{ pf(capacity, pend_capacity) }}</td>
 								</tr>
+								{% endif %}
 							{% endfor %}
 						</tbody>
 					</table>
+				</div>
+				<div class="table-wrapper">
+					<table class="resources-table">
+						<thead>
+							<tr class="resources-header-row">
+								<th colspan="6" class="resources-header">Luxury Resources</th>
+							</tr>
+						</thead>
+						<tbody>
+							{% for row in json_data["luxury_resources"] | batch(3, none) %}
+							<tr>
+								{% for resource in row %}
+									{% if resource is not none %}
+										{% set rkey = resource["key"] %}
+										{% set storage = nation.get("resource_storage", {}).get(rkey, 0) %}
+										{% set capacity = nation.get("nation_resource_capacity", {}).get(rkey, 0) %}
+										{% set pend_storage = pn.get("resource_storage", {}).get(rkey) %}
+										{% set pend_capacity = pn.get("nation_resource_capacity", {}).get(rkey) %}
+										<td>{{ resource.name }}</td>
+										<td>{{ pf(storage, pend_storage) }} / {{ pf(capacity, pend_capacity) }}</td>
+									{% else %}
+										<td colspan="2"></td>
+									{% endif %}
+								{% endfor %}
+							</tr>
+							{% endfor %}
+						</tbody>
+					</table>
+					{% set ns = namespace(has_prod=false) %}
+					{% for resource in json_data["luxury_resources"] %}
+						{% if nation.get("resource_production", {}).get(resource["key"], 0) > 0 %}
+							{% set ns.has_prod = true %}
+						{% endif %}
+					{% endfor %}
+					{% if ns.has_prod %}
+					<table class="resources-table">
+						<thead>
+							<tr class="resources-header-row">
+								<th colspan="5" class="resources-header">Luxury Production</th>
+							</tr>
+							<tr>
+								<th>Resource</th>
+								<th>Production</th>
+								<th>Consumption</th>
+								<th>Excess</th>
+								<th>Storage</th>
+							</tr>
+						</thead>
+						<tbody>
+							{% for resource in json_data["luxury_resources"] %}
+								{% set rkey = resource["key"] %}
+								{% set cur_prod = nation.get("resource_production", {}).get(rkey, 0) %}
+								{% if cur_prod > 0 %}
+									{% set cur_cons = nation.get("resource_consumption", {}).get(rkey, 0) %}
+									{% set excess_value = nation.get("resource_excess", {}).get(rkey, 0) %}
+									{% set storage = nation.get("resource_storage", {}).get(rkey, 0) %}
+									{% set capacity = nation.get("nation_resource_capacity", {}).get(rkey, 0) %}
+									{% set pend_prod = pn.get("resource_production", {}).get(rkey) %}
+									{% set pend_cons = pn.get("resource_consumption", {}).get(rkey) %}
+									{% set pend_excess = pn.get("resource_excess", {}).get(rkey) %}
+									{% set pend_storage = pn.get("resource_storage", {}).get(rkey) %}
+									{% set pend_capacity = pn.get("nation_resource_capacity", {}).get(rkey) %}
+									<tr>
+										<td>{{ resource.name }}</td>
+										<td>
+											{{ pfbd(
+												cur_prod,
+												pend_prod,
+												breakdowns["resource_production"][rkey],
+												pbd.get("resource_production", {}).get(rkey, []),
+												resource.name ~ " Production"
+											) }}
+										</td>
+										<td>
+											{{ pfbd(
+												cur_cons,
+												pend_cons,
+												breakdowns["resource_consumption"][rkey],
+												pbd.get("resource_consumption", {}).get(rkey, []),
+												resource.name ~ " Consumption"
+											) }}
+										</td>
+										{% if excess_value + storage < 0 %}
+											<td class="excess-critical-negative">{{ pf(excess_value, pend_excess) }}</td>
+										{% elif excess_value < 0 %}
+											<td class="excess-negative">{{ pf(excess_value, pend_excess) }}</td>
+										{% elif excess_value + storage > capacity %}
+											<td class="excess-overflow">{{ pf(excess_value, pend_excess) }}</td>
+										{% elif excess_value > 0 %}
+											<td class="excess-positive">{{ pf(excess_value, pend_excess) }}</td>
+										{% else %}
+											<td>{{ pf(excess_value, pend_excess) }}</td>
+										{% endif %}
+										<td>{{ pf(storage, pend_storage) }} / {{ pf(capacity, pend_capacity) }}</td>
+									</tr>
+								{% endif %}
+							{% endfor %}
+						</tbody>
+					</table>
+					{% endif %}
 				</div>
 				<h2>Jobs</h2>
 				<p>Working Pops: {{ pf(nation.working_pop_count, pn.get("working_pop_count")) }}/{{ pf(nation.pop_count, pn.get("pop_count")) }}</p>
@@ -1132,19 +1244,9 @@
 							{{ district_card(dd, cur_node, cur_upgrades, pend_node=pend_node if node_changed else none) }}
 
 						{% elif cur_type %}
-							{# ── Legacy JSON-driven district ── #}
-							{% set district = nation.district_details.get(cur_type, {}) %}
-							{% set pd_type = pd.get("type", "") if pd is not none else cur_type %}
-							{% set pend_node = pd.get("node", "") if pd is not none else cur_node %}
-							{% set type_changed = pd is not none and pd_type != cur_type %}
-							{% set node_changed = pd is not none and pend_node != cur_node %}
+							{# ── Legacy district (inactive) ── #}
 							<div class="district-slot">
-								<h3>
-									{{ district.get("display_name", cur_type) }}
-									{% if type_changed %}<span class="pending-value">→ {{ json_data["nation_districts"].get(pd_type, {}).get("display_name", pd_type) or "Empty" }}</span>{% endif %}
-								</h3>
-								<p>Node: {{ pf(cur_node or "None", pend_node or "None" if node_changed else none) }}</p>
-								<p>Modifiers: {% for mod, value in district.get("modifiers", {}).items() %}{{ mod }}: {{ value }}<br>{% endfor %}</p>
+								<h3>{{ cur_type }} <span style="color:#888; font-size:0.85em;">(Legacy — Inactive)</span></h3>
 							</div>
 
 						{% else %}
@@ -1154,7 +1256,7 @@
 							{% if pd_type or pd_def_key %}
 							<div class="district-slot">
 								<div class="empty-slot"><p>Empty Slot {{ i + 1 }}</p></div>
-								<p class="pending-value">→ {{ district_defs_map.get(pd_def_key, {}).get("display_name", pd_def_key) or json_data["nation_districts"].get(pd_type, {}).get("display_name", pd_type) }}</p>
+								<p class="pending-value">→ {{ district_defs_map.get(pd_def_key, {}).get("display_name", pd_def_key) or pd_type or pd_def_key }}</p>
 								{% if pd.get("node") %}<p class="pending-value">Node: {{ pd.node }}</p>{% endif %}
 							</div>
 							{% else %}

@@ -16,7 +16,7 @@ import os
 data_item_routes = Blueprint("data_item_routes", __name__)
 
 _DISTRICT_FILES = [
-    "nation_districts", "nation_imperial_districts", "mercenary_districts",
+    "nation_imperial_districts", "mercenary_districts",
     "merchant_production_districts", "merchant_specialty_districts", "merchant_luxury_districts"
 ]
 
@@ -186,7 +186,7 @@ def data_item(data_type, item_ref):
 
     template_name = "units_item.html" if data_type == "units" else "dataItem.html"
 
-    district_files = ["nation_districts", "nation_imperial_districts", "mercenary_districts",
+    district_files = ["nation_imperial_districts", "mercenary_districts",
                       "merchant_production_districts", "merchant_specialty_districts", "merchant_luxury_districts"]
     districts_lookup = {}
     for fname in district_files:

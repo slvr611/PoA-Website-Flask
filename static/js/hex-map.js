@@ -227,8 +227,9 @@ class HexMapViewer {
         this._nationBuildings = {};    // name -> {cities, districts}
         this._wonderList      = null;  // [{id, name, owner_nation}]
 
-        // Nation label cache — rebuilt when tile ownership changes
+        // Nation/region label caches — rebuilt when tile data changes
         this._nationLabels = null;  // Map<name, {wx, wy, wBboxW, wBboxH}>
+        this._regionLabels = null;  // [{name, wx, wy, wBboxW, wBboxH, count}]
 
         // District def image cache: def_key -> HTMLImageElement (null if load failed)
         this._districtImages  = {};    // def_key -> HTMLImageElement | null
@@ -246,6 +247,7 @@ class HexMapViewer {
         this.nationAdmin      = new Map();  // nation name -> stored administration value
         this.nationNomadic    = new Map();  // nation name -> boolean (is nomadic)
         this._outOfRangeTiles = new Set();  // "q,r" keys of owned tiles beyond admin range
+        this._adminDistData   = new Map();  // "q,r" key -> {dist, tileCost, entrance, limit, inRange, isSource}
 
         // Render caches — invalidated when colors change
         this._terrainFillCache = {};  // terrain key  → rgba string
@@ -364,7 +366,7 @@ class HexMapViewer {
         if (bgOffsetX != null) this.bgOffsetX = bgOffsetX;
         if (bgOffsetY != null) this.bgOffsetY = bgOffsetY;
         if (bgScale   != null) this.bgScale   = bgScale;
-        if (recenter) { this._centerView(); this._scheduleOutlineRebuild(); this._scheduleTerrainRebuild(); this._computeNationLabels(); }
+        if (recenter) { this._centerView(); this._scheduleOutlineRebuild(); this._scheduleTerrainRebuild(); this._computeNationLabels(); this._computeRegionLabels(); }
         this.render();
     }
 
@@ -445,11 +447,13 @@ class HexMapViewer {
         this._scheduleOutlineRebuild();
         this._scheduleTerrainRebuild();
         this._nationLabels = null;
+        this._regionLabels = null;
         this.nationAdmin      = new Map();
         this.nationNomadic    = new Map();
         this._outOfRangeTiles = new Set();
+        this._adminDistData   = new Map();
         this._ensureNationList().then(() => {
-            this._computeNationLabels();
+            this._computeNationLabels(); this._computeRegionLabels();
             this._computeAllAdminRanges();
             this.render();
         });
@@ -786,7 +790,7 @@ class HexMapViewer {
                 nationBuckets[fill].push(x, y);
             }
 
-            if (tile && tile.portal?.color) {
+            if (this.layers.buildings && tile && tile.portal?.color) {
                 const portalHex = PORTAL_COLORS[tile.portal.color] || tile.portal.color;
                 if (!portalBuckets[portalHex]) portalBuckets[portalHex] = [];
                 portalBuckets[portalHex].push(x, y);
@@ -838,7 +842,7 @@ class HexMapViewer {
             const lw  = Math.max(2, 3.5 / this.zoom);
             const rx  = inner * 0.48;
             const ry  = inner * 0.24;
-            const rot = Math.PI / 8;   // ~22.5° tilt
+            const rot = Math.PI / 8 + Math.PI / 2;   // ~112.5° (22.5° + 90°)
             for (const color in portalBuckets) {
                 const pts = portalBuckets[color];
                 ctx.strokeStyle = color;
@@ -970,6 +974,7 @@ class HexMapViewer {
 
         // ── Nation name labels (screen space, drawn over everything) ──────────
         this._drawNationLabels();
+        this._drawRegionLabels();
 
         // ── Perf bookkeeping (cheap — always runs) ────────────────────────────
         const _t6 = performance.now();
@@ -1367,7 +1372,7 @@ class HexMapViewer {
             }).catch(() => {});
         }
         if (batch.type === 'terrain') this._scheduleTerrainRebuild();
-        if (batch.type === 'nation' || batch.type === 'unown') this._computeNationLabels();
+        if (batch.type === 'nation' || batch.type === 'unown') this._computeNationLabels(); this._computeRegionLabels();
         this.render();
     }
 
@@ -1405,7 +1410,7 @@ class HexMapViewer {
             if (this._currentUndoBatch && !this._currentUndoBatch.tiles.has(key))
                 this._currentUndoBatch.tiles.set(key, existing.owner || null);
             this.tiles.set(key, { ...existing, owner });
-            this._computeNationLabels();
+            this._computeNationLabels(); this._computeRegionLabels();
             this.render();
             let resp;
             try {
@@ -1419,7 +1424,7 @@ class HexMapViewer {
                 // Server rejected — roll back the local change and remove from undo batch
                 if (this._currentUndoBatch) this._currentUndoBatch.tiles.delete(key);
                 this.tiles.set(key, existing);
-                this._computeNationLabels();
+                this._computeNationLabels(); this._computeRegionLabels();
                 this.render();
                 const data = await resp.json().catch(() => ({}));
                 this._showPaintError(data.error || 'This tile cannot be claimed.');
@@ -1494,7 +1499,7 @@ class HexMapViewer {
         if (this._currentUndoBatch && !this._currentUndoBatch.tiles.has(key))
             this._currentUndoBatch.tiles.set(key, existing.owner || null);
         this.tiles.set(key, { ...existing, owner: null });
-        this._computeNationLabels();
+        this._computeNationLabels(); this._computeRegionLabels();
         this.render();
         await fetch(`/api/hex-map/tile/${q}/${r}`, {
             method:  'POST',
@@ -1590,6 +1595,22 @@ class HexMapViewer {
                 html += row('Owner', `<a href="/nations/item/${encodeURIComponent(tile.owner)}" target="_blank">${_esc(tile.owner)}</a>`);
             } else {
                 html += row('Owner', '<em>None</em>');
+            }
+
+            const adminDbg = this._adminDistData.get(`${q},${r}`);
+            if (adminDbg) {
+                let dbgVal;
+                if (adminDbg.isSource) {
+                    dbgVal = `<span style="color:#8f8">source tile</span> (limit ${adminDbg.limit})`;
+                } else if (!isFinite(adminDbg.entrance)) {
+                    dbgVal = `<span style="color:#f88">unreachable</span> (limit ${adminDbg.limit})`;
+                } else {
+                    const color = adminDbg.inRange ? '#8f8' : '#f88';
+                    const label = adminDbg.inRange ? '✓ in range' : '✗ out of range';
+                    dbgVal = `<span style="color:${color}">${adminDbg.entrance} / ${adminDbg.limit} — ${label}</span>`
+                           + ` <span style="color:#888">(entry cost ${adminDbg.tileCost}, total dist ${adminDbg.dist})</span>`;
+                }
+                html += row('Admin dist', dbgVal);
             }
 
             if (tile.city) {
@@ -1743,6 +1764,7 @@ class HexMapViewer {
 
     _computeAllAdminRanges() {
         this._outOfRangeTiles = new Set();
+        this._adminDistData   = new Map();
         if (!this.nationAdmin || this.nationAdmin.size === 0) return;
 
         // Build portal map: color → [{q,r,key,terrain}] for all portal tiles on the map.
@@ -1785,11 +1807,17 @@ class HexMapViewer {
             }
 
             if (sources.length === 0) {
-                for (const t of ownedTiles) this._outOfRangeTiles.add(t.key);
+                for (const t of ownedTiles) {
+                    this._outOfRangeTiles.add(t.key);
+                    this._adminDistData.set(t.key, { dist: Infinity, tileCost: 0, entrance: Infinity, limit, inRange: false, isSource: false });
+                }
                 continue;
             }
 
             const sourceKeys = new Set(sources.map(s => s.key));
+            for (const s of sources) {
+                this._adminDistData.set(s.key, { dist: 0, tileCost: 0, entrance: 0, limit, inRange: true, isSource: true });
+            }
 
             // Multi-source Dijkstra — entry-cost semantics
             const dist = new Map();
@@ -1835,16 +1863,21 @@ class HexMapViewer {
                 }
             }
 
-            // "Entering a tile is sufficient" — check cost-to-entrance ≤ limit
+            // A tile is in range when its full entry cost fits within the limit
+            // and at least 1 movement point is available at the entrance.
             for (const t of ownedTiles) {
                 if (sourceKeys.has(t.key)) continue;
                 const d = dist.get(t.key) ?? INF;
                 if (d === INF) {
                     this._outOfRangeTiles.add(t.key);
+                    this._adminDistData.set(t.key, { dist: Infinity, tileCost: 0, entrance: Infinity, limit, inRange: false, isSource: false });
                 } else {
                     let tileCost = TERRAIN_MOVE_COST[t.terrain] ?? _TERRAIN_MOVE_IMPASSABLE;
                     if (t.routeTier === 3) tileCost = Math.max(1, tileCost - 1);
-                    if ((d - tileCost) > limit) this._outOfRangeTiles.add(t.key);
+                    const entrance = d - tileCost;
+                    const inRange = entrance < limit;
+                    if (!inRange) this._outOfRangeTiles.add(t.key);
+                    this._adminDistData.set(t.key, { dist: d, tileCost, entrance, limit, inRange, isSource: false });
                 }
             }
         }
@@ -1911,6 +1944,93 @@ class HexMapViewer {
         }
 
         this._nationLabels = labels;
+    }
+
+    _computeRegionLabels() {
+        const byRegion = new Map();
+        for (const [key, tile] of this.tiles) {
+            if (!tile.region) continue;
+            if (!byRegion.has(tile.region)) byRegion.set(tile.region, new Map());
+            byRegion.get(tile.region).set(key, tile);
+        }
+
+        const labels = [];
+        const dirs = HexMapViewer._HEX_DIRS;
+
+        for (const [name, tileMap] of byRegion) {
+            const unvisited = new Set(tileMap.keys());
+
+            while (unvisited.size > 0) {
+                const startKey = unvisited.values().next().value;
+                unvisited.delete(startKey);
+                const queue = [startKey];
+                let sumX = 0, sumY = 0, count = 0;
+                let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+
+                while (queue.length > 0) {
+                    const key = queue.pop();
+                    const tile = tileMap.get(key);
+                    const { x, y } = this._axialToPixel(tile.q, tile.r);
+                    sumX += x; sumY += y; count++;
+                    if (x < minX) minX = x; if (x > maxX) maxX = x;
+                    if (y < minY) minY = y; if (y > maxY) maxY = y;
+
+                    for (const [dq, dr] of dirs) {
+                        const nk = `${tile.q + dq},${tile.r + dr}`;
+                        if (unvisited.has(nk)) { unvisited.delete(nk); queue.push(nk); }
+                    }
+                }
+
+                labels.push({
+                    name,
+                    wx:     sumX / count,
+                    wy:     sumY / count,
+                    wBboxW: maxX - minX + this.hexSize * 2,
+                    wBboxH: maxY - minY + this.hexSize * 2,
+                    count,
+                });
+            }
+        }
+
+        this._regionLabels = labels;
+    }
+
+    _drawRegionLabels() {
+        if (!this._regionLabels || !this.layers.regions) return;
+        const ctx = this.ctx;
+        ctx.save();
+        ctx.textAlign    = 'center';
+        ctx.textBaseline = 'middle';
+
+        for (const lb of this._regionLabels) {
+            const { name } = lb;
+            const sx = lb.wx * this.zoom + this.panX;
+            const sy = lb.wy * this.zoom + this.panY;
+
+            if (sx < -200 || sx > this.canvas.width + 200 ||
+                sy < -200 || sy > this.canvas.height + 200) continue;
+
+            const bboxWScreen = lb.wBboxW * this.zoom;
+            let fontSize = Math.min(bboxWScreen * 0.18, 52);
+            fontSize = Math.max(fontSize, 7);
+
+            ctx.font = `bold italic ${fontSize}px serif`;
+            while (fontSize > 7 && ctx.measureText(name).width > bboxWScreen * 0.85) {
+                fontSize -= 1;
+                ctx.font = `bold italic ${fontSize}px serif`;
+            }
+
+            if (fontSize < 8) continue;
+
+            ctx.shadowColor = 'rgba(0,0,0,0.75)';
+            ctx.shadowBlur  = Math.max(2, fontSize * 0.25);
+            ctx.fillStyle   = '#ffffff';
+            ctx.font = `bold italic ${fontSize}px serif`;
+            ctx.fillText(name, sx, sy);
+        }
+
+        ctx.shadowBlur = 0;
+        ctx.restore();
     }
 
     async _loadNationBuildings(nationName) {
@@ -2083,7 +2203,7 @@ class HexMapViewer {
                     } catch (_) {}
                 }
                 this.tiles.set(key, { ...(old || { q, r }), ...update });
-                this._computeNationLabels();
+                this._computeNationLabels(); this._computeRegionLabels();
                 // Recompute admin ranges if a building was added or removed
                 if ('city' in update || 'district' in update || 'wonder' in update || 'owner' in update || 'capital' in update || 'portal' in update)
                     this._computeAllAdminRanges();

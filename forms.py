@@ -47,31 +47,27 @@ class ResourceStorageDict(Form):
     
     @classmethod
     def create_form_class(cls):
-        general_resources = json_data.get("general_resources", [])
-        for resource in general_resources:
+        all_resources = (
+            json_data.get("general_resources", [])
+            + json_data.get("unique_resources", [])
+            + json_data.get("luxury_resources", [])
+        )
+        for resource in all_resources:
             field = IntegerField(resource["name"], default=0)
             setattr(cls, resource["key"], field)
-        
-        unique_resources = json_data.get("unique_resources", [])
-        for resource in unique_resources:
-            field = IntegerField(resource["name"], default=0)
-            setattr(cls, resource["key"], field)
-        
         return cls
 
     def load_form_from_item(self, item, schema):
-        # Handle resource storage
         if item:
-            general_resources = json_data.get("general_resources", [])
-            for resource in general_resources:
+            all_resources = (
+                json_data.get("general_resources", [])
+                + json_data.get("unique_resources", [])
+                + json_data.get("luxury_resources", [])
+            )
+            for resource in all_resources:
                 resource_field = getattr(self, resource["key"], None)
-                resource_field.data = int(item.get(resource["key"], 0))
-            
-            # Unique resources
-            unique_resources = json_data.get("unique_resources", [])
-            for resource in unique_resources:
-                resource_field = getattr(self, resource["key"], None)
-                resource_field.data = int(item.get(resource["key"], 0))
+                if resource_field is not None:
+                    resource_field.data = int(item.get(resource["key"], 0))
 
 
 class TerritoryTerrainDict(Form):
@@ -1356,10 +1352,6 @@ class NationForm(BaseSchemaForm):
         
         #Handle Districts separately
         district_choices = [("", "Empty Slot")]
-        districts = json_data.get("nation_districts", {})
-        for district_key, district_data in districts.items():
-            district_choices.append((district_key, district_data["display_name"]))
-
         for district_field in self.districts:
             district_field.form.populate_linked_fields(type_options=district_choices)
 

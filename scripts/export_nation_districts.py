@@ -13,7 +13,6 @@ load_dotenv(override=True)
 
 # Load district display name maps from all relevant JSON files
 DISTRICT_JSON_FILES = [
-    "json-data/nation_districts.json",
     "json-data/nation_imperial_districts.json",
 ]
 

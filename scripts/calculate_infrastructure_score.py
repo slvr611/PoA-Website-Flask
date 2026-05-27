@@ -42,23 +42,13 @@ def score_districts(nation: Dict[str, Any]) -> Tuple[int, int]:
     # Score filled district entries
     for d in districts:
         node = d.get("node") if isinstance(d, dict) else None
-        if not d.get("type") or d.get("type") == "":
+        def_key = d.get("def_key") if isinstance(d, dict) else None
+        if not def_key:
             score_total += EMPTY_SLOT_SCORE
-        elif "classical" in d.get("type"):
-            score_total += CLASSICAL_DISTRICT_WITHOUT_NODE_SCORE
+        elif node:
+            score_total += CLASSICAL_DISTRICT_WITHOUT_NODE_SCORE + NODE_SCORE
         else:
-            score_total += ANCIENT_DISTRICT_WITHOUT_NODE_SCORE
-        if node:
-            score_total += NODE_SCORE
-        dd = json_data["nation_districts"].get(d.get("type"), {})
-        synergies = dd.get("synergies") or ([{"requirement": dd["synergy_requirement"]}] if "synergy_requirement" in dd else [])
-        synergy_active = node and any(
-            (isinstance(s.get("requirement"), list) and ("any" in s["requirement"] or node in s["requirement"]))
-            or s.get("requirement") in ("any", node)
-            for s in synergies
-        )
-        if synergy_active:
-            score_total += SYNERGY_SCORE
+            score_total += CLASSICAL_DISTRICT_WITHOUT_NODE_SCORE
         counted += 1
 
     # Add empty slots up to district_slots

@@ -1,0 +1,53 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>AI Personality Overrides</h1>
+    <p class="text-muted mb-3">
+        These per-nation dimension values are the <em>base</em> overrides. The effective personality also
+        incorporates racial traits and current temperament at runtime.
+        Dimensions range from <strong>-1.0</strong> (low) to <strong>+1.0</strong> (high); <strong>0</strong> = no override.
+    </p>
+
+    <div class="card mb-4">
+        <div class="card-header bg-secondary text-white">Dimension Reference</div>
+        <div class="card-body p-2">
+            <table class="table table-sm mb-0">
+                <thead><tr><th>Dimension</th><th>Description</th></tr></thead>
+                <tbody>
+                {% for key, label, desc in dims %}
+                <tr><td><strong>{{ label }}</strong></td><td>{{ desc }}</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <table class="table table-striped table-hover">
+        <thead>
+            <tr>
+                <th>Nation</th>
+                <th>Temperament</th>
+                {% for key, label, desc in dims %}
+                <th>{{ label }}</th>
+                {% endfor %}
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for nation in nations %}
+        <tr>
+            <td>{{ nation.name }}</td>
+            <td>{{ nation.get('temperament', '—') }}</td>
+            {% for key, label, desc in dims %}
+            <td>{{ nation.get('ai_personality', {}).get(key, 0) }}</td>
+            {% endfor %}
+            <td>
+                <a href="{{ url_for('admin_tool_routes.edit_ai_personality', nation_id=nation._id) }}" class="btn btn-sm btn-primary">Edit</a>
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

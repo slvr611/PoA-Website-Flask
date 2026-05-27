@@ -99,8 +99,7 @@
 			"district": ["guardhouse"]
 		},
 		"production": {
-			"stability_loss_chance": -0.1,
-			"contested_cunning_checks": 1
+			"stability_loss_chance": -0.15
 		},
 		"upkeep": {
 			"food": 1
@@ -142,8 +141,7 @@
 	"missionary": {
 		"display_name": "Missionary",
 		"requirements": {
-			"district": ["church"],
-			"district_era": 3
+			"district": ["church"]
 		},
 		"production": {
 			"blacklash_chance": -0.1
@@ -153,6 +151,18 @@
 		"display_name": "Mystic",
 		"production": {
 			"magic": 1
+		}
+	},
+	"rancher": {
+		"display_name": "Researcher",
+		"requirements": {
+			"district": ["ranch"]
+		},
+		"upkeep": {
+			"food": 1
+		},
+		"production": {
+			"mounts": 1
 		}
 	},
 	"researcher": {

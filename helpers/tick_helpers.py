@@ -2,6 +2,8 @@ import uuid
 import math
 from bson import ObjectId
 from helpers.data_helpers import get_data_on_category
+from helpers.ai_decision_helpers import ai_decision_tick, ai_market_matching_tick, market_price_tick
+from helpers.trade_route_helpers import run_trade_route_lifecycle, _current_session as _tr_current_session
 from calculations.field_calculations import calculate_all_fields
 from pymongo import ASCENDING
 from helpers.change_helpers import system_request_change, system_approve_change
@@ -1241,8 +1243,8 @@ def reset_all_temperaments(old_nation, new_nation, schema):
 def library_tick(old_nation, new_nation, schema):
     districts = new_nation.get("districts", [])
     for district in districts:
-        if "library" in district.get("type", ""):
-            library_details = json_data["nation_districts"].get(district.get("type", ""), {})
+        if district.get("type", "") and "library" in district.get("type", ""):
+            library_details = {}  # legacy JSON district — treated as inactive
             required_turns = library_details.get("modifiers", {}).get("research_production_per_turns_with_library", 0)
             max_research = library_details.get("modifiers", {}).get("max_research_production_per_turns_with_library", 0)
             modifiers = new_nation.get("modifiers", [])
@@ -1458,7 +1460,6 @@ VASSAL_SPECIFIC_NATION_TICK_FUNCTIONS = [
 
 NATION_TICK_FUNCTIONS = {
     "Nation Isolated Diplo Stance Tick": isolated_diplo_stance_tick,
-    "AI Resource Desire Tick": ai_resource_desire_tick,
     "Nation Income Tick": nation_income_tick,
     "Nation Tech Tick": nation_tech_tick,
     "Nation Update Rolling Karma Tick": update_rolling_karma,
@@ -1474,6 +1475,7 @@ NATION_TICK_FUNCTIONS = {
     "Nation Modifier Decay Tick": modifier_decay_tick,
     "Nation Progress Quests Tick": progress_quests_tick,
     "Nation Job Cleanup Tick": nation_job_cleanup_tick,
+    "AI Decision Tick": ai_decision_tick,
     "Nation Vampirism Tick": vampirism_tick,
     "Nation Undead Tick": undead_tick,
     "Nation Pop Loss Tick": pop_loss_tick,
@@ -1481,7 +1483,18 @@ NATION_TICK_FUNCTIONS = {
     "Nation Library Tick": library_tick,
 }
 
-NATION_CROSS_TICK_FUNCTIONS = {}
+def ongoing_trade_route_tick(_old_nations, _new_nations, _schema):
+    """Lifecycle-only tick: ends routes that have passed their last delivery session."""
+    current_session = _tr_current_session()
+    log = run_trade_route_lifecycle(current_session)
+    return (log + "\n") if log else ""
+
+
+NATION_CROSS_TICK_FUNCTIONS = {
+    "Ongoing Trade Route Tick": ongoing_trade_route_tick,
+    "AI Market Matching Tick": ai_market_matching_tick,
+    "Market Price Tick": market_price_tick,
+}
 
 ERA_NATION_TICK_FUNCTIONS = {
     "Nation Tech Cost Reduction Tick (Generally Don't Use)": nation_tech_cost_reduction_tick,

@@ -72,7 +72,7 @@ def units():
     ))
     traits_lookup = {t["name"]: t for t in all_traits}
 
-    district_files = ["nation_districts", "nation_imperial_districts", "mercenary_districts",
+    district_files = ["nation_imperial_districts", "mercenary_districts",
                       "merchant_production_districts", "merchant_specialty_districts", "merchant_luxury_districts"]
     districts_lookup = {}
     for fname in district_files:

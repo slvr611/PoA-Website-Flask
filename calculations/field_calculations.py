@@ -122,10 +122,10 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
     districts = []
     if target_data_type == "nation":
         district_details = calculate_district_details(target, schema_properties, modifier_totals, law_totals, external_modifiers_total)
-        districts = collect_nation_districts(target, law_totals, district_details)
+        districts = collect_nation_districts(target, law_totals)
     elif target_data_type == "nation_jobs":
         district_details = calculate_district_details(target, schema_properties, modifier_totals, law_totals, external_modifiers_total)
-        districts = collect_nation_districts(target, law_totals, district_details)
+        districts = collect_nation_districts(target, law_totals)
     elif target_data_type == "merchant":
         district_details = json_data["merchant_production_districts"]
         district_details.update(json_data["merchant_specialty_districts"])
@@ -176,13 +176,14 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
         _oor_set = out_of_range
         territory_node_counts = {}
         active_node_counts = {}
+        _luxury_resource_keys = {r["key"] for r in json_data["luxury_resources"]}
         for _nt in _node_tiles:
             _coord = (_nt["q"], _nt["r"])
             if _coord in _oor_set:
                 continue
             _res = _nt["rt"]
             territory_node_counts[_res] = territory_node_counts.get(_res, 0) + 1
-            if _nt.get("has_building"):
+            if _nt.get("has_building") or _res in _luxury_resource_keys:
                 active_node_counts[_res] = active_node_counts.get(_res, 0) + 1
         _cache = target.setdefault("_calc_cache", {})
         _cache["out_of_range_tiles"] = out_of_range
@@ -198,7 +199,7 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
         territory_terrain_totals = collect_territory_terrain(effective_territory_types, all_terrain_rules)
 
         jobs_assigned = collect_jobs_assigned(target)
-        job_details = calculate_job_details(target, district_details, modifier_totals, district_totals, tech_totals, city_totals, law_totals, external_modifiers_total)
+        job_details = calculate_job_details(target, modifier_totals, district_totals, tech_totals, city_totals, law_totals, external_modifiers_total)
         job_totals = sum_job_totals(target, jobs_assigned, job_details)
 
         land_units_assigned = collect_land_units_assigned(target)
@@ -220,7 +221,7 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
         
         calculate_karma_from_negative_stockpiles(target, modifier_totals)
     elif target_data_type == "nation_jobs":
-        job_details = calculate_job_details(target, district_details, modifier_totals, district_totals, tech_totals, city_totals, law_totals, external_modifiers_total)
+        job_details = calculate_job_details(target, modifier_totals, district_totals, tech_totals, city_totals, law_totals, external_modifiers_total)
     elif target_data_type == "character":
         positive_title_modifiers = calculate_title_modifiers(target.get("positive_titles", []), target_data_type, schema_properties)
         negative_title_modifiers = calculate_title_modifiers(target.get("negative_titles", []), target_data_type, schema_properties)
@@ -365,7 +366,7 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
 
         if excess_food < 0:
             #print("Nation excess food is less than 0")
-            job_details = calculate_job_details(target, district_details, modifier_totals, district_totals, tech_totals, city_totals, law_totals, external_modifiers_total)
+            job_details = calculate_job_details(target, modifier_totals, district_totals, tech_totals, city_totals, law_totals, external_modifiers_total)
             job_totals = sum_job_totals(target, target.get("jobs", {}), job_details)
             calculated_values["job_details"] = job_details
 
@@ -564,21 +565,11 @@ def collect_laws(target, schema):
 
 def calculate_district_details(target, schema_properties, modifier_totals, law_totals, external_modifiers_total):
     district_details = {}
-    district_consumption_modifier = modifier_totals.get("district_resource_consumption", 0) + law_totals.get("district_resource_consumption", 0) + external_modifiers_total.get("district_resource_consumption", 0)
-    for district_type, district_data in json_data["nation_districts"].items():
-        district_data = copy.deepcopy(district_data)
-        district_details[district_type] = district_data
-        current_district_consumption_modifier = district_consumption_modifier + modifier_totals.get(district_type + "_resource_consumption", 0) + law_totals.get(district_type + "_resource_consumption", 0) + external_modifiers_total.get(district_type + "_resource_consumption", 0)
-        for modifier, value in district_data.get("modifiers", {}).items():
-            if modifier.endswith("_consumption"):
-                district_data["modifiers"][modifier] = max(value + current_district_consumption_modifier, 0)
-        
     for district_type, district_data in json_data["nation_imperial_districts"].items():
         district_details[district_type] = copy.deepcopy(district_data)
     return district_details
 
-def collect_nation_districts(target, law_totals, district_details):
-    nation_districts = target.get("districts", [])
+def collect_nation_districts(target, law_totals):
     collected_modifiers = []
 
     def synergy_matches(node, requirement):
@@ -596,24 +587,6 @@ def collect_nation_districts(target, law_totals, district_details):
         if req or mods:
             return [{"requirement": req, "modifiers": mods, "node_active": dd.get("synergy_node_active", True)}]
         return []
-
-    for district in nation_districts:
-        if isinstance(district, dict):
-            district_type = district.get("type", "")
-            if not district_type:
-                continue
-            district_node = district.get("node", "")
-            dd = district_details.get(district_type, {})
-            collected_modifiers.append(dd.get("modifiers", {}))
-            node_bonus_applied = False
-            for syn in get_synergies(dd):
-                if synergy_matches(district_node, syn.get("requirement", "")):
-                    collected_modifiers.append(syn.get("modifiers", {}))
-                    if syn.get("node_active", True) and district_node and not node_bonus_applied:
-                        collected_modifiers.append({district_node + "_nodes": 1})
-                        node_bonus_applied = True
-            if not node_bonus_applied and district_node:
-                collected_modifiers.append({district_node + "_nodes": 1})
 
     imperial_district_json_data = json_data["nation_imperial_districts"]
 
@@ -928,7 +901,7 @@ def collect_territory_terrain(territory_types, terrain_rules):
 def collect_jobs_assigned(target):
     return target.get("jobs", {})
 
-def calculate_job_details(target, district_details, modifier_totals, district_totals, tech_totals, city_totals, law_totals, external_modifiers_total):
+def calculate_job_details(target, modifier_totals, district_totals, tech_totals, city_totals, law_totals, external_modifiers_total):
     job_details = json_data["jobs"]
     modifier_sources = [modifier_totals, district_totals, tech_totals, city_totals, law_totals, external_modifiers_total]
     general_resources = json_data["general_resources"]
@@ -936,11 +909,6 @@ def calculate_job_details(target, district_details, modifier_totals, district_to
     unique_resources = json_data["unique_resources"]
     unique_resources = [resource["key"] for resource in unique_resources]
 
-    district_types = []
-    for district in target.get("districts", []):
-        if isinstance(district, dict):
-            district_types.append(district_details.get(district.get("type", ""), {}).get("type", ""))
-    
     new_job_details = {}
     for job, details in job_details.items():
         locked = modifier_totals.get("locks_" + job, 0) + district_totals.get("locks_" + job, 0) + city_totals.get("locks_" + job, 0) + law_totals.get("locks_" + job, 0) + external_modifiers_total.get("locks_" + job, 0)
@@ -974,9 +942,6 @@ def calculate_job_details(target, district_details, modifier_totals, district_to
                         elif modifier.endswith("resource_upkeep_mult"):
                             all_resource_upkeep_multiplier = all_resource_upkeep_multiplier * value
                         
-                        if job == "hunter":
-                            if modifier == "hunter_food_production_from_dock_or_farm" and ("dock" in district_types or "farm" in district_types):
-                                new_details.setdefault("production", {})["food"] = new_details.get("production", {}).get("food", 0) + value
 
             for resource in new_details.get("production", {}):
                 if resource in general_resources or resource in unique_resources:
@@ -1018,11 +983,6 @@ def calculate_job_details(target, district_details, modifier_totals, district_to
 def check_job_requirements(target, job_details, overall_total_modifiers):
     requirements = job_details.get("requirements", {})
     meets_requirements = True
-    districts = []
-    districts = [district.get("type", "") for district in target.get("districts", [])]
-    district_types = []
-    for district in districts:
-        district_types.append(json_data["nation_districts"].get(district, {}))
     region = target.get("region", "")
     try:
         region_name = category_data["regions"]["database"].find_one({"_id": ObjectId(region)}, {"name": 1})["name"]
@@ -1035,12 +995,7 @@ def check_job_requirements(target, job_details, overall_total_modifiers):
     for requirement, value in requirements.items():
         if requirement == "district":
             has_district = False
-            required_district_era = requirements.get("district_era", 0)
-            for district in district_types:
-                if district.get("type", "") in value and district.get("era", 0) >= required_district_era:
-                    has_district = True
-            if not has_district:
-                for def_key in def_keys:
+            for def_key in def_keys:
                     if def_key in value:
                         has_district = True
                         break
@@ -1866,18 +1821,6 @@ def load_db_units(unit_type=None):
         }
     return db_units
 
-def _district_key_to_category(district_key):
-    """Return the category type (e.g. 'forge') for a district key (e.g. 'ancient_forge')."""
-    all_district_files = [
-        "nation_districts", "nation_imperial_districts", "mercenary_districts",
-        "merchant_production_districts", "merchant_specialty_districts", "merchant_luxury_districts"
-    ]
-    for fname in all_district_files:
-        data = json_data.get(fname, {}).get(district_key)
-        if data:
-            return data.get("type", "")
-    return ""
-
 
 def _resolve_def(district_instance):
     """Return the district definition dict for a nation district instance.
@@ -1893,7 +1836,7 @@ def _resolve_def(district_instance):
     legacy_type = district_instance.get("type", "")
     if not legacy_type:
         return {}
-    for fname in ["nation_districts", "nation_imperial_districts", "mercenary_districts",
+    for fname in ["nation_imperial_districts", "mercenary_districts",
                   "merchant_production_districts", "merchant_specialty_districts", "merchant_luxury_districts"]:
         data = json_data.get(fname, {}).get(legacy_type)
         if data:
@@ -1903,22 +1846,19 @@ def _resolve_def(district_instance):
 
 def _check_requirements_dict(nation, requirements):
     """Evaluate a requirements dict (as produced by _db_prerequisites_to_requirements) against a nation."""
-    nation_district_keys = [d.get("type", "") for d in nation.get("districts", []) if isinstance(d, dict)]
     nation_district_def_keys = [d.get("def_key", "") for d in nation.get("districts", []) if isinstance(d, dict)]
-    nation_district_categories_json = {_district_key_to_category(k) for k in nation_district_keys if k}
-    nation_district_categories_db = set()
+    nation_district_categories = set()
     for dk in nation_district_def_keys:
         if dk:
             dd = _resolve_def({"def_key": dk})
             cat = dd.get("category", "")
             if cat:
-                nation_district_categories_db.add(cat)
-    nation_district_categories = nation_district_categories_json | nation_district_categories_db
+                nation_district_categories.add(cat)
 
     for requirement, value in requirements.items():
         if requirement == "district":
             has_district = any(
-                d in nation_district_keys or d in nation_district_def_keys or d in nation_district_categories
+                d in nation_district_def_keys or d in nation_district_categories
                 for d in value
             )
             if not has_district:
@@ -1985,9 +1925,13 @@ def check_unit_requirements(target, unit_details):
 
     requirements = unit_details.get("requirements", {})
     meets_requirements = True
-    nation_district_keys = [district.get("type", "") for district in target.get("districts", [])]
-    # Categories of all districts the nation has (e.g. {'forge', 'workshop'})
-    nation_district_categories = {_district_key_to_category(k) for k in nation_district_keys if k}
+    nation_district_def_keys = {d.get("def_key", "") for d in target.get("districts", []) if isinstance(d, dict) and d.get("def_key")}
+    nation_district_categories = set()
+    for dk in nation_district_def_keys:
+        dd = _resolve_def({"def_key": dk})
+        cat = dd.get("category", "")
+        if cat:
+            nation_district_categories.add(cat)
 
     check_name = False
     check_defensive_pact = False
@@ -1995,14 +1939,10 @@ def check_unit_requirements(target, unit_details):
 
     for requirement, value in requirements.items():
         if requirement == "district":
-            has_district = False
-            for district in value:
-                # Exact key match (old JSON format: e.g. "ancient_forge")
-                if district in nation_district_keys:
-                    has_district = True
-                # Category match (new MongoDB format: e.g. "forge")
-                elif district in nation_district_categories:
-                    has_district = True
+            has_district = any(
+                d in nation_district_def_keys or d in nation_district_categories
+                for d in value
+            )
             if not has_district:
                 meets_requirements = False
         elif requirement == "research":
@@ -3197,8 +3137,16 @@ def compute_nation_breakdowns(
                      "value": calculated_values.get("money_income", target.get("money_income", 0))})
     breakdowns["money_income"] = money_bd
 
+    # Trade route contributions — add before resource breakdown loop so totals include them
+    nation_name_bd = target.get("name", "")
+    if nation_name_bd:
+        from helpers.trade_route_helpers import _get_cached_routes, get_trade_route_source_contributions
+        tr_routes = _get_cached_routes(target)
+        if tr_routes:
+            contributions.extend(get_trade_route_source_contributions(nation_name_bd, tr_routes))
+
     # Resources
-    for resource in json_data["general_resources"] + json_data["unique_resources"]:
+    for resource in json_data["general_resources"] + json_data["unique_resources"] + json_data["luxury_resources"]:
         key = resource["key"]
         breakdowns["resource_production"][key]  = _resource_bd(key, "production")
         breakdowns["resource_consumption"][key] = _resource_bd(key, "consumption")

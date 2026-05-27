@@ -19,8 +19,7 @@ def get_synergies(details):
 
 
 def district_synergy_active(district_type, district_node):
-    details = json_data["nation_districts"].get(district_type, {})
-    return any(synergy_matches(district_node, syn.get("requirement", "")) for syn in get_synergies(details))
+    return False  # legacy JSON districts removed
 
 
 def imperial_synergy_active(district_type, district_node):

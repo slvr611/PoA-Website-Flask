@@ -503,7 +503,23 @@ def compute_resource_production(field, target, base_value, field_schema, overall
             specific_resource_production = 0
 
         production_dict[resource["key"]] = int(specific_resource_production)
-    
+
+    # Luxury resources: 1 per active node, no building required, no modifiers
+    for resource in json_data["luxury_resources"]:
+        key = resource["key"]
+        production_dict[key] = overall_total_modifiers.get(key + "_nodes", 0)
+
+    # Trade route imports
+    nation_name = target.get("name", "")
+    if nation_name:
+        from helpers.trade_route_helpers import _get_cached_routes, get_trade_route_resource_net
+        routes = _get_cached_routes(target)
+        if routes:
+            net = get_trade_route_resource_net(nation_name, routes)
+            for resource, delta in net.items():
+                if delta > 0:
+                    production_dict[resource] = production_dict.get(resource, 0) + int(delta)
+
     return production_dict
 
 def compute_resource_consumption(field, target, base_value, field_schema, overall_total_modifiers):
@@ -538,6 +554,20 @@ def compute_resource_consumption(field, target, base_value, field_schema, overal
                 consumption_dict[r_to] = consumption_dict.get(r_to, 0) + consumption_dict.get(r_from, 0) * ratio
                 consumption_dict[r_from] = 0
 
+    for resource in json_data["luxury_resources"]:
+        consumption_dict[resource["key"]] = 0
+
+    # Trade route exports
+    nation_name = target.get("name", "")
+    if nation_name:
+        from helpers.trade_route_helpers import _get_cached_routes, get_trade_route_resource_net
+        routes = _get_cached_routes(target)
+        if routes:
+            net = get_trade_route_resource_net(nation_name, routes)
+            for resource, delta in net.items():
+                if delta < 0:
+                    consumption_dict[resource] = consumption_dict.get(resource, 0) + int(abs(delta))
+
     return {k: int(max(v, 0)) for k, v in consumption_dict.items()}
 
 def compute_resource_excess(field, target, base_value, field_schema, overall_total_modifiers):
@@ -546,25 +576,25 @@ def compute_resource_excess(field, target, base_value, field_schema, overall_tot
     production_dict = target.get("resource_production", {})
     consumption_dict = target.get("resource_consumption", {})
     
-    all_resources = json_data["general_resources"] + json_data["unique_resources"]
-    
+    all_resources = json_data["general_resources"] + json_data["unique_resources"] + json_data["luxury_resources"]
+
     for resource in all_resources:
         excess_dict[resource["key"]] = int(production_dict.get(resource["key"], 0) - consumption_dict.get(resource["key"], 0))
-    
+
     return excess_dict
 
 def compute_nation_resource_storage_capacity(field, target, base_value, field_schema, overall_total_modifiers):
     storage_dict = {}
-    
-    all_resources = json_data["general_resources"] + json_data["unique_resources"]
-    
+
+    all_resources = json_data["general_resources"] + json_data["unique_resources"] + json_data["luxury_resources"]
+
     for resource in all_resources:
         specific_resource_storage = resource["base_storage"]
         specific_resource_storage += overall_total_modifiers.get(resource["key"] + "_storage_capacity", 0)
         if specific_resource_storage > 0:
             specific_resource_storage += overall_total_modifiers.get("resource_storage_capacity", 0)
         storage_dict[resource["key"]] = int(specific_resource_storage)
-    
+
     return storage_dict
 
 def compute_market_resource_storage_capacity(field, target, base_value, field_schema, overall_total_modifiers):
@@ -611,17 +641,21 @@ def compute_export_slots(field, target, base_value, field_schema, overall_total_
 
 def compute_remaining_import_slots(field, target, base_value, field_schema, overall_total_modifiers):
     import_slots = target.get("import_slots", 0)
-
-    value = import_slots
-    
-    return int(value)
+    nation_name = target.get("name", "")
+    if nation_name:
+        from helpers.trade_route_helpers import count_route_slots
+        _, import_used = count_route_slots(nation_name)
+        import_slots = max(0, import_slots - import_used)
+    return int(import_slots)
 
 def compute_remaining_export_slots(field, target, base_value, field_schema, overall_total_modifiers):
     export_slots = target.get("export_slots", 0)
-
-    value = export_slots
-    
-    return int(value)
+    nation_name = target.get("name", "")
+    if nation_name:
+        from helpers.trade_route_helpers import count_route_slots
+        export_used, _ = count_route_slots(nation_name)
+        export_slots = max(0, export_slots - export_used)
+    return int(export_slots)
 
 def compute_land_attack(field, target, base_value, field_schema, overall_total_modifiers):
     stability = target.get("stability", "Uknown")

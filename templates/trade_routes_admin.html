@@ -1,0 +1,53 @@
+{% extends "layout.html" %}
+{% block title %}Trade Routes{% endblock %}
+{% block content %}
+<div class="container mt-4">
+  <h1>Trade Routes</h1>
+  <p class="text-muted mb-3">Current session: {{ current_session }}</p>
+
+  {% if not routes %}
+  <p class="text-muted">No trade routes found.</p>
+  {% else %}
+  <table class="table table-sm table-striped">
+    <thead>
+      <tr>
+        <th>Nation A</th>
+        <th>Nation B</th>
+        <th>Status</th>
+        <th>A → B</th>
+        <th>B → A</th>
+        <th>Dist</th>
+        <th>Delay</th>
+        <th>Duration</th>
+        <th>Created</th>
+        <th>Accepted</th>
+        <th>Cancel</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in routes %}
+      <tr>
+        <td>{{ r.nation_a }}</td>
+        <td>{{ r.nation_b }}</td>
+        <td>
+          {% if r.status == "active" %}<span class="text-success">{{ r.status }}</span>
+          {% elif r.status == "ending" %}<span class="text-warning">{{ r.status }}</span>
+          {% elif r.status == "pending" %}<span class="text-info">{{ r.status }}</span>
+          {% elif r.status in ("ended", "rejected") %}<span class="text-muted">{{ r.status }}</span>
+          {% else %}{{ r.status }}{% endif %}
+        </td>
+        <td>{% for e in r.get("resources_a_to_b", []) %}{{ e.quantity }}×{{ e.resource }} {% endfor %}</td>
+        <td>{% for e in r.get("resources_b_to_a", []) %}{{ e.quantity }}×{{ e.resource }} {% endfor %}</td>
+        <td>{{ r.road_distance }}</td>
+        <td>{{ r.delay }}</td>
+        <td>{{ r.duration_ticks or "∞" }}</td>
+        <td>{{ r.created_session }}</td>
+        <td>{{ r.accepted_session or "—" }}</td>
+        <td>{{ r.cancel_session or "—" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</div>
+{% endblock %}

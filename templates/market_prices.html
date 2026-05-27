@@ -1,0 +1,60 @@
+{% extends "layout.html" %}
+
+{% block title %}Market Prices{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>Market Prices</h1>
+    <p class="text-muted mb-4">
+        Prices are updated each session from open buy and sell orders within each market.
+        A resource with no open orders shows its static base price.
+        <strong>Buy pressure raises prices; sell pressure lowers them.</strong>
+    </p>
+
+    {% if not markets %}
+    <p class="text-muted">No markets found.</p>
+    {% endif %}
+
+    {% for market in markets %}
+    {% set dyn = market.get('resource_prices', {}) %}
+    <div class="card mb-4">
+        <div class="card-header">
+            <strong>{{ market.get('name', market._id) }}</strong>
+        </div>
+        <div class="card-body p-2">
+            <table class="table table-sm table-striped mb-0">
+                <thead>
+                    <tr>
+                        <th>Resource</th>
+                        <th>Market Price</th>
+                        <th>Base Price</th>
+                        <th>Δ</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for r in all_resources %}
+                {% set mp = dyn.get(r) %}
+                {% set bp = base_prices.get(r, 10) %}
+                {% if mp is not none %}
+                {% set delta = mp - bp %}
+                <tr>
+                    <td>{{ r }}</td>
+                    <td>{{ "%.1f"|format(mp) }}</td>
+                    <td class="text-muted">{{ bp }}</td>
+                    <td class="{% if delta > 0.5 %}text-success{% elif delta < -0.5 %}text-danger{% else %}text-muted{% endif %}">
+                        {% if delta > 0 %}+{% endif %}{{ "%.1f"|format(delta) }}
+                    </td>
+                </tr>
+                {% endif %}
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endfor %}
+
+    <p class="text-muted small">
+        Resources without open orders are omitted from the market table; they fall back to static base price in AI calculations.
+    </p>
+</div>
+{% endblock %}

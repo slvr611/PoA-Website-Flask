@@ -7,9 +7,11 @@ from pymongo import ASCENDING
 from app_core import restore_mongodb
 from forms import form_generator
 from io import BytesIO
+from copy import deepcopy
 import random
 import os
 import datetime
+from bson import ObjectId
 
 admin_tool_routes = Blueprint('admin_tool_routes', __name__)
 
@@ -482,61 +484,9 @@ def player_district_analysis():
     district_stats = {}
     category_stats = {}
     total_districts = 0
-    district_data = json_data["nation_districts"]
     imperial_data = json_data["nation_imperial_districts"]
 
     for nation in player_nations:
-        for district in nation.get("districts", []):
-            if isinstance(district, dict):
-                district_type = district.get("type", "")
-                district_node = district.get("node", "")
-            else:
-                district_type = district
-                district_node = ""
-
-            if not district_type:
-                continue
-
-            dd = district_data.get(district_type, {})
-            synergy_active = any(synergy_matches(district_node, syn.get("requirement", "")) for syn in get_synergies(dd))
-            label = district_data.get(district_type, {}).get("name", district_type)
-            stats = district_stats.setdefault(
-                district_type,
-                {"label": label, "active": 0, "inactive": 0},
-            )
-            if synergy_active:
-                stats["active"] += 1
-            else:
-                stats["inactive"] += 1
-            total_districts += 1
-
-            category_label = label
-            tier_label = ""
-            for prefix, tier in (("Ancient ", "Ancient"), ("Classical ", "Classical"), ("ancient_", "Ancient"), ("classical_", "Classical")):
-                if category_label.startswith(prefix):
-                    category_label = category_label[len(prefix):]
-                    tier_label = tier
-                    break
-            category_label = category_label.lower()
-            category_entry = category_stats.setdefault(
-                category_label,
-                {
-                    "label": category_label,
-                    "active": 0,
-                    "inactive": 0,
-                    "ancient": 0,
-                    "classical": 0,
-                },
-            )
-            if synergy_active:
-                category_entry["active"] += 1
-            else:
-                category_entry["inactive"] += 1
-            if tier_label == "Ancient":
-                category_entry["ancient"] += 1
-            elif tier_label == "Classical":
-                category_entry["classical"] += 1
-
         if nation.get("empire", False):
             imperial = nation.get("imperial_district", {})
             imperial_type = imperial.get("type", "")
@@ -711,3 +661,114 @@ def delete_placeholder_nations():
     result = mongo.db.nations.delete_many({"name": {"$regex": "^Placeholder [A-Z]+$"}})
     flash(f"Deleted {result.deleted_count} placeholder nation(s).", "success")
     return redirect(url_for("admin_tool_routes.placeholder_nations"))
+
+
+# ---------------------------------------------------------------------------
+# AI Market Matching — mid-session manual trigger
+# ---------------------------------------------------------------------------
+
+@admin_tool_routes.route("/run_ai_market_matching", methods=["POST"])
+@admin_required
+def run_ai_market_matching():
+    """Run the AI-to-AI market order matching tick immediately against the live DB."""
+    from helpers.ai_decision_helpers import ai_market_matching_tick
+    from helpers.change_helpers import system_request_change, system_approve_change
+    from calculations.field_calculations import calculate_all_fields
+    from copy import deepcopy
+
+    nation_schema, nation_db = get_data_on_category("nations")
+    old_nations = list(nation_db.find().sort("name", ASCENDING))
+    new_nations = []
+    for nation in old_nations:
+        if nation:
+            nation.update(calculate_all_fields(nation, nation_schema, "nation"))
+            new_nations.append(deepcopy(nation))
+
+    result = ai_market_matching_tick(old_nations, new_nations, nation_schema)
+
+    for i in range(len(old_nations)):
+        change_id = system_request_change(
+            data_type="nations",
+            item_id=old_nations[i]["_id"],
+            change_type="Update",
+            before_data=old_nations[i],
+            after_data=new_nations[i],
+            reason="AI Market Matching (manual trigger)"
+        )
+        system_approve_change(change_id)
+
+    flash(f"AI market matching complete. {result}", "success")
+    return redirect(url_for("admin_tool_routes.admin_tools"))
+
+
+# ---------------------------------------------------------------------------
+# AI Personality Editor
+# ---------------------------------------------------------------------------
+
+_AI_PERSONALITY_DIMS = [
+    ("aggression", "Aggression", "Likelihood to declare war or take hostile actions (-1 = pacifist, +1 = warmonger)"),
+    ("military",   "Military",   "Priority given to military units and wonders (-1 = minimal, +1 = heavily armed)"),
+    ("economic",   "Economic",   "Drive to build economic districts and stockpile resources (-1 = subsistence, +1 = growth-focused)"),
+    ("expansion",  "Expansion",  "Desire to claim new territory (-1 = static, +1 = expansionist)"),
+    ("trade",      "Trade",      "Willingness to engage in market trades (-1 = autarkic, +1 = trade-focused)"),
+]
+
+
+@admin_tool_routes.route("/ai_personality", methods=["GET"])
+@admin_required
+def ai_personality_list():
+    """List all AI nations for personality editing."""
+    schema, db = get_data_on_category("nations")
+    ai_nations = list(db.find({"temperament": {"$ne": "Player"}}, {"name": 1, "temperament": 1, "ai_personality": 1}).sort("name", ASCENDING))
+    return render_template("admin/ai_personality_list.html", nations=ai_nations, dims=_AI_PERSONALITY_DIMS)
+
+
+@admin_tool_routes.route("/ai_personality/<nation_id>", methods=["GET", "POST"])
+@admin_required
+def edit_ai_personality(nation_id):
+    """Edit the ai_personality overrides for a single nation."""
+    from helpers.change_helpers import system_request_change, system_approve_change
+
+    try:
+        nation = mongo.db.nations.find_one({"_id": ObjectId(nation_id)})
+    except Exception:
+        flash("Nation not found.", "error")
+        return redirect(url_for("admin_tool_routes.ai_personality_list"))
+
+    if not nation:
+        flash("Nation not found.", "error")
+        return redirect(url_for("admin_tool_routes.ai_personality_list"))
+
+    if request.method == "POST":
+        new_personality = {}
+        for key, _label, _desc in _AI_PERSONALITY_DIMS:
+            raw = request.form.get(key, "0")
+            try:
+                val = max(-1.0, min(1.0, float(raw)))
+            except (ValueError, TypeError):
+                val = 0.0
+            new_personality[key] = val
+
+        old_nation = deepcopy(nation)
+        new_nation = deepcopy(nation)
+        new_nation["ai_personality"] = new_personality
+
+        change_id = system_request_change(
+            data_type="nations",
+            item_id=nation["_id"],
+            change_type="Update",
+            before_data=old_nation,
+            after_data=new_nation,
+            reason=f"AI Personality edited via admin tool"
+        )
+        system_approve_change(change_id)
+        flash(f"AI personality updated for {nation.get('name', nation_id)}.", "success")
+        return redirect(url_for("admin_tool_routes.ai_personality_list"))
+
+    current = nation.get("ai_personality", {})
+    return render_template(
+        "admin/ai_personality_edit.html",
+        nation=nation,
+        dims=_AI_PERSONALITY_DIMS,
+        current=current,
+    )

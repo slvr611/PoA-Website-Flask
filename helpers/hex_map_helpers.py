@@ -265,7 +265,7 @@ def compute_admin_range_out_of_range(nation_name, admin, nomadic=False, all_tile
         if tile and (tile.get("route") or {}).get("tier") == 3:
             cost = max(1, cost - 1)
         d = dist.get(coord, INF)
-        if d == INF or (d - cost) > limit:
+        if d == INF or (d - cost) >= limit:
             out_of_range.add(coord)
 
     return out_of_range

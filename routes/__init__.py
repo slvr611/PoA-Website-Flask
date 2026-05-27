@@ -15,6 +15,7 @@ from .war_routes import war_routes
 from .pops_routes import pops_routes
 from .hex_map_routes import hex_map_routes
 from .district_def_routes import district_def_routes
+from .trade_route_routes import trade_route_routes
 
 def register_routes(app, mongo, discord):
     app.register_blueprint(base_routes)
@@ -32,6 +33,7 @@ def register_routes(app, mongo, discord):
     app.register_blueprint(pops_routes)
     app.register_blueprint(hex_map_routes)
     app.register_blueprint(district_def_routes)
+    app.register_blueprint(trade_route_routes)
 
 @app.context_processor
 def inject_navbar_data():
@@ -58,6 +60,15 @@ def inject_modifier_data():
     for r in json_data.get("unique_resources", []):
         all_resources.append({"key": r["key"], "name": r["name"]})
     all_resources[1:] = sorted(all_resources[1:], key=lambda x: x["name"])
+
+    all_trade_resources = []
+    for r in json_data.get("general_resources", []):
+        all_trade_resources.append({"key": r["key"], "name": r["name"]})
+    for r in json_data.get("unique_resources", []):
+        all_trade_resources.append({"key": r["key"], "name": r["name"]})
+    for r in json_data.get("luxury_resources", []):
+        all_trade_resources.append({"key": r["key"], "name": r["name"]})
+    all_trade_resources = sorted(all_trade_resources, key=lambda x: x["name"])
 
     all_attributes = [
         {"key": "attribute", "name": "All Attributes"},
@@ -145,6 +156,7 @@ def inject_modifier_data():
         "modifier_types": modifier_types,
         "sorted_modifier_types": sorted_modifier_types,
         "all_resources": all_resources,
+        "all_trade_resources": all_trade_resources,
         "all_attributes": all_attributes,
         "all_jobs": all_jobs,
         "scope_definitions": scope_definitions,

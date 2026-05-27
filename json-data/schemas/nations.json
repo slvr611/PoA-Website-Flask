@@ -790,44 +790,49 @@
             "city_slots": 1
           },
           "Untamed Lords": {
-            "effective_territory": 6,
             "nomadic": 1,
             "hunter_food_production": 1,
             "max_passive_expansion_chance": 0
           },
           "Far Travelers": {
-            "effective_territory": 3,
             "nomadic": 1,
             "hunter_food_production": 1,
-            "max_passive_expansion_chance": 0
+            "max_passive_expansion_chance": 0,
+            "effective_territory": -20
           },
           "Iron-Fisted Dictatorship": {
             "resource_production": 1,
+            "research_production": -1,
             "high_stability_strength": 2,
             "low_stability_strength": -2,
-            "city_slots": 5
+            "city_slots": 6
           },
           "Imperial Council": {
-            "unit_money_production": 30,
-            "unit_trade_slots": 1,
-            "unit_trade_range": 1,
-            "city_slots": 5
+            "city_slots": 6,
+            "_modifiers": [
+              { "modifier_type": "trade_risk", "value": 0.02, "scope": "nation_market", "scaling": "per_x_units", "scaling_x": 1 },
+              { "modifier_type": "trade_slots", "value": 1, "scope": "nation_self", "scaling": "per_x_units", "scaling_x": 2 },
+              { "modifier_type": "trade_speed", "value": 1, "scope": "nation_self", "scaling": "per_x_units", "scaling_x": 2 }
+            ]
           },
           "Sacred Vicar": {
-            "city_slots": 5,
-            "stability_gain_chance_per_foreign_religious_pop": 0.01,
-            "max_stability_gain_chance_per_foreign_religious_pop": 0.5
+            "city_slots": 6,
+            "_modifiers": [
+              { "modifier_type": "stability_gain_chance", "value": 0.01, "scope": "nation_self", "scaling": "per_x_foreign_religious_pops", "scaling_x": 1, "max": 0.5 }
+            ]
           },
           "Great Khanate:": {
-            "morale": 2,
-            "effective_territory_per_tributary": 6,
+            "unit_morale": 2,
             "nomadic": 1,
             "hunter_food_production": 1,
-            "max_passive_expansion_chance": 0
+            "max_passive_expansion_chance": 0,
+            "_modifiers": [
+              { "modifier_type": "effective_territory", "value": 8, "scope": "nation_self", "scaling": "per_x_tributaries", "scaling_x": 1}
+            ]
           },
           "World Warden": {
-            "migration_distance": 6,
-            "effective_territory": 3,
+            "migration_distance": 8,
+            "effective_territory": 4,
             "nomadic": 1,
             "hunter_food_production": 1,
             "max_passive_expansion_chance": 0
@@ -866,41 +871,39 @@
         "label": "Nomad Camp Type",
         "description": "The type of camp a nomadic nation currently has",
         "enum": [
-          "None",
-          "Caravan",
+          "Standard",
           "Canvass",
+          "Caravan",
           "Encampment",
           "Hearth"
         ],
         "laws": {
-          "None": {},
-          "Caravan": {
-            "mount_consumption": 1,
-            "trade_slots": 3,
-            "money_income": 120,
-            "strength": -1,
-            "morale": -1
-          },
+          "Standard": {},
           "Canvass": {
             "food_consumption": 1,
-            "nomad_production_of_available_nodes": 1
+            "hunter_food_production": -1,
+            "hunter_wood_production": 1
+          },
+          "Caravan": {
+            "mounts_consumption": 1,
+            "hunter_food_production": -1,
+            "hunter_stone_production": 1,
+            "trade_slots": 3
           },
           "Encampment": {
-            "stone_consumption": 1,
-            "strength": 1,
-            "unit_morale": 1,
-            "unit_mounts_upkeep": -1,
-            "chance_to_lose_stability": 0.2,
-            "chance_to_lose_stability_while_at_war": -0.1
+            "wood_consumption": 1,
+            "hunter_food_production": -1,
+            "hunter_mounts_production": 1,
+            "_modifiers": [
+              { "modifier_type": "mounts_consumption", "value": -1, "scope": "nation_self", "scaling": "per_x_units", "scaling_x": 1}
+            ]
           },
           "Hearth": {
-            "wood_consumption": 1,
-            "food_consumption": -3,
+            "stone_consumption": 1,
+            "food_consumption": -4,
             "hunter_food_production": 1,
             "hunter_food_production_from_dock_or_farm": 1,
-            "resource_production": -1,
-            "food_production": 1,
-            "research_production": 1
+            "stability_gain_chance": 0.5
           }
         }
       },
@@ -1855,30 +1858,6 @@
         "calculated": true,
         "base_value": 7
       },
-      "outgoing_trades": {
-        "bsonType": "array",
-        "label": "Outgoing Trades",
-        "description": "The ongoing trades where the nation is currently exporting resources",
-        "collections": [
-          "trades"
-        ],
-        "queryTargetAttribute": "exporting_nation",
-        "items": {
-          "bsonType": "linked_object"
-        }
-      },
-      "incoming_trades": {
-        "bsonType": "array",
-        "label": "Incoming Trades",
-        "description": "The ongoing trades where the nation is currently importing resources",
-        "collections": [
-          "trades"
-        ],
-        "queryTargetAttribute": "importing_nation",
-        "items": {
-          "bsonType": "linked_object"
-        }
-      },
       "0_progress_slots": {
         "bsonType": "number",
         "label": "0 Progress Slots",
@@ -1983,6 +1962,18 @@
             }
           }
         }
+      },
+      "ai_state": {
+        "bsonType": "object",
+        "label": "AI State",
+        "description": "Current AI goals and decision log written each session by the AI decision tick",
+        "hidden": true
+      },
+      "ai_personality": {
+        "bsonType": "object",
+        "label": "AI Personality",
+        "description": "Per-nation AI personality dimension overrides; set only via the admin AI personality tool",
+        "hidden": true
       },
       "notes": {
         "bsonType": "string",

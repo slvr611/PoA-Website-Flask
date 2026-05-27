@@ -80,12 +80,12 @@ category_data = {
     "wars": {"pluralName": "Wars", "singularName": "War", "database": mongo.db.wars},
     "diplo_relations": {"pluralName": "Diplomatic Relations", "singularName": "Diplomatic Relation", "database": mongo.db.diplo_relations},
     "pops": {"pluralName": "Pops", "singularName": "Pop", "database": mongo.db.pops},
-    "trades": {"pluralName": "Trades", "singularName": "Trade", "database": mongo.db.trades},
     "events": {"pluralName": "Events", "singularName": "Event", "database": mongo.db.events},
     "changes": {"pluralName": "Changes", "singularName": "Change", "database": mongo.db.changes},
     "global_modifiers": {"pluralName": "Global Modifiers", "singularName": "Global Modifiers", "database": mongo.db.global_modifiers},
     "units": {"pluralName": "Units", "singularName": "Unit", "database": mongo.db.units},
-    "traits": {"pluralName": "Traits", "singularName": "Trait", "database": mongo.db.traits}
+    "traits": {"pluralName": "Traits", "singularName": "Trait", "database": mongo.db.traits},
+    "trade_routes": {"pluralName": "Trade Routes", "singularName": "Trade Route", "database": mongo.db.trade_routes},
 }
 
 def ensure_mongo_indexes():
@@ -94,7 +94,6 @@ def ensure_mongo_indexes():
         "pops": [[("nation", ASCENDING)]],
         "characters": [[("ruling_nation_org", ASCENDING)], [("player", ASCENDING)]],
         "diplo_relations": [[("nation_1", ASCENDING)], [("nation_2", ASCENDING)]],
-        "trades": [[("exporting_nation", ASCENDING)], [("importing_nation", ASCENDING)]],
         "wonders":       [[("owner_nation", ASCENDING)]],
         "hex_map_tiles":  [[("q", ASCENDING), ("r", ASCENDING)], [("owner", ASCENDING)]],
         "hex_map_history": [[("session", ASCENDING)]],
@@ -112,37 +111,37 @@ def ensure_mongo_indexes():
 
 rarity_rankings = {"Mythical": 0, "Legendary": 1, "Great": 2, "Good": 3, "Mundane": 4}
 
-json_files = ["jobs", "tech", "nation_districts", "nation_imperial_districts", "mercenary_districts",
+json_files = ["jobs", "tech", "nation_imperial_districts", "mercenary_districts",
                 "merchant_production_districts", "merchant_specialty_districts", "merchant_luxury_districts",
                 "cities", "terrains", "walls", "positive_titles", "negative_titles", "meta_mods", "modifier_types",
                 "scaling_types", "scope_definitions"]
 json_data = {"general_resources": [
             # color: optional hex string for map node rendering; omit to auto-generate
             {"key": "food",     "name": "Food",     "base_storage": 20, "base_price": 50,  "color": "#00ff00"},
-            {"key": "wood",     "name": "Wood",     "base_storage": 15, "base_price": 75,  "color": "#b47e5a"},
-            {"key": "stone",    "name": "Stone",    "base_storage": 15, "base_price": 75,  "color": "#96e3ef"},
-            {"key": "mounts",   "name": "Mounts",   "base_storage": 15, "base_price": 75,  "color": "#ffeb00"},
+            {"key": "wood",     "name": "Wood",     "base_storage": 15, "base_price": 100,  "color": "#b47e5a"},
+            {"key": "stone",    "name": "Stone",    "base_storage": 15, "base_price": 100,  "color": "#96e3ef"},
+            {"key": "mounts",   "name": "Mounts",   "base_storage": 15, "base_price": 200,  "color": "#ffeb00"},
             {"key": "research", "name": "Research", "base_storage": 0,                     "color": "#ff00b8"},
             {"key": "magic",    "name": "Magic",    "base_storage": 10, "base_price": 100, "color": "#ba00ff"},
         ],
         "unique_resources": [
-            {"key": "iron",   "name": "Iron",   "base_storage": 0,  "base_price": 150, "color": "#828282"},
-            {"key": "gunpowder", "name": "Gunpowder", "base_storage": 0,  "base_price": 200, "color": "#d9ba2a"},
+            {"key": "iron",   "name": "Iron",   "base_storage": 10,  "base_price": 200, "color": "#828282"},
+            {"key": "gunpowder", "name": "Gunpowder", "base_storage": 0,  "base_price": 400, "color": "#d9ba2a"},
         ],
         "luxury_resources": [
-            # Luxury resources render as squares on the map
-            {"key": "narcotics",       "name": "Narcotics",       "base_price": 300, "color": "#f6092f"},
-            {"key": "spices",          "name": "Spices",          "base_price": 300, "color": "#e2620c"},
-            {"key": "medicinal_herbs", "name": "Medicinal Herbs", "base_price": 300, "color": "#0b9d11"},
-            {"key": "dyes",            "name": "Dyes",            "base_price": 300, "color": "#ff009c"},
-            {"key": "magical_crystals","name": "Magical Crystals","base_price": 300, "color": "#00ffcc"},
-            {"key": "gold",            "name": "Gold",            "base_price": 300, "color": "#f1c232"},
-            {"key": "moonstone",       "name": "Moonstone",       "base_price": 300, "color": "#ead1dc"},
-            {"key": "furs",            "name": "Furs",            "base_price": 300, "color": "#fcb893"},
-            {"key": "quintessence",    "name": "Quintessence",    "base_price": 300, "color": "#d379ff"},
-            {"key": "cocoa",           "name": "Cocoa",           "base_price": 300, "color": "#783200"},
-            {"key": "star_iron",       "name": "Star Iron",       "base_price": 300, "color": "#9fc5e8"},
-            {"key": "tea",             "name": "Tea",             "base_price": 300, "color": "#b6d7a8"},
+            # Luxury resources render as squares on the map; nodes produce 1/session with no building required
+            {"key": "narcotics",       "name": "Narcotics",       "base_storage": 10, "base_price": 300, "color": "#f6092f"},
+            {"key": "spices",          "name": "Spices",          "base_storage": 10, "base_price": 300, "color": "#e2620c"},
+            {"key": "medicinal_herbs", "name": "Medicinal Herbs", "base_storage": 10, "base_price": 300, "color": "#0b9d11"},
+            {"key": "dyes",            "name": "Dyes",            "base_storage": 10, "base_price": 300, "color": "#ff009c"},
+            {"key": "magical_crystals","name": "Magical Crystals","base_storage": 10, "base_price": 300, "color": "#00ffcc"},
+            {"key": "gold",            "name": "Gold",            "base_storage": 10, "base_price": 300, "color": "#f1c232"},
+            {"key": "moonstone",       "name": "Moonstone",       "base_storage": 10, "base_price": 300, "color": "#ead1dc"},
+            {"key": "furs",            "name": "Furs",            "base_storage": 10, "base_price": 300, "color": "#fcb893"},
+            {"key": "quintessence",    "name": "Quintessence",    "base_storage": 10, "base_price": 300, "color": "#d379ff"},
+            {"key": "cocoa",           "name": "Cocoa",           "base_storage": 10, "base_price": 300, "color": "#783200"},
+            {"key": "star_iron",       "name": "Star Iron",       "base_storage": 10, "base_price": 300, "color": "#9fc5e8"},
+            {"key": "tea",             "name": "Tea",             "base_storage": 10, "base_price": 300, "color": "#b6d7a8"},
         ],
         "slot_types": {
             "no_slot": {"progress_per_tick": 0, "name": "No Slot"},
