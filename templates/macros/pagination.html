@@ -632,7 +632,26 @@
                 <td>{{ change.change_type }}</td>
                 <td>{{ change.status }}</td>
                 <td class="changes-column wrap-content">
-                    {{ render_changes_preview(change.before_requested_data, change.after_requested_data, target_schemas[change.target_collection], preview_references, view_access_level) }}
+                    {% if change.target_collection == "hex_map" %}
+                        {% set tile_count = (change.after_requested_data.get("tiles", {}) if change.after_requested_data else {})|length %}
+                        <span style="font-size:0.85em;color:#aaa;">{{ tile_count }} tile{{ 's' if tile_count != 1 else '' }}</span>
+                        <div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap;">
+                            {% if change.get("before_image") %}
+                                <div>
+                                    <div style="font-size:0.75em;color:#777;margin-bottom:2px;">Before</div>
+                                    <img src="{{ change['before_image'] }}" alt="Before" style="max-width:130px;border-radius:3px;border:1px solid #444;">
+                                </div>
+                            {% endif %}
+                            {% if change.get("after_image") %}
+                                <div>
+                                    <div style="font-size:0.75em;color:#777;margin-bottom:2px;">After</div>
+                                    <img src="{{ change['after_image'] }}" alt="After" style="max-width:130px;border-radius:3px;border:1px solid #444;">
+                                </div>
+                            {% endif %}
+                        </div>
+                    {% else %}
+                        {{ render_changes_preview(change.before_requested_data, change.after_requested_data, target_schemas[change.target_collection], preview_references, view_access_level) }}
+                    {% endif %}
                 </td>
                 <td class="reason-column wrap-content">
                     {{ change.request_reason|format_discord_link|safe }}

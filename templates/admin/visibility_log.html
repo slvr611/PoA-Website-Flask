@@ -1,0 +1,97 @@
+{% extends "layout.html" %}
+
+{% block title %}Visibility Bypass Log{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div style="display:flex;align-items:baseline;gap:1rem;margin-bottom:1rem;">
+        <h1 style="margin:0;">Visibility Bypass Log</h1>
+        <span style="color:var(--text-muted,#888);font-size:0.9rem;">{{ total }} entr{{ 'y' if total == 1 else 'ies' }}</span>
+    </div>
+
+    {# ── Filters ── #}
+    <form method="get" style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-bottom:1.25rem;align-items:flex-end;">
+        <div>
+            <label style="display:block;font-size:0.8rem;color:var(--text-muted,#888);margin-bottom:0.2rem;">Admin username</label>
+            <input type="text" name="admin" value="{{ admin_filter }}"
+                   placeholder="Filter by username…"
+                   style="background:var(--input-bg,#2a2a3e);border:1px solid var(--border-color,#444);color:inherit;padding:0.35rem 0.6rem;border-radius:4px;width:200px;">
+        </div>
+        <div>
+            <label style="display:block;font-size:0.8rem;color:var(--text-muted,#888);margin-bottom:0.2rem;">Source</label>
+            <select name="source"
+                    style="background:var(--input-bg,#2a2a3e);border:1px solid var(--border-color,#444);color:inherit;padding:0.35rem 0.6rem;border-radius:4px;">
+                <option value="all"    {% if source_filter == 'all'    %}selected{% endif %}>All</option>
+                <option value="nation" {% if source_filter == 'nation' %}selected{% endif %}>Nation page</option>
+                <option value="map"    {% if source_filter == 'map'    %}selected{% endif %}>Map admin view</option>
+            </select>
+        </div>
+        <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+        {% if admin_filter or source_filter != 'all' %}
+        <a href="/admin/visibility_log" class="btn btn-secondary btn-sm">Clear</a>
+        {% endif %}
+    </form>
+
+    {% if entries %}
+    <div class="table-responsive">
+        <table class="table table-striped" style="font-size:0.9rem;">
+            <thead>
+                <tr>
+                    <th style="white-space:nowrap;">Timestamp (UTC)</th>
+                    <th>Admin</th>
+                    <th>Source</th>
+                    <th>Details</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for e in entries %}
+                <tr>
+                    <td style="white-space:nowrap;color:var(--text-muted,#aaa);">
+                        {{ e.timestamp.strftime('%Y-%m-%d %H:%M:%S') if e.timestamp else '—' }}
+                    </td>
+                    <td>{{ e.get('admin_username', '—') }}</td>
+                    <td>
+                        {% if e.get('action') == 'map_admin_view_enabled' %}
+                            <span style="background:#1a3a5c;color:#7ec8e3;padding:0.15rem 0.45rem;border-radius:3px;font-size:0.8rem;">Map</span>
+                        {% else %}
+                            <span style="background:#3a2a1a;color:#e3b07e;padding:0.15rem 0.45rem;border-radius:3px;font-size:0.8rem;">Nation page</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if e.get('action') == 'map_admin_view_enabled' %}
+                            <span style="color:var(--text-muted,#aaa);">Enabled unrestricted map view</span>
+                        {% else %}
+                            {% if e.get('nation') %}
+                                <a href="/nations/item/{{ e['nation'] }}">{{ e['nation'] }}</a>
+                            {% endif %}
+                            {% if e.get('page_url') %}
+                                <span style="color:var(--text-muted,#777);font-size:0.8rem;margin-left:0.5rem;">{{ e['page_url'] }}</span>
+                            {% endif %}
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {# ── Pagination ── #}
+    {% if total_pages > 1 %}
+    <div style="display:flex;gap:0.5rem;align-items:center;margin-top:1rem;">
+        {% if page > 1 %}
+        <a href="?page={{ page - 1 }}&admin={{ admin_filter }}&source={{ source_filter }}" class="btn btn-secondary btn-sm">← Prev</a>
+        {% endif %}
+        <span style="color:var(--text-muted,#aaa);font-size:0.85rem;">Page {{ page }} of {{ total_pages }}</span>
+        {% if page < total_pages %}
+        <a href="?page={{ page + 1 }}&admin={{ admin_filter }}&source={{ source_filter }}" class="btn btn-secondary btn-sm">Next →</a>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div style="padding:2rem;text-align:center;color:var(--text-muted,#888);border:1px solid var(--border-color,#333);border-radius:6px;">
+        No log entries found{% if admin_filter or source_filter != 'all' %} matching the current filters{% endif %}.
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

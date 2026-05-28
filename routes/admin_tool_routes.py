@@ -664,6 +664,58 @@ def delete_placeholder_nations():
 
 
 # ---------------------------------------------------------------------------
+# Visibility bypass log viewer
+# ---------------------------------------------------------------------------
+
+@admin_tool_routes.route("/admin/visibility_log")
+@admin_required
+def visibility_log():
+    PAGE_SIZE = 50
+
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+    except (ValueError, TypeError):
+        page = 1
+
+    admin_filter  = request.args.get("admin", "").strip()
+    source_filter = request.args.get("source", "all")  # "all" | "nation" | "map"
+
+    query = {}
+    if admin_filter:
+        query["admin_username"] = {"$regex": admin_filter, "$options": "i"}
+    if source_filter == "nation":
+        query["nation"] = {"$exists": True}
+    elif source_filter == "map":
+        query["action"] = "map_admin_view_enabled"
+
+    total  = mongo.db.admin_visibility_logs.count_documents(query)
+    skip   = (page - 1) * PAGE_SIZE
+    entries = list(
+        mongo.db.admin_visibility_logs
+        .find(query)
+        .sort("timestamp", -1)
+        .skip(skip)
+        .limit(PAGE_SIZE)
+    )
+
+    # Coerce ObjectId to string so Jinja can render it
+    for e in entries:
+        e["_id"] = str(e["_id"])
+
+    total_pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
+
+    return render_template(
+        "admin/visibility_log.html",
+        entries=entries,
+        page=page,
+        total_pages=total_pages,
+        total=total,
+        admin_filter=admin_filter,
+        source_filter=source_filter,
+    )
+
+
+# ---------------------------------------------------------------------------
 # AI Market Matching — mid-session manual trigger
 # ---------------------------------------------------------------------------
 

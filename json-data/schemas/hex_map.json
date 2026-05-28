@@ -1,0 +1,24 @@
+{
+  "$jsonSchema": {
+    "bsonType": "object",
+    "pluralName": "Map Changes",
+    "singularName": "Map Change",
+    "properties": {
+      "tiles": {
+        "bsonType": "object",
+        "label": "Tiles",
+        "description": "Map of coord-key to tile data for this change"
+      },
+      "before_image": {
+        "bsonType": ["string", "null"],
+        "label": "Before Image",
+        "description": "Base64 PNG of the map area before the change"
+      },
+      "after_image": {
+        "bsonType": ["string", "null"],
+        "label": "After Image",
+        "description": "Base64 PNG of the map area after the change"
+      }
+    }
+  }
+}

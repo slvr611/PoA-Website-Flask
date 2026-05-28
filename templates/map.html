@@ -45,29 +45,54 @@
             <button id="layer-nodes"     class="map-btn layer-btn active"   data-layer="nodes">Nodes</button>
             <button id="layer-buildings" class="map-btn layer-btn active"   data-layer="buildings">Buildings</button>
             <button id="layer-roads"     class="map-btn layer-btn"          data-layer="roads">Roads</button>
+
+            {# ── Edit Mode — available to any logged-in user ── #}
+            {% if g.user %}
+            <span class="map-btn-separator"></span>
+            <button id="edit-mode-btn" class="map-btn" title="Enter map edit mode to propose changes">Edit Map</button>
+
+            {# Edit toolbar — hidden until edit mode is active #}
+            <div id="edit-mode-toolbar" style="display:none;">
+                <span class="map-btn-separator"></span>
+                <button id="tool-pan" class="map-btn active" title="Pan / select">Pan</button>
+                <input type="text" id="paint-terrain-input" class="map-btn" list="paint-terrain-datalist"
+                       placeholder="Paint terrain…" autocomplete="off" title="Paint terrain">
+                <datalist id="paint-terrain-datalist"></datalist>
+                <input type="text" id="paint-nation-input" class="map-btn" list="paint-nation-datalist"
+                       placeholder="Paint nation…" autocomplete="off" title="Paint nation ownership">
+                <datalist id="paint-nation-datalist"></datalist>
+                <input type="text" id="paint-region-input" class="map-btn" list="paint-region-datalist"
+                       placeholder="Paint region…" autocomplete="off" title="Paint region">
+                <datalist id="paint-region-datalist"></datalist>
+                <input type="text" id="paint-route-owner" class="map-btn" list="paint-route-owner-datalist"
+                       placeholder="Route owner…" autocomplete="off" title="Route owner nation">
+                <datalist id="paint-route-owner-datalist"></datalist>
+                <select id="paint-route-tier" class="map-btn" title="Route tier">
+                    <option value="">Tier…</option>
+                    <option value="erase">Erase</option>
+                    <option value="1">Tier 1</option>
+                    <option value="2">Tier 2</option>
+                    <option value="3">Tier 3</option>
+                </select>
+                <span class="map-btn-separator"></span>
+                <span id="edit-mode-count" style="font-size:0.8em;color:#aaa;align-self:center;"></span>
+                <button id="cancel-edit-btn"  class="map-btn" style="background:#7b2020;color:#fff;" title="Discard all edits and exit edit mode">Cancel</button>
+                {% if g.edit_access_level >= 10 %}
+                <button id="save-direct-btn" class="map-btn" style="background:#1a5276;color:#fff;" title="Save edits directly to the map (admin)">Save Directly</button>
+                {% endif %}
+                <button id="submit-change-btn" class="map-btn" style="background:#1e6b3f;color:#fff;" title="Submit edits as a change request for moderator review">Submit Change</button>
+            </div>
+
+            {# Map changes log link #}
+            <span class="map-btn-separator"></span>
+            <a href="/hex_map/changes/pending" class="map-btn" style="text-decoration:none;" title="View pending and archived map changes">Map Changes</a>
+            {% endif %}
+
+            {# ── Admin-only controls (outside edit mode) ── #}
             {% if g.edit_access_level >= 10 %}
             <span class="map-btn-separator"></span>
-            <button id="tool-pan" class="map-btn active" title="Pan / select">Pan</button>
-            <input type="text" id="paint-terrain-input" class="map-btn" list="paint-terrain-datalist"
-                   placeholder="Paint terrain…" autocomplete="off" title="Paint terrain">
-            <datalist id="paint-terrain-datalist"></datalist>
-            <input type="text" id="paint-nation-input" class="map-btn" list="paint-nation-datalist"
-                   placeholder="Paint nation…" autocomplete="off" title="Paint nation ownership">
-            <datalist id="paint-nation-datalist"></datalist>
-            <input type="text" id="paint-region-input" class="map-btn" list="paint-region-datalist"
-                   placeholder="Paint region…" autocomplete="off" title="Paint region">
-            <datalist id="paint-region-datalist"></datalist>
-            <input type="text" id="paint-route-owner" class="map-btn" list="paint-route-owner-datalist"
-                   placeholder="Route owner…" autocomplete="off" title="Route owner nation">
-            <datalist id="paint-route-owner-datalist"></datalist>
-            <select id="paint-route-tier" class="map-btn" title="Route tier">
-                <option value="">Tier…</option>
-                <option value="erase">Erase</option>
-                <option value="1">Tier 1</option>
-                <option value="2">Tier 2</option>
-                <option value="3">Tier 3</option>
-            </select>
-            <span class="map-btn-separator"></span>
+            <button id="admin-view-btn" class="map-btn"
+                    title="Show all map data (districts, admin range) regardless of visibility — access is logged">Admin View</button>
             <button id="hex-snapshot-btn" class="map-btn">Snapshot</button>
             <div class="map-tools-dropdown" id="map-tools-dropdown">
                 <button class="map-btn map-tools-toggle" id="map-tools-toggle" title="Admin utilities">Tools ▾</button>
@@ -94,7 +119,8 @@
          Hex map viewer  (Canvas, sessions >= threshold)
     ====================================================== -->
     <div id="hex-section" style="display:none"
-         data-is-admin="{{ (g.edit_access_level >= 10) | tojson }}">
+         data-is-admin="{{ (g.edit_access_level >= 10) | tojson }}"
+         data-is-logged-in="{{ (g.user is not none) | tojson }}">
         <div id="hex-paint-error" style="display:none; color:#e03030; font-size:0.85em; padding:3px 4px; min-height:1.3em;"></div>
         <div class="hex-map-layout">
             <div class="hex-map-canvas-wrap">
@@ -108,6 +134,24 @@
             </div>
         </div>
     </div>
+
+    {# Submit change modal #}
+    {% if g.user %}
+    <div id="map-change-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:2000;align-items:center;justify-content:center;">
+        <div style="background:#1e1e2e;padding:1.5rem;border-radius:8px;max-width:520px;width:92%;border:1px solid #444;box-shadow:0 8px 32px rgba(0,0,0,0.6);">
+            <h3 style="margin-top:0;">Submit Map Change Request</h3>
+            <p id="map-change-summary" style="color:#aaa;margin-bottom:1rem;"></p>
+            <label for="map-change-reason" style="display:block;margin-bottom:0.3rem;">Reason / description <span style="color:#888;">(optional)</span>:</label>
+            <textarea id="map-change-reason" rows="3"
+                      style="width:100%;background:#252535;color:#eee;border:1px solid #555;border-radius:4px;padding:0.4rem;box-sizing:border-box;resize:vertical;"></textarea>
+            <div style="margin-top:1rem;display:flex;gap:0.5rem;justify-content:flex-end;">
+                <button id="map-change-cancel-btn" class="btn btn-secondary">Back</button>
+                <button id="map-change-submit-btn" class="btn btn-success">Submit</button>
+            </div>
+            <div id="map-change-status" style="margin-top:0.6rem;font-size:0.85rem;color:#888;min-height:1.2em;"></div>
+        </div>
+    </div>
+    {% endif %}
 
     {% if g.edit_access_level >= 10 %}
     <div id="hex-region-manager" class="mt-3" style="display:none">
@@ -325,7 +369,10 @@ document.addEventListener('DOMContentLoaded', function () {
             });
             bgViewer.open(url);
         }
-        if (hexViewer) hexViewer.attachBgViewer(bgViewer);
+        if (hexViewer) {
+            hexViewer.bgDziUrl = url;   // stored for proxy-based capture viewer
+            hexViewer.attachBgViewer(bgViewer);
+        }
     }
 
     // ================================================================
@@ -586,6 +633,22 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    const adminViewBtn = document.getElementById('admin-view-btn');
+    if (adminViewBtn) {
+        adminViewBtn.addEventListener('click', async () => {
+            const enabling = !hexViewer?._adminView;
+            if (enabling) {
+                try { await fetch('/api/hex-map/admin-view-log', { method: 'POST' }); } catch (_) {}
+            }
+            if (hexViewer) {
+                hexViewer._adminView = enabling;
+                hexViewer.render();
+            }
+            adminViewBtn.classList.toggle('active', enabling);
+            adminViewBtn.textContent = enabling ? 'Admin View: ON' : 'Admin View';
+        });
+    }
+
     const snapBtn = document.getElementById('hex-snapshot-btn');
     if (snapBtn) {
         snapBtn.addEventListener('click', async () => {
@@ -750,6 +813,133 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }, 3000);
 
+    // ================================================================
+    // Edit mode controls
+    // ================================================================
+    const editModeBtn      = document.getElementById('edit-mode-btn');
+    const editModeToolbar  = document.getElementById('edit-mode-toolbar');
+    const cancelEditBtn    = document.getElementById('cancel-edit-btn');
+    const saveDirBtn       = document.getElementById('save-direct-btn');
+    const submitChangeBtn  = document.getElementById('submit-change-btn');
+    const editModeCount    = document.getElementById('edit-mode-count');
+    const mapChangeModal   = document.getElementById('map-change-modal');
+    const mapChangeSummary = document.getElementById('map-change-summary');
+    const mapChangeReason  = document.getElementById('map-change-reason');
+    const mapChangeCancelBtn = document.getElementById('map-change-cancel-btn');
+    const mapChangeSubmitBtn = document.getElementById('map-change-submit-btn');
+    const mapChangeStatus  = document.getElementById('map-change-status');
+
+    function _setEditModeUI(active) {
+        if (editModeBtn)     editModeBtn.style.display     = active ? 'none' : '';
+        if (editModeToolbar) editModeToolbar.style.display = active ? 'contents' : 'none';
+    }
+
+    function _updateEditCount() {
+        if (!hexViewer || !editModeCount) return;
+        const n = hexViewer.pendingEditCount;
+        editModeCount.textContent = n ? `${n} tile${n !== 1 ? 's' : ''} changed` : '';
+    }
+
+    // Listen for edit mode state changes dispatched by the viewer
+    document.getElementById('hex-map-canvas')?.addEventListener('hexmap:editmodechange', e => {
+        _setEditModeUI(e.detail.active);
+        if (!e.detail.active) {
+            _updateEditCount();
+        }
+    });
+
+    document.getElementById('hex-map-canvas')?.addEventListener('hexmap:editchange', () => {
+        _updateEditCount();
+    });
+
+    if (editModeBtn) {
+        editModeBtn.addEventListener('click', () => {
+            if (!hexViewer) return;
+            hexViewer.enterEditMode();
+            _setEditModeUI(true);
+            _activatePan();
+        });
+    }
+
+    if (cancelEditBtn) {
+        cancelEditBtn.addEventListener('click', () => {
+            if (!hexViewer) return;
+            if (hexViewer.pendingEditCount > 0 && !confirm('Discard all pending edits?')) return;
+            hexViewer.cancelEditMode();
+            _setEditModeUI(false);
+        });
+    }
+
+    if (saveDirBtn) {
+        saveDirBtn.addEventListener('click', async () => {
+            if (!hexViewer || !hexViewer.pendingEditCount) return;
+            if (!confirm(`Save ${hexViewer.pendingEditCount} tile change(s) directly to the map?`)) return;
+            saveDirBtn.disabled = true;
+            saveDirBtn.textContent = 'Saving…';
+            const result = await hexViewer.saveDirect();
+            saveDirBtn.disabled = false;
+            saveDirBtn.textContent = 'Save Directly';
+            if (result.ok) {
+                _setEditModeUI(false);
+                alert('Map changes saved.');
+            } else {
+                alert('Some tiles failed to save:\n' + (result.errors || []).join('\n'));
+            }
+        });
+    }
+
+    if (submitChangeBtn) {
+        submitChangeBtn.addEventListener('click', () => {
+            if (!hexViewer || !hexViewer.pendingEditCount) {
+                alert('No tile changes to submit.');
+                return;
+            }
+            const n = hexViewer.pendingEditCount;
+            if (mapChangeSummary) mapChangeSummary.textContent = `${n} tile${n !== 1 ? 's' : ''} will be included in this change request.`;
+            if (mapChangeReason) mapChangeReason.value = '';
+            if (mapChangeStatus) mapChangeStatus.textContent = '';
+            if (mapChangeModal) {
+                mapChangeModal.style.display = 'flex';
+            }
+        });
+    }
+
+    if (mapChangeCancelBtn) {
+        mapChangeCancelBtn.addEventListener('click', () => {
+            if (mapChangeModal) mapChangeModal.style.display = 'none';
+        });
+    }
+
+    if (mapChangeSubmitBtn) {
+        mapChangeSubmitBtn.addEventListener('click', async () => {
+            if (!hexViewer) return;
+            mapChangeSubmitBtn.disabled = true;
+            mapChangeSubmitBtn.textContent = 'Generating preview…';
+            if (mapChangeStatus) mapChangeStatus.textContent = 'Rendering before/after images…';
+
+            const reason = mapChangeReason ? mapChangeReason.value.trim() : '';
+            const result = await hexViewer.submitChange(reason);
+
+            mapChangeSubmitBtn.disabled = false;
+            mapChangeSubmitBtn.textContent = 'Submit';
+
+            if (result.ok) {
+                if (mapChangeModal) mapChangeModal.style.display = 'none';
+                _setEditModeUI(false);
+                _updateEditCount();
+                alert(`Change request submitted! Change ID: ${result.change_id}\n\nView it at /changes/item/${result.change_id}`);
+            } else {
+                if (mapChangeStatus) mapChangeStatus.textContent = 'Error: ' + (result.error || 'Unknown error');
+            }
+        });
+    }
+
+    // Close modal on backdrop click
+    if (mapChangeModal) {
+        mapChangeModal.addEventListener('click', e => {
+            if (e.target === mapChangeModal) mapChangeModal.style.display = 'none';
+        });
+    }
 });
 </script>
 {% endblock %}

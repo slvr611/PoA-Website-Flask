@@ -240,6 +240,53 @@ def system_request_change(data_type, item_id, change_type, before_data, after_da
     return result.inserted_id
 
 
+def _approve_hex_map_change(change, change_id, changes_collection, approver, now, session_number):
+    """Write all buffered tile changes from a hex_map change request to the database."""
+    after_tiles = change.get("after_requested_data", {}).get("tiles", {})
+    affected_nations = set()
+    for coord_key, tile_data in after_tiles.items():
+        try:
+            q, r = map(int, coord_key.split(","))
+        except (ValueError, TypeError):
+            continue
+        existing = mongo.db.hex_map_tiles.find_one(
+            {"q": {"$in": [q, float(q)]}, "r": {"$in": [r, float(r)]}}
+        ) or {}
+        update = {k: v for k, v in tile_data.items() if k != "_id"}
+        update["q"] = q
+        update["r"] = r
+        if existing.get("_id"):
+            mongo.db.hex_map_tiles.update_one({"_id": existing["_id"]}, {"$set": update})
+            mongo.db.hex_map_tiles.delete_many({
+                "q": {"$in": [q, float(q)]}, "r": {"$in": [r, float(r)]},
+                "_id": {"$ne": existing["_id"]},
+            })
+        else:
+            mongo.db.hex_map_tiles.insert_one(update)
+        for n in [existing.get("owner"), tile_data.get("owner")]:
+            if n:
+                affected_nations.add(n)
+
+    for nation_name in affected_nations:
+        pipeline = [
+            {"$match": {"owner": nation_name, "terrain": {"$exists": True, "$ne": None}}},
+            {"$group": {"_id": "$terrain", "count": {"$sum": 1}}},
+        ]
+        counts = {doc["_id"]: doc["count"] for doc in mongo.db.hex_map_tiles.aggregate(pipeline)}
+        mongo.db.nations.update_one({"name": nation_name}, {"$set": {"territory_types": counts}})
+
+    changes_collection.update_one({"_id": change_id}, {"$set": {
+        "status": "Approved",
+        "time_implemented": now,
+        "last_modified_time": now,
+        "approver": approver["_id"],
+        "session_number": session_number,
+        "before_implemented_data": change.get("before_requested_data", {}),
+        "after_implemented_data": change.get("after_requested_data", {}),
+    }})
+    return True
+
+
 def approve_change(change_id):
     approver = mongo.db.players.find_one({"id": g.user.get("id", None)})
     if approver is None or not approver.get("is_admin", False):
@@ -252,6 +299,9 @@ def approve_change(change_id):
     session_number = global_modifiers.get("session_counter", 0) if global_modifiers else 0
     change = changes_collection.find_one({"_id": change_id})
     target_collection = category_data[change["target_collection"]]["database"]
+
+    if change["target_collection"] == "hex_map":
+        return _approve_hex_map_change(change, change_id, changes_collection, approver, now, session_number)
 
     if change["change_type"] == "Add":
         after_data = change["after_requested_data"]

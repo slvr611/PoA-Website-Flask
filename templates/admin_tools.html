@@ -4,34 +4,224 @@
 
 {% block content %}
 <div class="container">
-	<h1>Admin Tools</h1>
-	<a href="/placeholder_nations">Placeholder Nations Creator</a>
-	<br>
-	<a href="/karma_helper">Karma Helper</a>
-	<br>
-	<a href="/player_district_analysis">Player District Analysis</a>
-	<br>
-	<a href="/player_law_analysis">Player Law Analysis</a>
-	<br>
-	<a href="/ai_personality">AI Personality Editor</a>
-	<br>
-	<a href="/market_prices">Market Prices</a>
-	<br>
-	<br>
-	<strong>AI Market Matching</strong>
-	<br>
-	<form action="/run_ai_market_matching" method="POST" style="display:inline;">
-		<button type="submit" class="btn btn-warning btn-sm"
-		        onclick="return confirm('Run AI market matching now against live data?')">
-			Run AI Market Matching
-		</button>
-	</form>
-	<br>
-	<br>
-	<strong>War &amp; Units</strong>
-	<br>
-	<a href="/traits">View / Edit Unit Traits</a>
-	<br>
-	<a href="/traits/new">Add New Trait</a>
+    <h1>Admin Tools</h1>
+    <p class="text-muted" style="margin-bottom:1.5rem;">All administrative helper functions, listed alphabetically.</p>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1rem;">
+
+        <div class="admin-tool-card">
+            <div class="admin-tool-card-body">
+                <h3 class="admin-tool-card-title">AI Market Matching</h3>
+                <p class="admin-tool-card-desc">Manually trigger AI-to-AI market order matching against live data.</p>
+                <form action="/run_ai_market_matching" method="POST">
+                    <button type="submit" class="btn btn-warning btn-sm"
+                            onclick="return confirm('Run AI market matching now against live data?')">
+                        Run Now
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <div class="admin-tool-card">
+            <div class="admin-tool-card-body">
+                <h3 class="admin-tool-card-title">AI Personality Editor</h3>
+                <p class="admin-tool-card-desc">Set behavioral personality dimensions (aggression, trade, expansion, etc.) for AI nations.</p>
+                <a href="/ai_personality" class="btn btn-primary btn-sm">Open</a>
+            </div>
+        </div>
+
+        <div class="admin-tool-card">
+            <div class="admin-tool-card-body">
+                <h3 class="admin-tool-card-title">Bulk Pop Creation</h3>
+                <p class="admin-tool-card-desc">Create multiple population units at once across nations.</p>
+                <a href="/pops/bulk_create" class="btn btn-primary btn-sm">Open</a>
+            </div>
+        </div>
+
+        <div class="admin-tool-card">
+            <div class="admin-tool-card-body">
+                <h3 class="admin-tool-card-title">Changes</h3>
+                <p class="admin-tool-card-desc">Review, approve, or reject pending change requests from players and automated systems.</p>
+                <a href="/changes" class="btn btn-primary btn-sm">Open</a>
+            </div>
+        </div>
+
+        <div class="admin-tool-card">
+            <div class="admin-tool-card-body">
+                <h3 class="admin-tool-card-title">Database Management</h3>
+                <p class="admin-tool-card-desc">Back up and restore the MongoDB database via S3.</p>
+                <a href="/database_management" class="btn btn-primary btn-sm">Open</a>
+            </div>
+        </div>
+
+        <div class="admin-tool-card">
+            <div class="admin-tool-card-body">
+                <h3 class="admin-tool-card-title">Elected Candidates Generator</h3>
+                <p class="admin-tool-card-desc">Generate two randomised candidates with distinct strengths, weaknesses, and titles for elections.</p>
+                <a href="/elected_candidates_generator" class="btn btn-primary btn-sm">Open</a>
+            </div>
+        </div>
+
+        <div class="admin-tool-card">
+            <div class="admin-tool-card-body">
+                <h3 class="admin-tool-card-title">Era / Age Tick Helper</h3>
+                <p class="admin-tool-card-desc">Run the era and age advancement tick.</p>
+                <a href="/era_tick_helper" class="btn btn-primary btn-sm">Open</a>
+            </div>
+        </div>
+
+        <div class="admin-tool-card">
+            <div class="admin-tool-card-body">
+                <h3 class="admin-tool-card-title">Global Modifiers</h3>
+                <p class="admin-tool-card-desc">View and edit world-level modifiers and the session counter.</p>
+                <a href="/global_modifiers/item/global_modifiers" class="btn btn-primary btn-sm">Open</a>
+            </div>
+        </div>
+
+        <div class="admin-tool-card">
+            <div class="admin-tool-card-body">
+                <h3 class="admin-tool-card-title">Karma Helper</h3>
+                <p class="admin-tool-card-desc">Adjust rolling and temporary karma for nations, and roll random events.</p>
+                <a href="/karma_helper" class="btn btn-primary btn-sm">Open</a>
+            </div>
+        </div>
+
+        <div class="admin-tool-card">
+            <div class="admin-tool-card-body">
+                <h3 class="admin-tool-card-title">Market Prices</h3>
+                <p class="admin-tool-card-desc">View current market buy and sell prices for all resources.</p>
+                <a href="/market_prices" class="btn btn-primary btn-sm">Open</a>
+            </div>
+        </div>
+
+        <div class="admin-tool-card">
+            <div class="admin-tool-card-body">
+                <h3 class="admin-tool-card-title">Placeholder Nations</h3>
+                <p class="admin-tool-card-desc">Create or delete placeholder nation entries for map or testing purposes.</p>
+                <a href="/placeholder_nations" class="btn btn-primary btn-sm">Open</a>
+            </div>
+        </div>
+
+        <div class="admin-tool-card">
+            <div class="admin-tool-card-body">
+                <h3 class="admin-tool-card-title">Player District Analysis</h3>
+                <p class="admin-tool-card-desc">See which imperial districts player nations have built and their synergy activation rates.</p>
+                <a href="/player_district_analysis" class="btn btn-primary btn-sm">Open</a>
+            </div>
+        </div>
+
+        <div class="admin-tool-card">
+            <div class="admin-tool-card-body">
+                <h3 class="admin-tool-card-title">Player Law Analysis</h3>
+                <p class="admin-tool-card-desc">Breakdown of law choices across all player nations as percentages.</p>
+                <a href="/player_law_analysis" class="btn btn-primary btn-sm">Open</a>
+            </div>
+        </div>
+
+        <div class="admin-tool-card">
+            <div class="admin-tool-card-body">
+                <h3 class="admin-tool-card-title">Players</h3>
+                <p class="admin-tool-card-desc">List and manage all player accounts.</p>
+                <a href="/players" class="btn btn-primary btn-sm">Open</a>
+            </div>
+        </div>
+
+        <div class="admin-tool-card">
+            <div class="admin-tool-card-body">
+                <h3 class="admin-tool-card-title">Pop Growth Helper</h3>
+                <p class="admin-tool-card-desc">Run population growth calculations across all nations.</p>
+                <a href="/pop_growth_helper" class="btn btn-primary btn-sm">Open</a>
+            </div>
+        </div>
+
+        <div class="admin-tool-card">
+            <div class="admin-tool-card-body">
+                <h3 class="admin-tool-card-title">Recalculate All Objects</h3>
+                <p class="admin-tool-card-desc">Trigger a full recalculation of computed fields across all data items in the background.</p>
+                <a href="/recalculate_all_objects" class="btn btn-warning btn-sm"
+                   onclick="return confirm('Start recalculation of all objects? This runs in the background.')">
+                    Run
+                </a>
+            </div>
+        </div>
+
+        <div class="admin-tool-card">
+            <div class="admin-tool-card-body">
+                <h3 class="admin-tool-card-title">Session Tick Helper</h3>
+                <p class="admin-tool-card-desc">Run the main session tick that advances the game state.</p>
+                <a href="/tick_helper" class="btn btn-primary btn-sm">Open</a>
+            </div>
+        </div>
+
+        <div class="admin-tool-card">
+            <div class="admin-tool-card-body">
+                <h3 class="admin-tool-card-title">Temperament Overview</h3>
+                <p class="admin-tool-card-desc">See how many nations fall into each temperament category.</p>
+                <a href="/temperament_overview" class="btn btn-primary btn-sm">Open</a>
+            </div>
+        </div>
+
+        <div class="admin-tool-card">
+            <div class="admin-tool-card-body">
+                <h3 class="admin-tool-card-title">Tick Summaries</h3>
+                <p class="admin-tool-card-desc">Browse and download historical tick summary reports.</p>
+                <a href="/tick_summaries" class="btn btn-primary btn-sm">Open</a>
+            </div>
+        </div>
+
+        <div class="admin-tool-card">
+            <div class="admin-tool-card-body">
+                <h3 class="admin-tool-card-title">Trade Routes</h3>
+                <p class="admin-tool-card-desc">View all trade routes across all nations.</p>
+                <a href="/trade_routes" class="btn btn-primary btn-sm">Open</a>
+            </div>
+        </div>
+
+        <div class="admin-tool-card">
+            <div class="admin-tool-card-body">
+                <h3 class="admin-tool-card-title">Unit Traits</h3>
+                <p class="admin-tool-card-desc">View, edit, and add unit combat traits.</p>
+                <a href="/traits" class="btn btn-primary btn-sm">View / Edit</a>
+                <a href="/traits/new" class="btn btn-secondary btn-sm" style="margin-left:0.4rem;">Add New</a>
+            </div>
+        </div>
+
+        <div class="admin-tool-card">
+            <div class="admin-tool-card-body">
+                <h3 class="admin-tool-card-title">Visibility Bypass Log</h3>
+                <p class="admin-tool-card-desc">Audit log of all admin visibility bypasses — nation page and map admin view activations.</p>
+                <a href="/admin/visibility_log" class="btn btn-primary btn-sm">View Log</a>
+            </div>
+        </div>
+
+    </div>
 </div>
+
+<style>
+.admin-tool-card {
+    background: var(--card-bg, #1e1e2e);
+    border: 1px solid var(--border-color, #333);
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+}
+.admin-tool-card-body {
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    gap: 0.5rem;
+}
+.admin-tool-card-title {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+}
+.admin-tool-card-desc {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--text-muted, #888);
+    flex: 1;
+}
+</style>
 {% endblock %}

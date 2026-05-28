@@ -2,7 +2,7 @@
   "$jsonSchema": {
     "bsonType": "object",
     "required": ["target", "target_collection", "request_reason"],
-    "preview": ["target_collection", "change_type", "status", "target", "last_modified_time", "time_requested", "time_implemented", "time_denied", "time_reverted", "requester", "approver", "denier", "reverter", "before_requested_data", "after_requested_data", "before_implemented_data", "after_implemented_data", "before_revert_data", "after_revert_data", "request_reason"],
+    "preview": ["target_collection", "change_type", "status", "target", "last_modified_time", "time_requested", "time_implemented", "time_denied", "time_reverted", "requester", "approver", "denier", "reverter", "before_requested_data", "after_requested_data", "before_implemented_data", "after_implemented_data", "before_revert_data", "after_revert_data", "request_reason", "before_image", "after_image"],
     "properties": {
       "target_collection": {
         "bsonType": "string",

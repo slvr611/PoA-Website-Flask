@@ -92,6 +92,107 @@ def get_viewer_nation(g_user) -> dict | None:
     )
 
 
+def compute_all_visibilities(viewer_nation: dict) -> dict:
+    """
+    Efficiently compute visibility tier (0-4) for every nation at once.
+    Uses bulk DB queries instead of per-nation round-trips.
+    Returns {nation_name: tier}.
+    """
+    viewer_id     = str(viewer_nation["_id"])
+    viewer_region = str(viewer_nation.get("region") or "")
+
+    all_nations = list(mongo.db.nations.find(
+        {},
+        {"_id": 1, "name": 1, "region": 1, "overlord": 1, "visibility_modifiers": 1},
+    ))
+
+    # Bulk market memberships
+    markets_by_member = {}
+    for ml in mongo.db.market_links.find({}, {"member": 1, "market": 1}):
+        m, mkt = str(ml.get("member", "")), str(ml.get("market", ""))
+        if m and mkt:
+            markets_by_member.setdefault(m, set()).add(mkt)
+    viewer_markets = markets_by_member.get(viewer_id, set())
+
+    # Bulk diplo pacts involving the viewer
+    pact_by_partner = {}
+    for row in mongo.db.diplo_relations.find(
+        {
+            "$or": [{"nation_1": viewer_id}, {"nation_2": viewer_id}],
+            "pact_type": {"$in": ["Non-Aggression Pact", "Defensive Pact", "Military Alliance"]},
+        },
+        {"nation_1": 1, "nation_2": 1, "pact_type": 1},
+    ):
+        partner = row["nation_2"] if row["nation_1"] == viewer_id else row["nation_1"]
+        pact_by_partner[str(partner)] = row.get("pact_type", "")
+
+    # Region names — only needed when offensive modifiers target by region
+    viewer_vis_mods = viewer_nation.get("visibility_modifiers", [])
+    needs_regions = any(
+        vm.get("target_type") == "region"
+        for vm in viewer_vis_mods
+        if vm.get("type") == "offensive"
+    )
+    region_names = {}
+    if needs_regions:
+        for r in mongo.db.regions.find({}, {"_id": 1, "name": 1}):
+            region_names[str(r["_id"])] = r.get("name", "")
+
+    result = {}
+    for target in all_nations:
+        name = target.get("name")
+        if not name:
+            continue
+        target_id = str(target["_id"])
+
+        if target_id == viewer_id:
+            result[name] = 4
+            continue
+
+        bonus = 0
+        target_region = str(target.get("region") or "")
+
+        if viewer_region and viewer_region == target_region:
+            bonus += 1
+
+        if str(target.get("overlord") or "") == viewer_id:
+            bonus += 1
+        elif str(viewer_nation.get("overlord") or "") == target_id:
+            bonus += 1
+
+        if viewer_markets & markets_by_member.get(target_id, set()):
+            bonus += 1
+
+        pact_type = pact_by_partner.get(target_id, "")
+        if pact_type == "Non-Aggression Pact":
+            bonus += 1
+        elif pact_type in ("Defensive Pact", "Military Alliance"):
+            bonus += 2
+
+        offensive_bonus = 0
+        target_region_name = region_names.get(target_region, "") if needs_regions else ""
+        for vm in viewer_vis_mods:
+            if vm.get("type") != "offensive":
+                continue
+            tt, tv = vm.get("target_type", "all_nations"), vm.get("target_value", "")
+            if tt == "all_nations":
+                offensive_bonus += vm.get("value", 0)
+            elif tt == "region" and tv and tv == target_region_name:
+                offensive_bonus += vm.get("value", 0)
+            elif tt == "specific_nation" and tv and tv == name:
+                offensive_bonus += vm.get("value", 0)
+
+        defensive_penalty = sum(
+            vm.get("value", 0)
+            for vm in target.get("visibility_modifiers", [])
+            if vm.get("type") == "defensive"
+        )
+
+        result[name] = max(0, min(4, bonus + offensive_bonus + defensive_penalty))
+
+    return result
+
+
 def compute_visibility(viewer_nation: dict, target_nation_id: str) -> int:
     """
     Compute the visibility tier (0-4) that viewer_nation has into target_nation_id.

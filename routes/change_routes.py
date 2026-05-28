@@ -57,6 +57,9 @@ def pending_change_list(page=1):
         if collection_names:
             for collection_name in collection_names:
                 collections_to_preview[preview_item] = collection_name
+    # Always include image fields (not in schema preview to keep schema clean)
+    query_dict["before_image"] = 1
+    query_dict["after_image"]  = 1
 
     # Count total documents for pagination
     pending_count = db.count_documents({"status": "Pending"})
@@ -117,6 +120,8 @@ def archived_change_list(page=1):
         if collection_names:
             for collection_name in collection_names:
                 collections_to_preview[preview_item] = collection_name
+    query_dict["before_image"] = 1
+    query_dict["after_image"]  = 1
 
     # Count total documents for pagination
     archived_count = db.count_documents({"status": {"$ne": "Pending"}})
@@ -292,6 +297,8 @@ def data_type_pending_changes(data_type, page=1):
         if collection_names:
             for collection_name in collection_names:
                 collections_to_preview[preview_item] = collection_name
+    query_dict["before_image"] = 1
+    query_dict["after_image"]  = 1
 
     # Count total documents for pagination - filter by data_type
     pending_count = db.count_documents({"status": "Pending", "target_collection": data_type})
@@ -360,6 +367,8 @@ def data_type_archived_changes(data_type, page=1):
         if collection_names:
             for collection_name in collection_names:
                 collections_to_preview[preview_item] = collection_name
+    query_dict["before_image"] = 1
+    query_dict["after_image"]  = 1
 
     # Count total documents for pagination - filter by data_type
     archived_count = db.count_documents({"status": {"$ne": "Pending"}, "target_collection": data_type})

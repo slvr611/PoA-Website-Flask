@@ -1,6 +1,7 @@
 import os
 import math
-from flask import Blueprint, request, jsonify, render_template, g
+import requests as http_req
+from flask import Blueprint, request, jsonify, render_template, g, Response
 from bson import ObjectId
 from app_core import mongo, json_data, upload_bytes_to_s3
 from helpers.auth_helpers import admin_required
@@ -807,7 +808,164 @@ def sync_nation_regions():
 
 
 # ---------------------------------------------------------------------------
+# Map change request (players and admins)
+# ---------------------------------------------------------------------------
+
+@hex_map_routes.route("/api/hex-map/request-change", methods=["POST"])
+def request_hex_map_change():
+    """Submit a set of tile edits as a pending change request."""
+    if not g.user:
+        return jsonify({"error": "You must be logged in."}), 401
+
+    player = mongo.db.players.find_one({"id": g.user.get("id")})
+    if not player:
+        return jsonify({"error": "Player record not found."}), 401
+
+    data = request.get_json() or {}
+    tiles = data.get("tiles", {})
+    reason = (data.get("reason") or "").strip() or None
+    before_image = data.get("before_image")
+    after_image = data.get("after_image")
+
+    if not tiles:
+        return jsonify({"error": "No tile changes provided."}), 400
+
+    before_tiles = {}
+    after_tiles = {}
+    for coord_key, edit in tiles.items():
+        before_tiles[coord_key] = edit.get("before") or {}
+        after_tiles[coord_key] = edit.get("after") or {}
+
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    change_doc = {
+        "target_collection": "hex_map",
+        "target": None,
+        "time_requested": now,
+        "last_modified_time": now,
+        "requester": player["_id"],
+        "change_type": "Update",
+        "before_requested_data": {"tiles": before_tiles},
+        "after_requested_data": {"tiles": after_tiles},
+        "differential_data": {},
+        "request_reason": reason,
+        "status": "Pending",
+        "before_image": before_image,
+        "after_image": after_image,
+    }
+    result = mongo.db.changes.insert_one(change_doc)
+    return jsonify({"ok": True, "change_id": str(result.inserted_id)})
+
+
+@hex_map_routes.route("/api/hex-map/save-map-edits", methods=["POST"])
+def save_hex_map_edits():
+    """Batch-save tile edits directly (admin only, no change request)."""
+    if getattr(g, "edit_access_level", 0) < 10:
+        return jsonify({"error": "Unauthorized"}), 403
+
+    data = request.get_json() or {}
+    tiles = data.get("tiles", {})
+    if not tiles:
+        return jsonify({"ok": True})
+
+    affected_nations = set()
+    for coord_key, tile_data in tiles.items():
+        try:
+            q, r = map(int, coord_key.split(","))
+        except (ValueError, TypeError):
+            continue
+        allowed = {"terrain", "node", "city", "district", "wonder", "owner", "capital", "region", "portal", "route"}
+        update = {k: v for k, v in tile_data.items() if k in allowed}
+        if not update:
+            continue
+        update["q"] = q
+        update["r"] = r
+        existing = mongo.db.hex_map_tiles.find_one(
+            {"q": {"$in": [q, float(q)]}, "r": {"$in": [r, float(r)]}}
+        ) or {}
+        if existing.get("_id"):
+            mongo.db.hex_map_tiles.update_one({"_id": existing["_id"]}, {"$set": update})
+        else:
+            mongo.db.hex_map_tiles.insert_one(update)
+        for n in [existing.get("owner"), tile_data.get("owner")]:
+            if n:
+                affected_nations.add(n)
+
+    for nation_name in affected_nations:
+        pipeline = [
+            {"$match": {"owner": nation_name, "terrain": {"$exists": True, "$ne": None}}},
+            {"$group": {"_id": "$terrain", "count": {"$sum": 1}}},
+        ]
+        counts = {doc["_id"]: doc["count"] for doc in mongo.db.hex_map_tiles.aggregate(pipeline)}
+        mongo.db.nations.update_one({"name": nation_name}, {"$set": {"territory_types": counts}})
+
+    return jsonify({"ok": True, "saved": len(tiles)})
+
+
+# ---------------------------------------------------------------------------
 # Manual snapshot endpoint
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Visibility data for the hex map
+# ---------------------------------------------------------------------------
+
+@hex_map_routes.route("/api/hex-map/visibility")
+def hex_map_visibility():
+    from calculations.visibility import get_viewer_nation, compute_all_visibilities
+    viewer_nation = get_viewer_nation(g.user)
+    if not viewer_nation:
+        return jsonify({})
+    return jsonify(compute_all_visibilities(viewer_nation))
+
+
+@hex_map_routes.route("/api/hex-map/admin-view-log", methods=["POST"])
+def hex_map_admin_view_log():
+    if not (g.user and getattr(g, "edit_access_level", 0) >= 10):
+        return jsonify({"error": "Unauthorized"}), 403
+    from datetime import datetime, timezone
+    mongo.db.admin_visibility_logs.insert_one({
+        "admin_id":       g.user.get("id"),
+        "admin_username": g.user.get("name", "unknown"),
+        "timestamp":      datetime.now(timezone.utc),
+        "action":         "map_admin_view_enabled",
+    })
+    return jsonify({"ok": True})
+
+
+# ---------------------------------------------------------------------------
+# S3 tile proxy — serves DZI tiles from our domain so the capture canvas
+# stays same-origin and is never tainted (no crossOriginPolicy needed).
+# ---------------------------------------------------------------------------
+
+_S3_ALLOWED_PREFIX = "https://poa-website-static-assets.s3.us-east-1.amazonaws.com/"
+
+@hex_map_routes.route("/api/hex-map/s3-proxy/manifest")
+def s3_proxy_manifest():
+    url = request.args.get("url", "")
+    if not url.startswith(_S3_ALLOWED_PREFIX) or not url.endswith(".dzi"):
+        return jsonify({"error": "Invalid URL"}), 400
+    try:
+        resp = http_req.get(url, timeout=10)
+        return Response(resp.content, content_type="application/xml")
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 502
+
+@hex_map_routes.route("/api/hex-map/s3-proxy/tile")
+def s3_proxy_tile():
+    url = request.args.get("url", "")
+    if not url.startswith(_S3_ALLOWED_PREFIX):
+        return jsonify({"error": "Invalid URL"}), 400
+    try:
+        resp = http_req.get(url, timeout=10)
+        response = Response(resp.content,
+                            content_type=resp.headers.get("Content-Type", "image/jpeg"))
+        response.headers["Cache-Control"] = "public, max-age=3600"
+        return response
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 502
+
+
 # ---------------------------------------------------------------------------
 
 @hex_map_routes.route("/api/hex-map/snapshot", methods=["POST"])

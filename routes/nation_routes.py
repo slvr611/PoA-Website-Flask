@@ -721,7 +721,7 @@ def toggle_visibility_bypass():
     nation_name = request.form.get("nation_name", "")
     mongo.db.admin_visibility_logs.insert_one({
         "admin_id": g.user.get("id"),
-        "admin_username": g.user.get("username", "unknown"),
+        "admin_username": g.user.get("name", "unknown"),
         "timestamp": datetime.now(timezone.utc),
         "page_url": page_url,
         "nation": nation_name,

@@ -1,7 +1,7 @@
 {% extends "layout.html" %}
 {% from "macros/tech_tree.html" import render_tech_tree %}
 {% from "_modifier_macros.html" import modifier_row with context %}
-{% from "_district_macros.html" import district_card %}
+{% from "_district_macros.html" import district_card with context %}
 
 {% block title %}{{ nation["name"] }}{% endblock %}
 
@@ -132,7 +132,7 @@
 					None
 				{% endif %}
 			</span>
-			<span>{{ schema.properties.pop_count.label }}: {{ pf(nation.pop_count, pn.get("pop_count")) }} / {{ pfbd(nation.effective_pop_capacity, pn.get("effective_pop_capacity"), breakdowns.get("effective_pop_capacity", []), pbd.get("effective_pop_capacity", []), "Effective Pop Capacity") }}</span>
+			<span>{{ schema.properties.pop_count.label }}: {{ pf(nation.pop_count, pn.get("pop_count")) }}{% if visibility_level >= 3 %} / {{ pfbd(nation.effective_pop_capacity, pn.get("effective_pop_capacity"), breakdowns.get("effective_pop_capacity", []), pbd.get("effective_pop_capacity", []), "Effective Pop Capacity") }}{% endif %}</span>
 			{% if nation.empire %}
 				<span>Empire</span>
 				<span>{{ schema.properties.prestige.label }}: {{ pf(nation.prestige, pn.get("prestige")) }}</span>
@@ -310,7 +310,7 @@
 				<span class="toggle-icon">▼</span>
 			</div>
 			<div class="section-content">
-			{% if visibility_level >= 2 %}
+			{% if visibility_level >= 3 %}
 				<div class="table-wrapper">
 					<table class="info-table">
 						<tr class="resources-header-row">
@@ -360,7 +360,7 @@
 					{% endif %}
 				</div>
 			{% else %}
-				<p class="visibility-locked">Requires Tier 2 visibility.</p>
+				<p class="visibility-locked">Requires Tier 3 visibility.</p>
 			{% endif %}
 			</div>
 		</div>
@@ -1461,10 +1461,10 @@
 			<span class="toggle-icon">▼</span>
 		</div>
 		<div class="section-content">
-			{% if visibility_level >= 2 %}
+			{% if visibility_level >= 3 %}
 			{{ render_tech_tree(nation.get("technologies", {"political_philosophy": {"researched": true}}), nation.get("technology_cost_modifier", 0), nation.get("technology_cost_minimum", 2), json_data) }}
 		{% else %}
-				<p class="visibility-locked">Requires Tier 2 visibility.</p>
+				<p class="visibility-locked">Requires Tier 3 visibility.</p>
 			{% endif %}
 			</div>
 	</div>

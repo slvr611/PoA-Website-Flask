@@ -221,6 +221,10 @@ class HexMapViewer {
         this._undoStack        = [];
         this._currentUndoBatch = null;
 
+        // Edit mode — buffers changes for submission instead of saving directly
+        this._editMode     = false;
+        this._pendingEdits = new Map();  // "q,r" → { before: tile|undefined, after: tile }
+
         // Nation cache for owner autocomplete and buildings
         this._nationList      = null;  // [{name, color, overlord}]
         this._nationOverlords = {};   // name -> overlord name string
@@ -248,6 +252,13 @@ class HexMapViewer {
         this.nationNomadic    = new Map();  // nation name -> boolean (is nomadic)
         this._outOfRangeTiles = new Set();  // "q,r" keys of owned tiles beyond admin range
         this._adminDistData   = new Map();  // "q,r" key -> {dist, tileCost, entrance, limit, inRange, isSource}
+        this._pendingAdminNations    = new Set();   // nations queued for next incremental range update
+        this._adminRangeUpdateSched  = false;       // rAF already queued for range update
+        this._capturingImage         = false;       // suppress paint overlays during screenshot capture
+
+        // Visibility filtering
+        this._visibilityMap = {};     // nation name -> tier (0-4); empty = not loaded yet
+        this._adminView     = false;  // when true (admin toggled on), bypass all visibility filters
 
         // Render caches — invalidated when colors change
         this._terrainFillCache = {};  // terrain key  → rgba string
@@ -415,16 +426,18 @@ class HexMapViewer {
         const url  = sessionNum != null
             ? `/api/hex-map/tiles/${sessionNum}`
             : '/api/hex-map/tiles';
-        const [resp, imgResp, wonderImgResp, cityImgResp] = await Promise.all([
+        const [resp, imgResp, wonderImgResp, cityImgResp, visResp] = await Promise.all([
             fetch(url),
             fetch('/api/district-defs/image-map'),
             fetch('/api/wonders/default-image'),
             fetch('/api/cities/image-map'),
+            fetch('/api/hex-map/visibility'),
         ]);
         const data          = await resp.json();
         const imgMap        = await imgResp.json().catch(() => ({}));
         const wonderImgData = await wonderImgResp.json().catch(() => ({}));
         const cityImgMap    = await cityImgResp.json().catch(() => ({}));
+        this._visibilityMap = await visResp.json().catch(() => ({}));
 
         this.tiles = new Map();
         for (const tile of (data.tiles || [])) {
@@ -626,6 +639,8 @@ class HexMapViewer {
                 const { x, y } = this._axialToPixel(q, r);
                 const tile    = this.tiles.get(`${q},${r}`);
                 const terrain = tile ? (tile.terrain || 'disconnected') : 'disconnected';
+                // Owned tiles without a terrain type let the background show through.
+                if (terrain === 'disconnected' && tile?.owner) continue;
                 if (!groups[terrain]) groups[terrain] = [];
                 groups[terrain].push(
                     `M${x+ox[0]},${y+oy[0]}` +
@@ -773,9 +788,12 @@ class HexMapViewer {
             allTile.push(tile);
 
             if (hasTerrain && !this._terrainPaths) {
-                const fill = this._terrainFill(tile ? (tile.terrain || 'disconnected') : 'disconnected');
-                if (!terrainBuckets[fill]) terrainBuckets[fill] = [];
-                terrainBuckets[fill].push(x, y);
+                const terrain = tile ? (tile.terrain || 'disconnected') : 'disconnected';
+                if (!(terrain === 'disconnected' && tile?.owner)) {
+                    const fill = this._terrainFill(terrain);
+                    if (!terrainBuckets[fill]) terrainBuckets[fill] = [];
+                    terrainBuckets[fill].push(x, y);
+                }
             }
 
             if (hasRegions && tile && tile.region) {
@@ -880,7 +898,10 @@ class HexMapViewer {
             ctx.beginPath();
             for (let i = 0; i < allX.length; i++) {
                 if (this._outOfRangeTiles.has(allKey[i])) {
-                    this._hexSubpath(ctx, allX[i], allY[i], inner);
+                    const owner = this.tiles.get(allKey[i])?.owner;
+                    if (this._canSeePrivate(owner)) {
+                        this._hexSubpath(ctx, allX[i], allY[i], inner);
+                    }
                 }
             }
             ctx.fillStyle = 'rgba(0,0,0,0.45)';
@@ -938,7 +959,7 @@ class HexMapViewer {
         }
 
         // ── Forbidden tiles overlay (territory restriction, paint mode only) ──
-        if (this.forbiddenTiles.size && this.paintNationMode) {
+        if (this.forbiddenTiles.size && this.paintNationMode && !this._capturingImage) {
             ctx.beginPath();
             for (const [col, row] of this._visibleCells()) {
                 const { q, r } = this._offsetToAxial(col, row);
@@ -952,7 +973,7 @@ class HexMapViewer {
         }
 
         // ── Selection highlight (single hex, drawn on top) ────────────────────
-        if (this.selectedTile) {
+        if (this.selectedTile && !this._capturingImage) {
             const { x, y } = this._axialToPixel(this.selectedTile.q, this.selectedTile.r);
             this._drawHex(ctx, x, y, inner, 'rgba(255,255,100,0.25)', '#ffff44', 2.5);
         }
@@ -1087,6 +1108,13 @@ class HexMapViewer {
         ));
     }
 
+    // Returns true if the viewer can see visibility-gated info (districts, admin range)
+    // for the given nation owner.  Admins with _adminView bypass this.
+    _canSeePrivate(owner) {
+        if (this._adminView || !owner) return true;
+        return (this._visibilityMap[owner] ?? 0) >= 3;
+    }
+
     _drawBuildings(ctx, cx, cy, tile) {
         const s       = this.hexSize;
         const szCity  = Math.max(10, s * 1);   // city — drawn on top
@@ -1109,11 +1137,12 @@ class HexMapViewer {
         };
 
         // Draw order: capital (bottom) → wonder → city (top) → district
+        const showDistrict = tile.district && this._canSeePrivate(tile.owner);
         if (tile.capital) this._drawCapital(ctx, cx, cy, tile);
         if (tile.wonder)   _drawImg(this._wonderDefaultImage, '✦', szWond);
-        if (tile.city || tile.district) ctx.globalAlpha = 0.6;
-        if (tile.city)     _drawImg(tile.city.type ? this._cityTypeImages[tile.city.type] : undefined, '🏛', szCity);
-        if (tile.district) _drawImg(tile.district.def_key ? this._districtImages[tile.district.def_key] : undefined, '⬡', szDist);
+        if (tile.city || showDistrict) ctx.globalAlpha = 0.6;
+        if (tile.city)        _drawImg(tile.city.type ? this._cityTypeImages[tile.city.type] : undefined, '🏛', szCity);
+        if (showDistrict)     _drawImg(tile.district.def_key ? this._districtImages[tile.district.def_key] : undefined, '⬡', szDist);
         ctx.globalAlpha = 1;
 
         ctx.shadowBlur = 0;
@@ -1364,12 +1393,22 @@ class HexMapViewer {
                 field      = { route: originalValue };
                 apiPayload = { route: originalValue };
             }
-            this.tiles.set(key, { ...existing, ...field });
-            fetch(`/api/hex-map/tile/${q}/${r}`, {
-                method:  'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body:    JSON.stringify(apiPayload),
-            }).catch(() => {});
+            const newTile = { ...existing, ...field };
+            this.tiles.set(key, newTile);
+            if (this._editMode) {
+                if (this._pendingEdits.has(key)) {
+                    this._pendingEdits.get(key).after = newTile;
+                }
+            } else {
+                fetch(`/api/hex-map/tile/${q}/${r}`, {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify(apiPayload),
+                }).catch(() => {});
+            }
+        }
+        if (this._editMode) {
+            this.canvas.dispatchEvent(new CustomEvent('hexmap:editchange', { bubbles: true }));
         }
         if (batch.type === 'terrain') this._scheduleTerrainRebuild();
         if (batch.type === 'nation' || batch.type === 'unown') this._computeNationLabels(); this._computeRegionLabels();
@@ -1377,7 +1416,7 @@ class HexMapViewer {
     }
 
     async _paintAt(screenX, screenY) {
-        if (!this.isAdmin) return;
+        if (!this.isAdmin && !this._editMode) return;
         const rect  = this.canvas.getBoundingClientRect();
         const world = this._screenToWorld(screenX - rect.left, screenY - rect.top);
         const { q, r } = this._pixelToAxial(world.x, world.y);
@@ -1387,20 +1426,26 @@ class HexMapViewer {
         if (key === this._lastPainted) return;
         this._lastPainted = key;
 
-        const existing = this.tiles.get(key) || { q, r };
+        const rawExisting = this.tiles.get(key);
+        const existing    = rawExisting || { q, r };
 
         if (this.paintMode) {
             const terrain = this.paintMode;
             if (this._currentUndoBatch && !this._currentUndoBatch.tiles.has(key))
                 this._currentUndoBatch.tiles.set(key, existing.terrain || 'disconnected');
-            this.tiles.set(key, { ...existing, terrain });
+            const newTile = { ...existing, terrain };
+            this.tiles.set(key, newTile);
             this._scheduleTerrainRebuild();
             this.render();
-            await fetch(`/api/hex-map/tile/${q}/${r}`, {
-                method:  'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body:    JSON.stringify({ terrain }),
-            }).catch(() => {});
+            if (this._editMode) {
+                this._recordPendingEdit(key, rawExisting, newTile);
+            } else {
+                await fetch(`/api/hex-map/tile/${q}/${r}`, {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify({ terrain }),
+                }).catch(() => {});
+            }
         } else if (this.paintNationMode) {
             const owner = this.paintNationMode === '__unowned__' ? null : this.paintNationMode;
             if (owner && this.forbiddenTiles.has(key)) {
@@ -1409,46 +1454,60 @@ class HexMapViewer {
             }
             if (this._currentUndoBatch && !this._currentUndoBatch.tiles.has(key))
                 this._currentUndoBatch.tiles.set(key, existing.owner || null);
-            this.tiles.set(key, { ...existing, owner });
+            const newTile = { ...existing, owner };
+            this.tiles.set(key, newTile);
+            // Remove the stale overlay immediately — the rAF will recompute fully.
+            this._outOfRangeTiles.delete(key);
             this._computeNationLabels(); this._computeRegionLabels();
+            this._scheduleAdminRangeUpdate(existing?.owner ?? null, owner);
             this.render();
-            let resp;
-            try {
-                resp = await fetch(`/api/hex-map/tile/${q}/${r}`, {
-                    method:  'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body:    JSON.stringify({ owner }),
-                });
-            } catch (_) { resp = null; }
-            if (resp && !resp.ok) {
-                // Server rejected — roll back the local change and remove from undo batch
-                if (this._currentUndoBatch) this._currentUndoBatch.tiles.delete(key);
-                this.tiles.set(key, existing);
-                this._computeNationLabels(); this._computeRegionLabels();
-                this.render();
-                const data = await resp.json().catch(() => ({}));
-                this._showPaintError(data.error || 'This tile cannot be claimed.');
+            if (this._editMode) {
+                this._recordPendingEdit(key, rawExisting, newTile);
+            } else {
+                let resp;
+                try {
+                    resp = await fetch(`/api/hex-map/tile/${q}/${r}`, {
+                        method:  'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body:    JSON.stringify({ owner }),
+                    });
+                } catch (_) { resp = null; }
+                if (resp && !resp.ok) {
+                    if (this._currentUndoBatch) this._currentUndoBatch.tiles.delete(key);
+                    this.tiles.set(key, existing);
+                    this._outOfRangeTiles.delete(key);
+                    this._computeNationLabels(); this._computeRegionLabels();
+                    this._scheduleAdminRangeUpdate(owner, existing?.owner ?? null);
+                    this.render();
+                    const data = await resp.json().catch(() => ({}));
+                    this._showPaintError(data.error || 'This tile cannot be claimed.');
+                }
             }
         } else if (this.paintRegionMode) {
             const region = this.paintRegionMode === '__unregioned__' ? null : this.paintRegionMode;
             if (this._currentUndoBatch && !this._currentUndoBatch.tiles.has(key))
                 this._currentUndoBatch.tiles.set(key, existing.region || null);
-            this.tiles.set(key, { ...existing, region });
+            const newTile = { ...existing, region };
+            this.tiles.set(key, newTile);
             this.render();
-            let resp;
-            try {
-                resp = await fetch(`/api/hex-map/tile/${q}/${r}`, {
-                    method:  'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body:    JSON.stringify({ region }),
-                });
-            } catch (_) { resp = null; }
-            if (resp && !resp.ok) {
-                if (this._currentUndoBatch) this._currentUndoBatch.tiles.delete(key);
-                this.tiles.set(key, existing);
-                this.render();
-                const data = await resp.json().catch(() => ({}));
-                this._showPaintError(data.error || 'Could not set region on this tile.');
+            if (this._editMode) {
+                this._recordPendingEdit(key, rawExisting, newTile);
+            } else {
+                let resp;
+                try {
+                    resp = await fetch(`/api/hex-map/tile/${q}/${r}`, {
+                        method:  'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body:    JSON.stringify({ region }),
+                    });
+                } catch (_) { resp = null; }
+                if (resp && !resp.ok) {
+                    if (this._currentUndoBatch) this._currentUndoBatch.tiles.delete(key);
+                    this.tiles.set(key, existing);
+                    this.render();
+                    const data = await resp.json().catch(() => ({}));
+                    this._showPaintError(data.error || 'Could not set region on this tile.');
+                }
             }
         } else if (this.paintRouteMode) {
             const route = this.paintRouteMode.erase ? null
@@ -1465,28 +1524,33 @@ class HexMapViewer {
             }
             if (this._currentUndoBatch && !this._currentUndoBatch.tiles.has(key))
                 this._currentUndoBatch.tiles.set(key, existing.route || null);
-            this.tiles.set(key, { ...existing, route });
+            const newTile = { ...existing, route };
+            this.tiles.set(key, newTile);
             this.render();
-            let resp;
-            try {
-                resp = await fetch(`/api/hex-map/tile/${q}/${r}`, {
-                    method:  'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body:    JSON.stringify({ route }),
-                });
-            } catch (_) { resp = null; }
-            if (resp && !resp.ok) {
-                if (this._currentUndoBatch) this._currentUndoBatch.tiles.delete(key);
-                this.tiles.set(key, existing);
-                this.render();
-                const data = await resp.json().catch(() => ({}));
-                this._showPaintError(data.error || 'Could not set route on this tile.');
+            if (this._editMode) {
+                this._recordPendingEdit(key, rawExisting, newTile);
+            } else {
+                let resp;
+                try {
+                    resp = await fetch(`/api/hex-map/tile/${q}/${r}`, {
+                        method:  'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body:    JSON.stringify({ route }),
+                    });
+                } catch (_) { resp = null; }
+                if (resp && !resp.ok) {
+                    if (this._currentUndoBatch) this._currentUndoBatch.tiles.delete(key);
+                    this.tiles.set(key, existing);
+                    this.render();
+                    const data = await resp.json().catch(() => ({}));
+                    this._showPaintError(data.error || 'Could not set route on this tile.');
+                }
             }
         }
     }
 
     async _paintUnownedAt(screenX, screenY) {
-        if (!this.isAdmin) return;
+        if (!this.isAdmin && !this._editMode) return;
         const rect  = this.canvas.getBoundingClientRect();
         const world = this._screenToWorld(screenX - rect.left, screenY - rect.top);
         const { q, r } = this._pixelToAxial(world.x, world.y);
@@ -1495,17 +1559,23 @@ class HexMapViewer {
         const key = `${q},${r}`;
         if (key === this._lastPainted) return;
         this._lastPainted = key;
-        const existing = this.tiles.get(key) || { q, r };
+        const rawExisting = this.tiles.get(key);
+        const existing    = rawExisting || { q, r };
         if (this._currentUndoBatch && !this._currentUndoBatch.tiles.has(key))
             this._currentUndoBatch.tiles.set(key, existing.owner || null);
-        this.tiles.set(key, { ...existing, owner: null });
+        const newTile = { ...existing, owner: null };
+        this.tiles.set(key, newTile);
         this._computeNationLabels(); this._computeRegionLabels();
         this.render();
-        await fetch(`/api/hex-map/tile/${q}/${r}`, {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ owner: null }),
-        }).catch(() => {});
+        if (this._editMode) {
+            this._recordPendingEdit(key, rawExisting, newTile);
+        } else {
+            await fetch(`/api/hex-map/tile/${q}/${r}`, {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify({ owner: null }),
+            }).catch(() => {});
+        }
     }
 
     _onWheel(e) {
@@ -1598,7 +1668,7 @@ class HexMapViewer {
             }
 
             const adminDbg = this._adminDistData.get(`${q},${r}`);
-            if (adminDbg) {
+            if (adminDbg && this._canSeePrivate(tile.owner)) {
                 let dbgVal;
                 if (adminDbg.isSource) {
                     dbgVal = `<span style="color:#8f8">source tile</span> (limit ${adminDbg.limit})`;
@@ -1645,14 +1715,14 @@ class HexMapViewer {
                 const rKey = nd.resource_type || nd.value || nd.type;
                 html += row('Node', _esc(RESOURCE_NAME[rKey] || rKey || nd.type || ''));
             }
-            if (this.isAdmin) html += this._buildEditForm(q, r, tile);
+            if (this.isAdmin || this._editMode) html += this._buildEditForm(q, r, tile);
         } else {
             html += `<div class="hex-detail-empty">Empty tile (no data)</div>`;
-            if (this.isAdmin) html += this._buildEditForm(q, r, {});
+            if (this.isAdmin || this._editMode) html += this._buildEditForm(q, r, {});
         }
 
         this.detailPanel.innerHTML = html;
-        if (this.isAdmin) this._bindEditForm(q, r);
+        if (this.isAdmin || this._editMode) this._bindEditForm(q, r);
     }
 
     _clearDetails() {
@@ -1762,9 +1832,49 @@ class HexMapViewer {
         } catch (_) { this._nationList = []; }
     }
 
-    _computeAllAdminRanges() {
-        this._outOfRangeTiles = new Set();
-        this._adminDistData   = new Map();
+    // Queue nations for a scoped admin-range recompute on the next animation frame.
+    // Multiple paints in the same frame are batched into one Dijkstra pass.
+    _scheduleAdminRangeUpdate(oldOwner, newOwner) {
+        if (oldOwner) this._pendingAdminNations.add(oldOwner);
+        if (newOwner) this._pendingAdminNations.add(newOwner);
+        if (this._adminRangeUpdateSched) return;
+        this._adminRangeUpdateSched = true;
+        requestAnimationFrame(() => {
+            this._adminRangeUpdateSched = false;
+            const nations = this._pendingAdminNations;
+            this._pendingAdminNations = new Set();
+            if (nations.size > 0) {
+                this._computeAllAdminRanges(nations);
+                this.render();
+            }
+        });
+    }
+
+    // targetNations: optional Set of nation names — if provided, only those nations are
+    // recomputed and their previous entries are cleared.  Pass null for a full rebuild.
+    _computeAllAdminRanges(targetNations = null) {
+        if (targetNations === null) {
+            this._outOfRangeTiles = new Set();
+            this._adminDistData   = new Map();
+        } else {
+            // Incremental: evict any key previously computed for the affected nations.
+            // Use _adminDistData as the source of truth (covers tiles that changed owner or
+            // became unowned since the last full compute).
+            for (const [key, tile] of this.tiles) {
+                if (tile.owner && targetNations.has(tile.owner)) {
+                    this._outOfRangeTiles.delete(key);
+                    this._adminDistData.delete(key);
+                }
+            }
+            // Also evict keys that are in the range data but no longer owned (painted unowned).
+            for (const [key] of this._adminDistData) {
+                const tile = this.tiles.get(key);
+                if (!tile || !tile.owner) {
+                    this._outOfRangeTiles.delete(key);
+                    this._adminDistData.delete(key);
+                }
+            }
+        }
         if (!this.nationAdmin || this.nationAdmin.size === 0) return;
 
         // Build portal map: color → [{q,r,key,terrain}] for all portal tiles on the map.
@@ -1776,10 +1886,12 @@ class HexMapViewer {
             portalMap.get(color).push({ q: tile.q, r: tile.r, key, terrain: tile.terrain || 'disconnected' });
         }
 
-        // Group owned tiles by nation, tracking capital and building flags
+        // Group owned tiles by nation, tracking capital and building flags.
+        // When targetNations is provided, skip all other nations.
         const nationTiles = new Map();
         for (const [key, tile] of this.tiles) {
             if (!tile.owner) continue;
+            if (targetNations !== null && !targetNations.has(tile.owner)) continue;
             if (!nationTiles.has(tile.owner)) nationTiles.set(tile.owner, []);
             nationTiles.get(tile.owner).push({
                 q: tile.q, r: tile.r, key,
@@ -2179,43 +2291,374 @@ class HexMapViewer {
                 route,
             };
 
-            const resp = await fetch(`/api/hex-map/tile/${q}/${r}`, {
-                method:  'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body:    JSON.stringify(update),
-            });
-            if (resp.ok) {
-                const key = `${q},${r}`;
-                const old = this.tiles.get(key);
-                // Refresh nation color cache if owner changed
-                if (update.owner && update.owner !== (old && old.owner)) {
-                    try {
-                        const nc = await (await fetch('/api/hex-map/nation-list')).json();
-                        if (nc.nations) {
-                            this._nationList = nc.nations;
-                            for (const n of nc.nations) {
-                                this.nationColors[n.name] = n.color;
-                                if (n.overlord) this._nationOverlords[n.name] = n.overlord;
-                                this.nationAdmin.set(n.name, n.admin || 1);
-                                this.nationNomadic.set(n.name, !!n.nomadic);
-                            }
-                        }
-                    } catch (_) {}
-                }
-                this.tiles.set(key, { ...(old || { q, r }), ...update });
+            const key = `${q},${r}`;
+
+            if (this._editMode) {
+                const rawOld  = this.tiles.get(key);
+                const newTile = { ...(rawOld || { q, r }), ...update };
+                this.tiles.set(key, newTile);
+                this._recordPendingEdit(key, rawOld, newTile);
                 this._computeNationLabels(); this._computeRegionLabels();
-                // Recompute admin ranges if a building was added or removed
                 if ('city' in update || 'district' in update || 'wonder' in update || 'owner' in update || 'capital' in update || 'portal' in update)
-                    this._computeAllAdminRanges();
+                    this._scheduleAdminRangeUpdate(rawOld?.owner ?? null, update.owner ?? null);
                 this._showDetails(q, r);
                 this.render();
             } else {
-                const data = await resp.json().catch(() => ({}));
-                this._showPaintError(data.error || `Save failed (HTTP ${resp.status}).`);
+                const resp = await fetch(`/api/hex-map/tile/${q}/${r}`, {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify(update),
+                });
+                if (resp.ok) {
+                    const old = this.tiles.get(key);
+                    // Refresh nation color cache if owner changed
+                    if (update.owner && update.owner !== (old && old.owner)) {
+                        try {
+                            const nc = await (await fetch('/api/hex-map/nation-list')).json();
+                            if (nc.nations) {
+                                this._nationList = nc.nations;
+                                for (const n of nc.nations) {
+                                    this.nationColors[n.name] = n.color;
+                                    if (n.overlord) this._nationOverlords[n.name] = n.overlord;
+                                    this.nationAdmin.set(n.name, n.admin || 1);
+                                    this.nationNomadic.set(n.name, !!n.nomadic);
+                                }
+                            }
+                        } catch (_) {}
+                    }
+                    this.tiles.set(key, { ...(old || { q, r }), ...update });
+                    this._computeNationLabels(); this._computeRegionLabels();
+                    if ('city' in update || 'district' in update || 'wonder' in update || 'owner' in update || 'capital' in update || 'portal' in update)
+                        this._scheduleAdminRangeUpdate(old?.owner ?? null, update.owner ?? null);
+                    this._showDetails(q, r);
+                    this.render();
+                } else {
+                    const data = await resp.json().catch(() => ({}));
+                    this._showPaintError(data.error || `Save failed (HTTP ${resp.status}).`);
+                }
             }
         } catch (err) {
             this._showPaintError(`Save failed: ${err.message}`);
         } });
+    }
+
+    // -----------------------------------------------------------------------
+    // Edit mode (change proposal system)
+    // -----------------------------------------------------------------------
+
+    get pendingEditCount() { return this._pendingEdits.size; }
+
+    _recordPendingEdit(key, originalTile, newTile) {
+        if (!this._pendingEdits.has(key)) {
+            this._pendingEdits.set(key, { before: originalTile });
+        }
+        this._pendingEdits.get(key).after = newTile;
+        this.canvas.dispatchEvent(new CustomEvent('hexmap:editchange', { bubbles: true }));
+    }
+
+    enterEditMode() {
+        if (this._editMode) return;
+        this._editMode     = true;
+        this._pendingEdits = new Map();
+        this._undoStack    = [];
+        this.canvas.dispatchEvent(new CustomEvent('hexmap:editmodechange', { bubbles: true, detail: { active: true } }));
+    }
+
+    cancelEditMode() {
+        if (!this._editMode) return;
+        for (const [key, edit] of this._pendingEdits) {
+            if (edit.before === undefined) {
+                this.tiles.delete(key);
+            } else {
+                this.tiles.set(key, edit.before);
+            }
+        }
+        this._pendingEdits = new Map();
+        this._editMode     = false;
+        this._undoStack    = [];
+        this._buildTerrainPaths();
+        this._computeNationLabels();
+        this._computeRegionLabels();
+        this._computeAllAdminRanges();
+        this.render();
+        this.canvas.dispatchEvent(new CustomEvent('hexmap:editmodechange', { bubbles: true, detail: { active: false } }));
+    }
+
+    _zoomToAxialBounds(minQ, maxQ, minR, maxR, targetW, targetH, padHexes = 1.5) {
+        const w   = targetW  !== undefined ? targetW  : this.canvas.width;
+        const h   = targetH  !== undefined ? targetH  : this.canvas.height;
+        const pad = this.hexSize * padHexes;
+        const corners = [
+            this._axialToPixel(minQ, minR),
+            this._axialToPixel(maxQ, minR),
+            this._axialToPixel(minQ, maxR),
+            this._axialToPixel(maxQ, maxR),
+        ];
+        const wxMin = Math.min(...corners.map(c => c.x)) - pad;
+        const wxMax = Math.max(...corners.map(c => c.x)) + pad;
+        const wyMin = Math.min(...corners.map(c => c.y)) - pad;
+        const wyMax = Math.max(...corners.map(c => c.y)) + pad;
+        const ww = wxMax - wxMin, wh = wyMax - wyMin;
+        const zoom = Math.max(this.minZoom, Math.min(
+            this.maxZoom,
+            w * 0.94 / (ww || 1),
+            h * 0.94 / (wh || 1),
+        ));
+        this.zoom = zoom;
+        this.panX = w / 2 - ((wxMin + wxMax) / 2) * zoom;
+        this.panY = h / 2 - ((wyMin + wyMax) / 2) * zoom;
+    }
+
+    // Wait for two animation frames so pending canvas renders have settled.
+    _waitTwoFrames() {
+        return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    }
+
+    // Create a temporary OSD viewer for screenshot capture.
+    // Tiles are fetched through a Flask same-origin proxy (/api/hex-map/s3-proxy/tile)
+    // so the OSD canvas stays same-origin and is never tainted — no crossOriginPolicy
+    // needed, and the main map viewer is completely unaffected.
+    // Returns the viewer once all tiles for the capture viewport are fully loaded,
+    // or after a 6-second timeout so captures still proceed on slow connections.
+    async _createCaptureViewer(captureW, captureH) {
+        if (!this.bgDziUrl) return null;
+
+        // Fetch the DZI manifest through the proxy to read image dimensions.
+        let tileSource;
+        try {
+            const resp = await fetch(
+                `/api/hex-map/s3-proxy/manifest?url=${encodeURIComponent(this.bgDziUrl)}`
+            );
+            if (!resp.ok) return null;
+            const xmlText = await resp.text();
+            const doc     = new DOMParser().parseFromString(xmlText, 'application/xml');
+            const imgEl   = doc.querySelector('Image');
+            const sizeEl  = doc.querySelector('Size');
+            const imgW    = parseInt(sizeEl?.getAttribute('Width')   || '0');
+            const imgH    = parseInt(sizeEl?.getAttribute('Height')  || '0');
+            const tSize   = parseInt(imgEl?.getAttribute('TileSize') || '256');
+            const ovlap   = parseInt(imgEl?.getAttribute('Overlap')  || '1');
+            const fmt     = imgEl?.getAttribute('Format') || 'jpg';
+            if (!imgW || !imgH) return null;
+
+            const dziBase  = this.bgDziUrl.replace(/\.dzi$/, '');
+            const maxLevel = Math.ceil(Math.log2(Math.max(imgW, imgH)));
+
+            // Build a generic TileSource; route every tile through the Flask proxy.
+            tileSource = new OpenSeadragon.TileSource({
+                width: imgW, height: imgH,
+                tileSize: tSize, tileOverlap: ovlap,
+                minLevel: 0, maxLevel,
+            });
+            tileSource.getTileUrl = (level, x, y) => {
+                const s3Url = `${dziBase}_files/${level}/${x}_${y}.${fmt}`;
+                return `/api/hex-map/s3-proxy/tile?url=${encodeURIComponent(s3Url)}`;
+            };
+        } catch (_) {
+            return null;
+        }
+
+        const container = document.createElement('div');
+        container.style.cssText =
+            `position:fixed;top:-${captureH + 20}px;left:0;` +
+            `width:${captureW}px;height:${captureH}px;` +
+            `visibility:hidden;pointer-events:none;`;
+        document.body.appendChild(container);
+
+        const viewer = OpenSeadragon({
+            element:               container,
+            prefixUrl:             'https://cdn.jsdelivr.net/npm/openseadragon@3.1.0/build/openseadragon/images/',
+            showNavigationControl: false,
+            mouseNavEnabled:       false,
+            animationTime:         0,
+            blendTime:             0,
+            immediateRender:       true,
+            // No crossOriginPolicy — tiles come from our own server (same origin).
+        });
+        viewer._container = container;
+
+        return new Promise((resolve) => {
+            const timeoutId = setTimeout(() => resolve(viewer), 6000);
+
+            viewer.addOnceHandler('open-failed', () => {
+                clearTimeout(timeoutId);
+                resolve(null);
+            });
+
+            viewer.addOnceHandler('open', () => {
+                // Sync viewport to match the capture canvas pan/zoom state.
+                try {
+                    const ww = this._worldWidth() * (this.bgScale || 1.0);
+                    const l  = (-this.panX / this.zoom - (this.bgOffsetX || 0)) / ww;
+                    const t  = (-this.panY / this.zoom - (this.bgOffsetY || 0)) / ww;
+                    const w  = captureW / this.zoom / ww;
+                    const h  = captureH / this.zoom / ww;
+                    viewer.viewport.fitBounds(new OpenSeadragon.Rect(l, t, w, h), true);
+                } catch (_) {}
+
+                // Resolve once all tiles for this viewport are fully loaded.
+                const onFullyLoaded = (event) => {
+                    if (event.fullyLoaded) {
+                        viewer.world.removeHandler('fully-loaded-change', onFullyLoaded);
+                        clearTimeout(timeoutId);
+                        resolve(viewer);
+                    }
+                };
+                viewer.world.addHandler('fully-loaded-change', onFullyLoaded);
+                if (viewer.world.getFullyLoaded()) {
+                    viewer.world.removeHandler('fully-loaded-change', onFullyLoaded);
+                    clearTimeout(timeoutId);
+                    resolve(viewer);
+                }
+            });
+
+            viewer.open(tileSource);
+        });
+    }
+
+    // Composite an OSD capture-viewer canvas with the current hex offscreen canvas.
+    _compositeCapture(captureViewer) {
+        const bgCanvas = captureViewer?.drawer?.canvas;
+        const W = this.canvas.width, H = this.canvas.height;
+        const off  = document.createElement('canvas');
+        off.width  = W;
+        off.height = H;
+        const octx = off.getContext('2d');
+        if (bgCanvas) {
+            try { octx.drawImage(bgCanvas, 0, 0, W, H); } catch (_) {}
+        }
+        octx.drawImage(this.canvas, 0, 0);
+        return off.toDataURL('image/jpeg', 0.88);
+    }
+
+    async _generateChangeImages() {
+        const keys = [...this._pendingEdits.keys()];
+        if (!keys.length) return { before: null, after: null };
+
+        let minQ = Infinity, maxQ = -Infinity, minR = Infinity, maxR = -Infinity;
+        for (const key of keys) {
+            const [q, r] = key.split(',').map(Number);
+            if (q < minQ) minQ = q; if (q > maxQ) maxQ = q;
+            if (r < minR) minR = r; if (r > maxR) maxR = r;
+        }
+
+        const CAPTURE_W = 500, CAPTURE_H = 375;
+        const offCanvas = document.createElement('canvas');
+        offCanvas.width  = CAPTURE_W;
+        offCanvas.height = CAPTURE_H;
+
+        const mainCanvas = this.canvas;
+        const mainCtx    = this.ctx;
+        const savedPanX  = this.panX, savedPanY = this.panY, savedZoom = this.zoom;
+
+        this.canvas = offCanvas;
+        this.ctx    = offCanvas.getContext('2d');
+        this._capturingImage = true;
+
+        this._zoomToAxialBounds(minQ, maxQ, minR, maxR, CAPTURE_W, CAPTURE_H);
+
+        // Spin up the anonymous capture viewer ONCE — reused for both before and after.
+        const captureViewer = await this._createCaptureViewer(CAPTURE_W, CAPTURE_H);
+
+        // After state
+        this._buildTerrainPaths();
+        this.render();
+        await this._waitTwoFrames();
+        const afterImage = this._compositeCapture(captureViewer);
+
+        // Before state
+        for (const [key, edit] of this._pendingEdits) {
+            if (edit.before === undefined) this.tiles.delete(key);
+            else this.tiles.set(key, edit.before);
+        }
+        this._buildTerrainPaths();
+        this.render();
+        await this._waitTwoFrames();
+        const beforeImage = this._compositeCapture(captureViewer);
+
+        // Destroy the capture viewer and its container.
+        if (captureViewer) {
+            try { captureViewer.destroy(); } catch (_) {}
+            try { captureViewer._container?.remove(); } catch (_) {}
+        }
+
+        // Restore after state, main canvas, and viewport.
+        for (const [key, edit] of this._pendingEdits) {
+            if (edit.after !== undefined) this.tiles.set(key, edit.after);
+        }
+        this._capturingImage = false;
+        this.canvas = mainCanvas;
+        this.ctx    = mainCtx;
+        this.panX = savedPanX; this.panY = savedPanY; this.zoom = savedZoom;
+        this._buildTerrainPaths();
+        this.render();
+
+        return { before: beforeImage, after: afterImage };
+    }
+
+    async submitChange(reason) {
+        if (!this._pendingEdits.size) return { ok: false, error: 'No edits to submit.' };
+
+        let beforeImage = null, afterImage = null;
+        try {
+            const imgs = await this._generateChangeImages();
+            beforeImage = imgs.before;
+            afterImage  = imgs.after;
+        } catch (_) {}
+
+        const tiles = {};
+        for (const [key, edit] of this._pendingEdits) {
+            tiles[key] = { before: edit.before || null, after: edit.after || null };
+        }
+
+        try {
+            const resp = await fetch('/api/hex-map/request-change', {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify({ tiles, reason: reason || null, before_image: beforeImage, after_image: afterImage }),
+            });
+            const data = await resp.json().catch(() => ({}));
+            if (resp.ok) {
+                this._pendingEdits = new Map();
+                this._editMode     = false;
+                this._undoStack    = [];
+                this.canvas.dispatchEvent(new CustomEvent('hexmap:editmodechange', { bubbles: true, detail: { active: false } }));
+                await this.loadTiles(null);
+                return { ok: true, change_id: data.change_id };
+            }
+            return { ok: false, error: data.error || `HTTP ${resp.status}` };
+        } catch (err) {
+            return { ok: false, error: err.message };
+        }
+    }
+
+    async saveDirect() {
+        if (!this._pendingEdits.size) return { ok: true };
+
+        const tiles = {};
+        for (const [key, edit] of this._pendingEdits) {
+            if (edit.after) tiles[key] = edit.after;
+        }
+
+        try {
+            const resp = await fetch('/api/hex-map/save-map-edits', {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify({ tiles }),
+            });
+            const data = await resp.json().catch(() => ({}));
+            if (resp.ok) {
+                this._pendingEdits = new Map();
+                this._editMode     = false;
+                this._undoStack    = [];
+                this.canvas.dispatchEvent(new CustomEvent('hexmap:editmodechange', { bubbles: true, detail: { active: false } }));
+                await this.loadTiles(null);
+                return { ok: true };
+            }
+            return { ok: false, errors: data.errors || [`HTTP ${resp.status}`] };
+        } catch (err) {
+            return { ok: false, errors: [err.message] };
+        }
     }
 
     // -----------------------------------------------------------------------

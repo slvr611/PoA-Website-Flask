@@ -86,6 +86,7 @@ category_data = {
     "units": {"pluralName": "Units", "singularName": "Unit", "database": mongo.db.units},
     "traits": {"pluralName": "Traits", "singularName": "Trait", "database": mongo.db.traits},
     "trade_routes": {"pluralName": "Trade Routes", "singularName": "Trade Route", "database": mongo.db.trade_routes},
+    "hex_map": {"pluralName": "Map Changes", "singularName": "Map Change", "database": mongo.db.hex_map_tiles},
 }
 
 def ensure_mongo_indexes():
