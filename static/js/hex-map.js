@@ -1715,14 +1715,14 @@ class HexMapViewer {
                 const rKey = nd.resource_type || nd.value || nd.type;
                 html += row('Node', _esc(RESOURCE_NAME[rKey] || rKey || nd.type || ''));
             }
-            if (this.isAdmin || this._editMode) html += this._buildEditForm(q, r, tile);
+            if (this._editMode) html += this._buildEditForm(q, r, tile);
         } else {
             html += `<div class="hex-detail-empty">Empty tile (no data)</div>`;
-            if (this.isAdmin || this._editMode) html += this._buildEditForm(q, r, {});
+            if (this._editMode) html += this._buildEditForm(q, r, {});
         }
 
         this.detailPanel.innerHTML = html;
-        if (this.isAdmin || this._editMode) this._bindEditForm(q, r);
+        if (this._editMode) this._bindEditForm(q, r);
     }
 
     _clearDetails() {

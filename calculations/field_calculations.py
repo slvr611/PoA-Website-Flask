@@ -160,7 +160,7 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
         cities = collect_cities(target)
         city_totals = sum_city_totals(cities)
 
-        technologies = target.get("technologies", {})
+        technologies = _normalize_technologies(target.get("technologies"))
         tech_totals = sum_tech_totals(technologies)
 
         loose_nodes = target.get("nodes", {})
@@ -677,7 +677,15 @@ def collect_cities(target):
 
     return collected_modifiers
 
+_DEFAULT_TECHNOLOGIES = {"political_philosophy": {"researched": True}}
+
+def _normalize_technologies(technologies):
+    if not technologies or not isinstance(technologies, dict):
+        return _DEFAULT_TECHNOLOGIES
+    return technologies
+
 def sum_tech_totals(technologies):
+    technologies = _normalize_technologies(technologies)
     tech_totals = {}
     for tech, value in technologies.items():
         if value.get("researched", False):
@@ -1526,7 +1534,7 @@ def _build_unit_tagged_sources(target, schema, district_details):
                     tagged.append({"label": f"District: {imperial_name} (Synergy)", "modifiers": synergy_mods})
 
     # Technologies
-    for tech_key, tech_val in target.get("technologies", {}).items():
+    for tech_key, tech_val in _normalize_technologies(target.get("technologies")).items():
         if tech_val.get("researched"):
             tech_data = json_data["tech"].get(tech_key, {})
             mods = tech_data.get("modifiers", {})
@@ -2958,7 +2966,7 @@ def _build_computed_contributions(
         contribs.append(SourceContribution(label="Population", source_type="computed",
                                            modifiers={"food_consumption": food_from_pop}))
 
-    tech_invest = sum(d.get("investing", 0) for d in target.get("technologies", {}).values()
+    tech_invest = sum(d.get("investing", 0) for d in _normalize_technologies(target.get("technologies")).values()
                       if isinstance(d, dict))
     if tech_invest:
         contribs.append(SourceContribution(label="Tech Investment", source_type="computed",

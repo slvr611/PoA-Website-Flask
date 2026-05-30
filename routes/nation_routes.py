@@ -118,6 +118,15 @@ def nation_item(item_ref):
     request_start = perf_counter()
     timings = {}
 
+    # Before the normal lookup, check if this is an old name that was renamed.
+    # get_data_on_item aborts with 404 if not found, so we check previous_names first.
+    if not mongo.db.nations.find_one({"name": item_ref}, {"_id": 1}):
+        successor = mongo.db.nations.find_one(
+            {"previous_names": item_ref}, {"name": 1}
+        )
+        if successor:
+            return redirect(f"/nations/item/{successor['name']}", code=301)
+
     phase_start = perf_counter()
     schema, db, nation = get_data_on_item("nations", item_ref)
     timings["get_data_on_item_ms"] = round((perf_counter() - phase_start) * 1000, 2)

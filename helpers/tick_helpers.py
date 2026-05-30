@@ -851,7 +851,8 @@ def nation_tech_tick(old_nation, new_nation, schema):
     new_nation["research_consumption_at_tick"] = old_nation.get("resource_consumption", {}).get("research", 0)
     json_tech_data = json_data["tech"]
 
-    new_nation["technologies"] = deepcopy(old_nation.get("technologies", {}))
+    techs = old_nation.get("technologies")
+    new_nation["technologies"] = deepcopy(techs) if isinstance(techs, dict) else {"political_philosophy": {"researched": True}}
     for tech, value in new_nation["technologies"].items():
         if value.get("investing", 0) > 0:
             value["invested"] = value.get("invested", 0) + value.get("investing", 0)
@@ -1179,7 +1180,8 @@ def nation_tech_cost_reduction_tick(old_nation, new_nation, schema):
     result = ""
     json_tech_data = json_data["tech"]
     
-    for tech, value in new_nation["technologies"].items():
+    techs = new_nation.get("technologies") or {}
+    for tech, value in (techs.items() if isinstance(techs, dict) else []):
         base_cost = json_tech_data.get(tech, {}).get("cost", 0)
         current_cost = value.get("cost", base_cost + old_nation.get("technology_cost_modifier", 0))
         invested = value.get("invested", 0)

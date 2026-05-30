@@ -9,6 +9,21 @@ from bson import ObjectId
 _NATURAL_KEY_FIELDS = ['name', 'quest_name', 'source', 'modifier_type', 'scope', 'attribute', 'resource_from', 'resource_to', 'field', 'key', 'unit_category', 'unit_stat', 'tier', 'tech_category']
 
 
+def _handle_nation_rename(nation_id, old_name, new_name):
+    """When a nation is renamed: update all hex_map_tiles owner references and
+    record the old name in previous_names so old links can redirect."""
+    if not old_name or not new_name or old_name == new_name:
+        return
+    mongo.db.hex_map_tiles.update_many(
+        {"owner": old_name},
+        {"$set": {"owner": new_name}}
+    )
+    mongo.db.nations.update_one(
+        {"_id": nation_id},
+        {"$addToSet": {"previous_names": old_name}}
+    )
+
+
 def _get_natural_key(item):
     """Return the first non-empty value from a priority list of identifying fields."""
     for field in _NATURAL_KEY_FIELDS:
@@ -349,6 +364,8 @@ def approve_change(change_id):
                 merged = deep_merge(existing, after_data)
                 merged = _calculate_and_attach_fields(change["target_collection"], merged)
                 target_collection.update_one({"_id": change["target"]}, {"$set": merged})
+                if change["target_collection"] == "nations":
+                    _handle_nation_rename(change["target"], existing.get("name", ""), merged.get("name", ""))
             else:
                 target_collection.delete_one({"_id": change["target"]})
 
@@ -425,6 +442,8 @@ def system_approve_change(change_id):
                 merged = deep_merge(existing, after_data)
                 merged = _calculate_and_attach_fields(change["target_collection"], merged)
                 target_collection.update_one({"_id": change["target"]}, {"$set": merged})
+                if change["target_collection"] == "nations":
+                    _handle_nation_rename(change["target"], existing.get("name", ""), merged.get("name", ""))
             else:
                 target_collection.delete_one({"_id": change["target"]})
 
@@ -437,7 +456,7 @@ def system_approve_change(change_id):
                 "before_implemented_data": target,
                 "after_implemented_data": after_data
             }})
-            
+
             if change["change_type"] == "Update":
                 propagate_updates(
                     changed_data_type=change["target_collection"],

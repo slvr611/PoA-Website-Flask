@@ -540,7 +540,8 @@ def compute_resource_consumption(field, target, base_value, field_schema, overal
             food_consumption = math.ceil(food_consumption) if food_consumption_per_pop < 1 else math.floor(food_consumption)
             specific_resource_consumption += food_consumption
         elif resource["key"] == "research":
-            for _, details in target.get("technologies", {}).items():
+            techs = target.get("technologies") or {}
+            for _, details in (techs.items() if isinstance(techs, dict) else []):
                 specific_resource_consumption += details.get("investing", 0)
 
         consumption_dict[resource["key"]] = max(specific_resource_consumption, 0)

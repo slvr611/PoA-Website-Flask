@@ -356,7 +356,8 @@ class TechnologyAdapter:
     def collect(cls, target: dict) -> list:
         contributions = []
         tech_data = json_data.get("tech", {})
-        for tech, value in target.get("technologies", {}).items():
+        techs = target.get("technologies") or {}
+        for tech, value in (techs.items() if isinstance(techs, dict) else []):
             if value.get("researched", False):
                 mods = dict(tech_data.get(tech, {}).get("modifiers", {}))
                 if mods:
