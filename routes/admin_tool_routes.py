@@ -688,14 +688,19 @@ def wipe_all_districts():
 def wipe_all_nodes():
     """Remove the node field from every district and imperial district, and
     clear the nodes array from every city, across all nations."""
-    # Unset node from every element of districts[] and from imperial_district
+    # Unset node from every element of districts[] (only on docs where the array exists)
     mongo.db.nations.update_many(
-        {},
-        {"$unset": {"districts.$[].node": "", "imperial_district.node": ""}}
+        {"districts": {"$exists": True, "$not": {"$size": 0}}},
+        {"$unset": {"districts.$[].node": ""}}
+    )
+    # Unset node from imperial_district (only on docs where the field exists)
+    mongo.db.nations.update_many(
+        {"imperial_district.node": {"$exists": True}},
+        {"$unset": {"imperial_district.node": ""}}
     )
     # Clear nodes array from every element of cities[]
     mongo.db.nations.update_many(
-        {"cities": {"$exists": True, "$ne": []}},
+        {"cities": {"$exists": True, "$not": {"$size": 0}}},
         {"$set": {"cities.$[].nodes": []}}
     )
     flash("Wiped all district nodes and city nodes across all nations.", "success")
