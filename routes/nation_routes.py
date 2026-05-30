@@ -202,7 +202,8 @@ def nation_item(item_ref):
         )
 
     visibility_bypassed = bool(
-        g.user and g.user.get("is_admin") and request.args.get("bypass_visibility") == "1"
+        (g.user and g.user.get("is_admin") and request.args.get("bypass_visibility") == "1")
+        or getattr(g, 'is_non_player_admin', False)
     )
     if visibility_bypassed:
         visibility_level = 4
@@ -360,6 +361,11 @@ def _render_nation_edit(item_ref, form=None):
     from helpers.trade_route_helpers import get_connectable_nations
     connectable_nations = get_connectable_nations(nation_name, nation.get("trade_speed", 1))
 
+    visibility_bypassed = bool(
+        (g.user and g.user.get("is_admin") and request.args.get("bypass_visibility") == "1")
+        or getattr(g, 'is_non_player_admin', False)
+    )
+
     return render_template(
         "nation_owner_edit.html",
         form=form,
@@ -379,6 +385,7 @@ def _render_nation_edit(item_ref, form=None):
         current_session=current_session,
         editable=True,
         connectable_nations=connectable_nations,
+        visibility_bypassed=visibility_bypassed,
     )
 
 

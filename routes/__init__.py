@@ -46,7 +46,8 @@ def inject_permission_data():
     """Make permission data available to all templates"""
     return {
         'view_access_level': getattr(g, 'view_access_level', 0),
-        'edit_access_level': getattr(g, 'edit_access_level', 0)
+        'edit_access_level': getattr(g, 'edit_access_level', 0),
+        'is_non_player_admin': getattr(g, 'is_non_player_admin', False),
     }
 
 @app.context_processor

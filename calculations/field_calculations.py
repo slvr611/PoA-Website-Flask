@@ -74,12 +74,17 @@ def _build_nation_calc_cache(target):
                     "has_building": bool(tile.get("city") or tile.get("district") or tile.get("wonder")),
                 })
 
+    culture_count  = len({p.get("culture")  for p in pops if p.get("culture")})
+    religion_count = len({p.get("religion") for p in pops if p.get("religion")})
+
     return {
         "pops": pops,
         "pop_count": len(pops),
         "bloodthirsty_pop_count": bloodthirsty_pop_count,
         "primary_culture_pop_count": primary_culture_pop_count,
         "primary_religion_pop_count": primary_religion_pop_count,
+        "culture_count": culture_count,
+        "religion_count": religion_count,
         "_node_tiles": node_tiles,
         # territory_node_counts, active_node_counts, and out_of_range_tiles are
         # populated by calculate_all_fields after law_totals are available.
@@ -2489,6 +2494,28 @@ def sum_modifier_totals(modifiers, target=None):
             # Backwards compat: old format stored with "field" or "key"
             field = m.get("field", m.get("key", modifier_type))
         value = m.get("value", 0)
+
+        # Conditional modifier: skip if condition is not met
+        condition_scaling = m.get("condition_scaling") or ""
+        if condition_scaling and target is not None:
+            try:
+                cond_x     = float(m.get("condition_scaling_x") or 1)
+                cond_extra = m.get("condition_scaling_extra") or ""
+                cond_op    = m.get("condition_operator") or ">="
+                cond_val   = float(m.get("condition_value") or 0)
+                actual     = get_scaling_multiplier(condition_scaling, target, scaling_x=cond_x, scaling_extra=cond_extra)
+                met = (
+                    (cond_op == ">="  and actual >= cond_val) or
+                    (cond_op == ">"   and actual >  cond_val) or
+                    (cond_op == "<="  and actual <= cond_val) or
+                    (cond_op == "<"   and actual <  cond_val) or
+                    (cond_op == "=="  and actual == cond_val)
+                )
+                if not met:
+                    continue
+            except Exception:
+                continue
+
         scaling = m.get("scaling", "flat")
         scaling_x = float(m.get("scaling_x") or 1)
         scaling_extra = m.get("scaling_extra") or ""

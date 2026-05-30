@@ -108,7 +108,9 @@
 		{% if user_is_owner or (g.user and g.user.get('is_admin')) %}
 			<a href="/nations/cosmetics/{{ nation.name }}" class="edit-button">Customize</a>
 		{% endif %}
-		{% if g.user and g.user.get('is_admin') %}
+		{% if is_non_player_admin %}
+			<span class="edit-button" style="background:#2d4a5a;cursor:default;">Visibility: Bypassed (RP)</span>
+		{% elif g.user and g.user.get('is_admin') %}
 			{% if visibility_bypassed %}
 				<a href="{{ request.path }}" class="edit-button" style="background:#2d5a2d">Visibility: Bypassed</a>
 			{% else %}
@@ -148,6 +150,20 @@
 			{% endif %}
 		</div>
 	</div>
+
+	{% if visibility_bypassed and nation.get('temperament', 'Player') != 'Player' %}
+	<div style="background:#1a2a1a;border:1px solid #3a6a3a;border-radius:6px;padding:1rem;margin-bottom:1rem;">
+		<div style="display:flex;align-items:baseline;gap:0.75rem;margin-bottom:0.5rem;">
+			<strong style="color:#7ec87e;">RP Mod Notes</strong>
+			<span style="font-size:0.8rem;color:var(--text-muted,#888);">Visible to RP mods only</span>
+		</div>
+		{% if nation.get('rp_mod_notes') %}
+			<p style="margin:0;white-space:pre-wrap;">{{ nation.rp_mod_notes }}</p>
+		{% else %}
+			<p style="margin:0;color:var(--text-muted,#888);font-style:italic;">No notes recorded.</p>
+		{% endif %}
+	</div>
+	{% endif %}
 
 	<div class="expandable-sections">
 		<div class="expandable-section"  id="general-info-section">

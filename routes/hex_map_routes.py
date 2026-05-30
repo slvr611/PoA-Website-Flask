@@ -859,34 +859,62 @@ def request_hex_map_change():
 
 @hex_map_routes.route("/api/hex-map/save-map-edits", methods=["POST"])
 def save_hex_map_edits():
-    """Batch-save tile edits directly (admin only, no change request)."""
+    """Batch-save tile edits directly (admin only). Writes an auto-approved change record."""
     if getattr(g, "edit_access_level", 0) < 10:
         return jsonify({"error": "Unauthorized"}), 403
 
     data = request.get_json() or {}
     tiles = data.get("tiles", {})
+    reason = (data.get("reason") or "").strip() or None
+    before_image = data.get("before_image")
+    after_image = data.get("after_image")
+
     if not tiles:
         return jsonify({"ok": True})
 
+    before_tiles = {}
+    after_tiles = {}
     affected_nations = set()
-    for coord_key, tile_data in tiles.items():
+
+    for coord_key, tile_entry in tiles.items():
+        # tile_entry may be {before, after} (new format) or a plain tile dict (legacy).
+        if isinstance(tile_entry, dict) and ("before" in tile_entry or "after" in tile_entry):
+            tile_data = tile_entry.get("after") or {}
+            client_before = tile_entry.get("before") or {}
+        else:
+            tile_data = tile_entry
+            client_before = {}
+
         try:
             q, r = map(int, coord_key.split(","))
         except (ValueError, TypeError):
             continue
+
         allowed = {"terrain", "node", "city", "district", "wonder", "owner", "capital", "region", "portal", "route"}
         update = {k: v for k, v in tile_data.items() if k in allowed}
         if not update:
             continue
         update["q"] = q
         update["r"] = r
+
         existing = mongo.db.hex_map_tiles.find_one(
             {"q": {"$in": [q, float(q)]}, "r": {"$in": [r, float(r)]}}
         ) or {}
+
+        # Capture before state from DB (authoritative) or client fallback.
+        before_tiles[coord_key] = {
+            k: existing.get(k)
+            for k in allowed
+            if existing.get(k) is not None
+        } if existing else client_before
+
+        after_tiles[coord_key] = {k: v for k, v in update.items() if k in allowed}
+
         if existing.get("_id"):
             mongo.db.hex_map_tiles.update_one({"_id": existing["_id"]}, {"$set": update})
         else:
             mongo.db.hex_map_tiles.insert_one(update)
+
         for n in [existing.get("owner"), tile_data.get("owner")]:
             if n:
                 affected_nations.add(n)
@@ -899,7 +927,35 @@ def save_hex_map_edits():
         counts = {doc["_id"]: doc["count"] for doc in mongo.db.hex_map_tiles.aggregate(pipeline)}
         mongo.db.nations.update_one({"name": nation_name}, {"$set": {"territory_types": counts}})
 
-    return jsonify({"ok": True, "saved": len(tiles)})
+    # Write an auto-approved change record so the edit appears in the change log.
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    player = mongo.db.players.find_one({"id": g.user.get("id")}) if g.user else None
+    global_modifiers = mongo.db.global_modifiers.find_one({"name": "global_modifiers"})
+    session_number = global_modifiers.get("session_counter", 0) if global_modifiers else 0
+
+    change_doc = {
+        "target_collection": "hex_map",
+        "target": None,
+        "time_requested": now,
+        "last_modified_time": now,
+        "requester": player["_id"] if player else None,
+        "change_type": "Update",
+        "before_requested_data": {"tiles": before_tiles},
+        "after_requested_data": {"tiles": after_tiles},
+        "differential_data": {},
+        "request_reason": reason,
+        "status": "Approved",
+        "time_implemented": now,
+        "approver": player["_id"] if player else None,
+        "session_number": session_number,
+        "before_implemented_data": {"tiles": before_tiles},
+        "after_implemented_data": {"tiles": after_tiles},
+        "before_image": before_image,
+        "after_image": after_image,
+    }
+    result = mongo.db.changes.insert_one(change_doc)
+    return jsonify({"ok": True, "saved": len(after_tiles), "change_id": str(result.inserted_id)})
 
 
 # ---------------------------------------------------------------------------

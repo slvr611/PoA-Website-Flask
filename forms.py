@@ -325,6 +325,10 @@ class ModifierForm(Form):
     max_value = FloatField("Max Value", validators=[Optional()])
     duration = IntegerField("Duration", validators=[NumberRange()], default=-1)
     source = StringField("Source", validators=[DataRequired()])
+    condition_scaling = StringField("Condition Scaling")
+    condition_scaling_x = FloatField("Condition Scaling X", validators=[Optional()])
+    condition_operator = StringField("Condition Operator")
+    condition_value = FloatField("Condition Value", validators=[Optional()])
 
     class Meta:
         csrf = False
@@ -1268,6 +1272,7 @@ class NationForm(BaseSchemaForm):
     progress_quests = FieldList(FormField(ProgressQuestForm), min_entries=0)
 
     notes = TextAreaField("Notes")
+    rp_mod_notes = TextAreaField("RP Mod Notes")
 
     reason = TextAreaField("Reason")
 

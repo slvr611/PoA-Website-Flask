@@ -21,21 +21,28 @@ def calculate_user_permissions():
     # Default permission levels
     g.view_access_level = 0  # Public access
     g.edit_access_level = 0  # No edit access
-    
+    g.is_non_player_admin = False
+
     if g.user:
         # Get user from database to check permissions
         user = mongo.db.players.find_one({"id": g.user.get("id")})
-        
+
         if user:
             # Base view access for authenticated users
             g.view_access_level = 5
-            
+
             # Check if user is admin
             if user.get("is_admin", False):
                 g.view_access_level = 10  # Admin view access
                 g.edit_access_level = 10  # Admin edit access
                 return
-            
+
+            # Check if user is non-player admin (RP mod with auto visibility bypass)
+            if user.get("is_non_player_admin", False):
+                g.is_non_player_admin = True
+                g.view_access_level = 7
+                return
+
             # Check if user owns any nations/organizations
             user_id = str(user.get("_id"))
             user_characters = list(mongo.db.characters.find({"player": user_id}))

@@ -1064,17 +1064,17 @@ class HexMapViewer {
             // Compute font size: fill ~60% of bbox width, clamped
             const bboxWScreen = lb.wBboxW * this.zoom;
             let fontSize = Math.min(bboxWScreen * 0.18, 52);
-            fontSize = Math.max(fontSize, 7);
+            fontSize = Math.max(fontSize, 5);
 
             // Shrink until name fits within bbox width
             ctx.font = `bold italic ${fontSize}px serif`;
-            while (fontSize > 7 && ctx.measureText(name).width > bboxWScreen * 0.85) {
+            while (fontSize > 5 && ctx.measureText(name).width > bboxWScreen * 0.85) {
                 fontSize -= 1;
                 ctx.font = `bold italic ${fontSize}px serif`;
             }
 
             // Skip labels that would be tiny and unreadable
-            if (fontSize < 8) continue;
+            if (fontSize < 6) continue;
 
             const overlord = this._nationOverlords[name] || '';
             const ovFontSize = Math.max(6, fontSize * 0.55);
@@ -2632,19 +2632,27 @@ class HexMapViewer {
         }
     }
 
-    async saveDirect() {
+    async saveDirect(reason) {
         if (!this._pendingEdits.size) return { ok: true };
+
+        // Capture before/after images for the change log, same as submitChange.
+        let beforeImage = null, afterImage = null;
+        try {
+            const imgs = await this._generateChangeImages();
+            beforeImage = imgs.before;
+            afterImage  = imgs.after;
+        } catch (_) {}
 
         const tiles = {};
         for (const [key, edit] of this._pendingEdits) {
-            if (edit.after) tiles[key] = edit.after;
+            tiles[key] = { before: edit.before || null, after: edit.after || null };
         }
 
         try {
             const resp = await fetch('/api/hex-map/save-map-edits', {
                 method:  'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body:    JSON.stringify({ tiles }),
+                body:    JSON.stringify({ tiles, reason: reason || null, before_image: beforeImage, after_image: afterImage }),
             });
             const data = await resp.json().catch(() => ({}));
             if (resp.ok) {
@@ -2653,7 +2661,7 @@ class HexMapViewer {
                 this._undoStack    = [];
                 this.canvas.dispatchEvent(new CustomEvent('hexmap:editmodechange', { bubbles: true, detail: { active: false } }));
                 await this.loadTiles(null);
-                return { ok: true };
+                return { ok: true, change_id: data.change_id };
             }
             return { ok: false, errors: data.errors || [`HTTP ${resp.status}`] };
         } catch (err) {

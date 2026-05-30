@@ -664,6 +664,45 @@ def delete_placeholder_nations():
 
 
 # ---------------------------------------------------------------------------
+# District / Node wipe helpers
+# ---------------------------------------------------------------------------
+
+@admin_tool_routes.route("/admin/wipe_districts", methods=["POST"])
+@admin_required
+def wipe_all_districts():
+    """Clear the districts array on every nation. Imperial district is left intact."""
+    result = mongo.db.nations.update_many(
+        {"districts": {"$exists": True, "$ne": []}},
+        {"$set": {"districts": []}}
+    )
+    flash(
+        f"Wiped districts from {result.modified_count} nation(s). "
+        "Imperial districts were not affected.",
+        "success"
+    )
+    return redirect(url_for("admin_tool_routes.admin_tools"))
+
+
+@admin_tool_routes.route("/admin/wipe_nodes", methods=["POST"])
+@admin_required
+def wipe_all_nodes():
+    """Remove the node field from every district and imperial district, and
+    clear the nodes array from every city, across all nations."""
+    # Unset node from every element of districts[] and from imperial_district
+    mongo.db.nations.update_many(
+        {},
+        {"$unset": {"districts.$[].node": "", "imperial_district.node": ""}}
+    )
+    # Clear nodes array from every element of cities[]
+    mongo.db.nations.update_many(
+        {"cities": {"$exists": True, "$ne": []}},
+        {"$set": {"cities.$[].nodes": []}}
+    )
+    flash("Wiped all district nodes and city nodes across all nations.", "success")
+    return redirect(url_for("admin_tool_routes.admin_tools"))
+
+
+# ---------------------------------------------------------------------------
 # Visibility bypass log viewer
 # ---------------------------------------------------------------------------
 

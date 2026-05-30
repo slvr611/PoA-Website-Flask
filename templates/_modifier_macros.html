@@ -230,6 +230,26 @@
               {% endif %}
             </small>
             <small class="form-text text-muted modifier-max-field"{% if cur_scaling == 'flat' %} style="display:none"{% endif %}>Max: <input type="number" step="any" class="form-control d-inline" style="width:80px" placeholder="None" name="{{ field_name }}-{{ idx }}-max_value" id="{{ field_name }}-{{ idx }}-max_value" value="{{ item.get('max_value', '') }}"></small>
+            {% set cur_cond_sc = item.get('condition_scaling', '') %}
+            <details class="modifier-condition-details"{% if cur_cond_sc %} open{% endif %} style="margin-top:4px;font-size:0.8rem;">
+              <summary style="cursor:pointer;color:var(--text-muted,#888);">Condition</summary>
+              <div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin-top:4px;">
+                <span style="color:var(--text-muted,#888);">If</span>
+                <select class="form-control" style="width:auto;font-size:0.8rem;" name="{{ field_name }}-{{ idx }}-condition_scaling" id="{{ field_name }}-{{ idx }}-condition_scaling">
+                  <option value="">— none —</option>
+                  {% for st_key, st_data in sorted_scaling_types %}
+                    <option value="{{ st_key }}" {% if st_key == cur_cond_sc %}selected{% endif %}>{{ st_data.name }}</option>
+                  {% endfor %}
+                </select>
+                <select class="form-control" style="width:60px;font-size:0.8rem;" name="{{ field_name }}-{{ idx }}-condition_operator" id="{{ field_name }}-{{ idx }}-condition_operator">
+                  {% for op in ['>=', '>', '<=', '<', '=='] %}
+                    <option value="{{ op }}" {% if item.get('condition_operator', '>=') == op %}selected{% endif %}>{{ op }}</option>
+                  {% endfor %}
+                </select>
+                <input type="number" step="any" class="form-control d-inline" style="width:70px;font-size:0.8rem;" placeholder="0" name="{{ field_name }}-{{ idx }}-condition_value" id="{{ field_name }}-{{ idx }}-condition_value" value="{{ item.get('condition_value', '') }}">
+                <input type="hidden" name="{{ field_name }}-{{ idx }}-condition_scaling_x" id="{{ field_name }}-{{ idx }}-condition_scaling_x" value="{{ item.get('condition_scaling_x', 1) }}">
+              </div>
+            </details>
           </td>
           {% endif %}
           {% if show_duration %}<td><input type="number" class="form-control" name="{{ field_name }}-{{ idx }}-duration" id="{{ field_name }}-{{ idx }}-duration" value="{{ item.get('duration', -1) }}"></td>{% endif %}
@@ -404,6 +424,26 @@
               {% endif %}
             </small>
             <small class="form-text text-muted modifier-max-field"{% if cur_scaling == 'flat' %} style="display:none"{% endif %}>Max: {{ modifier_field.form.max_value(class="form-control d-inline", style="width:80px", placeholder="None") }}</small>
+            {% set cur_cond_sc = modifier_field.form.condition_scaling.data or '' %}
+            <details class="modifier-condition-details"{% if cur_cond_sc %} open{% endif %} style="margin-top:4px;font-size:0.8rem;">
+              <summary style="cursor:pointer;color:var(--text-muted,#888);">Condition</summary>
+              <div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin-top:4px;">
+                <span style="color:var(--text-muted,#888);">If</span>
+                <select class="form-control" style="width:auto;font-size:0.8rem;" name="{{ modifier_field.form.condition_scaling.name }}" id="{{ modifier_field.form.condition_scaling.id }}">
+                  <option value="">— none —</option>
+                  {% for st_key, st_data in sorted_scaling_types %}
+                    <option value="{{ st_key }}" {% if st_key == cur_cond_sc %}selected{% endif %}>{{ st_data.name }}</option>
+                  {% endfor %}
+                </select>
+                <select class="form-control" style="width:60px;font-size:0.8rem;" name="{{ modifier_field.form.condition_operator.name }}" id="{{ modifier_field.form.condition_operator.id }}">
+                  {% for op in ['>=', '>', '<=', '<', '=='] %}
+                    <option value="{{ op }}" {% if (modifier_field.form.condition_operator.data or '>=') == op %}selected{% endif %}>{{ op }}</option>
+                  {% endfor %}
+                </select>
+                <input type="number" step="any" class="form-control d-inline" style="width:70px;font-size:0.8rem;" placeholder="0" name="{{ modifier_field.form.condition_value.name }}" id="{{ modifier_field.form.condition_value.id }}" value="{{ modifier_field.form.condition_value.data if modifier_field.form.condition_value.data is not none else '' }}">
+                <input type="hidden" name="{{ modifier_field.form.condition_scaling_x.name }}" id="{{ modifier_field.form.condition_scaling_x.id }}" value="{{ modifier_field.form.condition_scaling_x.data or 1 }}">
+              </div>
+            </details>
           </td>
           {% endif %}
           {% if show_duration %}<td>{{ modifier_field.form.duration(class="form-control") }}</td>{% endif %}
@@ -577,10 +617,22 @@ if(!window.onScalingChange){window.onScalingChange=function(s){var row=s.closest
     {%- set val_html = '<span class="' ~ val_class ~ (' neg' if val < 0 else '') ~ '">' ~ sign ~ val_str ~ '</span>' -%}
   {%- endif -%}
 
+  {# ── Condition label ──────────────────────────────────────────────────── #}
+  {%- set cond_sc = mod.get('condition_scaling', '') -%}
+  {%- set cond_label = '' -%}
+  {%- if cond_sc -%}
+    {%- set cond_op  = mod.get('condition_operator', '>=') -%}
+    {%- set cond_val = mod.get('condition_value', 0) | int -%}
+    {%- set cond_sx  = (mod.get('condition_scaling_x') or 1) | float -%}
+    {%- set st_name  = (scaling_types.get(cond_sc, {})).get('name', cond_sc) -%}
+    {%- set cond_label = 'if ' ~ st_name ~ ' ' ~ cond_op ~ ' ' ~ cond_val -%}
+  {%- endif -%}
+
   {# ── Render row ───────────────────────────────────────────────────────── #}
   <div class="{{ row_class }}{% if dimmed %} dc-dim{% endif %}"{% if indent %} style="padding-left:0.75rem;"{% endif %}>
     <span class="{{ key_class }}"{% if label_color %} style="color:{{ label_color }};"{% endif %}>
       {{- label -}}
+      {%- if cond_label %} <span style="color:#88a;font-size:0.7rem;">({{ cond_label }})</span>{%- endif -%}
       {%- if scope and scope != 'nation_self' %} <span style="color:#88a;font-size:0.7rem;">({{ scope_definitions.get(scope,{}).get('name', scope) }})</span>{%- endif -%}
     </span>
     <span style="display:inline-flex;align-items:baseline;flex-shrink:0;">
@@ -636,6 +688,18 @@ if(!window.onScalingChange){window.onScalingChange=function(s){var row=s.closest
   {%- elif sc == 'per_x_resource_produced' -%}
     {%- set ns.label = se | replace('_', ' ') | title ~ ' Produced' -%}
     {%- for r in all_resources -%}{%- if r.key == se -%}{%- set ns.label = r.name ~ ' Produced' -%}{%- endif -%}{%- endfor -%}
+  {%- elif sc == 'per_x_cultures' -%}
+    {%- set ns.label = 'Culture' -%}
+  {%- elif sc == 'per_x_religions' -%}
+    {%- set ns.label = 'Religion' -%}
+  {%- elif sc == 'per_x_cultures_and_religions' -%}
+    {%- set ns.label = 'Culture/Religion' -%}
+  {%- elif sc == 'per_x_minority_cultures' -%}
+    {%- set ns.label = 'Minority Culture' -%}
+  {%- elif sc == 'per_x_minority_religions' -%}
+    {%- set ns.label = 'Minority Religion' -%}
+  {%- elif sc == 'per_x_minority_cultures_and_religions' -%}
+    {%- set ns.label = 'Minority Culture/Religion' -%}
   {%- endif -%}
   {%- if ns.label -%}
 <span class="mod-scale-suffix">per {% if sx != 1 %}{{ sx | int if sx == sx | int else sx }} {% endif %}{{ ns.label }}</span>

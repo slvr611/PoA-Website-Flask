@@ -873,15 +873,16 @@ document.addEventListener('DOMContentLoaded', function () {
     if (saveDirBtn) {
         saveDirBtn.addEventListener('click', async () => {
             if (!hexViewer || !hexViewer.pendingEditCount) return;
-            if (!confirm(`Save ${hexViewer.pendingEditCount} tile change(s) directly to the map?`)) return;
+            const reason = prompt(`Save ${hexViewer.pendingEditCount} tile change(s) directly to the map.\n\nReason (optional):`);
+            if (reason === null) return; // cancelled
             saveDirBtn.disabled = true;
             saveDirBtn.textContent = 'Saving…';
-            const result = await hexViewer.saveDirect();
+            const result = await hexViewer.saveDirect(reason);
             saveDirBtn.disabled = false;
             saveDirBtn.textContent = 'Save Directly';
             if (result.ok) {
                 _setEditModeUI(false);
-                alert('Map changes saved.');
+                alert('Map changes saved.' + (result.change_id ? `\nChange #${result.change_id} logged.` : ''));
             } else {
                 alert('Some tiles failed to save:\n' + (result.errors || []).join('\n'));
             }

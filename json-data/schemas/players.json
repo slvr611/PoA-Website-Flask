@@ -39,6 +39,11 @@
 		    "label": "Is Website Helper?",
         "description": "Indicates if the user is a website helper"
       },
+      "is_non_player_admin": {
+        "bsonType": "boolean",
+        "label": "Is Non-Player Admin?",
+        "description": "RP moderator role: auto-applies visibility bypass on nation pages without logging"
+      },
       "characters": {
         "bsonType": "array",
         "label": "Characters",

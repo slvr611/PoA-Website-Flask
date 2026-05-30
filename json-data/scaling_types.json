@@ -103,5 +103,41 @@
         "has_x": true,
         "default_x": 1,
         "has_dropdown": "resource"
+    },
+    "per_x_cultures": {
+        "name": "Per X Cultures",
+        "description": "Multiplied by the total number of distinct cultures present among the nation's pops divided by X, floored.",
+        "has_x": true,
+        "default_x": 1
+    },
+    "per_x_religions": {
+        "name": "Per X Religions",
+        "description": "Multiplied by the total number of distinct religions present among the nation's pops divided by X, floored.",
+        "has_x": true,
+        "default_x": 1
+    },
+    "per_x_cultures_and_religions": {
+        "name": "Per X Cultures & Religions",
+        "description": "Multiplied by the combined total of distinct cultures and religions among the nation's pops divided by X, floored.",
+        "has_x": true,
+        "default_x": 1
+    },
+    "per_x_minority_cultures": {
+        "name": "Per X Minority Cultures",
+        "description": "Multiplied by the number of non-primary cultures (total cultures minus 1, minimum 0) divided by X, floored.",
+        "has_x": true,
+        "default_x": 1
+    },
+    "per_x_minority_religions": {
+        "name": "Per X Minority Religions",
+        "description": "Multiplied by the number of non-primary religions (total religions minus 1, minimum 0) divided by X, floored.",
+        "has_x": true,
+        "default_x": 1
+    },
+    "per_x_minority_cultures_and_religions": {
+        "name": "Per X Minority Cultures & Religions",
+        "description": "Multiplied by the combined non-primary cultures and religions (total cultures + religions minus 2, minimum 0) divided by X, floored.",
+        "has_x": true,
+        "default_x": 1
     }
 }

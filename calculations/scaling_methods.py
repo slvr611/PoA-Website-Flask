@@ -133,6 +133,48 @@ def per_x_resource_produced(target, scaling_x=1, scaling_extra="", context=None)
     return int(amount / divisor)
 
 
+def per_x_cultures(target, scaling_x=1, scaling_extra="", context=None):
+    cache = target.get("_calc_cache", {}) or {}
+    count = cache.get("culture_count", 0)
+    divisor = float(scaling_x) if scaling_x else 1
+    return int(count / divisor)
+
+
+def per_x_religions(target, scaling_x=1, scaling_extra="", context=None):
+    cache = target.get("_calc_cache", {}) or {}
+    count = cache.get("religion_count", 0)
+    divisor = float(scaling_x) if scaling_x else 1
+    return int(count / divisor)
+
+
+def per_x_cultures_and_religions(target, scaling_x=1, scaling_extra="", context=None):
+    cache = target.get("_calc_cache", {}) or {}
+    count = cache.get("culture_count", 0) + cache.get("religion_count", 0)
+    divisor = float(scaling_x) if scaling_x else 1
+    return int(count / divisor)
+
+
+def per_x_minority_cultures(target, scaling_x=1, scaling_extra="", context=None):
+    cache = target.get("_calc_cache", {}) or {}
+    count = max(0, cache.get("culture_count", 0) - 1)
+    divisor = float(scaling_x) if scaling_x else 1
+    return int(count / divisor)
+
+
+def per_x_minority_religions(target, scaling_x=1, scaling_extra="", context=None):
+    cache = target.get("_calc_cache", {}) or {}
+    count = max(0, cache.get("religion_count", 0) - 1)
+    divisor = float(scaling_x) if scaling_x else 1
+    return int(count / divisor)
+
+
+def per_x_minority_cultures_and_religions(target, scaling_x=1, scaling_extra="", context=None):
+    cache = target.get("_calc_cache", {}) or {}
+    count = max(0, cache.get("culture_count", 0) + cache.get("religion_count", 0) - 2)
+    divisor = float(scaling_x) if scaling_x else 1
+    return int(count / divisor)
+
+
 # Registry — each key must match scaling_types.json (plus legacy aliases).
 SCALING_METHODS = {
     "flat": flat,
@@ -152,6 +194,12 @@ SCALING_METHODS = {
     "per_x_administration": per_x_administration,
     "per_x_resource_produced": per_x_resource_produced,
     "per_x_resource_nodes": per_x_resource_nodes,
+    "per_x_cultures": per_x_cultures,
+    "per_x_religions": per_x_religions,
+    "per_x_cultures_and_religions": per_x_cultures_and_religions,
+    "per_x_minority_cultures": per_x_minority_cultures,
+    "per_x_minority_religions": per_x_minority_religions,
+    "per_x_minority_cultures_and_religions": per_x_minority_cultures_and_religions,
 }
 
 

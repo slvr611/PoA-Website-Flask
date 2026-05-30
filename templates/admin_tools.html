@@ -194,6 +194,32 @@
             </div>
         </div>
 
+        <div class="admin-tool-card">
+            <div class="admin-tool-card-body">
+                <h3 class="admin-tool-card-title">Wipe All Districts</h3>
+                <p class="admin-tool-card-desc">Remove every district from every nation's district slots. Imperial districts are not affected.</p>
+                <form action="/admin/wipe_districts" method="POST">
+                    <button type="submit" class="btn btn-danger btn-sm"
+                            onclick="return confirm('This will permanently wipe all districts from every nation. This cannot be undone. Continue?')">
+                        Wipe Districts
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <div class="admin-tool-card">
+            <div class="admin-tool-card-body">
+                <h3 class="admin-tool-card-title">Wipe All Nodes</h3>
+                <p class="admin-tool-card-desc">Clear the node assignment from every district (including imperial) and empty the nodes list from every city, across all nations.</p>
+                <form action="/admin/wipe_nodes" method="POST">
+                    <button type="submit" class="btn btn-danger btn-sm"
+                            onclick="return confirm('This will permanently clear all district nodes and city nodes from every nation. This cannot be undone. Continue?')">
+                        Wipe Nodes
+                    </button>
+                </form>
+            </div>
+        </div>
+
     </div>
 </div>
 

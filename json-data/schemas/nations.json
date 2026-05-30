@@ -212,6 +212,14 @@
         "hidden": true,
         "view_access_level": 10
       },
+      "rp_mod_notes": {
+        "bsonType": "string",
+        "label": "RP Mod Notes",
+        "description": "Internal notes for RP moderators. Only visible when visibility bypass is active for non-player nations.",
+        "long_text": true,
+        "hidden": true,
+        "view_access_level": 10
+      },
       "region": {
         "bsonType": "linked_object",
         "label": "Region",
@@ -405,14 +413,14 @@
         "label": "Money Capacity",
         "description": "The amount of money the nation can hold",
         "calculated": true,
-        "base_value": 6000
+        "base_value": 8000
       },
       "money_income": {
         "bsonType": "number",
         "label": "Money Income",
         "description": "The amount of money the nation gains each tick",
         "calculated": true,
-        "base_value": 150
+        "base_value": 200
       },
       "karma": {
         "bsonType": "number",
@@ -458,7 +466,7 @@
         "label": "Migration Distance",
         "description": "The distance this nation can migrate each session",
         "calculated": true,
-        "base_value": 6
+        "base_value":9
       },
       "stationary_delay": {
         "bsonType": "number",
@@ -671,7 +679,7 @@
         "label": "Effective Pop Capacity",
         "description": "The amount of pops the nation can effectively hold",
         "calculated": true,
-        "base_value": 13
+        "base_value": 15
       },
       "pops": {
         "bsonType": "array",
@@ -922,29 +930,63 @@
         "default": "Moderate",
         "laws": {
           "Moderate": {
-            "recruit_percentage": 0.3
+            "recruit_percentage": 0.2
           },
           "Low": {
-            "recruit_percentage": 0.2,
+            "recruit_percentage": 0.1,
             "strength": 1,
             "karma": 1
           },
           "High": {
-            "recruit_percentage": 0.4,
+            "recruit_percentage": 0.3,
             "strength": -1
           },
           "Very High": {
-            "recruit_percentage": 0.5,
-            "strength": -1,
-            "karma": -2
+            "recruit_percentage": 0.4,
+            "strength": -2,
+            "karma": -1
           },
           "Total": {
-            "recruit_percentage": 0.65,
-            "strength": -2,
-            "karma": -2
+            "recruit_percentage": 0.5,
+            "strength": -3,
+            "karma": -3
           },
           "Rebellion": {
             "recruit_percentage": 0.5
+          }
+        }
+      },
+      "magic_stance": {
+        "bsonType": "enum",
+        "label": "Magic Stance",
+        "description": "The nation's stance towards magic",
+        "enum": [
+          "Bureaucracy",
+          "Ceremonial",
+          "Creation",
+          "Destruction",
+          "Manifest",
+          "Persecution"
+        ],
+        "laws": {
+          "Bureaucracy": {
+            "_modifiers": [
+              { "modifier_type": "magic_production", "value": 1, "scope": "nation_self", "scaling": "per_x_administration", "scaling_x": 1}
+            ]
+          },
+          "Ceremonial": {},
+          "Creation": {
+            "magic_node_value": -2
+          },
+          "Destruction": {},
+          "Manifest": {
+            "magic_node_value": -2,
+            "_modifiers": [
+              { "modifier_type": "karma", "value": 2, "scope": "nation_self", "scaling": "per_x_resource_nodes", "scaling_x": 1, "scaling_extra": "magic"}
+            ]
+          },
+          "Persecution": {
+            "cannot_create_magical_units": true
           }
         }
       },
@@ -963,54 +1005,35 @@
         "default": "Standard",
         "laws": {
           "Minimal": {
-            "money_income": 150,
+            "money_income": 600,
+            "army_size": 0,
             "strength": -2
           },
           "Substandard": {
-            "money_income": 75,
+            "money_income": 200,
+            "army_size": 2,
             "strength": -1
           },
-          "Standard": {},
+          "Standard": {
+            "army_size": 3
+          },
           "Notable": {
-            "money_income": -75,
-            "unit_money_upkeep": 15,
+            "money_income": -200,
+            "unit_recruitment_discount": -0.25,
+            "army_size": 4,
             "strength": 1
           },
           "Substantial": {
-            "money_income": -150,
-            "unit_money_upkeep": 30,
+            "money_income": -500,
+            "unit_recruitment_discount": -0.5,
+            "army_size": 5,
             "strength": 2
           },
           "Extreme": {
-            "money_income": -225,
-            "unit_money_upkeep": 45,
+            "money_income": -1000,
+            "unit_recruitment_discount": -1,
+            "army_size": 6,
             "strength": 3
-          }
-        }
-      },
-      "magic_stance": {
-        "bsonType": "enum",
-        "label": "Magic Stance",
-        "description": "The nation's stance towards magic",
-        "enum": [
-          "Bureaucracy",
-          "Creation",
-          "Military",
-          "Persecution",
-          "Manifest"
-        ],
-        "laws": {
-          "Bureaucracy": {
-            "bureaucrat_magic_production": 0.3333333333333334
-          },
-          "Creation": {},
-          "Military": {},
-          "Persecution": {
-            "cannot_create_magical_units": true
-          },
-          "Manifest": {
-            "karma_per_magic_node": 2,
-            "magic_node_value": -1
           }
         }
       },
@@ -1050,16 +1073,14 @@
         "label": "Citizenship Stance",
         "description": "How easy it is to get citizenship in the nation",
         "enum": [
-          "None",
           "Free",
           "Open",
           "Restricted",
           "Closed"
         ],
         "laws": {
-          "None": {},
           "Free": {
-            "stability_loss_chance": 0.05
+            "stability_loss_chance": 0.25
           },
           "Open": {
             "stability_loss_chance": 0.05
@@ -1472,7 +1493,7 @@
         "label": "Defensive Pact Slots",
         "description": "The number of defensive pacts the nation can support",
         "calculated": true,
-        "base_value": 1
+        "base_value": 2
       },
       "military_alliance_slots": {
         "bsonType": "number",
@@ -1830,14 +1851,14 @@
         "label": "Export Slots",
         "description": "The total number of export slots the nation has available each session, before accounting for ongoing trades",
         "calculated": true,
-        "base_value": 3
+        "base_value": 4
       },
       "import_slots": {
         "bsonType": "number",
         "label": "Import Slots",
         "description": "The total number of import slots the nation has available each session, before accounting for ongoing trades",
         "calculated": true,
-        "base_value": 3
+        "base_value": 4
       },
       "remaining_export_slots": {
         "bsonType": "number",
@@ -1856,7 +1877,7 @@
         "label": "Trade Speed",
         "description": "The distance at which the nation can trade with other nations or merchant companies",
         "calculated": true,
-        "base_value": 7
+        "base_value": 8
       },
       "0_progress_slots": {
         "bsonType": "number",
