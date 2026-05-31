@@ -455,6 +455,20 @@ h1, h2 {
   color: #afffbd;            /* light green text */
 }
 
+.pop-slave-row td {
+  background-color: #2a1a1a;
+}
+
+.slave-badge {
+  display: inline-block;
+  background-color: #7a1a1a;
+  color: #ffaaaa;
+  font-size: 0.75em;
+  padding: 1px 6px;
+  border-radius: 3px;
+  letter-spacing: 0.04em;
+}
+
 .pops-table {
   width: 100%;
   border-collapse: collapse;

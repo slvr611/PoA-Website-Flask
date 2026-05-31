@@ -135,6 +135,9 @@
 				{% endif %}
 			</span>
 			<span>{{ schema.properties.pop_count.label }}: {{ pf(nation.pop_count, pn.get("pop_count")) }}{% if visibility_level >= 3 %} / {{ pfbd(nation.effective_pop_capacity, pn.get("effective_pop_capacity"), breakdowns.get("effective_pop_capacity", []), pbd.get("effective_pop_capacity", []), "Effective Pop Capacity") }}{% endif %}</span>
+			{% if (nation.slave_capacity | default(0)) > 0 %}
+			<span>Slaves: {{ pf(nation.slave_count | default(0), pn.get("slave_count")) }} / {{ pfbd(nation.slave_capacity | default(0), pn.get("slave_capacity"), breakdowns.get("slave_capacity", []), pbd.get("slave_capacity", []), "Slave Capacity") }}</span>
+			{% endif %}
 			{% if nation.empire %}
 				<span>Empire</span>
 				<span>{{ schema.properties.prestige.label }}: {{ pf(nation.prestige, pn.get("prestige")) }}</span>
@@ -441,11 +444,12 @@
 								<th>Race</th>
 								<th>Culture</th>
 								<th>Religion</th>
+								<th>Status</th>
 							</tr>
 						</thead>
 						<tbody>
 							{% for pop in linked_objects["pops"] %}
-								<tr>
+								<tr{% if pop.get("slave") %} class="pop-slave-row"{% endif %}>
 									<td><a href="{{ pop['link'] }}">{{ loop.index }}</a></td>
 									<td>
 									{% if pop["linked_objects"]["race"] %}
@@ -468,6 +472,7 @@
 										None
 									{% endif %}
 									</td>
+									<td>{% if pop.get("slave") %}<span class="slave-badge">Slave</span>{% endif %}</td>
 								</tr>
 							{% endfor %}
 						</tbody>
@@ -579,8 +584,8 @@
 							<td>{{ pf(nation.tax_stance, pn.get("tax_stance")) }}</td>
 						</tr>
 						<tr>
-							<th>{{ schema.properties.justice_stance.label }}:</th>
-							<td>{{ pf(nation.justice_stance, pn.get("justice_stance")) }}</td>
+							<th>{{ schema.properties.slavery_stance.label }}:</th>
+							<td>{{ pf(nation.slavery_stance, pn.get("slavery_stance")) }}</td>
 						</tr>
 					</table>
 				</div>

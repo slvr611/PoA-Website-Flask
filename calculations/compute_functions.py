@@ -212,7 +212,7 @@ def compute_pop_count(field, target, base_value, field_schema, overall_total_mod
     if "pop_count" in calc_cache:
         pop_count = int(calc_cache.get("pop_count", 0) + overall_total_modifiers.get(field, 0))
     else:
-        pop_count = int(pop_database.count_documents({"nation": target_id}) + overall_total_modifiers.get(field, 0))
+        pop_count = int(pop_database.count_documents({"nation": target_id, "slave": {"$ne": True}}) + overall_total_modifiers.get(field, 0))
     
     return int(pop_count)
 
@@ -658,6 +658,21 @@ def compute_remaining_export_slots(field, target, base_value, field_schema, over
         export_slots = max(0, export_slots - export_used)
     return int(export_slots)
 
+def compute_slave_count(field, target, base_value, field_schema, overall_total_modifiers):
+    cache = target.get("_calc_cache", {})
+    if "slave_count" in cache:
+        return int(cache["slave_count"])
+    target_id = str(target.get("_id", ""))
+    if not target_id:
+        return 0
+    return int(category_data["pops"]["database"].count_documents({"nation": target_id, "slave": True}))
+
+def compute_slave_capacity(field, target, base_value, field_schema, overall_total_modifiers):
+    return int(base_value + overall_total_modifiers.get(field, 0))
+
+def compute_remaining_slave_capacity(field, target, base_value, field_schema, overall_total_modifiers):
+    return int(target.get("slave_capacity", 0) - target.get("slave_count", 0))
+
 def compute_land_attack(field, target, base_value, field_schema, overall_total_modifiers):
     stability = target.get("stability", "Uknown")
     high_stability = False
@@ -1024,6 +1039,9 @@ CUSTOM_COMPUTE_FUNCTIONS = {
     "import_slots": compute_import_slots,
     "remaining_export_slots": compute_remaining_export_slots,
     "remaining_import_slots": compute_remaining_import_slots,
+    "slave_count": compute_slave_count,
+    "slave_capacity": compute_slave_capacity,
+    "remaining_slave_capacity": compute_remaining_slave_capacity,
     "land_attack": compute_land_attack,
     "land_defense": compute_land_defense,
     "naval_attack": compute_naval_attack,

@@ -73,7 +73,7 @@ def _fetch_nation_pops_page(nation_id, page, page_size, pops_schema):
     sort_tuples = [(field, ASCENDING) for field in sort_by] if isinstance(sort_by, list) else [(sort_by, ASCENDING)]
 
     pops = list(
-        mongo.db.pops.find(pop_query, {"_id": 1, "race": 1, "culture": 1, "religion": 1})
+        mongo.db.pops.find(pop_query, {"_id": 1, "race": 1, "culture": 1, "religion": 1, "slave": 1})
         .sort(sort_tuples)
         .skip(skip)
         .limit(page_size)
@@ -165,7 +165,7 @@ def nation_item(item_ref):
     calc_timings = {}
     breakdowns = nation.get("breakdowns", None)
     required_breakdown_keys = {"stability_gain_chance", "stability_loss_chance", "resource_production", "resource_consumption", "money_income", "job_production", "job_consumption"}
-    has_cached_breakdowns = isinstance(breakdowns, dict) and required_breakdown_keys.issubset(set(breakdowns.keys()))
+    has_cached_breakdowns = isinstance(breakdowns, dict) and required_breakdown_keys.issubset(set(breakdowns.keys())) and "slave_capacity" in nation
 
     timings["calculate_all_fields_ms"] = 0.0
     timings["used_cached_calculations"] = True

@@ -139,5 +139,11 @@
         "description": "Multiplied by the combined non-primary cultures and religions (total cultures + religions minus 2, minimum 0) divided by X, floored.",
         "has_x": true,
         "default_x": 1
+    },
+    "per_x_slaves": {
+        "name": "Per X Slaves",
+        "description": "Multiplied by the number of enslaved pops in the nation divided by X, floored.",
+        "has_x": true,
+        "default_x": 1
     }
 }

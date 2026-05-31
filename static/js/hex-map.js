@@ -1191,6 +1191,7 @@ class HexMapViewer {
         const c = this.canvas;
         c.addEventListener('contextmenu', e => e.preventDefault());
         c.addEventListener('mousedown', e => {
+            if (this._capturingImage) return;
             if (e.button === 2) { this._startPan(e.clientX, e.clientY); return; }
             if (e.button === 1) {
                 e.preventDefault();
@@ -1321,6 +1322,7 @@ class HexMapViewer {
     }
 
     _startPan(cx, cy) {
+        if (this._capturingImage) return;
         this.isDragging = true;
         this.hasMoved   = false;
         this.dragStart  = { x: cx, y: cy };
@@ -1329,6 +1331,7 @@ class HexMapViewer {
     }
 
     _onDown(cx, cy) {
+        if (this._capturingImage) return;
         if (this.paintMode || this.paintNationMode || this.paintRegionMode || this.paintRouteMode) {
             this._painting    = true;
             this._lastPainted = null;
@@ -1580,6 +1583,7 @@ class HexMapViewer {
 
     _onWheel(e) {
         e.preventDefault();
+        if (this._capturingImage) return;
         const rect    = this.canvas.getBoundingClientRect();
         const mx = e.clientX - rect.left, my = e.clientY - rect.top;
         const factor  = e.deltaY < 0 ? 1.12 : 1 / 1.12;
@@ -1588,6 +1592,7 @@ class HexMapViewer {
 
     _onTouchStart(e) {
         e.preventDefault();
+        if (this._capturingImage) return;
         if (e.touches.length === 1) {
             const t = e.touches[0];
             this._onDown(t.clientX, t.clientY);

@@ -34,7 +34,7 @@
       "mercenary_law",
       "consumption_stance",
       "tax_stance",
-      "justice_stance",
+      "slavery_stance",
       "vassal_type"
     ],
     "preview": [
@@ -681,6 +681,25 @@
         "calculated": true,
         "base_value": 15
       },
+      "slave_count": {
+        "bsonType": "number",
+        "label": "Slave Count",
+        "description": "The number of enslaved pops in the nation",
+        "calculated": true
+      },
+      "slave_capacity": {
+        "bsonType": "number",
+        "label": "Slave Capacity",
+        "description": "The maximum number of slaves the nation can hold",
+        "calculated": true,
+        "base_value": 0
+      },
+      "remaining_slave_capacity": {
+        "bsonType": "number",
+        "label": "Remaining Slave Capacity",
+        "description": "How many more slaves the nation can take on",
+        "calculated": true
+      },
       "pops": {
         "bsonType": "array",
         "label": "Pops",
@@ -695,6 +714,7 @@
           "religion"
         ],
         "sort_by": [
+          "slave",
           "race",
           "culture",
           "religion"
@@ -1106,21 +1126,25 @@
         "default": "Integration",
         "laws": {
           "Oppression": {
-            "stability_loss_chance_per_unique_minority": 0.05,
-            "max_stability_loss_chance_per_unique_minority": 0.5,
-            "homogeneous_stability_loss_chance": -0.25
+            "_modifiers": [
+              { "modifier_type": "stability_loss_chance", "value": 0.05, "scope": "nation_self", "scaling": "per_x_minority_cultures_and_religions", "scaling_x": 1, "max_value": 0.5 },
+              { "modifier_type": "stability_loss_chance", "value": -0.25, "scope": "nation_self", "condition_scaling": "per_x_minority_cultures_and_religions", "condition_scaling_x": 1, "condition_operator": "==", "condition_value": 0 }
+            ]
           },
           "Integration": {
-            "stability_loss_chance_per_unique_minority": 0.03,
-            "max_stability_loss_chance_per_unique_minority": 0.3
+             "_modifiers": [
+              { "modifier_type": "stability_loss_chance", "value": 0.03, "scope": "nation_self", "scaling": "per_x_minority_cultures_and_religions", "scaling_x": 1, "max_value": 0.3 }
+            ]
           },
           "Acceptance": {
-            "stability_gain_chance_per_unique_minority": 0.02,
-            "max_stability_gain_chance_per_unique_minority": 0.3
+             "_modifiers": [
+              { "modifier_type": "stability_loss_chance", "value": 0.02, "scope": "nation_self", "scaling": "per_x_minority_cultures_and_religions", "scaling_x": 1, "max_value": 0.3 }
+            ]
           },
           "Harmony": {
-            "stability_gain_chance_per_unique_minority": 0.05,
-            "max_stability_gain_chance_per_unique_minority": 0.3
+             "_modifiers": [
+              { "modifier_type": "stability_loss_chance", "value": 0.05, "scope": "nation_self", "scaling": "per_x_minority_cultures_and_religions", "scaling_x": 1, "max_value": 0.3 }
+            ]
           }
         }
       },
@@ -1136,7 +1160,8 @@
         "default": "Balanced",
         "laws": {
           "Suppression": {
-            "vassal_nation_concessions_chance": -1
+            "vassal_nation_concessions_chance": -1,
+            "vassal_nation_disobey_chance": -1
           },
           "Balanced": {},
           "Benevolence": {
@@ -1151,37 +1176,32 @@
         "description": "The nation's general approach to land based warfare",
         "enum": [
           "Standard",
-          "Nomadic",
-          "Shock",
-          "Volley",
-          "Safeguard",
+          "Ambush",
+          "Horde",
           "Militia",
-          "Ambush"
+          "Safeguard",
+          "Shock",
+          "Volley"
         ],
         "laws": {
           "Standard": {},
-          "Nomadic": {
-            "land_unit_speed": 1,
-            "land_cavalry_unit_speed": 1
-          },
-          "Shock": {
-            "land_unit_speed": 1
-          },
-          "Volley": {
-            "land_melee_unit_defense": 1,
-            "land_melee_unit_retaliation_damage": 1,
-            "land_melee_unit_attack": -2
-          },
-          "Safeguard": {},
-          "Militia": {
-            "civilian_unit_strength": 1,
-            "civilian_unit_morale": 1
-          },
           "Ambush": {
             "land_attack_vs_damaged_units": 2,
-            "land_non_ruler_unit_speed": 1,
-            "land_cavalry_unit_speed": -1,
-            "land_unit_hp_mult": 0.75
+            "land_unit_speed": 1,
+            "land_unit_health": -2
+          },
+          "Horde": {
+            "army_size": 1
+          },
+          "Militia": {
+            "civilian_unit_health": 1,
+            "civilian_unit_morale": 1
+          },
+          "Safeguard": {},
+          "Shock": {},
+          "Volley": {
+            "land_melee_unit_health": 1,
+            "land_melee_unit_damage": -1
           }
         }
       },
@@ -1191,15 +1211,24 @@
         "description": "The nation's general approach to aquatic warfare",
         "enum": [
           "Standard",
-          "Skirmish",
           "Fleet",
+          "Skirmish",
           "Transport"
         ],
         "laws": {
           "Standard": {},
-          "Skirmish": {},
-          "Fleet": {},
-          "Transport": {}
+          "Fleet": {
+            "naval_unit_health": 1,
+            "naval_unit_armor": 1,
+            "naval_unit_speed": -1
+          },
+          "Skirmish": {
+            "naval_unit_speed": 2
+          },
+          "Transport": {
+            "naval_transport_unit_health": 1,
+            "naval_transport_unit_speed": 1
+          }
         }
       },
       "diplomatic_stance": {
@@ -1207,31 +1236,32 @@
         "label": "Diplomatic Stance",
         "description": "The nation's default stance towards interacting with its neighbors",
         "enum": [
-          "Expansionist",
-          "Cooperative",
           "Belligerent",
-          "Isolated",
-          "Extermination"
+          "Cooperative",
+          "Expansionist",
+          "Extermination",
+          "Isolated"
         ],
         "laws": {
+          "Belligerent": {
+            "unit_recruitment_discount": 0.05,
+            "unit_recruitment_discount_during_offensive_war": 0.05
+          },
           "Cooperative": {
             "defensive_pact_slots": 1
           },
           "Expansionist": {
-            "effective_territory": 3,
-            "nomad_effective_territory": 3
+            "effective_territory": 4,
+            "nomad_effective_territory": 4,
+            "passive_expansion_chance": 0.3
           },
-          "Belligerent": {
-            "unit_recruitment_discount": 0.05,
-            "unit_recruitment_discount_during_offensive_war": 0.05
+          "Extermination": {
+            "stability_loss_chance_from_infamy_mult": 0.5
           },
           "Isolated": {
             "military_alliance_slots": -1,
             "isolated_stab_gain_rate": 0.1,
             "isolated_stab_gain_max": 0.5
-          },
-          "Extermination": {
-            "stability_loss_chance_from_infamy_mult": 0.5
           }
         }
       },
@@ -1250,9 +1280,10 @@
         "default": "Pragmatic",
         "laws": {
           "Puritanical": {
-            "karma": 4,
+            "karma": 2,
             "stability_gain_chance": 0.25,
-            "locks_researcher": true
+            "researcher_research_production": -1,
+            "researcher_karma_production": 1
           },
           "Conservative": {
             "karma": 2,
@@ -1268,7 +1299,7 @@
           },
           "Radical": {
             "research_production": 4,
-            "stability_loss_chance_per_pop": 0.05,
+            "stability_loss_chance_per_pop": 0.04,
             "karma": -4
           },
           "Revolutionary": {
@@ -1285,29 +1316,35 @@
         "description": "The direction the nation's economy is specialized in",
         "enum": [
           "None",
-          "Conquest",
-          "Construction",
-          "Production",
-          "Commerce"
+          "Millet",
+          "Raiding",
+          "Serfdom",
+          "Mercantilism",
+          "Guilds"
         ],
         "laws": {
           "None": {},
-          "Conquest": {
-            "harvester_resource_production": -1,
-            "miner_resource_production": -1
+          "Millet": {
+            "money_income": -100
           },
-          "Construction": {
-            "district_resource_consumption": -1,
-            "district_pop_requirement": -1
+          "Raiding": {},
+          "Serfdom": {
+
           },
-          "Production": {
-            "harvester_stone_upkeep": -1,
-            "miner_wood_upkeep": -1,
-            "resource_storage_capacity": 5
+          "Mercantile": {
+            "maximum_markets": 1,
+            "export_slots": 5,
+            "import_slots_multiplier": -0.5
           },
-          "Commerce": {
-            "stability_gain_chance_per_road_usage": 0.01,
-            "maximum_markets": 1
+          "Guilds": {
+            "harvester_wood_production": 1,
+            "harvester_stability_gain_chance_production": 0.15,
+            "miner_stone_production": 1,
+            "miner_stability_gain_chance_production": 0.15,
+            "metallurgist_iron_production": 1,
+            "metallurgist_stability_gain_chance_production": 0.15,
+            "mystic_magic_production": 1,
+            "mystic_stability_gain_chance_production": 0.15
           }
         }
       },
@@ -1357,21 +1394,22 @@
         "default": "Some Mercenaries",
         "laws": {
           "No Mercenaries": {
-            "mercenary_limit_mult": 0
+            "mercenary_unit_limit": 0
           },
           "Some Mercenaries": {
-            "mercenary_limit_mult": 0.5
+            "mercenary_unit_limit": 2
           },
           "Mercenary Presence": {
-            "mercenary_limit_mult": 0.75,
+            "mercenary_unit_limit": 4,
             "strength": -1
           },
           "Mercenary Reliance": {
-            "mercenary_limit_mult": 0.75,
+            "mercenary_unit_limit": 8,
+            "mercenary_defense": 1,
             "strength": -2
           },
           "Mercenary Military": {
-            "mercenary_limit_mult": 1.25,
+            "mercenary_unit_limit": 10000,
             "strength": -4,
             "mercenary_strength": 1
           }
@@ -1391,25 +1429,77 @@
         "laws": {
           "None": {},
           "Indulgence": {
-            "food_consumption_per_pop": 0.5,
             "stability_gain_chance": 0.4,
             "unit_morale": 1,
             "unit_hp": 1,
-            "unit_retaliation_damage": 1
+            "unit_retaliation_damage": 1,
+            "_modifiers": [
+              { "modifier_type": "resource_consumption", "scaling_extra": "food", "value": 1, "scope": "nation_self", "scaling": "per_x_pops", "scaling_x": 2}
+            ]
           },
           "Comfort": {
-            "food_consumption_per_pop": 0.3333333333333334,
             "stability_gain_chance": 0.25,
             "unit_morale": 1,
-            "unit_hp": 1
+            "unit_hp": 1,
+            "_modifiers": [
+              { "modifier_type": "resource_consumption", "scaling_extra": "food", "value": 1, "scope": "nation_self", "scaling": "per_x_pops", "scaling_x": 3}
+            ]
           },
           "Standard": {
             "stability_gain_chance": 0.05
           },
           "Rationing": {
-            "food_consumption_per_pop": -0.25,
-            "stability_loss_chance": 0.15,
-            "unit_morale": -1
+            "unit_morale": -2,
+            "_modifiers": [
+              { "modifier_type": "resource_consumption", "scaling_extra": "food", "value": -1, "scope": "nation_self", "scaling": "per_x_pops", "scaling_x": 4}
+            ]
+          }
+        }
+      },
+      "slavery_stance": {
+        "bsonType": "enum",
+        "label": "Slavery Stance",
+        "description": "The nation's stance on slavery",
+        "enum": [
+          "None",
+          "Outlawed",
+          "Servitude",
+          "Punishment",
+          "Labor"
+        ],
+        "laws": {
+          "None": {},
+          "Outlawed": {
+            "stability_gain_chance": 0.2
+          },
+          "Servitude": {
+            "karma": -2,
+            "slave_capacity": 2,
+            "slave_death_chance": 0.01,
+            "_modifiers": [
+              { "modifier_type": "stability_loss_chance", "value": 0.15, "scope": "nation_self", "scaling": "per_x_slaves", "scaling_x": 1},
+              { "modifier_type": "administration", "value": 1, "scope": "nation_self", "scaling": "per_x_slaves", "scaling_x": 1}
+            ]
+          },
+          "Punishment": {
+            "karma": -4,
+            "slave_capacity": 4,
+            "slave_death_chance": 0.03,
+            "_modifiers": [
+              { "modifier_type": "stability_loss_chance", "value": 0.15, "scope": "nation_self", "scaling": "per_x_slaves", "scaling_x": 1},
+              { "modifier_type": "money_income", "value": 250, "scope": "nation_self", "scaling": "per_x_slaves", "scaling_x": 1}
+            ]
+          },
+          "Labor": {
+            "karma": -6,
+            "slave_capacity": 6,
+            "slave_death_chance": 0.05,
+            "_modifiers": [
+              { "modifier_type": "stability_loss_chance", "value": 0.15, "scope": "nation_self", "scaling": "per_x_slaves", "scaling_x": 1},
+              { "modifier_type": "resource_production", "scaling_extra": "food", "value": 1, "scope": "nation_self", "scaling": "per_x_slaves", "scaling_x": 1},
+              { "modifier_type": "resource_production", "scaling_extra": "wood", "value": 1, "scope": "nation_self", "scaling": "per_x_slaves", "scaling_x": 1},
+              { "modifier_type": "resource_production", "scaling_extra": "stone", "value": 1, "scope": "nation_self", "scaling": "per_x_slaves", "scaling_x": 1}
+            ]
           }
         }
       },
@@ -1429,50 +1519,39 @@
         "laws": {
           "None": {},
           "Subsidized": {
-            "money_income_per_pop": -18,
-            "stability_gain_chance_per_pop": 0.01
+            "_modifiers": [
+              { "modifier_type": "money_income", "value": -24, "scope": "nation_self", "scaling": "per_x_pops", "scaling_x": 1},
+              { "modifier_type": "stability_gain_chance", "value": 0.01, "scope": "nation_self", "scaling": "per_x_pops", "scaling_x": 1}
+            ]
           },
           "No Taxes": {
-            "money_income_per_pop": -9,
-            "stability_gain_chance_per_pop": 0.01
+            "_modifiers": [
+              { "modifier_type": "money_income", "value": -12, "scope": "nation_self", "scaling": "per_x_pops", "scaling_x": 1},
+              { "modifier_type": "stability_gain_chance", "value": 0.01, "scope": "nation_self", "scaling": "per_x_pops", "scaling_x": 1}
+            ]
           },
           "Low": {
-            "money_income_per_pop": 6
+            "_modifiers": [
+              { "modifier_type": "money_income", "value": 8, "scope": "nation_self", "scaling": "per_x_pops", "scaling_x": 1}
+            ]
           },
           "Moderate": {
-            "money_income_per_pop": 12,
-            "stability_loss_chance_per_pop": 0.01
+            "_modifiers": [
+              { "modifier_type": "money_income", "value": 16, "scope": "nation_self", "scaling": "per_x_pops", "scaling_x": 1},
+              { "modifier_type": "stability_loss_chance", "value": 0.01, "scope": "nation_self", "scaling": "per_x_pops", "scaling_x": 1}
+            ]
           },
           "High": {
-            "money_income_per_pop": 18,
-            "stability_loss_chance_per_pop": 0.02
+            "_modifiers": [
+              { "modifier_type": "money_income", "value": 32, "scope": "nation_self", "scaling": "per_x_pops", "scaling_x": 1},
+              { "modifier_type": "stability_loss_chance", "value": 0.02, "scope": "nation_self", "scaling": "per_x_pops", "scaling_x": 1}
+            ]
           },
           "Oppressive": {
-            "money_income_per_pop": 24,
-            "stability_loss_chance_per_pop": 0.03
-          }
-        }
-      },
-      "justice_stance": {
-        "bsonType": "enum",
-        "label": "Justice Stance",
-        "description": "The nation's stance on handling criminals",
-        "enum": [
-          "None",
-          "Reformation",
-          "Standard",
-          "Punishment"
-        ],
-        "laws": {
-          "None": {},
-          "Reformation": {
-            "stability_gain_chance_per_positive_karma": 0.03,
-            "max_stability_gain_chance_per_positive_karma": 0.3
-          },
-          "Standard": {},
-          "Punishment": {
-            "stability_loss_chance_per_negative_karma": 0.05,
-            "max_stability_loss_chance_per_negative_karma": 0.5
+            "_modifiers": [
+              { "modifier_type": "money_income", "value": 60, "scope": "nation_self", "scaling": "per_x_pops", "scaling_x": 1},
+              { "modifier_type": "stability_loss_chance", "value": 0.04, "scope": "nation_self", "scaling": "per_x_pops", "scaling_x": 1}
+            ]
           }
         }
       },

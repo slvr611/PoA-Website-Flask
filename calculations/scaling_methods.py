@@ -175,6 +175,12 @@ def per_x_minority_cultures_and_religions(target, scaling_x=1, scaling_extra="",
     return int(count / divisor)
 
 
+def per_x_slaves(target, scaling_x=1, scaling_extra="", context=None):
+    cache = target.get("_calc_cache", {}) or {}
+    divisor = float(scaling_x) if scaling_x else 1
+    return int(cache.get("slave_count", 0) / divisor)
+
+
 # Registry — each key must match scaling_types.json (plus legacy aliases).
 SCALING_METHODS = {
     "flat": flat,
@@ -200,6 +206,7 @@ SCALING_METHODS = {
     "per_x_minority_cultures": per_x_minority_cultures,
     "per_x_minority_religions": per_x_minority_religions,
     "per_x_minority_cultures_and_religions": per_x_minority_cultures_and_religions,
+    "per_x_slaves": per_x_slaves,
 }
 
 

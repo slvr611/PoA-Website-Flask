@@ -12,7 +12,7 @@ def _build_nation_calc_cache(target):
     if not target_id:
         return {}
 
-    pops = list(category_data["pops"]["database"].find({"nation": target_id}, {"race": 1, "culture": 1, "religion": 1}))
+    pops = list(category_data["pops"]["database"].find({"nation": target_id}, {"race": 1, "culture": 1, "religion": 1, "slave": 1}))
     race_ids = list({pop.get("race", "") for pop in pops if pop.get("race")})
 
     race_object_ids = []
@@ -76,15 +76,17 @@ def _build_nation_calc_cache(target):
 
     culture_count  = len({p.get("culture")  for p in pops if p.get("culture")})
     religion_count = len({p.get("religion") for p in pops if p.get("religion")})
+    slave_count    = sum(1 for p in pops if p.get("slave"))
 
     return {
         "pops": pops,
-        "pop_count": len(pops),
+        "pop_count": len(pops) - slave_count,
         "bloodthirsty_pop_count": bloodthirsty_pop_count,
         "primary_culture_pop_count": primary_culture_pop_count,
         "primary_religion_pop_count": primary_religion_pop_count,
         "culture_count": culture_count,
         "religion_count": religion_count,
+        "slave_count": slave_count,
         "_node_tiles": node_tiles,
         # territory_node_counts, active_node_counts, and out_of_range_tiles are
         # populated by calculate_all_fields after law_totals are available.
