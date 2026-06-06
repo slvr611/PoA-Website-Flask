@@ -1195,6 +1195,7 @@ class HexMapViewer {
             if (e.button === 2) { this._startPan(e.clientX, e.clientY); return; }
             if (e.button === 1) {
                 e.preventDefault();
+                if (!this._editMode) return;
                 this._midPainting = true;
                 this._lastPainted = null;
                 this._currentUndoBatch = { type: 'unown', tiles: new Map() };

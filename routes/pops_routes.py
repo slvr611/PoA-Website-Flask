@@ -159,3 +159,55 @@ def pops_bulk_edit():
         "approved": is_admin,
         "errors": errors,
     })
+
+
+@pops_routes.route("/pops/bulk_delete", methods=["POST"])
+def pops_bulk_delete():
+    """Create one Remove change per selected pop; approve immediately if admin."""
+    if not g.user:
+        return jsonify({"error": "Not logged in"}), 401
+    if not g.user.get("is_admin"):
+        return jsonify({"error": "Admin required"}), 403
+
+    data = request.get_json()
+    if not isinstance(data, dict):
+        return jsonify({"error": "Invalid payload"}), 400
+
+    pop_ids = data.get("pop_ids", [])
+    reason = data.get("reason") or "Bulk pop deletion"
+
+    change_ids = []
+    errors = []
+
+    for raw_id in pop_ids:
+        try:
+            oid = ObjectId(raw_id)
+        except Exception:
+            errors.append(f"Invalid pop id: {raw_id}")
+            continue
+
+        pop = mongo.db.pops.find_one({"_id": oid})
+        if not pop:
+            errors.append(f"Pop not found: {raw_id}")
+            continue
+
+        before = {k: v for k, v in pop.items() if k != "_id"}
+        change_id = request_change(
+            data_type="pops",
+            item_id=pop["_id"],
+            change_type="Remove",
+            before_data=before,
+            after_data={},
+            reason=reason,
+        )
+        if not change_id:
+            errors.append(f"Failed to create change for pop {raw_id}")
+            continue
+
+        approve_change(change_id)
+        change_ids.append(str(change_id))
+
+    return jsonify({
+        "deleted": len(change_ids),
+        "errors": errors,
+    })

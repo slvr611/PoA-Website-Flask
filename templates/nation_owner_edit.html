@@ -359,6 +359,9 @@
                                     <input type="text" id="bulk-edit-reason" placeholder="Optional reason" style="min-width:200px;">
                                 </label>
                                 <button id="bulk-edit-submit" style="align-self:flex-end;">Apply to Selected Pops</button>
+                                {% if g.user.is_admin %}
+                                <button id="bulk-delete-submit" style="align-self:flex-end;background:#8b1a1a;color:#fff;border:1px solid #c0392b;">Delete Selected Pops</button>
+                                {% endif %}
                             </div>
                         </div>
 
@@ -441,6 +444,40 @@
                                         this.textContent = 'Apply to Selected Pops';
                                     }
                                 });
+
+                                const deleteBtn = document.getElementById('bulk-delete-submit');
+                                if (deleteBtn) {
+                                    deleteBtn.addEventListener('click', async function() {
+                                        const checked = Array.from(document.querySelectorAll('.pop-select:checked'));
+                                        if (!checked.length) return;
+                                        if (!confirm('Permanently delete ' + checked.length + ' pop(s)? This cannot be undone.')) return;
+
+                                        const pop_ids = checked.map(cb => cb.closest('tr').dataset.popId);
+                                        const reason = document.getElementById('bulk-edit-reason').value.trim();
+                                        this.disabled = true;
+                                        this.textContent = 'Deleting…';
+
+                                        try {
+                                            const res = await fetch('/pops/bulk_delete', {
+                                                method: 'POST',
+                                                headers: {'Content-Type': 'application/json'},
+                                                body: JSON.stringify({ pop_ids, reason: reason || 'Bulk pop deletion' }),
+                                            });
+                                            const data = await res.json();
+                                            if (data.error) { alert('Error: ' + data.error); return; }
+                                            let msg = 'Deleted ' + data.deleted + ' pop(s).';
+                                            if (data.errors && data.errors.length)
+                                                msg += '\n\nErrors:\n' + data.errors.join('\n');
+                                            alert(msg);
+                                            if (data.deleted > 0) location.reload();
+                                        } catch(e) {
+                                            alert('Request failed: ' + e.message);
+                                        } finally {
+                                            this.disabled = false;
+                                            this.textContent = 'Delete Selected Pops';
+                                        }
+                                    });
+                                }
                             });
                         })();
                         </script>
