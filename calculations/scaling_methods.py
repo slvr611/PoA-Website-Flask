@@ -66,6 +66,14 @@ def per_x_pops(target, scaling_x=1, scaling_extra="", context=None):
     return int(pops / divisor)
 
 
+def per_x_units(target, scaling_x=1, scaling_extra="", context=None):
+    naval_units = target.get("naval_units", []) or []
+    land_units = target.get("land_units", []) or []
+    divisor = float(scaling_x) if scaling_x else 1
+    total_unit_count = len(land_units) + len(naval_units)
+    return int(total_unit_count / divisor)
+
+
 def per_x_naval_units(target, scaling_x=1, scaling_extra="", context=None):
     units = target.get("naval_units", []) or []
     divisor = float(scaling_x) if scaling_x else 1
@@ -181,6 +189,12 @@ def per_x_slaves(target, scaling_x=1, scaling_extra="", context=None):
     return int(cache.get("slave_count", 0) / divisor)
 
 
+def per_x_money_income(target, scaling_x=1, scaling_extra="", context=None):
+    income = float(target.get("money_income", 0) or 0)
+    divisor = float(scaling_x) if scaling_x else 1
+    return int(income / divisor)
+
+
 # Registry — each key must match scaling_types.json (plus legacy aliases).
 SCALING_METHODS = {
     "flat": flat,
@@ -192,6 +206,7 @@ SCALING_METHODS = {
     "per_x_primary_culture_pops_world": per_x_primary_culture_pops_world,
     "per_x_primary_religion_pops_world": per_x_primary_religion_pops_world,
     "per_x_pops": per_x_pops,
+    "per_x_units": per_x_units,
     "per_x_naval_units": per_x_naval_units,
     "per_x_land_units": per_x_land_units,
     "per_x_turns_library": per_x_turns_library,
@@ -207,6 +222,7 @@ SCALING_METHODS = {
     "per_x_minority_religions": per_x_minority_religions,
     "per_x_minority_cultures_and_religions": per_x_minority_cultures_and_religions,
     "per_x_slaves": per_x_slaves,
+    "per_x_money_income": per_x_money_income,
 }
 
 

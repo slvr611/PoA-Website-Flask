@@ -7,6 +7,7 @@ from helpers.form_helpers import validate_form_with_jsonschema
 from routes.nation_routes import edit_nation, nation_edit_request, nation_edit_approve
 from app_core import category_data, mongo, rarity_rankings, json_data, find_dict_in_list, upload_bytes_to_s3
 from helpers.auth_helpers import admin_required
+from calculations.field_calculations import calculate_all_fields
 from pymongo import ASCENDING
 from bson import ObjectId
 from copy import deepcopy
@@ -186,6 +187,14 @@ def data_item(data_type, item_ref):
 
     template_name = "units_item.html" if data_type == "units" else "dataItem.html"
 
+    schema_props = schema.get("properties", {})
+    breakdowns = {}
+    if any(v.get("show_breakdown") for v in schema_props.values() if isinstance(v, dict)):
+        calculated_values, breakdowns = calculate_all_fields(
+            item, schema, data_type, return_breakdowns=True
+        )
+        item.update(calculated_values)
+
     district_files = ["nation_imperial_districts", "mercenary_districts",
                       "merchant_production_districts", "merchant_specialty_districts", "merchant_luxury_districts"]
     districts_lookup = {}
@@ -211,6 +220,7 @@ def data_item(data_type, item_ref):
         tech_lookup=tech_lookup,
         mercenaries_names=_names_set("mercenaries"),
         races_names=_names_set("races"),
+        breakdowns=breakdowns,
     )
 
 @data_item_routes.route("/<data_type>/edit")

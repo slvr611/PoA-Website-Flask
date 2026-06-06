@@ -3,19 +3,6 @@
         "name": "Flat",
         "description": "Value applied as-is (multiplier = 1). The default for all modifiers."
     },
-    "per_x_money": {
-        "name": "Per X Money",
-        "description": "Multiplied by the nation's current money stockpile divided by X, floored.",
-        "has_x": true,
-        "default_x": 100
-    },
-    "per_x_resource": {
-        "name": "Per X Resource",
-        "description": "Multiplied by the nation's current resource stockpile divided by X, floored.",
-        "has_x": true,
-        "default_x": 1,
-        "has_dropdown": "resource"
-    },
     "per_x_shallow_and_deep_water_tiles": {
         "name": "Per X Shallow+Deep Water Tiles",
         "description": "Multiplied by combined shallow and deep water tiles divided by X, floored.",
@@ -49,6 +36,12 @@
     "per_x_pops": {
         "name": "Per X Pops In Nation",
         "description": "Multiplied by the total number of pops in the nation divided by X, floored.",
+        "has_x": true,
+        "default_x": 1
+    },
+    "per_x_units": {
+        "name": "Per X Units",
+        "description": "Multiplied by the nation's total units divided by X, floored.",
         "has_x": true,
         "default_x": 1
     },
@@ -89,6 +82,25 @@
         "description": "Multiplied by the nation's administration value divided by X, floored.",
         "has_x": true,
         "default_x": 1
+    },
+    "per_x_money": {
+        "name": "Per X Money",
+        "description": "Multiplied by the nation's current money stockpile divided by X, floored.",
+        "has_x": true,
+        "default_x": 100
+    },
+    "per_x_money_income": {
+        "name": "Per X Money Income",
+        "description": "Multiplied by the nation's money income divided by X, floored. Uses the income value from the previous calculation.",
+        "has_x": true,
+        "default_x": 1
+    },
+    "per_x_resource": {
+        "name": "Per X Resource",
+        "description": "Multiplied by the nation's current resource stockpile divided by X, floored.",
+        "has_x": true,
+        "default_x": 1,
+        "has_dropdown": "resource"
     },
     "per_x_resource_produced": {
         "name": "Per X Resource Produced",

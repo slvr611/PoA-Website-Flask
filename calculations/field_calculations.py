@@ -145,6 +145,7 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
     record_timing("district_calculations_ms", phase_start)
 
     city_totals = {}
+    city_schema_totals = {}
     tech_totals = {}
     loose_node_totals = {}
     territory_terrain_totals = {}
@@ -156,11 +157,13 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
     unit_totals = {}
     prestige_modifiers = {}
     title_modifiers = {}
+    nation_tagged_sources = None
 
     phase_start = perf_counter()
     if target_data_type == "nation":
         cities = collect_cities(target)
         city_totals = sum_city_totals(cities)
+        city_schema_totals = sum_modifier_totals(collect_city_schema_modifiers(target), target)
 
         technologies = _normalize_technologies(target.get("technologies"))
         tech_totals = sum_tech_totals(technologies)
@@ -256,10 +259,25 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
 
     phase_start = perf_counter()
     overall_total_modifiers = {}
-    calculated_values = {"district_details": district_details, "job_details": job_details, "land_unit_details": land_unit_details, "naval_unit_details": naval_unit_details, "support_unit_details": support_unit_details}
-    for d in [external_modifiers_total, modifier_totals, district_totals, tech_totals, loose_node_totals, territory_terrain_totals, city_totals, law_totals, job_totals, unit_totals, prestige_modifiers, title_modifiers]:
+    _karma_sources = [
+        ("external",   external_modifiers_total),
+        ("modifiers",  modifier_totals),
+        ("districts",  district_totals),
+        ("tech",       tech_totals),
+        ("loose_nodes",loose_node_totals),
+        ("terrain",    territory_terrain_totals),
+        ("cities",     city_totals),
+        ("city_mods",  city_schema_totals),
+        ("laws",       law_totals),
+        ("jobs",       job_totals),
+        ("units",      unit_totals),
+        ("prestige",   prestige_modifiers),
+        ("titles",     title_modifiers),
+    ]
+    for _label, d in _karma_sources:
         for key, value in d.items():
             overall_total_modifiers[key] = overall_total_modifiers.get(key, 0) + value
+    calculated_values = {"district_details": district_details, "job_details": job_details, "land_unit_details": land_unit_details, "naval_unit_details": naval_unit_details, "support_unit_details": support_unit_details}
 
     # Correct {resource}_nodes counts using tile-based truth.
     # Multiple buildings on one tile still activate its node only once. For
@@ -302,7 +320,7 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
     for d in [effective_territory_modifiers, route_capacity_modifiers, effective_pop_capacity_modifiers]:
         for key, value in d.items():
             overall_total_modifiers[key] = overall_total_modifiers.get(key, 0) + value
-    
+
     overall_total_modifiers = parse_meta_modifiers(target, overall_total_modifiers)
 
     if target_data_type == "nation" and target.get("infamy", 0) >= 50:
@@ -379,10 +397,10 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
 
             overall_total_modifiers = {}
 
-            for d in [external_modifiers_total, modifier_totals, district_totals, tech_totals, loose_node_totals, territory_terrain_totals, city_totals, law_totals, job_totals, unit_totals, prestige_modifiers, title_modifiers]:
+            for d in [external_modifiers_total, modifier_totals, district_totals, tech_totals, loose_node_totals, territory_terrain_totals, city_totals, city_schema_totals, law_totals, job_totals, unit_totals, prestige_modifiers, title_modifiers]:
                 for key, value in d.items():
                     overall_total_modifiers[key] = overall_total_modifiers.get(key, 0) + value
-            
+
             #print(overall_total_modifiers)
                         
             calculated_values["stability_loss_chance"] = compute_field(
@@ -426,21 +444,21 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
             calculated_values["effective_territory_types"] = _etypes
 
     phase_start = perf_counter()
-    if return_breakdowns and target_data_type == "nation":
+    if return_breakdowns:
         component_sources = {
             "base": {},
             "modifiers": modifier_totals,
-            "districts": district_totals,
-            "cities": city_totals,
+            "districts": district_totals if target_data_type == "nation" else {},
+            "cities": city_totals if target_data_type == "nation" else {},
             "laws": law_totals,
-            "tech": tech_totals,
-            "jobs": job_totals,
-            "units": unit_totals,
-            "terrain": territory_terrain_totals,
-            "loose_nodes": loose_node_totals,
+            "tech": tech_totals if target_data_type == "nation" else {},
+            "jobs": job_totals if target_data_type == "nation" else {},
+            "units": unit_totals if target_data_type == "nation" else {},
+            "terrain": territory_terrain_totals if target_data_type == "nation" else {},
+            "loose_nodes": loose_node_totals if target_data_type == "nation" else {},
             "external": external_modifiers_total,
-            "prestige": prestige_modifiers,
-            "titles": title_modifiers,
+            "prestige": prestige_modifiers if target_data_type == "nation" else {},
+            "titles": title_modifiers if target_data_type == "nation" else {},
         }
         breakdowns = compute_nation_breakdowns(
             target,
@@ -448,7 +466,7 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
             component_sources,
             overall_total_modifiers,
             calculated_values,
-            nation_tagged_sources,
+            nation_tagged_sources if target_data_type == "nation" else None,
         )
         record_timing("compute_breakdowns_ms", phase_start)
         local_timings["total_calculate_all_fields_ms"] = round((perf_counter() - calc_start) * 1000, 2)
@@ -678,6 +696,17 @@ def collect_cities(target):
             collected_modifiers.append({city_node + "_nodes": 1})
 
     return collected_modifiers
+
+def collect_city_schema_modifiers(target):
+    """Collect _modifiers arrays from city JSON defs (supports conditional/scaled modifiers)."""
+    result = []
+    city_json = json_data["cities"]
+    for city in target.get("cities", []):
+        city_type = city.get("type", "")
+        if not city_type:
+            continue
+        result.extend(city_json.get(city_type, {}).get("_modifiers", []))
+    return result
 
 _DEFAULT_TECHNOLOGIES = {"political_philosophy": {"researched": True}}
 
@@ -1547,20 +1576,51 @@ def _build_unit_tagged_sources(target, schema, district_details):
     # Cities
     city_json = json_data["cities"]
     wall_json = json_data["walls"]
+    from calculations.source_adapters import _resolve_modifier_type as _res_city_mod
     for city in target.get("cities", []):
         city_type = city.get("type", "")
         if not city_type:
             continue
         city_data = city_json.get(city_type, {})
+        city_name = city_data.get("display_name", city_type)
         city_mods = city_data.get("modifiers", {})
         if city_mods:
-            city_name = city_data.get("display_name", city_type)
             tagged.append({"label": f"City: {city_name}", "modifiers": city_mods})
         wall_data = wall_json.get(city.get("wall", ""), {})
         wall_mods = wall_data.get("modifiers", {})
         if wall_mods:
             wall_name = wall_data.get("display_name", city.get("wall", ""))
             tagged.append({"label": f"City: {wall_name}", "modifiers": wall_mods})
+        for m in city_data.get("_modifiers", []):
+            condition_scaling = m.get("condition_scaling") or ""
+            if condition_scaling:
+                try:
+                    cond_x     = float(m.get("condition_scaling_x") or 1)
+                    cond_extra = m.get("condition_scaling_extra") or ""
+                    cond_op    = m.get("condition_operator") or ">="
+                    cond_val   = float(m.get("condition_value") or 0)
+                    actual     = get_scaling_multiplier(condition_scaling, target, scaling_x=cond_x, scaling_extra=cond_extra)
+                    met = (
+                        (cond_op == ">=" and actual >= cond_val) or
+                        (cond_op == ">"  and actual >  cond_val) or
+                        (cond_op == "<=" and actual <= cond_val) or
+                        (cond_op == "<"  and actual <  cond_val) or
+                        (cond_op == "==" and actual == cond_val)
+                    )
+                    if not met:
+                        continue
+                except Exception:
+                    continue
+            field = _res_city_mod(m)
+            value = m.get("value", 0)
+            if field and value:
+                scaling = m.get("scaling", "flat")
+                scaling_x = float(m.get("scaling_x") or 1)
+                scaling_extra = m.get("scaling_extra") or ""
+                if scaling and scaling != "flat":
+                    value = value * get_scaling_multiplier(scaling, target, scaling_x=scaling_x, scaling_extra=scaling_extra)
+                cond_label = f" (income > {int(m.get('condition_value', 0))})" if condition_scaling else ""
+                tagged.append({"label": f"City: {city_name}{cond_label}", "modifiers": {field: value}})
 
     # Nation modifiers — resolve new modifier_type format and fall back to legacy field/key
     from calculations.source_adapters import _resolve_modifier_type as _res_mod_type
@@ -1669,6 +1729,13 @@ def _build_unit_tagged_sources(target, schema, district_details):
                         tagged.append({"label": f"Race: {race_name} ({trait_value})", "modifiers": stripped})
         except Exception:
             pass
+
+    # Prestige (empire only)
+    if target.get("empire", False):
+        prestige_mods = calculate_prestige_modifiers(target, schema_properties)
+        if prestige_mods:
+            prestige_val = int(target.get("prestige", 50))
+            tagged.append({"label": f"Prestige ({prestige_val})", "modifiers": prestige_mods})
 
     # All remaining external sources (global mods, religion, wonders, region,
     # overlord/vassal stances, markets) — labeled automatically.
@@ -1961,8 +2028,9 @@ def check_unit_requirements(target, unit_details):
             if not has_district:
                 meets_requirements = False
         elif requirement == "research":
+            technologies = _normalize_technologies(target.get("technologies"))
             for tech in value:
-                if not target.get("technologies", {}).get(tech, {}).get("researched", False):
+                if not technologies.get(tech, {}).get("researched", False):
                     meets_requirements = False
                     break
         elif requirement == "spell":
@@ -2858,7 +2926,8 @@ def _build_computed_contributions(
 
     # ── Job production / upkeep ───────────────────────────────────────────────
     job_details = calculated_values.get("job_details", {})
-    for job_key, count in target.get("jobs", {}).items():
+    jobs = target.get("jobs") or {}
+    for job_key, count in (jobs.items() if isinstance(jobs, dict) else []):
         if not count or job_key not in job_details:
             continue
         mods = {}
@@ -3048,6 +3117,52 @@ def _build_computed_contributions(
                 modifiers={r_to + "_consumption": converted},
             ))
 
+    # ── Negative stockpile karma ──────────────────────────────────────────────
+    if target.get("temperament", "None") == "Player":
+        storage = target.get("resource_storage") or {}
+        for resource in json_data.get("general_resources", []):
+            rkey = resource["key"]
+            if rkey == "research":
+                continue
+            v = storage.get(rkey, 0)
+            if v < 0:
+                contribs.append(SourceContribution(
+                    label=f"Negative {resource.get('display_name', rkey)} Stockpile",
+                    source_type="computed",
+                    modifiers={"karma": v},
+                ))
+        for resource in json_data.get("unique_resources", []):
+            rkey = resource["key"]
+            v = storage.get(rkey, 0)
+            if v < 0:
+                contribs.append(SourceContribution(
+                    label=f"Negative {resource.get('display_name', rkey)} Stockpile",
+                    source_type="computed",
+                    modifiers={"karma": v},
+                ))
+
+    # ── Over-capacity penalties (population & territory) ─────────────────────
+    pop_cap_mods = calculate_effective_pop_capacity_modifiers(target)
+    if pop_cap_mods.get("karma"):
+        eff_cap = int(calculated_values.get("effective_pop_capacity", target.get("effective_pop_capacity", 0)))
+        over = int(calculated_values.get("pop_count", target.get("pop_count", 0))) - eff_cap
+        contribs.append(SourceContribution(
+            label=f"Over Population Capacity ({over} over)",
+            source_type="computed",
+            modifiers={k: v for k, v in pop_cap_mods.items() if k == "karma"},
+        ))
+
+    terr_mods = calculate_effective_territory_modifiers(target, schema_properties)
+    if terr_mods.get("karma"):
+        eff_terr = int(calculated_values.get("effective_territory", target.get("effective_territory", 0)))
+        curr_terr = int(calculated_values.get("current_territory", target.get("current_territory", 0)))
+        over = curr_terr - eff_terr
+        contribs.append(SourceContribution(
+            label=f"Over Territory Capacity ({over} over)",
+            source_type="computed",
+            modifiers={k: v for k, v in terr_mods.items() if k == "karma"},
+        ))
+
     return contribs
 
 
@@ -3126,15 +3241,18 @@ def compute_nation_breakdowns(
         return entries
 
     # ── Build all breakdowns ──────────────────────────────────────────────────
+    # Schema-driven: any calculated field with "show_breakdown": true gets a
+    # generic _field_bd entry automatically. Special-case blocks below overwrite
+    # fields that need custom logic (admin injection, karma, money, resources).
     breakdowns = {
-        "stability_gain_chance":  _field_bd("stability_gain_chance", pct=True),
-        "stability_loss_chance":  _field_bd("stability_loss_chance", pct=True),
-        "effective_pop_capacity": _field_bd("effective_pop_capacity"),
         "money_income": [],
         "karma": [],
         "resource_production": {},
         "resource_consumption": {},
     }
+    for _f, _fschema in schema_properties.items():
+        if isinstance(_fschema, dict) and _fschema.get("calculated") and _fschema.get("show_breakdown"):
+            breakdowns[_f] = _field_bd(_f, pct=_fschema.get("format") == "percentage")
 
     # effective_territory — inject Administration contribution before Total
     eff_terr_bd = _field_bd("effective_territory")
@@ -3151,8 +3269,10 @@ def compute_nation_breakdowns(
         route_cap_bd.insert(-1, {"label": "Administration", "value": rc_per_admin * admin_val})
     breakdowns["route_capacity"] = route_cap_bd
 
-    # Karma — no schema base_value, needs rolling/temporary appended
+    # Karma — strip _field_bd's premature Total, inject rolling/temporary before the real one
     karma_bd = _field_bd("karma")
+    if karma_bd and karma_bd[-1].get("label") == "Total":
+        karma_bd.pop()
     rolling   = target.get("rolling_karma", 0)
     temporary = target.get("temporary_karma", 0)
     if rolling:

@@ -121,7 +121,7 @@ def compute_field_route_capacity(field, target, base_value, field_schema, overal
 def compute_field_karma(field, target, base_value, field_schema, overall_total_modifiers):
     rolling_karma = int(target.get("rolling_karma", 0))
     temporary_karma = int(target.get("temporary_karma", 0))
-    
+
     value = base_value + overall_total_modifiers.get(field, 0) + rolling_karma + temporary_karma
     
     return int(value)

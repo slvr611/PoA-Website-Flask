@@ -240,6 +240,7 @@
         "label": "Effective Territory",
         "description": "The nation's maximum territory they can hold before they start suffering penalties",
         "calculated": true,
+        "show_breakdown": true,
         "effective_territory_per_admin": 10,
         "base_value": 20
       },
@@ -259,6 +260,7 @@
         "label": "Route Capacity",
         "description": "The nation's maximum route capacity that can be used before they start suffering penalties",
         "calculated": true,
+        "show_breakdown": true,
         "route_capacity_per_admin": 4,
         "base_value": 6
       },
@@ -528,7 +530,8 @@
           "Enclave": {
             "defensive_pact_slots_maximum": 0,
             "military_pact_slots_maximum": 0,
-            "vassal_slots_maximum": 0
+            "vassal_slots_maximum": 0,
+            "trade_locked": 1
           },
           "Martial": {
             "defensive_pact_slots_maximum": 0,
@@ -537,16 +540,18 @@
             "land_unit_capacity": -1,
             "naval_unit_capacity": -1,
             "overlord_nation_land_unit_capacity": 1,
-            "overlord_nation_naval_unit_capacity": 1
+            "overlord_nation_naval_unit_capacity": 1,
+            "trade_locked": 1
           },
           "Mercantile": {
             "defensive_pact_slots_maximum": 0,
             "military_pact_slots_maximum": 0,
             "vassal_slots_maximum": 0,
-            "money_income": -75,
-            "overlord_nation_money_income": 75,
+            "money_income": -100,
+            "overlord_nation_money_income": 100,
             "trade_slots": 3,
-            "trade_speed": 3
+            "trade_speed": 3,
+            "war_locked": 1
           },
           "Protectorate": {
             "defensive_pact_slots_maximum": 1,
@@ -558,7 +563,9 @@
             "military_pact_slots_maximum": 0,
             "vassal_slots_maximum": 0,
             "overlord_nation_research_production": 1,
-            "nation_max_research_production": 0
+            "nation_max_research_production": 0,
+            "trade_locked": 1,
+            "war_locked": 1
           },
           "Tributary": {}
         }
@@ -679,6 +686,7 @@
         "label": "Effective Pop Capacity",
         "description": "The amount of pops the nation can effectively hold",
         "calculated": true,
+        "show_breakdown": true,
         "base_value": 15
       },
       "slave_count": {
@@ -692,6 +700,7 @@
         "label": "Slave Capacity",
         "description": "The maximum number of slaves the nation can hold",
         "calculated": true,
+        "show_breakdown": true,
         "base_value": 0
       },
       "remaining_slave_capacity": {
@@ -731,6 +740,7 @@
         "label": "Stability Gain Chance",
         "description": "The nation's percentage chance of gaining a level of stability each tick",
         "calculated": true,
+        "show_breakdown": true,
         "format": "percentage"
       },
       "stability_loss_chance": {
@@ -738,6 +748,7 @@
         "label": "Stability Loss Chance",
         "description": "The nation's percentage chance of losing a level of stability each tick",
         "calculated": true,
+        "show_breakdown": true,
         "format": "percentage"
       },
       "isolated_stab_gain_rate": {
@@ -1617,7 +1628,13 @@
           "(C) Enlightened Defeat",
           "(C) Loyal Vassal",
           "(C) Fleeing Victims",
-          "(C) Local Bully"
+          "(C) Local Bully",
+          "(M) Allied League",
+          "(M) Fallen Empire",
+          "(M) Beloved Survivor",
+          "(M) Refugee Haven",
+          "(M) Ascending Tribe",
+          "(M) Fresh Outsider"
         ]
       },
       "jobs": {
@@ -1930,6 +1947,7 @@
         "label": "Export Slots",
         "description": "The total number of export slots the nation has available each session, before accounting for ongoing trades",
         "calculated": true,
+        "show_breakdown": true,
         "base_value": 4
       },
       "import_slots": {
@@ -1937,6 +1955,7 @@
         "label": "Import Slots",
         "description": "The total number of import slots the nation has available each session, before accounting for ongoing trades",
         "calculated": true,
+        "show_breakdown": true,
         "base_value": 4
       },
       "remaining_export_slots": {

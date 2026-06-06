@@ -49,7 +49,15 @@
 									<td>None</td>
 								{% endif %}
 							{% elif properties.bsonType == "number" %}
-								{% if properties.format == "percentage" %}
+								{% set bd = (breakdowns if breakdowns is defined else {}).get(field, []) %}
+								{% if properties.get("show_breakdown") and bd %}
+									<td><span class="context-tooltip"
+											  data-tooltip-title="{{ properties.label }}"
+											  data-breakdown='{{ bd | tojson }}'>
+										{% if properties.format == "percentage" %}{{ (item.get(field, 0) * 100)|int }}%
+										{% else %}{{ item.get(field, 0) }}{% endif %}
+									</span></td>
+								{% elif properties.format == "percentage" %}
 									<td>{{ (item.get(field, 0) * 100)|int }}%</td>
 								{% else %}
 									<td>{{ item.get(field, 0) }}

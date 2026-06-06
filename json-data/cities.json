@@ -11,6 +11,24 @@
 			"effective_pop_capacity": 1
 		}
 	},
+	"citadel": {
+		"display_name": "Citadel",
+		"cost": {
+			"stone": 100,
+			"wood": 100,
+			"food": 100,
+			"iron": 100
+		},
+		"modifiers": {
+			"food_consumption": 100,
+			"effective_pop_capacity": 1
+		},
+		"_modifiers": [
+			{ "modifier_type": "effective_pop_capacity", "value": 1, "scope": "nation_self", "condition_scaling": "per_x_units", "condition_operator": ">=", "condition_value": 8 },
+			{ "modifier_type": "effective_pop_capacity", "value": 1, "scope": "nation_self", "condition_scaling": "per_x_units", "condition_operator": ">=", "condition_value": 12 },
+			{ "modifier_type": "effective_pop_capacity", "value": 1, "scope": "nation_self", "condition_scaling": "per_x_units", "condition_operator": ">=", "condition_value": 16 }
+		]
+	},
 	"commerce": {
 		"display_name": "Commerce",
 		"cost": {
@@ -22,11 +40,13 @@
 		"modifiers": {
 			"food_consumption": 1,
 			"mounts_consumption": 1,
-			"effective_pop_capacity": 1,
-			"money_income": 75,
-			"trade_speed": 3,
-			"trade_slots": 3
-		}
+			"effective_pop_capacity": 1
+		},
+		"_modifiers": [
+			{ "modifier_type": "effective_pop_capacity", "value": 1, "scope": "nation_self", "condition_scaling": "per_x_money_income", "condition_operator": ">=", "condition_value": 400 },
+			{ "modifier_type": "effective_pop_capacity", "value": 1, "scope": "nation_self", "condition_scaling": "per_x_money_income", "condition_operator": ">=", "condition_value": 1200 },
+			{ "modifier_type": "effective_pop_capacity", "value": 1, "scope": "nation_self", "condition_scaling": "per_x_money_income", "condition_operator": ">=", "condition_value": 3000 }
+		]
 	},
 	"heritage": {
 		"display_name": "Heritage",
@@ -38,12 +58,13 @@
 		},
 		"modifiers": {
 			"food_consumption": 2,
-			"stability_gain_chance_per_x_foreign_cultural_pop": 3,
-			"max_stability_gain_chance_per_foreign_cultural_pop": 0.25,
-			"stability_loss_chance_per_x_foreign_cultural_pop": -3,
-			"max_stability_loss_chance_per_foreign_cultural_pop": -0.25,
 			"effective_pop_capacity": 1
-		}
+		},
+		"_modifiers": [
+			{ "modifier_type": "effective_pop_capacity", "value": 1, "scope": "nation_self", "condition_scaling": "per_x_primary_culture_pops_world", "condition_operator": ">=", "condition_value": 60 },
+			{ "modifier_type": "effective_pop_capacity", "value": 1, "scope": "nation_self", "condition_scaling": "per_x_primary_culture_pops_world", "condition_operator": ">=", "condition_value": 120 },
+			{ "modifier_type": "effective_pop_capacity", "value": 1, "scope": "nation_self", "condition_scaling": "per_x_primary_culture_pops_world", "condition_operator": ">=", "condition_value": 200 }
+		]
 	},
 	"metropolis": {
 		"display_name": "Metropolis",
@@ -56,7 +77,7 @@
 		"modifiers": {
 			"wood_consumption": 1,
 			"stone_consumption": 1,
-			"effective_pop_capacity": 3
+			"effective_pop_capacity": 1
 		}
 	},
 	"sanctum": {
@@ -70,8 +91,12 @@
 		"modifiers": {
 			"food_consumption": 1,
 			"stone_consumption": 1,
-			"effective_pop_capacity": 1,
-			"magic_production": 3
-		}
+			"effective_pop_capacity": 1
+		},
+		"_modifiers": [
+			{ "modifier_type": "effective_pop_capacity", "value": 1, "scope": "nation_self", "condition_scaling": "per_x_resource_produced", "condition_scaling_extra": "magic", "condition_operator": ">=", "condition_value": 10 },
+			{ "modifier_type": "effective_pop_capacity", "value": 1, "scope": "nation_self", "condition_scaling": "per_x_resource_produced", "condition_scaling_extra": "magic", "condition_operator": ">=", "condition_value": 20 },
+			{ "modifier_type": "effective_pop_capacity", "value": 1, "scope": "nation_self", "condition_scaling": "per_x_resource_produced", "condition_scaling_extra": "magic", "condition_operator": ">=", "condition_value": 35 }
+		]
 	}
 }
