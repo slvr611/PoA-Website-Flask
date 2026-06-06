@@ -31,15 +31,17 @@ def calculate_user_permissions():
             # Base view access for authenticated users
             g.view_access_level = 5
 
+            # Check if user is non-player admin (RP mod with auto visibility bypass)
+            if user.get("is_non_player_admin", False):
+                g.is_non_player_admin = True
+
             # Check if user is admin
             if user.get("is_admin", False):
                 g.view_access_level = 10  # Admin view access
                 g.edit_access_level = 10  # Admin edit access
                 return
 
-            # Check if user is non-player admin (RP mod with auto visibility bypass)
-            if user.get("is_non_player_admin", False):
-                g.is_non_player_admin = True
+            if g.is_non_player_admin:
                 g.view_access_level = 7
                 return
 
