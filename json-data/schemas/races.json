@@ -162,6 +162,12 @@
         "description": "The preferred terrain of this race",
 		    "enum": ["None", "Plains", "Tundra", "Desert", "Forest", "River", "Dense Forest", "Marsh", "Hill", "Mountain", "Hazardous"]
       },
+      "description": {
+        "bsonType": "string",
+        "label": "Description",
+        "description": "A desciption of the race",
+        "long_text": true
+      },
 	    "pops": {
         "bsonType": "array",
 		    "label": "Pops",

@@ -1,0 +1,92 @@
+{% extends "layout.html" %}
+{% block title %}Randomize AI Laws{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1>Randomize AI Laws</h1>
+    <p class="text-muted" style="margin-bottom:1rem;">
+        Assigns a new weighted-random law value to every randomizable law for all non-Player nations.
+        Weights are configured in <code>json-data/law_randomization_weights.json</code>.
+    </p>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-bottom:1.5rem;">
+        <div style="background:var(--card-bg,#1e1e2e);border:1px solid var(--border,#333);border-radius:6px;padding:1rem;">
+            <strong>Nations affected:</strong> {{ ai_nations|length }}<br>
+            <strong>Laws randomized per nation:</strong> {{ law_keys|length }}
+            <div style="margin-top:0.5rem;font-size:0.85rem;color:var(--text-muted,#888);">
+                Excluded: {{ excluded | join(", ") if excluded else "none" }}
+            </div>
+        </div>
+        <div style="background:var(--card-bg,#1e1e2e);border:1px solid var(--border,#333);border-radius:6px;padding:1rem;">
+            <strong>Laws being randomized:</strong>
+            <div style="font-size:0.8rem;color:var(--text-muted,#888);margin-top:0.25rem;line-height:1.6;">
+                {{ law_keys | join(", ") }}
+            </div>
+        </div>
+    </div>
+
+    <div style="display:flex;gap:1rem;margin-bottom:2rem;flex-wrap:wrap;">
+        <form action="/randomize_ai_laws/preview" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-primary">Preview Changes</button>
+        </form>
+        <form action="/randomize_ai_laws/apply" method="POST"
+              onsubmit="return confirm('Apply randomized laws to all {{ ai_nations|length }} AI nations? This cannot be undone.')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-danger">Apply Now</button>
+        </form>
+        <a href="/admin_tools" class="btn btn-secondary">Back</a>
+    </div>
+
+    {% if preview_rows is defined %}
+    <h2>Preview</h2>
+    <p class="text-muted" style="margin-bottom:0.75rem;">
+        This preview was generated with a fresh random seed. Clicking "Apply Now" will generate another independent roll — the final results will differ from this preview.
+    </p>
+
+    {% set nations_with_changes = preview_rows | selectattr("changes") | list %}
+    {% set nations_no_changes = preview_rows | rejectattr("changes") | list %}
+
+    <p style="margin-bottom:1rem;">
+        <strong>{{ nations_with_changes|length }}</strong> nations would have at least one law change.
+        <strong>{{ nations_no_changes|length }}</strong> would keep all current laws.
+    </p>
+
+    {% if nations_with_changes %}
+    <div style="overflow-x:auto;">
+        <table class="info-table" style="font-size:0.85rem;">
+            <thead>
+                <tr>
+                    <th>Nation</th>
+                    <th>Culture</th>
+                    <th>Law</th>
+                    <th>Current</th>
+                    <th style="color:#7ec87e;">New</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in nations_with_changes %}
+                {% set loop_outer = loop %}
+                {% for law_key, (old_val, new_val) in row.changes.items() %}
+                <tr {% if loop.first %}style="border-top:2px solid var(--border,#333)"{% endif %}>
+                    {% if loop.first %}
+                    <td rowspan="{{ row.changes|length }}" style="vertical-align:top;font-weight:bold;">
+                        <a href="/nations/item/{{ row.name }}">{{ row.name }}</a>
+                    </td>
+                    <td rowspan="{{ row.changes|length }}" style="vertical-align:top;color:var(--text-muted,#888);">
+                        {{ row.culture }}
+                    </td>
+                    {% endif %}
+                    <td style="color:var(--text-muted,#888);">{{ law_key.replace("_", " ").title() }}</td>
+                    <td>{{ old_val if old_val else "—" }}</td>
+                    <td style="color:#7ec87e;">{{ new_val }}</td>
+                </tr>
+                {% endfor %}
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+    {% endif %}
+</div>
+{% endblock %}

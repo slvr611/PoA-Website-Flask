@@ -1343,6 +1343,115 @@ def era_formal_storage_bonus_tick(old_nation, new_nation, schema):
     return f"{old_nation.get('name', 'Unknown')} gained {gained_str} from Formal Storage.\n"
 
 
+# ---------------------------------------------------------------------------
+# Era AI resource grant
+# ---------------------------------------------------------------------------
+
+# Base grants calibrated to a ~15-pop nation (equivalent to a small player's district refunds).
+# Scaled linearly by pop count at runtime: 5 pops ≈ 0.33×, 15 pops ≈ 1×, 30 pops ≈ 2×.
+_ERA_AI_BASE_GRANTS = {
+    "food":   9,
+    "wood":   35,
+    "stone":  33,
+    "mounts": 1,
+    "magic":  7,
+    "iron":   3,
+}
+_ERA_AI_REFERENCE_POPS = 15  # pop count that yields the base amounts above
+
+
+def _era_ai_terrain_weights(nation):
+    """Return per-resource weight multipliers [0.5, 2.5] from terrain + node composition."""
+    terrain_json = json_data.get("terrains", {})
+
+    # Use effective territory types (what actually produces resources) rather than raw
+    # territory_types, which can include disconnected tiles that generate nothing.
+    # effective_territory_types is computed by calculate_all_fields and stored on the doc;
+    # _calc_cache.effective_territory_types is the same value set during the tick run.
+    cache = nation.get("_calc_cache", {}) or {}
+    territory = (
+        cache.get("effective_territory_types")
+        or nation.get("effective_territory_types")
+        or nation.get("territory_types")
+        or {}
+    )
+    total_tiles = max(sum(territory.values()), 1)
+
+    # Count tiles producing each resource using the terrain's own production rules
+    tiles_by_resource = {}
+    for terrain, count in territory.items():
+        res = terrain_json.get(terrain, {}).get("resource", "none")
+        if res != "none":
+            tiles_by_resource[res] = tiles_by_resource.get(res, 0) + count
+
+    # Multiplier: 0.5 (zero tiles) → 2.0 when ≥20% of effective tiles produce this resource
+    weights = {}
+    for res in _ERA_AI_BASE_GRANTS:
+        frac = tiles_by_resource.get(res, 0) / total_tiles
+        weights[res] = 0.5 + 1.5 * min(1.0, frac * 5)
+
+    # Node boosts — prefer _calc_cache counts (set by calculate_all_fields during tick),
+    # fall back to the stored resource_nodes field on the document.
+    nodes = nation.get("nodes", {}) or {}
+    territory_nodes = (
+        cache.get("territory_node_counts")
+        or nation.get("resource_nodes")
+        or {}
+    )
+    for res in _ERA_AI_BASE_GRANTS:
+        total_nodes = nodes.get(res, 0) + territory_nodes.get(res, 0)
+        if total_nodes > 0:
+            weights[res] = min(2.5, weights[res] + 0.25 * total_nodes)
+
+    return weights
+
+
+def era_ai_resource_grant_tick(old_nation, new_nation, schema):
+    """
+    Grant AI nations era-transition resources equivalent to what player nations
+    received as district refunds.  Amount scales linearly with pop count
+    (calibrated so 15 pops ≈ a small player's refund total; 5-pop nations get ~0.33×,
+    30-pop nations get ~2×).  Distribution is skewed by terrain composition and nodes.
+    """
+    if old_nation.get("temperament", "Player") == "Player":
+        return ""
+
+    pop_count = max(1, int(old_nation.get("pop_count", 0) or 0))
+    scale = pop_count / _ERA_AI_REFERENCE_POPS
+
+    terrain_weights = _era_ai_terrain_weights(old_nation)
+    storage = dict(new_nation.get("resource_storage", {}))
+    capacity = old_nation.get("nation_resource_capacity", {})
+    grants = {}
+
+    for res, base_amt in _ERA_AI_BASE_GRANTS.items():
+        mult = terrain_weights.get(res, 1.0)
+        amount = max(0, round(base_amt * scale * mult * random.uniform(0.75, 1.25)))
+        if amount == 0:
+            continue
+        current = storage.get(res, 0)
+        cap = capacity.get(res, 0)
+        new_val = min(current + amount, cap) if cap else current + amount
+        actual = new_val - current
+        if actual > 0:
+            storage[res] = new_val
+            grants[res] = actual
+
+    new_nation["resource_storage"] = storage
+
+    # Money: skewed toward stone/iron terrain (mines, mints)
+    money_mult = (terrain_weights.get("stone", 1.0) + terrain_weights.get("iron", 1.0)) / 2.0
+    money_grant = round(random.uniform(0, 1100) * scale * money_mult)
+    if money_grant > 0:
+        new_nation["money"] = new_nation.get("money", 0) + money_grant
+        grants["money"] = money_grant
+
+    if not grants:
+        return ""
+    summary = ", ".join(f"{k}+{v}" for k, v in sorted(grants.items()))
+    return f"{old_nation.get('name', '?')}: era resource grant [{summary}]\n"
+
+
 def era_relations_decay_tick():
     neutral_idx = _RELATION_STEPS.index("Neutral")
     relations = list(mongo.db.diplo_relations.find())
@@ -1506,9 +1615,11 @@ ERA_NATION_TICK_FUNCTIONS = {
     "Era Compliance Decay to Neutral": era_compliance_decay_tick,
     "Era Resource Stockpile Decay": era_resource_stockpile_decay_tick,
     "Era Formal Storage Bonus": era_formal_storage_bonus_tick,
+    "Era AI Resource Grant": era_ai_resource_grant_tick,
 }
 
 ERA_GENERAL_TICK_FUNCTIONS = {
+    "Backup Database": None,   # handled directly in era_tick() before nation processing
     "Era Relations Decay to Neutral": era_relations_decay_tick,
     "Era Pop Growth (All Nations)": era_pop_growth_tick,
     "Age Pop Growth (Skip Infertile Races)": age_pop_growth_tick,
@@ -1516,6 +1627,11 @@ ERA_GENERAL_TICK_FUNCTIONS = {
 
 def era_tick(form_data):
     full_tick_summary = ""
+
+    if "run_Backup Database" in form_data:
+        success, message = backup_database()
+        if not success:
+            return message
 
     collect_nation_data = any(
         f"run_{label}" in form_data for label in ERA_NATION_TICK_FUNCTIONS
@@ -1549,6 +1665,8 @@ def era_tick(form_data):
             system_approve_change(change_id)
 
     for label, fn in ERA_GENERAL_TICK_FUNCTIONS.items():
+        if fn is None:
+            continue  # handled as a special case above (e.g. Backup Database)
         if f"run_{label}" in form_data:
             print(label)
             full_tick_summary += fn()

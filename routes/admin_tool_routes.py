@@ -868,3 +868,146 @@ def edit_ai_personality(nation_id):
         dims=_AI_PERSONALITY_DIMS,
         current=current,
     )
+
+
+# ---------------------------------------------------------------------------
+# Randomize AI Laws
+# ---------------------------------------------------------------------------
+
+def _load_law_weights():
+    import json as _json
+    weights_path = os.path.join(os.path.dirname(__file__), '..', 'json-data', 'law_randomization_weights.json')
+    with open(os.path.normpath(weights_path), 'r', encoding='utf-8') as f:
+        return _json.load(f)
+
+
+def _pick_law(options, law_key, culture_traits, weights_data):
+    """Return a weighted-random choice from options using base + trait weights."""
+    base = weights_data.get("base_weights", {}).get(law_key, {})
+    trait_weights_map = weights_data.get("trait_weights", {})
+    weights = []
+    for option in options:
+        w = float(base.get(option, 1.0))
+        for trait in culture_traits:
+            if trait and trait != "None":
+                tw = float(trait_weights_map.get(trait, {}).get(law_key, {}).get(option, 1.0))
+                w *= tw
+        weights.append(max(w, 0.0))
+    total = sum(weights)
+    if total == 0:
+        return random.choice(options)
+    return random.choices(options, weights=weights, k=1)[0]
+
+
+def _randomize_nation_laws(nation, schema, weights_data, cultures_by_id):
+    """Return dict of {law_key: new_value} for all non-excluded laws."""
+    excluded = set(weights_data.get("excluded_law_categories", []))
+    law_keys = schema.get("laws", [])
+    props = schema.get("properties", {})
+
+    primary_culture_id = str(nation.get("primary_culture", ""))
+    culture = cultures_by_id.get(primary_culture_id, {})
+    culture_traits = [
+        culture.get("trait_one", "None"),
+        culture.get("trait_two", "None"),
+        culture.get("trait_three", "None"),
+    ]
+
+    new_laws = {}
+    for law_key in law_keys:
+        if law_key in excluded:
+            continue
+        options = props.get(law_key, {}).get("enum", [])
+        if not options:
+            continue
+        new_laws[law_key] = _pick_law(options, law_key, culture_traits, weights_data)
+    return new_laws
+
+
+@admin_tool_routes.route("/randomize_ai_laws", methods=["GET"])
+@admin_required
+def randomize_ai_laws():
+    schema, db = get_data_on_category("nations")
+    ai_nations = list(db.find({"temperament": {"$ne": "Player"}}, {"name": 1, "primary_culture": 1}).sort("name", ASCENDING))
+    weights_data = _load_law_weights()
+    excluded = weights_data.get("excluded_law_categories", [])
+    law_keys = [k for k in schema.get("laws", []) if k not in excluded]
+    return render_template(
+        "randomize_ai_laws.html",
+        ai_nations=ai_nations,
+        law_keys=law_keys,
+        excluded=excluded,
+    )
+
+
+@admin_tool_routes.route("/randomize_ai_laws/preview", methods=["POST"])
+@admin_required
+def randomize_ai_laws_preview():
+    schema, db = get_data_on_category("nations")
+    ai_nations = list(db.find({"temperament": {"$ne": "Player"}}).sort("name", ASCENDING))
+    weights_data = _load_law_weights()
+    excluded = weights_data.get("excluded_law_categories", [])
+    law_keys = [k for k in schema.get("laws", []) if k not in excluded]
+
+    culture_ids = list({ObjectId(n["primary_culture"]) for n in ai_nations if n.get("primary_culture")})
+    cultures_by_id = {
+        str(c["_id"]): c
+        for c in mongo.db.cultures.find({"_id": {"$in": culture_ids}}, {"trait_one": 1, "trait_two": 1, "trait_three": 1})
+    }
+
+    preview_rows = []
+    for nation in ai_nations:
+        new_laws = _randomize_nation_laws(nation, schema, weights_data, cultures_by_id)
+        changes = {k: (nation.get(k, ""), v) for k, v in new_laws.items() if nation.get(k) != v}
+        preview_rows.append({
+            "name": nation.get("name", "?"),
+            "culture": nation.get("primary_culture", ""),
+            "changes": changes,
+        })
+
+    return render_template(
+        "randomize_ai_laws.html",
+        ai_nations=ai_nations,
+        law_keys=law_keys,
+        excluded=excluded,
+        preview_rows=preview_rows,
+    )
+
+
+@admin_tool_routes.route("/randomize_ai_laws/apply", methods=["POST"])
+@admin_required
+def randomize_ai_laws_apply():
+    from helpers.change_helpers import system_request_change, system_approve_change
+    from copy import deepcopy
+
+    schema, db = get_data_on_category("nations")
+    ai_nations = list(db.find({"temperament": {"$ne": "Player"}}).sort("name", ASCENDING))
+    weights_data = _load_law_weights()
+
+    culture_ids = list({ObjectId(n["primary_culture"]) for n in ai_nations if n.get("primary_culture")})
+    cultures_by_id = {
+        str(c["_id"]): c
+        for c in mongo.db.cultures.find({"_id": {"$in": culture_ids}}, {"trait_one": 1, "trait_two": 1, "trait_three": 1})
+    }
+
+    updated = 0
+    for nation in ai_nations:
+        new_laws = _randomize_nation_laws(nation, schema, weights_data, cultures_by_id)
+        if not new_laws:
+            continue
+        old_data = deepcopy(nation)
+        new_data = deepcopy(nation)
+        new_data.update(new_laws)
+        change_id = system_request_change(
+            data_type="nations",
+            item_id=nation["_id"],
+            change_type="Update",
+            before_data=old_data,
+            after_data=new_data,
+            reason="AI law randomization via admin tool",
+        )
+        system_approve_change(change_id)
+        updated += 1
+
+    flash(f"Randomized laws for {updated} AI nations.", "success")
+    return redirect(url_for("admin_tool_routes.randomize_ai_laws"))

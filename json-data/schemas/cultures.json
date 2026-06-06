@@ -44,6 +44,12 @@
         "description": "The third cultural trait of this culture",
 		    "enum": ["None", "Absolutist", "Communalist", "Egalitarian", "Individualist", "Isolationist", "Mercantilist", "Militarist", "Pacifist", "Progressive", "Secular", "Spiritualist", "Traditionalist"]
       },
+      "description": {
+        "bsonType": "string",
+        "label": "Description",
+        "description": "A desciption of the culture",
+        "long_text": true
+      },
       "effect_description": {
         "bsonType": "string",
         "label": "Effect Description",

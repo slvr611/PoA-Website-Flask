@@ -1,0 +1,393 @@
+{
+  "_note": "Controls how AI law randomization works. 'excluded_law_categories' are skipped entirely. 'base_weights' set the default weight for each option (default 1.0 if omitted). 'trait_weights' are multipliers applied when the nation's primary culture has that trait — they stack multiplicatively across all three culture traits.",
+
+  "excluded_law_categories": ["stability", "nomad_camp_type", "government_type", "succession_type", "vassal_type", "slavery_stance"],
+
+  "base_weights": {
+    "government_type": {
+      "Fallen Monarchy":          1.0,
+      "Fanatical Theocracy":      1.0,
+      "Ruthless Meritocracy":     1.0,
+      "Disjointed Anarchists":    1.0,
+      "Archivist State":          0.0,
+      "Chaotic Throng":           0.0,
+      "Misfit Band":              0.0,
+      "Iron-Fisted Dictatorship": 0.0,
+      "Imperial Council":         0.0,
+      "Sacred Vicar":             0.0,
+      "Great Khanate":            0.0,
+      "World Warden":             0.0
+    },
+    "succession_type": {
+      "Strength":  1.0,
+      "Inherited": 1.0,
+      "Elected":   1.0
+    },
+    "conscription_type": {
+      "Low":      1.0,
+      "Moderate": 2.0,
+      "High":     1.0
+    },
+    "military_funding": {
+      "Minimal":     0.5,
+      "Substandard": 1.0,
+      "Standard":    2.0,
+      "Notable":     1.5,
+      "Substantial": 1.0,
+      "Extreme":     0.5
+    },
+    "magic_stance": {
+      "Bureaucracy": 1.0,
+      "Ceremonial":  1.0,
+      "Creation":    1.0,
+      "Destruction": 1.0,
+      "Manifest":    1.0,
+      "Persecution": 0.5
+    },
+    "centralization_law": {
+      "Autonomous":    0.5,
+      "Decentralized": 1.0,
+      "Standard":      1.5,
+      "Focused":       1.0,
+      "Absolute":      0.5
+    },
+    "citizenship_stance": {
+      "Free":       0.5,
+      "Open":       1.0,
+      "Restricted": 1.0,
+      "Closed":     0.5
+    },
+    "foreign_acceptance": {
+      "Oppression":  0.5,
+      "Integration": 2.0,
+      "Acceptance":  1.5,
+      "Harmony":     0.7
+    },
+    "subject_stance": {
+      "Suppression": 0.7,
+      "Balanced":    2.0,
+      "Benevolence": 1.0
+    },
+    "land_doctrine": {
+      "Standard":  6.0,
+      "Ambush":    1.0,
+      "Horde":     1.0,
+      "Militia":   1.0,
+      "Safeguard": 1.0,
+      "Shock":     1.0,
+      "Volley":    1.0
+    },
+    "naval_doctrine": {
+      "Standard":  3.0,
+      "Fleet":     1.0,
+      "Skirmish":  1.0,
+      "Transport": 1.0
+    },
+    "diplomatic_stance": {
+      "Belligerent":   0.5,
+      "Cooperative":   1.0,
+      "Expansionist":  1.0,
+      "Extermination": 0.1,
+      "Isolated":      0.5
+    },
+    "scientific_stance": {
+      "Puritanical":   0.5,
+      "Conservative":  1.0,
+      "Pragmatic":     2.0,
+      "Progressive":   1.0,
+      "Radical":       0.5,
+      "Revolutionary": 0.25
+    },
+    "economy_type": {
+      "None":         1.0,
+      "Millet":       0.0,
+      "Raiding":      0.0,
+      "Serfdom":      0.0,
+      "Mercantilism": 0.0,
+      "Guilds":       0.0
+    },
+    "expansion_stance": {
+      "Limitless":  0.5,
+      "Free":       1.0,
+      "Restricted": 1.0,
+      "Controlled": 0.5
+    },
+    "mercenary_law": {
+      "No Mercenaries":    1.5,
+      "Some Mercenaries":  2.0,
+      "Mercenary Presence":1.0,
+      "Mercenary Reliance":0.5,
+      "Mercenary Military":0.25
+    },
+    "consumption_stance": {
+      "Indulgence": 0.5,
+      "Comfort":    1.0,
+      "Standard":   2.0,
+      "Rationing":  1.0
+    },
+    "tax_stance": {
+      "Subsidized":  0.25,
+      "No Taxes":    0.5,
+      "Low":         2.0,
+      "Moderate":    1.5,
+      "High":        1.5,
+      "Oppressive":  0.5
+    }
+  },
+
+  "trait_weights": {
+    "Militarist": {
+      "military_funding": {
+        "Minimal":     0.1,
+        "Substandard": 0.3,
+        "Standard":    0.7,
+        "Notable":     2.0,
+        "Substantial": 3.0,
+        "Extreme":     2.0
+      },
+      "conscription_type": {
+        "Low":    0.2,
+        "High":   3.0
+      },
+      "land_doctrine": {
+        "Horde":  1.5,
+        "Shock":  2.0,
+        "Ambush": 1.5
+      },
+      "diplomatic_stance": {
+        "Belligerent":   2.5,
+        "Expansionist":  2.0,
+        "Cooperative":   0.5,
+        "Extermination": 10.0
+      },
+      "mercenary_law": {
+        "Mercenary Presence": 1.5,
+        "Mercenary Reliance": 2.0,
+        "Mercenary Military": 2.0
+      }
+    },
+
+    "Pacifist": {
+      "military_funding": {
+        "Minimal":     2.5,
+        "Substandard": 2.0,
+        "Standard":    1.0,
+        "Notable":     0.4,
+        "Substantial": 0.2,
+        "Extreme":     0.1
+      },
+      "conscription_type": {
+        "Low":    3.0,
+        "High":   0.2
+      },
+      "diplomatic_stance": {
+        "Belligerent":   0.1,
+        "Cooperative":   3.0,
+        "Expansionist":  0.4,
+        "Extermination": 0.0,
+        "Isolated":      1.5
+      }
+    },
+
+    "Mercantilist": {
+      "mercenary_law": {
+        "Some Mercenaries":  1.5,
+        "Mercenary Presence":2.0,
+        "Mercenary Reliance":2.0
+      },
+      "diplomatic_stance": {
+        "Cooperative":  2.0,
+        "Expansionist": 2.0,
+        "Isolated":     0.2
+      }
+    },
+
+    "Isolationist": {
+      "diplomatic_stance": {
+        "Isolated":     4.0,
+        "Cooperative":  0.3,
+        "Expansionist": 0.2,
+        "Extermination": 5.0,
+        "Belligerent":  0.5
+      },
+      "citizenship_stance": {
+        "Closed":     3.0,
+        "Restricted": 2.0,
+        "Free":       0.2
+      },
+      "foreign_acceptance": {
+        "Oppression":  2.0,
+        "Integration": 0.5,
+        "Acceptance":  0.3,
+        "Harmony":     0.2
+      },
+      "expansion_stance": {
+        "Limitless":  0.1,
+        "Free":       0.3,
+        "Restricted": 2.0,
+        "Controlled": 3.0
+      }
+    },
+
+    "Spiritualist": {
+      "magic_stance": {
+        "Ceremonial":  3.0,
+        "Creation":    2.0,
+        "Manifest":    2.0,
+        "Persecution": 0.1
+      },
+      "government_type": {
+        "Fanatical Theocracy": 3.0
+      },
+      "scientific_stance": {
+        "Puritanical":   2.0,
+        "Conservative":  2.0,
+        "Pragmatic":     0.7,
+        "Progressive":   0.4,
+        "Revolutionary": 0.2
+      }
+    },
+
+    "Secular": {
+      "magic_stance": {
+        "Bureaucracy": 2.0,
+        "Persecution": 2.0,
+        "Ceremonial":  0.4
+      },
+      "government_type": {
+        "Fanatical Theocracy": 0.1,
+        "Sacred Vicar":        0.2
+      },
+      "scientific_stance": {
+        "Puritanical":   0.2,
+        "Conservative":  0.5,
+        "Pragmatic":     2.0,
+        "Progressive":   2.0,
+        "Radical":       1.5,
+        "Revolutionary": 1.5
+      }
+    },
+
+    "Absolutist": {
+      "centralization_law": {
+        "Autonomous":    0.1,
+        "Decentralized": 0.2,
+        "Standard":      0.7,
+        "Focused":       2.0,
+        "Absolute":      4.0
+      },
+      "succession_type": {
+        "Inherited": 2.5,
+        "Elected":   0.3
+      },
+      "government_type": {
+        "Disjointed Anarchists":    0.0
+      },
+      "tax_stance": {
+        "High":       2.0,
+        "Oppressive": 2.0,
+        "Low":        0.3,
+        "No Taxes":   0.1
+      }
+    },
+
+    "Communalist": {
+      "government_type": {
+        "Disjointed Anarchists": 3.0
+      },
+      "citizenship_stance": {
+        "Free":   3.0,
+        "Open":   2.0,
+        "Closed": 0.2
+      },
+      "tax_stance": {
+        "No Taxes": 2.0,
+        "Low":      2.0,
+        "High":     0.4,
+        "Oppressive": 0.1
+      },
+      "foreign_acceptance": {
+        "Harmony":     2.5,
+        "Acceptance":  2.0,
+        "Oppression":  0.2
+      }
+    },
+
+    "Egalitarian": {
+      "citizenship_stance": {
+        "Free":     3.0,
+        "Open":     2.0,
+        "Closed":   0.1
+      },
+      "foreign_acceptance": {
+        "Harmony":    3.0,
+        "Acceptance": 2.0,
+        "Oppression": 0.1
+      },
+      "succession_type": {
+        "Elected": 5,
+        "Inherited": 0.5,
+        "Strength": 0.5
+      }
+    },
+
+    "Individualist": {
+      "citizenship_stance": {
+        "Free":       2.5,
+        "Open":       1.5,
+        "Closed":     0.3
+      },
+      "tax_stance": {
+        "None":     2.0,
+        "No Taxes": 2.0,
+        "Low":      2.0,
+        "Moderate": 1.0,
+        "High":     0.5,
+        "Oppressive": 0.1
+      },
+      "centralization_law": {
+        "Autonomous":    2.0,
+        "Decentralized": 2.0,
+        "Absolute":      0.2
+      },
+      "mercenary_law": {
+        "Some Mercenaries":  1.5,
+        "Mercenary Presence":2.0
+      }
+    },
+
+    "Traditionalist": {
+      "scientific_stance": {
+        "Puritanical":   1.5,
+        "Conservative":  3.0,
+        "Pragmatic":     1.5,
+        "Progressive":   0.4,
+        "Radical":       0.2,
+        "Revolutionary": 0.1
+      },
+      "succession_type": {
+        "Inherited": 2.5,
+        "Elected":   0.5
+      },
+      "government_type": {
+        "Fallen Monarchy":  2.5
+      }
+    },
+
+    "Progressive": {
+      "scientific_stance": {
+        "Puritanical":   0.1,
+        "Conservative":  0.4,
+        "Pragmatic":     1.0,
+        "Progressive":   2.0,
+        "Radical":       3.0,
+        "Revolutionary": 4.0
+      },
+      "succession_type": {
+        "Elected":   2.5,
+        "Inherited": 0.5,
+        "Strength":  0.5
+      }
+    }
+  }
+}

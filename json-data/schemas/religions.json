@@ -128,6 +128,12 @@
           "Mourning"
         ]
       },
+      "description": {
+        "bsonType": "string",
+        "label": "Description",
+        "description": "A desciption of the religion",
+        "long_text": true
+      },
       "effect_description": {
         "bsonType": "string",
         "label": "Effect Description",

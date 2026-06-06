@@ -1431,14 +1431,13 @@
         "label": "Consumption Stance",
         "description": "The nation's stance towards whether food should be distributed in abundance or rationed",
         "enum": [
-          "None",
           "Indulgence",
           "Comfort",
           "Standard",
           "Rationing"
         ],
+        "default": "Standard",
         "laws": {
-          "None": {},
           "Indulgence": {
             "stability_gain_chance": 0.4,
             "unit_morale": 1,
@@ -1519,7 +1518,6 @@
         "label": "Tax Stance",
         "description": "The nation's tax rate",
         "enum": [
-          "None",
           "Subsidized",
           "No Taxes",
           "Low",
@@ -1527,8 +1525,8 @@
           "High",
           "Oppressive"
         ],
+        "default": "Low",
         "laws": {
-          "None": {},
           "Subsidized": {
             "_modifiers": [
               { "modifier_type": "money_income", "value": -24, "scope": "nation_self", "scaling": "per_x_pops", "scaling_x": 1},
