@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, flash, jsonify
+from flask import Blueprint, render_template, request, redirect, flash, jsonify, g
 from forms import form_generator
 from helpers.data_helpers import get_data_on_category, get_data_on_item
 from helpers.change_helpers import request_change, approve_change, recalculate_object
@@ -12,6 +12,28 @@ from pymongo import ASCENDING
 from bson import ObjectId
 from copy import deepcopy
 import os
+
+
+_DEMOGRAPHIC_TYPES = frozenset(("races", "cultures", "religions"))
+
+
+def _get_visible_pop_nations():
+    """
+    Return the set of nation names whose pops the current user may see in detail
+    (visibility tier ≥ 1), or None if the user sees all pops (admin / non-player-admin).
+    Returns an empty set when the user has no ruling nation.
+    """
+    from calculations.visibility import get_viewer_nation, compute_all_visibilities
+
+    if getattr(g, "view_access_level", 0) >= 7:
+        return None  # admin / non-player-admin: no filtering
+
+    viewer_nation = get_viewer_nation(g.user)
+    if not viewer_nation:
+        return set()  # no nation → can't see any pops in detail
+
+    visibility_map = compute_all_visibilities(viewer_nation)
+    return {name for name, tier in visibility_map.items() if tier >= 1}
 
 
 data_item_routes = Blueprint("data_item_routes", __name__)
@@ -175,6 +197,14 @@ def data_list(data_type):
 def data_item(data_type, item_ref):
     schema, db, item = get_data_on_item(data_type, item_ref)
     linked_objects = get_linked_objects(schema, item)
+
+    if data_type in _DEMOGRAPHIC_TYPES and "pops" in linked_objects:
+        visible_nations = _get_visible_pop_nations()
+        if visible_nations is not None:
+            linked_objects["pops"] = [
+                p for p in linked_objects["pops"]
+                if p.get("nation") in visible_nations
+            ]
 
     unit_traits = []
     if data_type == "units":

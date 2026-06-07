@@ -1,10 +1,10 @@
-{% macro render_pagination(current_page, total_pages, base_url) %}
+{% macro render_pagination(current_page, total_pages, base_url, extra_params="") %}
 <div class="pagination">
     <span>Page {{ current_page }} of {{ total_pages }}</span>
     <div class="pagination-controls">
         {% if current_page > 1 %}
-            <a href="{{ base_url }}/page/1" class="pagination-btn">First</a>
-            <a href="{{ base_url }}/page/{{ current_page - 1 }}" class="pagination-btn">&laquo; Previous</a>
+            <a href="{{ base_url }}/page/1{{ extra_params }}" class="pagination-btn">First</a>
+            <a href="{{ base_url }}/page/{{ current_page - 1 }}{{ extra_params }}" class="pagination-btn">&laquo; Previous</a>
         {% endif %}
 
         {% set start_page = current_page - 2 if current_page - 2 > 0 else 1 %}
@@ -13,13 +13,13 @@
             {% if p == current_page %}
                 <span class="pagination-current">{{ p }}</span>
             {% else %}
-                <a href="{{ base_url }}/page/{{ p }}" class="pagination-btn">{{ p }}</a>
+                <a href="{{ base_url }}/page/{{ p }}{{ extra_params }}" class="pagination-btn">{{ p }}</a>
             {% endif %}
         {% endfor %}
 
         {% if current_page < total_pages %}
-            <a href="{{ base_url }}/page/{{ current_page + 1 }}" class="pagination-btn">Next &raquo;</a>
-            <a href="{{ base_url }}/page/{{ total_pages }}" class="pagination-btn">Last</a>
+            <a href="{{ base_url }}/page/{{ current_page + 1 }}{{ extra_params }}" class="pagination-btn">Next &raquo;</a>
+            <a href="{{ base_url }}/page/{{ total_pages }}{{ extra_params }}" class="pagination-btn">Last</a>
         {% endif %}
     </div>
 </div>
@@ -597,7 +597,29 @@
 {% endmacro %}
 
 
-{% macro render_changes_table(changes, preview_references, target_schemas, view_access_level, show_actions=false) %}
+{% macro render_visibility_bypass_bar(visibility_bypassed, current_url) %}
+{% if g.user and g.user.is_admin %}
+<div style="display:flex;align-items:center;gap:0.75rem;padding:0.5rem 0.75rem;margin-bottom:0.75rem;
+            background:{% if visibility_bypassed %}#2a1a00{% else %}#1a1a2a{% endif %};
+            border:1px solid {% if visibility_bypassed %}#c8a96e{% else %}#444{% endif %};
+            border-radius:4px;font-size:0.85rem;">
+    {% if visibility_bypassed %}
+        <span style="color:#c8a96e;font-weight:bold;">⚠ Visibility bypass active</span>
+        <span style="color:#888;">All nation change details are visible. This access has been logged.</span>
+    {% else %}
+        <span style="color:#888;">Nation change details are filtered by your visibility level.</span>
+        <a href="{{ current_url.split('?')[0] }}?bypass_visibility=1"
+           style="padding:2px 8px;background:#444;border-radius:3px;color:#ddd;text-decoration:none;"
+           onclick="return confirm('Bypass visibility restrictions for change logs? This will be logged.')">
+            Bypass Visibility
+        </a>
+    {% endif %}
+</div>
+{% endif %}
+{% endmacro %}
+
+
+{% macro render_changes_table(changes, preview_references, target_schemas, view_access_level, show_actions=false, visibility_bypassed=false) %}
 <table class="info-table">
     <thead>
         <tr>
@@ -617,6 +639,21 @@
     </thead>
     <tbody>
         {% for change in changes %}
+            {# Determine effective view level for this change row.
+               _visibility_tier is None for non-nation changes (or admin bypass) → use global level.
+               Tier 1-4 maps to view levels 2/4/6/8 so field-level schema gates apply correctly. #}
+            {% set vis_tier = change.get('_visibility_tier') %}
+            {% if vis_tier is none %}
+                {% set effective_view_level = view_access_level %}
+            {% elif vis_tier >= 4 %}
+                {% set effective_view_level = 8 %}
+            {% elif vis_tier == 3 %}
+                {% set effective_view_level = 6 %}
+            {% elif vis_tier == 2 %}
+                {% set effective_view_level = 4 %}
+            {% else %}
+                {% set effective_view_level = 2 %}
+            {% endif %}
             <tr>
                 <td><a href="/changes/item/{{ change._id }}">{{ change._id }}</a></td>
                 <td>{{ change.target_collection }}</td>
@@ -628,11 +665,16 @@
                     {% else %}
                         {{ change.target }}
                     {% endif %}
+                    {% if vis_tier is not none and vis_tier < 4 %}
+                        <div style="font-size:0.75em;color:#888;margin-top:2px;">Visibility tier {{ vis_tier }}</div>
+                    {% endif %}
                 </td>
                 <td>{{ change.change_type }}</td>
                 <td>{{ change.status }}</td>
                 <td class="changes-column wrap-content">
-                    {% if change.target_collection == "hex_map" %}
+                    {% if vis_tier is not none and vis_tier < 2 %}
+                        <span style="color:#888;font-style:italic;">Details require visibility tier 2+</span>
+                    {% elif change.target_collection == "hex_map" %}
                         {% set tile_count = (change.after_requested_data.get("tiles", {}) if change.after_requested_data else {})|length %}
                         <span style="font-size:0.85em;color:#aaa;">{{ tile_count }} tile{{ 's' if tile_count != 1 else '' }}</span>
                         <div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap;">
@@ -650,7 +692,7 @@
                             {% endif %}
                         </div>
                     {% else %}
-                        {{ render_changes_preview(change.before_requested_data, change.after_requested_data, target_schemas[change.target_collection], preview_references, view_access_level) }}
+                        {{ render_changes_preview(change.before_requested_data, change.after_requested_data, target_schemas[change.target_collection], preview_references, effective_view_level) }}
                     {% endif %}
                 </td>
                 <td class="reason-column wrap-content">

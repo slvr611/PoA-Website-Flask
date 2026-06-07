@@ -9,16 +9,16 @@
         <a href="/changes/pending" class="active">Pending Changes</a>
         <a href="/changes/archived">Archived Changes</a>
     </div>
-    
+
     <h1>Pending Changes ({{ total_count }} total)</h1>
-    
+
     <!-- Top Pagination -->
     {% if total_pages > 1 %}
         {{ render_pagination(current_page, total_pages, "/changes/pending") }}
     {% endif %}
-    
+
     <div class="table-wrapper">
-        {{ render_changes_table(changes, preview_references, target_schemas, view_access_level, show_actions=true) }}
+        {{ render_changes_table(changes, preview_references, target_schemas, view_access_level, show_actions=true, visibility_bypassed=visibility_bypassed) }}
     </div>
 
     <!-- Bottom Pagination -->
@@ -28,4 +28,3 @@
 
 </div>
 {% endblock %}
-

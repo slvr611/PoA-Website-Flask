@@ -159,7 +159,7 @@ def nation_item(item_ref):
                     break
     timings["ownership_check_ms"] = round((perf_counter() - phase_start) * 1000, 2)
     
-    if "jobs" not in nation:
+    if not isinstance(nation.get("jobs"), dict):
         nation["jobs"] = {}
 
     calc_timings = {}
@@ -242,6 +242,8 @@ def nation_item(item_ref):
                 merged, schema, "nation", return_breakdowns=True
             )
             pending_nation = {**merged, **pending_values}
+            if not isinstance(pending_nation.get("jobs"), dict):
+                pending_nation["jobs"] = nation.get("jobs", {})
     except Exception as e:
         current_app.logger.warning("Failed to compute pending nation state: %s", e)
 

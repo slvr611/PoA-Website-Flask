@@ -1,5 +1,5 @@
 {% extends "layout.html" %}
-{% from "macros/pagination.html" import render_pagination, render_changes_table %}
+{% from "macros/pagination.html" import render_pagination, render_changes_table, render_visibility_bypass_bar %}
 
 {% block title %}{{ title }}{% endblock %}
 
@@ -16,14 +16,15 @@
     </div>
     
     <h1>{{ title }} ({{ total_count }} total)</h1>
-    
+    {{ render_visibility_bypass_bar(visibility_bypassed, request.url) }}
+
     <!-- Top Pagination -->
     {% if total_pages > 1 %}
         {{ render_pagination(current_page, total_pages, "/"+data_type+"/item/"+item_ref+"/changes/"+change_type) }}
     {% endif %}
-    
+
     <div class="table-wrapper">
-        {{ render_changes_table(changes, preview_references, target_schemas, view_access_level, show_actions=(change_type == "pending")) }}
+        {{ render_changes_table(changes, preview_references, target_schemas, view_access_level, show_actions=(change_type == "pending"), visibility_bypassed=visibility_bypassed) }}
         
         <!-- Bottom Pagination -->
         {% if total_pages > 1 %}
