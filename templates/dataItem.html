@@ -7,6 +7,21 @@
 	{% if g.user is not none %}
 		<a href="{{ request.path.replace('item', 'edit') }}">Edit</a>
 	{% endif %}
+	{% if visibility_level is not none %}
+		{% if g.is_non_player_admin %}
+			<span class="edit-button" style="background:#2d4a5a;cursor:default;">Visibility: Bypassed (RP)</span>
+		{% elif g.user and g.user.get('is_admin') %}
+			{% if visibility_bypassed %}
+				<span class="edit-button" style="background:#2d5a2d;">Visibility: Bypassed</span>
+			{% else %}
+				<form method="POST" action="/visibility/toggle_bypass" style="display:inline;">
+					<input type="hidden" name="page_url" value="{{ request.full_path }}">
+					<input type="hidden" name="nation_name" value="">
+					<button type="submit" class="edit-button" style="background:#5a2d2d;">Visibility: Filtered (Tier {{ visibility_level }})</button>
+				</form>
+			{% endif %}
+		{% endif %}
+	{% endif %}
 	<div class="action-links">
 		<a href="{{ request.path }}/changes/pending">View Pending Changes</a>
 		<a href="{{ request.path }}/changes/archived">View Change History</a>
@@ -27,7 +42,8 @@
 				{% for field, properties in schema.properties.items() %}
 					{% if properties and not properties.hidden
 					and not (properties.hideIfNone is defined and (item.get(properties.hideIfNone) is none or item.get(properties.hideIfNone) == "" or not item.get(properties.hideIfNone)))
-					and (view_access_level >= properties.get("view_access_level", 0)) %}
+					and (view_access_level >= properties.get("view_access_level", 0))
+					and (field_tiers is none or visibility_level is none or visibility_bypassed or visibility_level >= field_tiers.get(field, 0)) %}
 						<tr>
 							<th><strong>{{ properties.label }}:</strong></th>
 							{% if properties.bsonType == "string" or properties.bsonType == "enum" or properties.bsonType == "date"%}

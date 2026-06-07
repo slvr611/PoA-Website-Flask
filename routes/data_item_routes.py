@@ -7,6 +7,7 @@ from helpers.form_helpers import validate_form_with_jsonschema
 from routes.nation_routes import edit_nation, nation_edit_request, nation_edit_approve
 from app_core import category_data, mongo, rarity_rankings, json_data, find_dict_in_list, upload_bytes_to_s3
 from helpers.auth_helpers import admin_required
+from helpers.visibility_helpers import gate_item_view, gate_item_edit, ITEM_VIEW_FIELD_TIERS
 from calculations.field_calculations import calculate_all_fields
 from pymongo import ASCENDING
 from bson import ObjectId
@@ -15,6 +16,7 @@ import os
 
 
 _DEMOGRAPHIC_TYPES = frozenset(("races", "cultures", "religions"))
+_VISIBILITY_GATED_TYPES = frozenset({"characters", "artifacts"})
 
 
 def _get_visible_pop_nations():
@@ -175,7 +177,7 @@ def data_list(data_type):
                     "link": f"{collection_name}/item/{data.get('name', data.get('_id', '#'))}"
                 }
             preview_overall_lookup_dict[preview_item] = preview_individual_lookup_dict
-    
+
     sort_by = schema.get("sort", "name")
 
     items = list(db.find({}, query_dict).sort("name", ASCENDING))
@@ -185,18 +187,148 @@ def data_list(data_type):
     else:
         items = list(db.find({}, query_dict).sort(sort_by, ASCENDING))
 
+    visibility_bypassed = None  # None = no visibility gating for this data type
+
+    if data_type == "artifacts":
+        visibility_bypassed = _apply_artifact_list_visibility(
+            items, preview_overall_lookup_dict
+        )
+
     return render_template(
         "dataList.html",
         title=category_data[data_type]["pluralName"],
         items=items,
         schema=schema,
-        preview_references=preview_overall_lookup_dict
+        preview_references=preview_overall_lookup_dict,
+        visibility_bypassed=visibility_bypassed,
     )
+
+
+def _apply_artifact_list_visibility(items, preview_references):
+    """
+    Compute visibility for the artifact list owner column.
+
+    Mutates preview_references["owner"] in-place: for owner characters whose
+    ruling nation falls below tier 2 for the current viewer, replaces the
+    owner display with the character's region name.
+
+    Returns visibility_bypassed (True/False/None per the standard convention).
+    Non-player-admin → True (auto-bypass, no log).
+    Admin with ?bypass_visibility=1 → True (logged).
+    Otherwise → False (filtered).
+    """
+    from helpers.visibility_helpers import log_visibility_bypass, ITEM_VIEW_FIELD_TIERS
+    from calculations.visibility import get_viewer_nation, compute_all_visibilities
+
+    explicit_bypass = bool(
+        g.user and g.user.get("is_admin")
+        and request.args.get("bypass_visibility") == "1"
+    )
+    non_player_admin = getattr(g, "is_non_player_admin", False)
+    visibility_bypassed = explicit_bypass or non_player_admin
+
+    if explicit_bypass and not non_player_admin:
+        log_visibility_bypass(
+            page_url=request.url,
+            nation_name="",
+            source="artifact_list",
+            user=g.user,
+        )
+
+    if visibility_bypassed:
+        return visibility_bypassed
+
+    owner_tier_required = ITEM_VIEW_FIELD_TIERS["artifacts"].get("owner", 0)
+
+    # Build nation_id → visibility tier for the current viewer
+    viewer_nation = get_viewer_nation(g.user) if g.user else None
+    if viewer_nation:
+        name_to_tier = compute_all_visibilities(viewer_nation)
+        nation_id_to_tier = {
+            str(nation["_id"]): name_to_tier.get(nation.get("name", ""), 0)
+            for nation in mongo.db.nations.find({}, {"_id": 1, "name": 1})
+        }
+    else:
+        nation_id_to_tier = {}
+
+    # Collect unique owner character IDs across all items
+    owner_oids = []
+    for item in items:
+        raw = item.get("owner")
+        if raw:
+            try:
+                owner_oids.append(ObjectId(str(raw)))
+            except Exception:
+                pass
+
+    if not owner_oids:
+        return visibility_bypassed
+
+    # Fetch each owner character's ruling nation and region in one query
+    chars = {}
+    for char in mongo.db.characters.find(
+        {"_id": {"$in": owner_oids}},
+        {"ruling_nation_org": 1, "region": 1},
+    ):
+        chars[str(char["_id"])] = char
+
+    # Fetch region names for the characters that need them
+    region_oids = []
+    for char in chars.values():
+        raw = char.get("region")
+        if raw:
+            try:
+                region_oids.append(ObjectId(str(raw)))
+            except Exception:
+                pass
+
+    region_name_by_id = {}
+    if region_oids:
+        for region in mongo.db.regions.find(
+            {"_id": {"$in": region_oids}},
+            {"name": 1},
+        ):
+            region_name_by_id[str(region["_id"])] = region.get("name", "Unknown Region")
+
+    # Override preview_references["owner"] for owners below the required tier
+    owner_refs = preview_references.setdefault("owner", {})
+    for owner_id_str, char in chars.items():
+        nation_raw = char.get("ruling_nation_org")
+        if not nation_raw:
+            # No ruling nation → artifact is publicly visible → keep owner display
+            continue
+        nation_id = str(nation_raw)
+        tier = nation_id_to_tier.get(nation_id, 0)
+        if tier >= owner_tier_required:
+            continue
+
+        region_raw = char.get("region")
+        region_id = str(region_raw) if region_raw else ""
+        region_name = region_name_by_id.get(region_id, "Unknown Region")
+        owner_refs[owner_id_str] = {
+            "name": region_name,
+            "link": f"regions/item/{region_name}" if region_name != "Unknown Region" else "",
+        }
+
+    return visibility_bypassed
 
 @data_item_routes.route("/<data_type>/item/<item_ref>")
 def data_item(data_type, item_ref):
     schema, db, item = get_data_on_item(data_type, item_ref)
     linked_objects = get_linked_objects(schema, item)
+
+    if data_type in _VISIBILITY_GATED_TYPES:
+        visibility_level, visibility_bypassed = gate_item_view(
+            data_type, item,
+            user=g.user,
+            view_access_level=g.view_access_level,
+            is_non_player_admin=g.is_non_player_admin,
+        )
+        field_tiers = ITEM_VIEW_FIELD_TIERS.get(data_type, {})
+    else:
+        visibility_level = None
+        visibility_bypassed = False
+        field_tiers = None
 
     if data_type in _DEMOGRAPHIC_TYPES and "pops" in linked_objects:
         visible_nations = _get_visible_pop_nations()
@@ -251,6 +383,9 @@ def data_item(data_type, item_ref):
         mercenaries_names=_names_set("mercenaries"),
         races_names=_names_set("races"),
         breakdowns=breakdowns,
+        visibility_level=visibility_level,
+        visibility_bypassed=visibility_bypassed,
+        field_tiers=field_tiers,
     )
 
 @data_item_routes.route("/<data_type>/edit")
@@ -451,6 +586,16 @@ def data_item_new_approve(data_type):
 @data_item_routes.route("/<data_type>/edit/<item_ref>", methods=["GET"])
 def data_item_edit(data_type, item_ref):
     schema, db, item = get_data_on_item(data_type, item_ref)
+
+    if data_type in _VISIBILITY_GATED_TYPES:
+        result = gate_item_edit(
+            data_type, item,
+            user=g.user,
+            view_access_level=g.view_access_level,
+            is_non_player_admin=g.is_non_player_admin,
+        )
+        if result is not True:
+            return result
 
     dropdown_options = {}
     for field, attrs in schema["properties"].items():

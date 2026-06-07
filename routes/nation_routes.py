@@ -15,6 +15,7 @@ import json
 from time import perf_counter
 from calculations.field_calculations import calculate_all_fields, _resolve_def, check_upgrade_requirements
 from bson import ObjectId
+from helpers.visibility_helpers import get_item_visibility, log_visibility_bypass, strip_form_data_to_tier
 
 nation_routes = Blueprint("nation_routes", __name__)
 
@@ -372,10 +373,19 @@ def _render_nation_edit(item_ref, form=None):
     from helpers.trade_route_helpers import get_connectable_nations
     connectable_nations = get_connectable_nations(nation_name, nation.get("trade_speed", 1))
 
-    visibility_bypassed = bool(
-        (g.user and g.user.get("is_admin") and request.args.get("bypass_visibility") == "1")
-        or getattr(g, 'is_non_player_admin', False)
+    visibility_level, visibility_bypassed = get_item_visibility(
+        "nations", nation,
+        user=g.user,
+        view_access_level=g.view_access_level,
+        is_non_player_admin=g.is_non_player_admin,
     )
+    if visibility_bypassed and g.user and g.user.get("is_admin") and request.args.get("bypass_visibility") == "1":
+        log_visibility_bypass(
+            page_url=request.url,
+            nation_name=nation.get("name", ""),
+            source="nation_edit",
+            user=g.user,
+        )
 
     return render_template(
         "nation_owner_edit.html",
@@ -396,6 +406,7 @@ def _render_nation_edit(item_ref, form=None):
         current_session=current_session,
         editable=True,
         connectable_nations=connectable_nations,
+        visibility_level=visibility_level,
         visibility_bypassed=visibility_bypassed,
     )
 
@@ -410,6 +421,13 @@ def nation_edit_request(item_ref):
     """Handle nation edit request"""
     schema, db, nation = get_data_on_item("nations", item_ref)
 
+    visibility_level, _ = get_item_visibility(
+        "nations", nation,
+        user=g.user,
+        view_access_level=g.view_access_level,
+        is_non_player_admin=g.is_non_player_admin,
+    )
+
     form = form_generator.get_form("nations", schema, formdata=request.form)
     form.populate_linked_fields(schema, get_dropdown_options(schema))
 
@@ -420,6 +438,7 @@ def nation_edit_request(item_ref):
     form_data = form.data.copy()
     form_data.pop('csrf_token', None)
     form_data.pop('submit', None)
+    form_data = strip_form_data_to_tier(form_data, visibility_level)
     if "name" in form_data:
         form_data["name"] = form_data.get("name", "").strip()
 
@@ -734,15 +753,13 @@ def market_prices():
 def toggle_visibility_bypass():
     if not (g.user and g.user.get("is_admin")):
         abort(403)
-    from datetime import datetime, timezone
     page_url = request.form.get("page_url", "/")
     nation_name = request.form.get("nation_name", "")
-    mongo.db.admin_visibility_logs.insert_one({
-        "admin_id": g.user.get("id"),
-        "admin_username": g.user.get("name", "unknown"),
-        "timestamp": datetime.now(timezone.utc),
-        "page_url": page_url,
-        "nation": nation_name,
-    })
+    log_visibility_bypass(
+        page_url=page_url,
+        nation_name=nation_name,
+        source="nation_view",
+        user=g.user,
+    )
     base_path = page_url.split("?")[0]
     return redirect(base_path + "?bypass_visibility=1")

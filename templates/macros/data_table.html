@@ -25,16 +25,17 @@
 					{% endif %}
 					{% for col in schema.preview %}
 						{% set item_value = item[col]|string %}
-						{% if col in preview_references %}
-							{% if preview_references.get(col, {}).get(item_value, {}).get('link') %}
-								<td><a href="{{ preview_references[col][item_value]['link'] }}">{{ preview_references[col][item_value]['name'] }}</a></td>
-							{% elif item[col] %}
-								<td>{{ item[col] }}</td>
+						{% if col in preview_references and item_value in preview_references[col] %}
+							{% set ref = preview_references[col][item_value] %}
+							{% if ref.get('link') %}
+								<td><a href="{{ ref['link'] }}">{{ ref['name'] }}</a></td>
 							{% else %}
-								<td>None</td>
+								<td>{{ ref['name'] }}</td>
 							{% endif %}
-						{% else %}
+						{% elif item[col] %}
 							<td>{{ item[col] }}</td>
+						{% else %}
+							<td>None</td>
 						{% endif %}
 					{% endfor %}
 				</tr>

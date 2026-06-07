@@ -14,70 +14,23 @@ change_routes = Blueprint("change_routes", __name__)
 
 
 # ---------------------------------------------------------------------------
-# Visibility helpers for change logs
+# Visibility helpers — delegated to the unified module
 # ---------------------------------------------------------------------------
-
-def _is_visibility_bypassed():
-    """True when an admin has explicitly requested bypass via ?bypass_visibility=1."""
-    return bool(g.user and g.user.get("is_admin") and request.args.get("bypass_visibility") == "1")
-
-
-def _build_nation_visibility_map():
-    """
-    Return a {nation_id_str: tier (0-4)} dict for all nations from the current
-    user's perspective, or None if visibility is fully bypassed (admin bypass or
-    non-player admin).  Empty dict means no ruling nation → no nation changes visible.
-    """
-    from calculations.visibility import get_viewer_nation, compute_all_visibilities
-
-    if _is_visibility_bypassed() or getattr(g, "view_access_level", 0) >= 7:
-        return None  # unrestricted
-
-    viewer_nation = get_viewer_nation(g.user)
-    if not viewer_nation:
-        return {}
-
-    name_to_tier = compute_all_visibilities(viewer_nation)
-    id_to_tier = {}
-    for nation in mongo.db.nations.find({}, {"_id": 1, "name": 1}):
-        id_to_tier[str(nation["_id"])] = name_to_tier.get(nation.get("name", ""), 0)
-    return id_to_tier
-
+from helpers.visibility_helpers import (
+    is_change_visibility_bypassed  as _is_visibility_bypassed,
+    build_nation_visibility_map    as _build_nation_visibility_map,
+    apply_nation_visibility        as _apply_nation_visibility,
+    log_visibility_bypass          as _log_visibility_bypass,
+)
 
 def _log_change_visibility_bypass():
-    """Record an admin visibility bypass for the change log in admin_visibility_logs."""
-    from datetime import datetime, timezone
-    if not (g.user and g.user.get("is_admin")):
-        return
-    mongo.db.admin_visibility_logs.insert_one({
-        "admin_id": g.user.get("id"),
-        "admin_username": g.user.get("name", "unknown"),
-        "timestamp": datetime.now(timezone.utc),
-        "page_url": request.url,
-        "nation": "",
-        "source": "changes",
-    })
-
-
-def _apply_nation_visibility(changes, visibility_map):
-    """
-    Filter and annotate changes with ``_visibility_tier``.
-
-    - visibility_map is None → bypass active, annotate all with None (show everything)
-    - visibility_map is dict → filter out nation changes at tier 0; annotate
-      remaining nation changes with their tier (1-4); non-nation changes get None.
-    """
-    filtered = []
-    for change in changes:
-        if change.get("target_collection") == "nations" and visibility_map is not None:
-            tier = visibility_map.get(str(change.get("target", "")), 0)
-            if tier == 0:
-                continue  # hide entirely
-            change["_visibility_tier"] = tier
-        else:
-            change["_visibility_tier"] = None
-        filtered.append(change)
-    return filtered
+    """Record an admin visibility bypass for the change log."""
+    _log_visibility_bypass(
+        page_url=request.url,
+        nation_name="",
+        source="changes",
+        user=g.user,
+    )
 
 def get_preview_references(schema, collections_to_preview):
     """Helper function to get preview references for all collections"""
@@ -229,7 +182,7 @@ def archived_change_list(page=1):
     # Archived changes: non-player admins auto-bypass silently; regular admins must
     # explicitly click "Bypass Visibility" (?bypass_visibility=1) which logs the action.
     explicit_bypass = _is_visibility_bypassed()
-    non_player_admin = getattr(g, "view_access_level", 0) >= 7
+    non_player_admin = getattr(g, "is_non_player_admin", False)
     visibility_bypassed = explicit_bypass or non_player_admin
     if explicit_bypass and not non_player_admin:
         _log_change_visibility_bypass()
@@ -578,10 +531,12 @@ def item_pending_changes(data_type, item_ref, page=1):
     # Get preview references for all collections
     preview_overall_lookup_dict = get_preview_references(schema, collections_to_preview)
 
-    visibility_bypassed = _is_visibility_bypassed()
-    if visibility_bypassed:
+    explicit_bypass = _is_visibility_bypassed()
+    non_player_admin = getattr(g, "is_non_player_admin", False)
+    visibility_bypassed = explicit_bypass or non_player_admin
+    if explicit_bypass and not non_player_admin:
         _log_change_visibility_bypass()
-    visibility_map = _build_nation_visibility_map()
+    visibility_map = None if visibility_bypassed else _build_nation_visibility_map()
     pending_changes = _apply_nation_visibility(pending_changes, visibility_map)
 
     return render_template(
@@ -666,10 +621,12 @@ def item_archived_changes(data_type, item_ref, page=1):
     # Get preview references for all collections
     preview_overall_lookup_dict = get_preview_references(schema, collections_to_preview)
 
-    visibility_bypassed = _is_visibility_bypassed()
-    if visibility_bypassed:
+    explicit_bypass = _is_visibility_bypassed()
+    non_player_admin = getattr(g, "is_non_player_admin", False)
+    visibility_bypassed = explicit_bypass or non_player_admin
+    if explicit_bypass and not non_player_admin:
         _log_change_visibility_bypass()
-    visibility_map = _build_nation_visibility_map()
+    visibility_map = None if visibility_bypassed else _build_nation_visibility_map()
     archived_changes = _apply_nation_visibility(archived_changes, visibility_map)
 
     return render_template(
