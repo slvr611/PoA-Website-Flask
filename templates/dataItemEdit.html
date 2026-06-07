@@ -115,6 +115,18 @@
 									</tbody>
 								</table>
 								<button type="button" class="btn btn-primary" onclick="addToArray('{{ field.name }}')">Add Negative Title</button>
+							{% elif schema.properties.get(field.name, {}).get('image') %}
+								{{ field(class="form-control", placeholder="https://...") }}
+								{% if g.user and g.user.is_admin %}
+								<div style="display:flex; gap:0.5rem; margin-top:0.4rem; align-items:center; flex-wrap:wrap;">
+									<input type="file" id="{{ field.name }}_file_input" accept="image/*" style="display:none">
+									<button type="button" class="btn-add" onclick="document.getElementById('{{ field.name }}_file_input').click()">Upload Image</button>
+									<span id="{{ field.name }}_upload_status" style="font-size:0.78rem; color:#888;"></span>
+								</div>
+								<div id="{{ field.name }}_preview_wrap" style="margin-top:0.5rem; display:none;">
+									<img id="{{ field.name }}_preview" src="" alt="Preview" style="max-width:160px; max-height:220px; border-radius:6px; border:1px solid #444;">
+								</div>
+								{% endif %}
 							{% else %}
 								{{ field(class="form-control") }}
 							{% endif %}
@@ -481,6 +493,56 @@
 		if (fieldName === 'progress_quests') updateProgressQuestSlots();
 		if (fieldName === 'negative_titles')  reindexNegativeTitles();
 	}
+
+	// ── Image upload ────────────────────────────────────────────────────────
+
+	function initImageUpload(fieldName, uploadUrl) {
+		const urlInput   = document.getElementById(fieldName);
+		const fileInput  = document.getElementById(fieldName + '_file_input');
+		const preview    = document.getElementById(fieldName + '_preview');
+		const previewWrap = document.getElementById(fieldName + '_preview_wrap');
+		const status     = document.getElementById(fieldName + '_upload_status');
+
+		function showPreview(src) {
+			if (src) { preview.src = src; previewWrap.style.display = ''; }
+			else { previewWrap.style.display = 'none'; }
+		}
+
+		if (urlInput && urlInput.value) showPreview(urlInput.value);
+		if (urlInput) urlInput.addEventListener('input', () => showPreview(urlInput.value));
+		if (!fileInput) return;
+
+		fileInput.addEventListener('change', function() {
+			const file = fileInput.files[0];
+			if (!file) return;
+			const nameInput = document.getElementById('name');
+			const itemName  = (nameInput ? nameInput.value : '') || 'unknown';
+			const fd = new FormData();
+			fd.append('image', file);
+			fd.append('item_name', itemName);
+			if (status) { status.textContent = 'Uploading…'; status.style.color = '#888'; }
+			fetch(uploadUrl, { method: 'POST', body: fd })
+				.then(r => r.json())
+				.then(data => {
+					if (data.success) {
+						if (urlInput) urlInput.value = data.url;
+						showPreview(data.url);
+						if (status) { status.textContent = 'Uploaded!'; status.style.color = '#4a8'; }
+					} else {
+						if (status) { status.textContent = 'Upload failed: ' + data.error; status.style.color = '#e55'; }
+					}
+				})
+				.catch(err => {
+					if (status) { status.textContent = 'Error: ' + err.message; status.style.color = '#e55'; }
+				});
+		});
+	}
+
+	{% for field in form %}
+	{% if schema.properties.get(field.name, {}).get('image') and g.user and g.user.is_admin %}
+	initImageUpload({{ field.name | tojson }}, '/{{ data_type }}/upload_image');
+	{% endif %}
+	{% endfor %}
 
 	function removeFromArray(button, categoryName) {
 		button.closest('tr').remove();

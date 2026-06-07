@@ -168,6 +168,12 @@
         "description": "A desciption of the race",
         "long_text": true
       },
+      "image": {
+        "bsonType": "string",
+        "label": "Image",
+        "description": "An image representing this race",
+        "image": true
+      },
 	    "pops": {
         "bsonType": "array",
 		    "label": "Pops",
