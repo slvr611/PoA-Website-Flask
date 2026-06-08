@@ -135,6 +135,18 @@ const ROUTE_DASHES = [
 // Axial hex neighbor directions (flat-top).
 const _AXIAL_DIRS = [[1,0],[-1,0],[0,1],[0,-1],[1,-1],[-1,1]];
 
+// Each entry is [dq, dr, cornerA, cornerB] where cornerA/B are the two hex corner
+// indices (0–5, angle = i*60° from east) forming the shared edge with that neighbor.
+// Derived from flat-top geometry: corner 0 = east (0°), 1 = lower-right (60°), etc.
+const _DIR_BORDER_EDGES = [
+    [ 1,  0,  0, 1],   // lower-right neighbor → edge between corners 0 and 1
+    [ 0,  1,  1, 2],   // bottom neighbor      → edge between corners 1 and 2
+    [-1,  1,  2, 3],   // lower-left neighbor  → edge between corners 2 and 3
+    [-1,  0,  3, 4],   // upper-left neighbor  → edge between corners 3 and 4
+    [ 0, -1,  4, 5],   // top neighbor         → edge between corners 4 and 5
+    [ 1, -1,  5, 0],   // upper-right neighbor → edge between corners 5 and 0
+];
+
 // Minimal binary min-heap used by the admin-range Dijkstra.
 // Each element is [priority, ...data].
 class _MinHeap {
@@ -198,12 +210,13 @@ class HexMapViewer {
 
         // Layers
         this.layers = {
-            terrain:   false,
-            political: true,
-            regions:   false,
-            nodes:     true,
-            buildings: true,
-            roads:     false,
+            terrain:      false,
+            political:    true,
+            regions:      false,
+            nodes:        true,
+            luxury_nodes: true,
+            buildings:    true,
+            roads:        false,
         };
 
         // Paint modes — at most one active at a time
@@ -866,6 +879,31 @@ class HexMapViewer {
             ctx.fill();
         }
 
+        // ── Nation borders ────────────────────────────────────────────────────
+        if (hasPolitical) {
+            // Cap at 2 screen pixels; fade to 1px as zoom drops below 0.4 (same threshold as grid lines).
+            const borderPx = Math.max(1, Math.min(2, this.zoom * 5));
+            ctx.save();
+            ctx.strokeStyle = `rgba(0,0,0,${(0.45 + 0.3 * (borderPx - 1)).toFixed(3)})`;
+            ctx.lineWidth   = borderPx / this.zoom;
+            ctx.lineCap     = 'butt';
+            ctx.beginPath();
+            for (let i = 0; i < allX.length; i++) {
+                const tile = allTile[i];
+                if (!tile?.owner) continue;
+                const tq = tile.q, tr = tile.r;
+                const cx = allX[i],  cy = allY[i];
+                for (const [dq, dr, ca, cb] of _DIR_BORDER_EDGES) {
+                    const nb = this.tiles.get(`${tq + dq},${tr + dr}`);
+                    if (nb?.owner === tile.owner) continue;
+                    ctx.moveTo(cx + inner * _HEX_COS[ca], cy + inner * _HEX_SIN[ca]);
+                    ctx.lineTo(cx + inner * _HEX_COS[cb], cy + inner * _HEX_SIN[cb]);
+                }
+            }
+            ctx.stroke();
+            ctx.restore();
+        }
+
         // ── Portal ovals ─────────────────────────────────────────────────────
         if (this.layers.buildings) {
             const lw  = Math.max(2, 3.5 / this.zoom);
@@ -989,16 +1027,22 @@ class HexMapViewer {
             this._drawHex(ctx, x, y, inner, 'rgba(255,255,100,0.25)', '#ffff44', 2.5);
         }
 
-        // ── Icons (only rendered when zoomed in enough to see them) ───────────
+        // ── Nodes (rendered at all zoom levels — just get smaller) ──────────
         const _t5 = performance.now();
-        if (showIcons) {
-            const doBldgs = this.layers.buildings;
-            const doNodes = this.layers.nodes;
+        const doNodes       = this.layers.nodes;
+        const doLuxuryNodes = this.layers.luxury_nodes;
+        if (doNodes || doLuxuryNodes) {
             for (let i = 0; i < allX.length; i++) {
                 const tile = allTile[i];
-                if (!tile) continue;
-                if (doNodes) this._drawNode(ctx, allX[i], allY[i], tile);
-                if (doBldgs) this._drawBuildings(ctx, allX[i], allY[i], tile);
+                if (tile) this._drawNode(ctx, allX[i], allY[i], tile, doNodes, doLuxuryNodes);
+            }
+        }
+
+        // ── Buildings / capitals (only rendered when zoomed in enough) ───────
+        if (showIcons && this.layers.buildings) {
+            for (let i = 0; i < allX.length; i++) {
+                const tile = allTile[i];
+                if (tile) this._drawBuildings(ctx, allX[i], allY[i], tile);
             }
         }
 
@@ -1159,17 +1203,21 @@ class HexMapViewer {
         ctx.shadowBlur = 0;
     }
 
-    _drawNode(ctx, cx, cy, tile) {
+    _drawNode(ctx, cx, cy, tile, doRegular = true, doLuxury = true) {
         if (!tile.node) return;
-        const s    = this.hexSize;
-        const rKey = tile.node.resource_type || tile.node.value || tile.node.type;
-        const col  = RESOURCE_COLORS[rKey] || '#aaaaaa';
-        const sz   = Math.max(5, s * 0.5);
+        const s       = this.hexSize;
+        const rKey    = tile.node.resource_type || tile.node.value || tile.node.type;
+        const isLuxury = LUXURY_KEYS.has(rKey);
+        if (isLuxury ? !doLuxury : !doRegular) return;
+
+        const col = RESOURCE_COLORS[rKey] || '#aaaaaa';
+        // Scale with hex size but guarantee a minimum screen footprint at any zoom level.
+        const sz  = Math.max(3 / this.zoom, s * 0.5);
         ctx.fillStyle   = col;
         ctx.strokeStyle = 'rgba(0,0,0,0.7)';
         ctx.lineWidth   = 1 / this.zoom;
 
-        if (LUXURY_KEYS.has(rKey)) {
+        if (isLuxury) {
             ctx.fillRect(cx - sz/2, cy - sz/2, sz, sz);
             ctx.strokeRect(cx - sz/2, cy - sz/2, sz, sz);
         } else {
