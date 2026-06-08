@@ -881,11 +881,10 @@ class HexMapViewer {
 
         // ── Nation borders ────────────────────────────────────────────────────
         if (hasPolitical) {
-            // Cap at 2 screen pixels; fade to 1px as zoom drops below 0.4 (same threshold as grid lines).
-            const borderPx = Math.max(1, Math.min(2, this.zoom * 5));
+            const borderAlpha = Math.min(0.75, this.zoom * 1.5);
             ctx.save();
-            ctx.strokeStyle = `rgba(0,0,0,${(0.45 + 0.3 * (borderPx - 1)).toFixed(3)})`;
-            ctx.lineWidth   = borderPx / this.zoom;
+            ctx.strokeStyle = `rgba(0,0,0,${borderAlpha.toFixed(3)})`;
+            ctx.lineWidth   = 1 / this.zoom;
             ctx.lineCap     = 'butt';
             ctx.beginPath();
             for (let i = 0; i < allX.length; i++) {
