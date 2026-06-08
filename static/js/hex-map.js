@@ -44,24 +44,24 @@ const NODE_TYPES      = Object.keys(NODE_SYMBOLS);
 const CITY_TYPES      = ['generic','commerce','heritage','metropolis','capital','sacred','fortified','fortress'];
 const DISTRICT_TYPES  = ['farming','logging','mining','pasture','arcane','barracks','harbor','market','temple','workshop'];
 
-// Resource definitions (mirrors app_core.py json_data)
-const GENERAL_RESOURCES = [
+// Resource definitions — seeded with fallback values, overwritten by loadConfig() from the server.
+let GENERAL_RESOURCES = [
     {key:'food',name:'Food'}, {key:'wood',name:'Wood'}, {key:'stone',name:'Stone'},
     {key:'mounts',name:'Mounts'}, {key:'research',name:'Research'}, {key:'magic',name:'Magic'},
 ];
-const UNIQUE_RESOURCES = [
-    {key:'bronze',name:'Bronze'}, {key:'iron',name:'Iron'},
+let UNIQUE_RESOURCES = [
+    {key:'iron',name:'Iron'},
 ];
-const LUXURY_RESOURCES = [
+let LUXURY_RESOURCES = [
     {key:'narcotics',name:'Narcotics'}, {key:'spices',name:'Spices'},
     {key:'medicinal_herbs',name:'Medicinal Herbs'}, {key:'dyes',name:'Dyes'},
     {key:'magical_crystals',name:'Magical Crystals'}, {key:'gold',name:'Gold'},
     {key:'moonstone',name:'Moonstone'}, {key:'furs',name:'Furs'},
     {key:'quintessence',name:'Quintessence'},
 ];
-const ALL_RESOURCES     = [...GENERAL_RESOURCES, ...UNIQUE_RESOURCES, ...LUXURY_RESOURCES];
-const LUXURY_KEYS       = new Set(LUXURY_RESOURCES.map(r => r.key));
-const RESOURCE_NAME     = Object.fromEntries(ALL_RESOURCES.map(r => [r.key, r.name]));
+let ALL_RESOURCES = [...GENERAL_RESOURCES, ...UNIQUE_RESOURCES, ...LUXURY_RESOURCES];
+let LUXURY_KEYS   = new Set(LUXURY_RESOURCES.map(r => r.key));
+let RESOURCE_NAME = Object.fromEntries(ALL_RESOURCES.map(r => [r.key, r.name]));
 
 // Deterministic unique color per resource key
 function _resourceColor(key) {
@@ -329,6 +329,17 @@ class HexMapViewer {
         this.bgOffsetX = cfg.bg_offset_x  ?? 0;
         this.bgOffsetY = cfg.bg_offset_y  ?? 0;
         this.bgScale   = cfg.bg_scale     || 1.0;
+        if (cfg.general_resources || cfg.unique_resources || cfg.luxury_resources) {
+            if (cfg.general_resources) GENERAL_RESOURCES = cfg.general_resources;
+            if (cfg.unique_resources)  UNIQUE_RESOURCES  = cfg.unique_resources;
+            if (cfg.luxury_resources)  LUXURY_RESOURCES  = cfg.luxury_resources;
+            ALL_RESOURCES = [...GENERAL_RESOURCES, ...UNIQUE_RESOURCES, ...LUXURY_RESOURCES];
+            LUXURY_KEYS   = new Set(LUXURY_RESOURCES.map(r => r.key));
+            RESOURCE_NAME = Object.fromEntries(ALL_RESOURCES.map(r => [r.key, r.name]));
+            for (const r of ALL_RESOURCES) {
+                if (!RESOURCE_COLORS[r.key]) RESOURCE_COLORS[r.key] = _resourceColor(r.key);
+            }
+        }
         if (cfg.resource_colors) {
             Object.assign(RESOURCE_COLORS, cfg.resource_colors);
         }
@@ -1229,6 +1240,7 @@ class HexMapViewer {
                 this.setPaintMode(null);
                 this.setPaintNationMode(null);
                 this.setPaintRegionMode(null);
+                this.setPaintNodeMode(null);
                 this.canvas.dispatchEvent(new CustomEvent('hexmap:pantool', { bubbles: true }));
             }
             if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
@@ -1259,6 +1271,7 @@ class HexMapViewer {
         this.paintNationMode = null;
         this.paintRegionMode = null;
         this.paintRouteMode  = null;
+        this.paintNodeMode   = null;
         this.forbiddenTiles  = new Set();
         this._updateCursor();
         this.render();
@@ -1269,6 +1282,7 @@ class HexMapViewer {
         this.paintMode       = null;
         this.paintNationMode = null;
         this.paintRouteMode  = null;
+        this.paintNodeMode   = null;
         this.forbiddenTiles  = new Set();
         this._updateCursor();
         this.render();
@@ -1285,6 +1299,7 @@ class HexMapViewer {
         this.paintMode       = null;
         this.paintNationMode = null;
         this.paintRegionMode = null;
+        this.paintNodeMode   = null;
         this.forbiddenTiles  = new Set();
         this._updateCursor();
         this.render();
@@ -1295,6 +1310,7 @@ class HexMapViewer {
         this.paintMode       = null;
         this.paintRegionMode = null;
         this.paintRouteMode  = null;
+        this.paintNodeMode   = null;
         this.forbiddenTiles  = new Set();
         this._updateCursor();
         if (nationName && nationName !== '__unowned__') {
@@ -1309,6 +1325,18 @@ class HexMapViewer {
         this.render();
     }
 
+    setPaintNodeMode(resourceKey) {
+        // resourceKey: a resource key string to paint, '__erase__' to remove nodes, or null to exit mode.
+        this.paintNodeMode   = resourceKey || null;
+        this.paintMode       = null;
+        this.paintNationMode = null;
+        this.paintRegionMode = null;
+        this.paintRouteMode  = null;
+        this.forbiddenTiles  = new Set();
+        this._updateCursor();
+        this.render();
+    }
+
     _showPaintError(msg) {
         const el = document.getElementById('hex-paint-error');
         if (!el) return;
@@ -1319,7 +1347,7 @@ class HexMapViewer {
     }
 
     _updateCursor() {
-        this.canvas.style.cursor = (this.paintMode || this.paintNationMode || this.paintRegionMode || this.paintRouteMode) ? 'crosshair' : 'grab';
+        this.canvas.style.cursor = (this.paintMode || this.paintNationMode || this.paintRegionMode || this.paintRouteMode || this.paintNodeMode) ? 'crosshair' : 'grab';
     }
 
     _startPan(cx, cy) {
@@ -1333,10 +1361,10 @@ class HexMapViewer {
 
     _onDown(cx, cy) {
         if (this._capturingImage) return;
-        if (this.paintMode || this.paintNationMode || this.paintRegionMode || this.paintRouteMode) {
+        if (this.paintMode || this.paintNationMode || this.paintRegionMode || this.paintRouteMode || this.paintNodeMode) {
             this._painting    = true;
             this._lastPainted = null;
-            const type = this.paintNationMode ? 'nation' : this.paintRegionMode ? 'region' : this.paintRouteMode ? 'route' : 'terrain';
+            const type = this.paintNationMode ? 'nation' : this.paintRegionMode ? 'region' : this.paintRouteMode ? 'route' : this.paintNodeMode ? 'node' : 'terrain';
             this._currentUndoBatch = { type, tiles: new Map() };
             this._paintAt(cx, cy);
         } else {
@@ -1345,7 +1373,7 @@ class HexMapViewer {
     }
 
     _onMove(cx, cy) {
-        if (this._painting && (this.paintMode || this.paintNationMode || this.paintRegionMode || this.paintRouteMode)) {
+        if (this._painting && (this.paintMode || this.paintNationMode || this.paintRegionMode || this.paintRouteMode || this.paintNodeMode)) {
             this._paintAt(cx, cy);
             return;
         }
@@ -1396,6 +1424,9 @@ class HexMapViewer {
             } else if (batch.type === 'route') {
                 field      = { route: originalValue };
                 apiPayload = { route: originalValue };
+            } else if (batch.type === 'node') {
+                field      = { node: originalValue };
+                apiPayload = { node: originalValue };
             }
             const newTile = { ...existing, ...field };
             this.tiles.set(key, newTile);
@@ -1548,6 +1579,34 @@ class HexMapViewer {
                     this.render();
                     const data = await resp.json().catch(() => ({}));
                     this._showPaintError(data.error || 'Could not set route on this tile.');
+                }
+            }
+        } else if (this.paintNodeMode) {
+            const node = this.paintNodeMode === '__erase__'
+                ? null
+                : { resource_type: this.paintNodeMode, type: 'resource' };
+            if (this._currentUndoBatch && !this._currentUndoBatch.tiles.has(key))
+                this._currentUndoBatch.tiles.set(key, existing.node || null);
+            const newTile = { ...existing, node };
+            this.tiles.set(key, newTile);
+            this.render();
+            if (this._editMode) {
+                this._recordPendingEdit(key, rawExisting, newTile);
+            } else {
+                let resp;
+                try {
+                    resp = await fetch(`/api/hex-map/tile/${q}/${r}`, {
+                        method:  'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body:    JSON.stringify({ node }),
+                    });
+                } catch (_) { resp = null; }
+                if (resp && !resp.ok) {
+                    if (this._currentUndoBatch) this._currentUndoBatch.tiles.delete(key);
+                    this.tiles.set(key, existing);
+                    this.render();
+                    const data = await resp.json().catch(() => ({}));
+                    this._showPaintError(data.error || 'Could not set node on this tile.');
                 }
             }
         }

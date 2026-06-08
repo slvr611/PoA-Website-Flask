@@ -74,6 +74,10 @@
                     <option value="2">Tier 2</option>
                     <option value="3">Tier 3</option>
                 </select>
+                <select id="paint-node-resource" class="map-btn" title="Paint node resource">
+                    <option value="">Node…</option>
+                    <option value="__erase__">Erase Node</option>
+                </select>
                 <span class="map-btn-separator"></span>
                 <span id="edit-mode-count" style="font-size:0.8em;color:#aaa;align-self:center;"></span>
                 <button id="cancel-edit-btn"  class="map-btn" style="background:#7b2020;color:#fff;" title="Discard all edits and exit edit mode">Cancel</button>
@@ -416,18 +420,20 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
-    const routeOwnerInput = document.getElementById('paint-route-owner');
-    const routeOwnerDL    = document.getElementById('paint-route-owner-datalist');
-    const routeTierSelect = document.getElementById('paint-route-tier');
+    const routeOwnerInput    = document.getElementById('paint-route-owner');
+    const routeOwnerDL       = document.getElementById('paint-route-owner-datalist');
+    const routeTierSelect    = document.getElementById('paint-route-tier');
+    const nodeResourceSelect = document.getElementById('paint-node-resource');
 
     function _activatePan() {
-        if (toolPanBtn)      toolPanBtn.classList.add('active');
-        if (terrainInput)    { terrainInput.value = ''; terrainInput.classList.remove('active'); }
-        if (nationInput)     { nationInput.value  = ''; nationInput.classList.remove('active'); }
-        if (regionInput)     { regionInput.value  = ''; regionInput.classList.remove('active'); }
-        if (routeOwnerInput) { routeOwnerInput.value = ''; routeOwnerInput.classList.remove('active'); }
-        if (routeTierSelect) { routeTierSelect.value  = ''; routeTierSelect.classList.remove('active'); }
-        if (hexViewer)       { hexViewer.setPaintMode(null); hexViewer.setPaintNationMode(null); hexViewer.setPaintRegionMode(null); hexViewer.setPaintRouteMode(null, null); }
+        if (toolPanBtn)         toolPanBtn.classList.add('active');
+        if (terrainInput)       { terrainInput.value = ''; terrainInput.classList.remove('active'); }
+        if (nationInput)        { nationInput.value  = ''; nationInput.classList.remove('active'); }
+        if (regionInput)        { regionInput.value  = ''; regionInput.classList.remove('active'); }
+        if (routeOwnerInput)    { routeOwnerInput.value = ''; routeOwnerInput.classList.remove('active'); }
+        if (routeTierSelect)    { routeTierSelect.value  = ''; routeTierSelect.classList.remove('active'); }
+        if (nodeResourceSelect) { nodeResourceSelect.value = ''; nodeResourceSelect.classList.remove('active'); }
+        if (hexViewer)          { hexViewer.setPaintMode(null); hexViewer.setPaintNationMode(null); hexViewer.setPaintRegionMode(null); hexViewer.setPaintRouteMode(null, null); hexViewer.setPaintNodeMode(null); }
     }
 
     function _tryActivateRoutePaint() {
@@ -570,6 +576,44 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     if (routeTierSelect) {
         routeTierSelect.addEventListener('change', _tryActivateRoutePaint);
+    }
+
+    if (nodeResourceSelect) {
+        nodeResourceSelect.addEventListener('change', () => {
+            const val = nodeResourceSelect.value;
+            if (val) {
+                toolPanBtn       && toolPanBtn.classList.remove('active');
+                terrainInput     && (terrainInput.value  = '', terrainInput.classList.remove('active'));
+                nationInput      && (nationInput.value   = '', nationInput.classList.remove('active'));
+                regionInput      && (regionInput.value   = '', regionInput.classList.remove('active'));
+                routeOwnerInput  && (routeOwnerInput.value = '', routeOwnerInput.classList.remove('active'));
+                routeTierSelect  && (routeTierSelect.value  = '', routeTierSelect.classList.remove('active'));
+                nodeResourceSelect.classList.add('active');
+                if (hexViewer) hexViewer.setPaintNodeMode(val);
+            } else {
+                _activatePan();
+            }
+        });
+    }
+
+    function _populateNodeResourceSelect() {
+        if (!nodeResourceSelect) return;
+        while (nodeResourceSelect.options.length > 2) nodeResourceSelect.remove(2);
+        const addGroup = (label, resources) => {
+            if (!resources.length) return;
+            const grp = document.createElement('optgroup');
+            grp.label = label;
+            for (const r of resources) {
+                const opt = document.createElement('option');
+                opt.value = r.key;
+                opt.textContent = r.name;
+                grp.appendChild(opt);
+            }
+            nodeResourceSelect.appendChild(grp);
+        };
+        addGroup('General', GENERAL_RESOURCES);
+        addGroup('Unique', UNIQUE_RESOURCES);
+        addGroup('Luxury', LUXURY_RESOURCES);
     }
 
     function _populateRegionSelect() {
@@ -769,6 +813,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 hexViewer = new HexMapViewer('hex-map-canvas', 'hex-tile-details', isAdmin);
                 window._hexViewer = hexViewer;  // console: _hexViewer.showPerfOverlay=true  or  _hexViewer.profileRender()
                 await hexViewer.loadConfig();
+                _populateNodeResourceSelect();
             } else {
                 hexViewer.show();
             }

@@ -81,6 +81,12 @@ def _resource_color_map():
 @hex_map_routes.route("/api/hex-map/config")
 def hex_map_config():
     cfg = mongo.db.global_modifiers.find_one({"name": "hex_map_config"}) or {}
+    def _res_list(category):
+        return [
+            {"key": r["key"], "name": r["name"]}
+            for r in json_data.get(category, [])
+        ]
+
     return jsonify(
         {
             "cols":         cfg.get("cols",         20),
@@ -89,7 +95,10 @@ def hex_map_config():
             "bg_offset_x":  cfg.get("bg_offset_x",  0),
             "bg_offset_y":  cfg.get("bg_offset_y",  0),
             "bg_scale":     cfg.get("bg_scale",     1.0),
-            "resource_colors": _resource_color_map(),
+            "resource_colors":    _resource_color_map(),
+            "general_resources":  _res_list("general_resources"),
+            "unique_resources":   _res_list("unique_resources"),
+            "luxury_resources":   _res_list("luxury_resources"),
         }
     )
 
