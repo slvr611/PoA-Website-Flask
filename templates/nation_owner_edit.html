@@ -398,8 +398,11 @@
                                 document.querySelectorAll('.pop-select:checked').forEach(cb => {
                                     const row = cb.closest('tr');
                                     row.dataset[fieldName] = newId;
-                                    const cell = row.querySelector('.' + (cellClass[fieldName] || ''));
-                                    if (cell) cell.textContent = newName;
+                                    const cls = cellClass[fieldName];
+                                    if (cls) {
+                                        const cell = row.querySelector('.' + cls);
+                                        if (cell) cell.textContent = newName;
+                                    }
                                 });
                             }
 

@@ -1,9 +1,10 @@
 from flask import Blueprint, render_template, request, jsonify, g
 from app_core import mongo
 from helpers.auth_helpers import admin_required
-from helpers.change_helpers import request_change, approve_change
+from helpers.change_helpers import request_change, approve_change, system_request_change, system_approve_change
 from pymongo import ASCENDING
 from bson import ObjectId
+import random
 
 pops_routes = Blueprint("pops_routes", __name__)
 
@@ -210,4 +211,77 @@ def pops_bulk_delete():
     return jsonify({
         "deleted": len(change_ids),
         "errors": errors,
+    })
+
+
+@pops_routes.route("/pops/flee_pop", methods=["POST"])
+@admin_required
+def pops_flee_pop():
+    """Move a single pop to a random non-Closed nation in the same region."""
+    data = request.get_json() or {}
+    raw_id = data.get("pop_id", "")
+    try:
+        pop_oid = ObjectId(raw_id)
+    except Exception:
+        return jsonify({"error": "Invalid pop id"}), 400
+
+    pop = mongo.db.pops.find_one({"_id": pop_oid})
+    if not pop:
+        return jsonify({"error": "Pop not found"}), 404
+
+    nation_id = pop.get("nation", "")
+    if not nation_id:
+        return jsonify({"error": "Pop has no nation"}), 400
+
+    try:
+        nation = mongo.db.nations.find_one({"_id": ObjectId(nation_id)}, {"region": 1, "name": 1})
+    except Exception:
+        return jsonify({"error": "Could not look up nation"}), 500
+
+    if not nation:
+        return jsonify({"error": "Nation not found"}), 404
+
+    region_id = str(nation.get("region", ""))
+    if not region_id:
+        return jsonify({"error": "Nation has no region"}), 400
+
+    try:
+        candidates = list(mongo.db.nations.find(
+            {
+                "region": region_id,
+                "_id": {"$ne": nation["_id"]},
+                "citizenship_stance": {"$ne": "Closed"},
+            },
+            {"_id": 1, "name": 1},
+        ))
+    except Exception:
+        return jsonify({"error": "Could not search for destination nations"}), 500
+
+    if not candidates:
+        return jsonify({"error": "No eligible destination nations in this region"}), 400
+
+    destination = random.choice(candidates)
+    old_pop_data = {k: v for k, v in pop.items() if k != "_id"}
+    new_pop_data = dict(old_pop_data)
+    new_pop_data["nation"] = str(destination["_id"])
+
+    change_id = system_request_change(
+        data_type="pops",
+        item_id=pop["_id"],
+        change_type="Update",
+        before_data=old_pop_data,
+        after_data=new_pop_data,
+        reason=(
+            f"Pop manually fled from {nation.get('name', 'Unknown')} "
+            f"to {destination.get('name', 'Unknown')}"
+        ),
+    )
+    if not change_id:
+        return jsonify({"error": "Failed to create change"}), 500
+
+    system_approve_change(change_id)
+    return jsonify({
+        "success": True,
+        "destination": destination.get("name", "Unknown"),
+        "change_id": str(change_id),
     })

@@ -1127,6 +1127,75 @@ def pop_loss_tick(old_nation, new_nation, schema):
         result += f"{old_nation.get('name', 'Unknown')} has lost a pop.\n"
     return result
 
+def pop_flee_tick(old_nation, new_nation, schema):
+    """5% chance per excess pop that it flees to a random non-Closed nation in the same region."""
+    pop_count    = old_nation.get("pop_count", 0)
+    eff_cap      = old_nation.get("effective_pop_capacity", 0)
+    excess_pops  = max(0, pop_count - eff_cap)
+    if excess_pops <= 0:
+        return ""
+
+    pops_fleeing = sum(1 for _ in range(excess_pops) if random.random() <= 0.05)
+    if pops_fleeing == 0:
+        return ""
+
+    region_id = str(old_nation.get("region", ""))
+    if not region_id:
+        return ""
+
+    try:
+        candidates = list(mongo.db.nations.find(
+            {
+                "region": region_id,
+                "_id": {"$ne": old_nation["_id"]},
+                "citizenship_stance": {"$ne": "Closed"},
+            },
+            {"_id": 1, "name": 1},
+        ))
+    except Exception:
+        return ""
+
+    if not candidates:
+        return ""
+
+    result = ""
+    nation_id_str = str(old_nation["_id"])
+    for _ in range(pops_fleeing):
+        try:
+            pops = list(mongo.db.pops.find(
+                {"nation": nation_id_str},
+                {"_id": 1, "race": 1, "culture": 1, "religion": 1},
+            ))
+        except Exception:
+            continue
+        if not pops:
+            break
+
+        fleeing_pop  = random.choice(pops)
+        destination  = random.choice(candidates)
+        old_pop_data = {k: v for k, v in fleeing_pop.items() if k != "_id"}
+        new_pop_data = dict(old_pop_data)
+        new_pop_data["nation"] = str(destination["_id"])
+
+        change_id = system_request_change(
+            data_type="pops",
+            item_id=fleeing_pop["_id"],
+            change_type="Update",
+            before_data=old_pop_data,
+            after_data=new_pop_data,
+            reason=(
+                f"Pop fled from {old_nation.get('name', 'Unknown')} "
+                f"to {destination.get('name', 'Unknown')} due to overcrowding"
+            ),
+        )
+        if change_id:
+            system_approve_change(change_id)
+            result += (
+                f"A pop fled from {old_nation.get('name', 'Unknown')} "
+                f"to {destination.get('name', 'Unknown')} due to overcrowding.\n"
+            )
+    return result
+
 def temperament_tick(old_nation, new_nation, schema):
     if old_nation.get("temperament", "None") == "Player":
         return ""
@@ -1590,6 +1659,7 @@ NATION_TICK_FUNCTIONS = {
     "Nation Vampirism Tick": vampirism_tick,
     "Nation Undead Tick": undead_tick,
     "Nation Pop Loss Tick": pop_loss_tick,
+    "Nation Pop Flee Tick": pop_flee_tick,
     "Nation Temperament Tick": temperament_tick,
     "Nation Library Tick": library_tick,
 }

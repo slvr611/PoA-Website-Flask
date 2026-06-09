@@ -15,6 +15,13 @@
         "label": "Map Color",
         "description": "Hex color code used to display this region on the hex map (e.g. #4488cc)"
       },
+      "prosperity": {
+        "bsonType": "enum",
+        "label": "Prosperity",
+        "description": "The prosperity tier of this region, determining savior and ravager effects",
+        "enum": ["Wretched", "Despairing", "Struggling", "Hopeful"],
+        "default": "Hopeful"
+      },
       "nations": {
         "bsonType": "array",
         "label": "Nations",

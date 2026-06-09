@@ -112,6 +112,10 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
 
     phase_start = perf_counter()
     external_modifiers_total = sum_external_modifier_totals(external_modifiers)
+    if target_data_type in ("nation", "nation_jobs"):
+        prosperity_mods = collect_prosperity_modifiers(target)
+        for k, v in prosperity_mods.items():
+            external_modifiers_total[k] = external_modifiers_total.get(k, 0) + v
     record_timing("sum_external_modifiers_ms", phase_start)
 
     phase_start = perf_counter()
@@ -332,6 +336,18 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
 
     record_timing("capacity_and_meta_modifiers_ms", phase_start)
 
+    # Excess pop capacity penalties — applied before field calc so stability_loss_chance
+    # is correct, and preserved through the food-state rebuild via modifier_totals.
+    _excess_pops = 0
+    if target_data_type == "nation":
+        _pop_count = calculated_values.get("pop_count", 0)
+        _eff_cap   = calculated_values.get("effective_pop_capacity", 0)
+        _excess_pops = max(0, _pop_count - _eff_cap)
+        if _excess_pops > 0:
+            _excess_stab = 0.25 * _excess_pops
+            modifier_totals["stability_loss_chance"] = modifier_totals.get("stability_loss_chance", 0) + _excess_stab
+            overall_total_modifiers["stability_loss_chance"] = overall_total_modifiers.get("stability_loss_chance", 0) + _excess_stab
+
     #print(overall_total_modifiers)
 
     phase_start = perf_counter()
@@ -363,30 +379,35 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
             food_consumption = math.ceil(food_consumption)
         else:
             food_consumption = math.floor(food_consumption)
-        
+        food_consumption += _excess_pops  # +1 food consumed per pop over capacity
+
         excess_food = calculated_values.get("resource_excess", {}).get("food", 0) + target.get("resource_storage", {}).get("food", 0)
 
         if excess_food < -food_consumption / 2:
-            #Nation is Starving
-            #print("Nation is Starving")
-            overall_total_modifiers["strength"] = overall_total_modifiers.get("strength", 0) - 2
-            modifier_totals["stability_loss_chance"] = modifier_totals.get("stability_loss_chance", 0) + 0.25
-            modifier_totals["job_resource_production"] = modifier_totals.get("job_resource_production", 0) - 1
-            modifier_totals["minimum_job_resource_production"] = -1
-            modifier_totals["hunter_food_production"] = modifier_totals.get("hunter_food_production", 0) + 1
-            modifier_totals["farmer_food_production"] = modifier_totals.get("farmer_food_production", 0) + 1
-            modifier_totals["fisherman_food_production"] = modifier_totals.get("fisherman_food_production", 0) + 1
-            modifier_totals["locks_research_production"] = 1
+            # Nation is Starving (producing/storing < 50% of consumption)
+            overall_total_modifiers["land_attack"]  = overall_total_modifiers.get("land_attack",  0) - 2
+            overall_total_modifiers["land_defense"] = overall_total_modifiers.get("land_defense", 0) - 2
+            overall_total_modifiers["naval_attack"]  = overall_total_modifiers.get("naval_attack",  0) - 2
+            overall_total_modifiers["naval_defense"] = overall_total_modifiers.get("naval_defense", 0) - 2
+            modifier_totals["stability_loss_chance"] = modifier_totals.get("stability_loss_chance", 0) + 0.50
+            # Zero out all non-food job production; large offset restores food jobs
+            modifier_totals["job_resource_production"]         = modifier_totals.get("job_resource_production", 0) - 100
+            modifier_totals["minimum_job_resource_production"] = -100
+            modifier_totals["hunter_food_production"]          = modifier_totals.get("hunter_food_production",  0) + 100
+            modifier_totals["farmer_food_production"]          = modifier_totals.get("farmer_food_production",  0) + 100
+            modifier_totals["fisherman_food_production"]       = modifier_totals.get("fisherman_food_production", 0) + 100
 
         elif excess_food < 0:
-            #Nation is Underfed
-            #print("Nation is Underfed")
-            overall_total_modifiers["strength"] = overall_total_modifiers.get("strength", 0) - 1
-            modifier_totals["stability_loss_chance"] = modifier_totals.get("stability_loss_chance", 0) + 0.1
+            # Nation is Underfed (producing/storing 50–99% of consumption)
+            overall_total_modifiers["land_attack"]  = overall_total_modifiers.get("land_attack",  0) - 1
+            overall_total_modifiers["land_defense"] = overall_total_modifiers.get("land_defense", 0) - 1
+            overall_total_modifiers["naval_attack"]  = overall_total_modifiers.get("naval_attack",  0) - 1
+            overall_total_modifiers["naval_defense"] = overall_total_modifiers.get("naval_defense", 0) - 1
+            modifier_totals["stability_loss_chance"] = modifier_totals.get("stability_loss_chance", 0) + 0.25
+            # Reduce non-food yields by 1 (minimum 1 preserved by natural floor)
             modifier_totals["job_resource_production"] = modifier_totals.get("job_resource_production", 0) - 1
-            modifier_totals["minimum_job_resource_production"] = -1
-            modifier_totals["hunter_food_production"] = modifier_totals.get("hunter_food_production", 0) + 1
-            modifier_totals["farmer_food_production"] = modifier_totals.get("farmer_food_production", 0) + 1
+            modifier_totals["hunter_food_production"]  = modifier_totals.get("hunter_food_production",  0) + 1
+            modifier_totals["farmer_food_production"]  = modifier_totals.get("farmer_food_production",  0) + 1
             modifier_totals["fisherman_food_production"] = modifier_totals.get("fisherman_food_production", 0) + 1
 
         if excess_food < 0:
@@ -1023,6 +1044,72 @@ def calculate_job_details(target, modifier_totals, district_totals, tech_totals,
             new_job_details[job] = new_details
     
     return new_job_details
+
+_PROSPERITY_EFFECTS = {
+    # (tier, role): {modifier_key: value, ...}
+    ("Wretched", "Savior"): {
+        "karma":                        -4,
+        "resource_production":      -1,
+        "research_production": -1,
+        "land_defense":                 -3,
+        "naval_defense":                -3,
+        "stability_loss_chance":         0.50,
+    },
+    ("Wretched", "Ravager"): {
+        "karma":        4,
+        "land_attack":  3,
+        "naval_attack": 3,
+    },
+    ("Despairing", "Savior"): {
+        "karma":                   -4,
+        "resource_production": -1,
+        "land_defense":            -2,
+        "naval_defense":           -2,
+        "stability_loss_chance":    0.35,
+    },
+    ("Despairing", "Ravager"): {
+        "karma":        4,
+        "land_attack":  2,
+        "naval_attack": 2,
+    },
+    ("Struggling", "Savior"): {
+        "karma":                          -2,
+        "research_production": -1,
+        "land_defense":                   -1,
+        "naval_defense":                  -1,
+        "stability_loss_chance":           0.25,
+    },
+    ("Struggling", "Ravager"): {
+        "karma":        2,
+        "land_attack":  1,
+        "naval_attack": 1,
+    },
+    ("Hopeful", "Savior"): {
+        "karma":                 -2,
+        "stability_loss_chance":  0.15,
+    },
+    ("Hopeful", "Ravager"): {
+        "karma":        2,
+        "land_attack":  1,
+        "naval_attack": 1,
+    },
+}
+
+def collect_prosperity_modifiers(target):
+    role = target.get("prosperity_role", "None")
+    if not role or role == "None":
+        return {}
+    region_id = target.get("region", "")
+    if not region_id:
+        return {}
+    try:
+        region_doc = category_data["regions"]["database"].find_one(
+            {"_id": ObjectId(region_id)}, {"prosperity": 1}
+        )
+        tier = region_doc.get("prosperity", "Hopeful") if region_doc else "Hopeful"
+    except Exception:
+        return {}
+    return dict(_PROSPERITY_EFFECTS.get((tier, role), {}))
 
 def check_job_requirements(target, job_details, overall_total_modifiers):
     requirements = job_details.get("requirements", {})
@@ -1736,6 +1823,20 @@ def _build_unit_tagged_sources(target, schema, district_details):
         if prestige_mods:
             prestige_val = int(target.get("prestige", 50))
             tagged.append({"label": f"Prestige ({prestige_val})", "modifiers": prestige_mods})
+
+    # Prosperity role modifiers
+    prosperity_mods = collect_prosperity_modifiers(target)
+    if prosperity_mods:
+        role = target.get("prosperity_role", "None")
+        region_id = target.get("region", "")
+        try:
+            region_doc = category_data["regions"]["database"].find_one(
+                {"_id": ObjectId(region_id)}, {"prosperity": 1}
+            )
+            tier = region_doc.get("prosperity", "Hopeful") if region_doc else "Hopeful"
+        except Exception:
+            tier = "Hopeful"
+        tagged.append({"label": f"Prosperity: {role} ({tier})", "modifiers": prosperity_mods})
 
     # All remaining external sources (global mods, religion, wonders, region,
     # overlord/vassal stances, markets) — labeled automatically.

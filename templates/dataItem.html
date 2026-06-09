@@ -273,7 +273,8 @@
 													{% for sub_item in item[field] %}
 														<tr>
 															<td>{{ sub_item["quest_name"] }}</td>
-															<td>{{ json_data["slot_types"][sub_item.get("slot", "no_slot")]["name"] }}</td>
+															{% set slot_key = sub_item.get("slot", "no_slot") %}
+															<td>{{ (json_data["slot_types"].get(slot_key) or {"name": slot_key})["name"] }}</td>
 															<td>{{ sub_item["bonus_progress_per_tick"] }}</td>
 															<td>{{ sub_item["total_progress_per_tick"] }}</td>
 															<td>{{ sub_item["current_progress"] }} / {{ sub_item["required_progress"] }}</td>

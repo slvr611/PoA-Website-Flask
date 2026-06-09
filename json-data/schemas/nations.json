@@ -228,6 +228,13 @@
           "regions"
         ]
       },
+      "prosperity_role": {
+        "bsonType": "enum",
+        "label": "Prosperity Role",
+        "description": "Whether this nation acts as a Savior or Ravager in its region, applying prosperity-tier bonuses and penalties",
+        "enum": ["None", "Savior", "Ravager"],
+        "default": "None"
+      },
       "administration": {
         "bsonType": "number",
         "label": "Administration",
