@@ -168,7 +168,7 @@ def compute_admin_range_out_of_range(nation_name, admin, nomadic=False, all_tile
     if all_tiles is None:
         all_tiles = list(mongo.db.hex_map_tiles.find(
             {},
-            {"q": 1, "r": 1, "terrain": 1, "city": 1, "district": 1, "wonder": 1, "capital": 1, "owner": 1, "portal": 1, "_id": 0},
+            {"q": 1, "r": 1, "terrain": 1, "city": 1, "district": 1, "wonder": 1, "capital": 1, "owner": 1, "portal": 1, "route": 1, "_id": 0},
         ))
 
     tile_map = {(t["q"], t["r"]): t for t in all_tiles}

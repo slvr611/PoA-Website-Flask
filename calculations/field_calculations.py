@@ -869,7 +869,6 @@ def apply_proximity_terrain_overrides(target, proximity_rules, out_of_range=None
     owned_tiles = list(mongo.db.hex_map_tiles.find(
         {"owner": nation_name}, {"q": 1, "r": 1, "terrain": 1, "_id": 0}
     ))
-
     # Per-tile effective terrain (starts as actual terrain, then overridden)
     tile_terrain = {}
     for tile in owned_tiles:
