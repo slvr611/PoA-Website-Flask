@@ -347,6 +347,9 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
             _excess_stab = 0.25 * _excess_pops
             modifier_totals["stability_loss_chance"] = modifier_totals.get("stability_loss_chance", 0) + _excess_stab
             overall_total_modifiers["stability_loss_chance"] = overall_total_modifiers.get("stability_loss_chance", 0) + _excess_stab
+            _excess_flee = 0.05 * _excess_pops
+            modifier_totals["pop_flee_chance"] = modifier_totals.get("pop_flee_chance", 0) + _excess_flee
+            overall_total_modifiers["pop_flee_chance"] = overall_total_modifiers.get("pop_flee_chance", 0) + _excess_flee
 
     #print(overall_total_modifiers)
 
@@ -360,7 +363,13 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
             )
             target[field] = calculated_values[field]
     record_timing("calculate_remaining_fields_ms", phase_start)
-    
+
+    if target_data_type == "nation":
+        _pfc = calculated_values.get("pop_flee_chance", 0)
+        _pfc_clamped = max(0.0, min(1.0, _pfc))
+        calculated_values["pop_flee_chance"] = _pfc_clamped
+        target["pop_flee_chance"] = _pfc_clamped
+
     # Calculate progress per session for progress quests
     phase_start = perf_counter()
     if "progress_quests" in target:
@@ -1048,50 +1057,50 @@ def calculate_job_details(target, modifier_totals, district_totals, tech_totals,
 _PROSPERITY_EFFECTS = {
     # (tier, role): {modifier_key: value, ...}
     ("Wretched", "Savior"): {
-        "karma":                        -4,
+        "karma":                    -4,
         "resource_production":      -1,
-        "research_production": -1,
-        "land_defense":                 -3,
-        "naval_defense":                -3,
-        "stability_loss_chance":         0.50,
+        "research_production":      -1,
+        "land_defense":             -3,
+        "naval_defense":            -3,
+        "stability_loss_chance":    0.50,
     },
     ("Wretched", "Ravager"): {
-        "karma":        4,
-        "land_attack":  3,
-        "naval_attack": 3,
+        "karma":                    4,
+        "land_attack":              3,
+        "naval_attack":             3,
     },
     ("Despairing", "Savior"): {
-        "karma":                   -4,
-        "resource_production": -1,
-        "land_defense":            -2,
-        "naval_defense":           -2,
+        "karma":                    -4,
+        "resource_production":      -1,
+        "land_defense":             -2,
+        "naval_defense":            -2,
         "stability_loss_chance":    0.35,
     },
     ("Despairing", "Ravager"): {
-        "karma":        4,
-        "land_attack":  2,
-        "naval_attack": 2,
+        "karma":                    4,
+        "land_attack":              2,
+        "naval_attack":             2,
     },
     ("Struggling", "Savior"): {
-        "karma":                          -2,
-        "research_production": -1,
-        "land_defense":                   -1,
-        "naval_defense":                  -1,
-        "stability_loss_chance":           0.25,
+        "karma":                    -2,
+        "research_production":      -1,
+        "land_defense":             -1,
+        "naval_defense":            -1,
+        "stability_loss_chance":    0.25,
     },
     ("Struggling", "Ravager"): {
-        "karma":        2,
-        "land_attack":  1,
-        "naval_attack": 1,
+        "karma":                    2,
+        "land_attack":              1,
+        "naval_attack":             1,
     },
     ("Hopeful", "Savior"): {
-        "karma":                 -2,
-        "stability_loss_chance":  0.15,
+        "karma":                    -2,
+        "stability_loss_chance":    0.15,
     },
     ("Hopeful", "Ravager"): {
-        "karma":        2,
-        "land_attack":  1,
-        "naval_attack": 1,
+        "karma":                    2,
+        "land_attack":              1,
+        "naval_attack":             1,
     },
 }
 
@@ -2561,20 +2570,32 @@ def calculate_effective_territory_modifiers(target, schema_properties):
 
     if over_capacity >= 30:
         modifiers["karma"] = -8
-        modifiers["stability_loss_chance"] = 1
-        modifiers["strength"] = -3
+        modifiers["stability_loss_chance"] = 1.0
+        modifiers["land_attack"]   = -3
+        modifiers["land_defense"]  = -3
+        modifiers["naval_attack"]  = -3
+        modifiers["naval_defense"] = -3
     elif over_capacity >= 20:
         modifiers["karma"] = -6
         modifiers["stability_loss_chance"] = 0.5
-        modifiers["strength"] = -2
+        modifiers["land_attack"]   = -2
+        modifiers["land_defense"]  = -2
+        modifiers["naval_attack"]  = -2
+        modifiers["naval_defense"] = -2
     elif over_capacity >= 10:
         modifiers["karma"] = -4
         modifiers["stability_loss_chance"] = 0.3
-        modifiers["strength"] = -1
+        modifiers["land_attack"]   = -1
+        modifiers["land_defense"]  = -1
+        modifiers["naval_attack"]  = -1
+        modifiers["naval_defense"] = -1
     elif over_capacity >= 5:
         modifiers["karma"] = -2
         modifiers["stability_loss_chance"] = 0.2
-        modifiers["strength"] = -1
+        modifiers["land_attack"]   = -1
+        modifiers["land_defense"]  = -1
+        modifiers["naval_attack"]  = -1
+        modifiers["naval_defense"] = -1
     elif over_capacity > 0:
         modifiers["karma"] = -2
         modifiers["stability_loss_chance"] = 0.1
@@ -2589,31 +2610,16 @@ def calculate_route_capacity_modifiers(target):
 
     modifiers = {}
 
-    if over_capacity >= 50:
-        modifiers["wood_consumption"] = 5
-        modifiers["stone_consumption"] = 5
-        modifiers["mount_consumption"] = 5
-    elif over_capacity >= 40:
-        modifiers["wood_consumption"] = 4
-        modifiers["stone_consumption"] = 4
-        modifiers["mount_consumption"] = 4
-    elif over_capacity >= 30:
-        modifiers["wood_consumption"] = 3
-        modifiers["stone_consumption"] = 3
-        modifiers["mount_consumption"] = 3
-    elif over_capacity >= 20:
-        modifiers["wood_consumption"] = 2
-        modifiers["stone_consumption"] = 2
-        modifiers["mount_consumption"] = 2
-    elif over_capacity > 10:
-        modifiers["wood_consumption"] = 1
-        modifiers["stone_consumption"] = 1
-        modifiers["mount_consumption"] = 1
-    elif over_capacity > 5:
-        modifiers["wood_consumption"] = 1
+    if over_capacity >= 20:
+        scale = 1 + (over_capacity - 20) // 10
+        modifiers["wood_consumption"]  = scale
+        modifiers["stone_consumption"] = scale
+        modifiers["mount_consumption"] = scale
+    elif over_capacity >= 10:
+        modifiers["wood_consumption"]  = 1
         modifiers["stone_consumption"] = 1
     elif over_capacity > 0:
-        modifiers["wood_consumption"] = 1
+        modifiers["wood_consumption"]  = 1
     
     return modifiers
 

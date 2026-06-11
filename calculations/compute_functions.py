@@ -380,7 +380,7 @@ def compute_stability_loss_chance(field, target, base_value, field_schema, overa
         infamy_stability_loss = infamy * 0.01
     infamy_stability_loss *= 1 * overall_total_modifiers.get("stability_loss_chance_from_infamy_mult", 0)
 
-    max_stability_loss_chance = 2 + overall_total_modifiers.get("max_stability_loss_chance", 0)
+    max_stability_loss_chance = 3 + overall_total_modifiers.get("max_stability_loss_chance", 0)
 
     value = round(min(max(base_value + overall_total_modifiers.get(field, 0) + karma_stability_loss + minority_stability_loss + pop_stability_loss + stab_loss_chance_from_stability + road_stability_loss + war_stability_loss + infamy_stability_loss, 0), max_stability_loss_chance), 2)
 

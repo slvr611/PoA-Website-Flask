@@ -286,6 +286,177 @@ def is_tile_legally_controllable(q, r, nation_name):
     return True
 
 
+def _dijkstra_from_sources(sources, tile_map, portal_map, terrain_move_costs):
+    """Multi-source Dijkstra across all tiles. Returns {(q, r): distance} for every reachable tile.
+
+    Impassable terrain (cost >= 9999) is never entered.  Tier-3 route tiles reduce
+    their entry cost by 1 (minimum 1).  Same-colour portal pairs are treated as
+    zero-extra-cost virtual neighbours.
+    """
+    IMPASSABLE = 9999
+    INF = float("inf")
+    dist = {coord: 0.0 for coord in sources}
+    heap = [(0.0, q, r) for q, r in sources]
+    heapq.heapify(heap)
+    while heap:
+        d, q, r = heapq.heappop(heap)
+        if d > dist.get((q, r), INF):
+            continue
+        # Normal hex neighbours
+        for nq, nr in axial_neighbors(q, r):
+            tile = tile_map.get((nq, nr))
+            if tile is None:
+                continue
+            cost = terrain_move_costs.get(tile.get("terrain", ""), IMPASSABLE)
+            if cost >= IMPASSABLE:
+                continue
+            if (tile.get("route") or {}).get("tier") == 3:
+                cost = max(1, cost - 1)
+            nd = d + cost
+            if nd < dist.get((nq, nr), INF):
+                dist[(nq, nr)] = nd
+                heapq.heappush(heap, (nd, nq, nr))
+        # Portal virtual neighbours
+        cur = tile_map.get((q, r))
+        if cur:
+            portal = cur.get("portal")
+            if portal and portal.get("color"):
+                for pq, pr in portal_map.get(portal["color"], []):
+                    if (pq, pr) == (q, r):
+                        continue
+                    ptile = tile_map.get((pq, pr))
+                    if not ptile:
+                        continue
+                    cost = terrain_move_costs.get(ptile.get("terrain", ""), IMPASSABLE)
+                    if cost >= IMPASSABLE:
+                        continue
+                    nd = d + cost
+                    if nd < dist.get((pq, pr), INF):
+                        dist[(pq, pr)] = nd
+                        heapq.heappush(heap, (nd, pq, pr))
+    return dist
+
+
+def select_passive_expansion_tiles(nation, all_tiles=None):
+    """Return an ordered list of (q, r) coordinates for the nation to passively expand into.
+
+    Selection rules (applied in priority order — lower number = claimed first):
+      1. Adjacent to a capital tile
+      2. Adjacent to a wonder tile
+      3. Adjacent to a city tile
+      4. Adjacent to a district tile
+      5. Closest admin distance from building tiles (cities / wonders / districts)
+
+    Within each priority tier ties are broken by ascending admin distance.
+
+    Count = max(1, floor((effective_territory - current_territory) / 10)).
+    Only unowned tiles that pass the nation's racial legality checks are considered.
+    Tiles need not be within admin range — the spec allows expanding beyond it.
+    """
+    from app_core import json_data as _json_data
+
+    nation_name = nation.get("name")
+    if not nation_name:
+        return []
+
+    if all_tiles is None:
+        all_tiles = list(mongo.db.hex_map_tiles.find(
+            {},
+            {"q": 1, "r": 1, "terrain": 1, "owner": 1,
+             "city": 1, "district": 1, "wonder": 1, "capital": 1,
+             "portal": 1, "route": 1, "_id": 0},
+        ))
+
+    tile_map = {(t["q"], t["r"]): t for t in all_tiles}
+    owned = {(t["q"], t["r"]) for t in all_tiles if t.get("owner") == nation_name}
+    if not owned:
+        return []
+
+    # Number of tiles to claim this expansion event
+    eff_territory = int(nation.get("effective_territory", 0))
+    cur_territory = int(nation.get("current_territory", 0))
+    remaining     = max(0, eff_territory - cur_territory)
+    n_claim       = max(1, remaining // 10)
+
+    # Categorise owned tiles by building type for adjacency priority checks
+    capital_tiles  = {pos for pos in owned if tile_map[pos].get("capital")}
+    wonder_tiles   = {pos for pos in owned if tile_map[pos].get("wonder")}
+    city_tiles     = {pos for pos in owned if tile_map[pos].get("city")}
+    district_tiles = {pos for pos in owned if tile_map[pos].get("district")}
+
+    # Build terrain cost and portal maps for Dijkstra
+    terrain_data       = _json_data.get("terrains", {})
+    terrain_move_costs = {
+        k: v.get("speed_cost") or v.get("naval_speed_cost") or 9999
+        for k, v in terrain_data.items()
+    }
+    portal_map = {}
+    for t in all_tiles:
+        p = t.get("portal")
+        if p and p.get("color"):
+            portal_map.setdefault(p["color"], []).append((t["q"], t["r"]))
+
+    # Admin distance from building tiles (cities/wonders/districts; fallback: capital)
+    building_sources = wonder_tiles | city_tiles | district_tiles
+    if not building_sources:
+        building_sources = capital_tiles
+    admin_dist = (
+        _dijkstra_from_sources(building_sources, tile_map, portal_map, terrain_move_costs)
+        if building_sources else {}
+    )
+
+    # Collect candidate tiles: adjacent to owned territory, currently unowned
+    candidates = set()
+    for (q, r) in owned:
+        for nq, nr in axial_neighbors(q, r):
+            if (nq, nr) not in owned and (nq, nr) in tile_map:
+                if not tile_map[(nq, nr)].get("owner"):
+                    candidates.add((nq, nr))
+
+    if not candidates:
+        return []
+
+    # Filter by racial legality — cache node positions per resource type
+    restrictions = get_nation_node_proximity_restrictions(nation_name)
+    node_cache   = {}
+    legal = []
+    for pos in candidates:
+        ok = True
+        for res_type, max_d in restrictions:
+            if res_type not in node_cache:
+                node_cache[res_type] = get_node_resource_positions(res_type)
+            if not is_within_distance_of_node_resource(
+                pos[0], pos[1], res_type, max_d, node_cache[res_type]
+            ):
+                ok = False
+                break
+        if ok:
+            legal.append(pos)
+
+    if not legal:
+        return []
+
+    # Score: (priority_tier, admin_distance)
+    INF = float("inf")
+
+    def _score(pos):
+        nbs = set(axial_neighbors(pos[0], pos[1]))
+        if nbs & capital_tiles:
+            tier = 1
+        elif nbs & wonder_tiles:
+            tier = 2
+        elif nbs & city_tiles:
+            tier = 3
+        elif nbs & district_tiles:
+            tier = 4
+        else:
+            tier = 5
+        return (tier, admin_dist.get(pos, INF))
+
+    legal.sort(key=_score)
+    return legal[:n_claim]
+
+
 def get_nations_within_distance(nation_name, max_distance=10):
     """Return a list of nation names whose territory contains at least one tile
     within max_distance hexes of any tile owned by nation_name.

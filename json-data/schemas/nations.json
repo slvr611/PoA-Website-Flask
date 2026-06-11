@@ -775,6 +775,15 @@
         "calculated": true,
         "format": "percentage"
       },
+      "pop_flee_chance": {
+        "bsonType": "number",
+        "label": "Pop Flee Chance",
+        "description": "The percentage chance that one excess pop flees to another nation each tick (min 0%, max 100%)",
+        "calculated": true,
+        "show_breakdown": true,
+        "format": "percentage",
+        "base_value": 0
+      },
       "district_slots": {
         "bsonType": "number",
         "label": "District Slots",

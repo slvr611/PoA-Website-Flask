@@ -217,6 +217,7 @@ class HexMapViewer {
             luxury_nodes: true,
             buildings:    true,
             roads:        false,
+            out_of_range: true,
         };
 
         // Paint modes — at most one active at a time
@@ -941,21 +942,6 @@ class HexMapViewer {
             }
         }
 
-        // ── Out-of-range overlay (dark tint over owned tiles beyond admin range) ──
-        if (hasPolitical && this._outOfRangeTiles.size) {
-            ctx.beginPath();
-            for (let i = 0; i < allX.length; i++) {
-                if (this._outOfRangeTiles.has(allKey[i])) {
-                    const owner = this.tiles.get(allKey[i])?.owner;
-                    if (this._canSeePrivate(owner)) {
-                        this._hexSubpath(ctx, allX[i], allY[i], inner);
-                    }
-                }
-            }
-            ctx.fillStyle = 'rgba(0,0,0,0.45)';
-            ctx.fill();
-        }
-
         // ── Routes (dashed lines connecting route tiles and adjacent cities) ────
         // Line width scales with zoom: 3.5 screen-px at zoom ≥ 0.875, thinner when zoomed out.
         if (hasPolitical) {
@@ -1042,6 +1028,44 @@ class HexMapViewer {
             for (let i = 0; i < allX.length; i++) {
                 const tile = allTile[i];
                 if (tile) this._drawBuildings(ctx, allX[i], allY[i], tile);
+            }
+        }
+
+        // ── Out-of-range icons (warning triangle on each tile beyond admin range) ──
+        if (this.layers['out_of_range'] && this._outOfRangeTiles.size) {
+            const oorPos = [];
+            for (let i = 0; i < allX.length; i++) {
+                if (!this._outOfRangeTiles.has(allKey[i])) continue;
+                const owner = this.tiles.get(allKey[i])?.owner;
+                if (!this._canSeePrivate(owner)) continue;
+                oorPos.push([allX[i], allY[i]]);
+            }
+            if (oorPos.length) {
+                const s = Math.max(7, Math.min(this.hexSize * 0.36, 18));
+                const h = s * 1.05;
+                ctx.save();
+                // Batch fill all triangles
+                ctx.beginPath();
+                for (const [cx, cy] of oorPos) {
+                    ctx.moveTo(cx,           cy - h * 0.65);
+                    ctx.lineTo(cx + s * 0.6, cy + h * 0.38);
+                    ctx.lineTo(cx - s * 0.6, cy + h * 0.38);
+                    ctx.closePath();
+                }
+                ctx.fillStyle = 'rgba(255, 175, 0, 0.88)';
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(120, 60, 0, 0.9)';
+                ctx.lineWidth   = Math.max(0.8, s * 0.08);
+                ctx.stroke();
+                // "!" text pass
+                ctx.fillStyle    = 'rgba(70, 25, 0, 1)';
+                ctx.font         = `bold ${Math.max(4, Math.round(s * 0.55))}px sans-serif`;
+                ctx.textAlign    = 'center';
+                ctx.textBaseline = 'middle';
+                for (const [cx, cy] of oorPos) {
+                    ctx.fillText('!', cx, cy + h * 0.07);
+                }
+                ctx.restore();
             }
         }
 

@@ -1062,6 +1062,8 @@ def nation_enclave_compliance_tick(old_nation, new_nation, schema):
 
 
 def nation_passive_expansion_tick(old_nation, new_nation, schema):
+    from helpers.hex_map_helpers import select_passive_expansion_tiles
+
     result = ""
     expansion_rolls = 1
     if old_nation.get("temperament", "None") != "Player":
@@ -1071,13 +1073,68 @@ def nation_passive_expansion_tick(old_nation, new_nation, schema):
             expansion_rolls = 5
         else:
             expansion_rolls = 0
-    while expansion_rolls > 0:
-        expansion_roll = random.random()
-        new_nation["expansion_roll"] = expansion_roll
-        new_nation["expansion_chance_at_tick"] = old_nation.get("passive_expansion_chance", 0)
-        if expansion_roll <= old_nation.get("passive_expansion_chance", 0):
-            result += f"{old_nation.get('name', 'Unknown')} has expanded into adjacent territory.\n"
-        expansion_rolls -= 1
+
+    if expansion_rolls <= 0:
+        return result
+
+    expansion_chance = old_nation.get("passive_expansion_chance", 0)
+    new_nation["expansion_chance_at_tick"] = expansion_chance
+
+    # Count how many rolls succeed
+    successes = 0
+    last_roll = 0.0
+    for _ in range(expansion_rolls):
+        roll = random.random()
+        last_roll = roll
+        if roll <= expansion_chance:
+            successes += 1
+    new_nation["expansion_roll"] = last_roll
+
+    if successes == 0:
+        return result
+
+    nation_name = old_nation.get("name", "Unknown")
+
+    # Fetch tiles once; reuse across multiple successful rolls so that tiles
+    # claimed in earlier rounds are visible to later rounds.
+    all_tiles = list(mongo.db.hex_map_tiles.find(
+        {},
+        {"q": 1, "r": 1, "terrain": 1, "owner": 1,
+         "city": 1, "district": 1, "wonder": 1, "capital": 1,
+         "portal": 1, "route": 1, "_id": 0},
+    ))
+    tile_map = {(t["q"], t["r"]): t for t in all_tiles}
+
+    # For each successful roll, select and claim tiles
+    claimed = []
+    for _ in range(successes):
+        to_claim = select_passive_expansion_tiles(old_nation, all_tiles)
+        if not to_claim:
+            break
+        for (q, r) in to_claim:
+            mongo.db.hex_map_tiles.update_one(
+                {"q": q, "r": r},
+                {"$set": {"owner": nation_name}}
+            )
+            claimed.append((q, r))
+            # Update the in-memory tile so subsequent rounds see the new ownership
+            if (q, r) in tile_map:
+                tile_map[(q, r)]["owner"] = nation_name
+
+    if claimed:
+        # Resync territory_types on the nation document
+        pipeline = [
+            {"$match": {"owner": nation_name, "terrain": {"$exists": True, "$ne": None}}},
+            {"$group": {"_id": "$terrain", "count": {"$sum": 1}}},
+        ]
+        counts = {doc["_id"]: doc["count"]
+                  for doc in mongo.db.hex_map_tiles.aggregate(pipeline)}
+        mongo.db.nations.update_one(
+            {"name": nation_name},
+            {"$set": {"territory_types": counts}}
+        )
+        result += f"{nation_name} expanded into {len(claimed)} tile(s).\n"
+
     return result
 
 def nation_job_cleanup_tick(old_nation, new_nation, schema):
@@ -1128,15 +1185,15 @@ def pop_loss_tick(old_nation, new_nation, schema):
     return result
 
 def pop_flee_tick(old_nation, new_nation, schema):
-    """5% chance per excess pop that it flees to a random non-Closed nation in the same region."""
-    pop_count    = old_nation.get("pop_count", 0)
-    eff_cap      = old_nation.get("effective_pop_capacity", 0)
-    excess_pops  = max(0, pop_count - eff_cap)
+    """Roll nation's pop_flee_chance once; on success one excess pop flees to a random non-Closed nation."""
+    pop_count   = old_nation.get("pop_count", 0)
+    eff_cap     = old_nation.get("effective_pop_capacity", 0)
+    excess_pops = max(0, pop_count - eff_cap)
     if excess_pops <= 0:
         return ""
 
-    pops_fleeing = sum(1 for _ in range(excess_pops) if random.random() <= 0.05)
-    if pops_fleeing == 0:
+    flee_chance = old_nation.get("pop_flee_chance", 0.0)
+    if flee_chance <= 0 or random.random() > flee_chance:
         return ""
 
     region_id = str(old_nation.get("region", ""))
@@ -1158,43 +1215,42 @@ def pop_flee_tick(old_nation, new_nation, schema):
     if not candidates:
         return ""
 
-    result = ""
     nation_id_str = str(old_nation["_id"])
-    for _ in range(pops_fleeing):
-        try:
-            pops = list(mongo.db.pops.find(
-                {"nation": nation_id_str},
-                {"_id": 1, "race": 1, "culture": 1, "religion": 1},
-            ))
-        except Exception:
-            continue
-        if not pops:
-            break
+    try:
+        pops = list(mongo.db.pops.find(
+            {"nation": nation_id_str},
+            {"_id": 1, "race": 1, "culture": 1, "religion": 1},
+        ))
+    except Exception:
+        return ""
 
-        fleeing_pop  = random.choice(pops)
-        destination  = random.choice(candidates)
-        old_pop_data = {k: v for k, v in fleeing_pop.items() if k != "_id"}
-        new_pop_data = dict(old_pop_data)
-        new_pop_data["nation"] = str(destination["_id"])
+    if not pops:
+        return ""
 
-        change_id = system_request_change(
-            data_type="pops",
-            item_id=fleeing_pop["_id"],
-            change_type="Update",
-            before_data=old_pop_data,
-            after_data=new_pop_data,
-            reason=(
-                f"Pop fled from {old_nation.get('name', 'Unknown')} "
-                f"to {destination.get('name', 'Unknown')} due to overcrowding"
-            ),
+    fleeing_pop  = random.choice(pops)
+    destination  = random.choice(candidates)
+    old_pop_data = {k: v for k, v in fleeing_pop.items() if k != "_id"}
+    new_pop_data = dict(old_pop_data)
+    new_pop_data["nation"] = str(destination["_id"])
+
+    change_id = system_request_change(
+        data_type="pops",
+        item_id=fleeing_pop["_id"],
+        change_type="Update",
+        before_data=old_pop_data,
+        after_data=new_pop_data,
+        reason=(
+            f"Pop fled from {old_nation.get('name', 'Unknown')} "
+            f"to {destination.get('name', 'Unknown')} due to overcrowding"
+        ),
+    )
+    if change_id:
+        system_approve_change(change_id)
+        return (
+            f"A pop fled from {old_nation.get('name', 'Unknown')} "
+            f"to {destination.get('name', 'Unknown')} due to overcrowding.\n"
         )
-        if change_id:
-            system_approve_change(change_id)
-            result += (
-                f"A pop fled from {old_nation.get('name', 'Unknown')} "
-                f"to {destination.get('name', 'Unknown')} due to overcrowding.\n"
-            )
-    return result
+    return ""
 
 def temperament_tick(old_nation, new_nation, schema):
     if old_nation.get("temperament", "None") == "Player":
