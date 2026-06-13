@@ -2722,7 +2722,8 @@ def sum_modifier_totals(modifiers, target=None):
             field = type_def.get("field_template", modifier_type)
             for extra_field in type_def.get("extra_fields", []):
                 key = extra_field["key"]
-                val = m.get(key) or ""
+                _raw = m.get(key)
+                val = "" if _raw is None else str(_raw)
                 if extra_field.get("source") == "attributes" and val == "attribute":
                     expand_all_attrs = True
                 field = field.replace(f"{{{key}}}", val)

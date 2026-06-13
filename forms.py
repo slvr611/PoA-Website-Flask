@@ -734,7 +734,7 @@ class BaseSchemaForm(FlaskForm):
 
     def get_available_slots(self, nation, schema):
         """Get available slot options based on nation's centralization law and modifiers"""
-        
+
         # Check if this is actually a nation or another entity type
         entity_type = schema.get("title", "").lower()
         if entity_type != "nations":
@@ -746,7 +746,20 @@ class BaseSchemaForm(FlaskForm):
                 ("tier_2_spell_slot", "Tier 2 Spell Slot"),
                 ("tier_3_spell_slot", "Tier 3 Spell Slot")
             ]
-        
+
+        # Always use the DB nation for calculation — form-derived data excludes
+        # external modifiers (wonders, rulers) and the AJAX endpoint strips
+        # all modifiers- fields entirely, making the calculation unreliable.
+        nation_name = nation.get("name", "")
+        if nation_name:
+            try:
+                from app_core import mongo
+                db_nation = mongo.db.nations.find_one({"name": nation_name})
+                if db_nation:
+                    nation = db_nation
+            except Exception:
+                pass  # fall back to form-provided data
+
         # Recalculate nation to get current modifiers
         calculated_nation = calculate_all_fields(nation, schema, "nation")
         

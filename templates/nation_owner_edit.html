@@ -212,7 +212,7 @@
                             {% for terrain, details in json_data["terrains"].items() %}
                                 <tr>
                                     <th>{{ details["display_name"] }}</th>
-                                    <td>{{ form.territory_types[terrain](class="form-control") }}</td>
+                                    <td>{{ nation.get("territory_types", {}).get(terrain, 0) }}</td>
                                 </tr>
                             {% endfor %}
                         </table>
