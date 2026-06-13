@@ -367,21 +367,6 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
 
     record_timing("capacity_and_meta_modifiers_ms", phase_start)
 
-    # Excess pop capacity penalties — applied before field calc so stability_loss_chance
-    # is correct, and preserved through the food-state rebuild via modifier_totals.
-    _excess_pops = 0
-    if target_data_type == "nation":
-        _pop_count = calculated_values.get("pop_count", 0)
-        _eff_cap   = calculated_values.get("effective_pop_capacity", 0)
-        _excess_pops = max(0, _pop_count - _eff_cap)
-        if _excess_pops > 0:
-            _excess_stab = 0.25 * _excess_pops
-            modifier_totals["stability_loss_chance"] = modifier_totals.get("stability_loss_chance", 0) + _excess_stab
-            overall_total_modifiers["stability_loss_chance"] = overall_total_modifiers.get("stability_loss_chance", 0) + _excess_stab
-            _excess_flee = 0.05 * _excess_pops
-            modifier_totals["pop_flee_chance"] = modifier_totals.get("pop_flee_chance", 0) + _excess_flee
-            overall_total_modifiers["pop_flee_chance"] = overall_total_modifiers.get("pop_flee_chance", 0) + _excess_flee
-
     #print(overall_total_modifiers)
 
     phase_start = perf_counter()
@@ -419,7 +404,7 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
             food_consumption = math.ceil(food_consumption)
         else:
             food_consumption = math.floor(food_consumption)
-        food_consumption += _excess_pops  # +1 food consumed per pop over capacity
+        food_consumption += overall_total_modifiers.get("food_consumption", 0)
 
         excess_food = calculated_values.get("resource_excess", {}).get("food", 0) + target.get("resource_storage", {}).get("food", 0)
 
@@ -2700,35 +2685,16 @@ def calculate_route_capacity_modifiers(target):
 def calculate_effective_pop_capacity_modifiers(target):
     effective_pop_capacity = int(target.get("effective_pop_capacity", 0))
     pop_count = int(target.get("pop_count", 0))
+    excess = max(0, pop_count - effective_pop_capacity)
 
-    over_capacity = pop_count - effective_pop_capacity
+    if excess <= 0:
+        return {}
 
-    modifiers = {}
-
-    if over_capacity >= 6:
-        modifiers["karma"] = -8
-        modifiers["stability_loss_chance"] = 1
-        modifiers["food_consumption_per_pop"] = 1
-    elif over_capacity == 5:
-        modifiers["karma"] = -8
-        modifiers["stability_loss_chance"] = 0.5
-        modifiers["food_consumption_per_pop"] = 1
-    elif over_capacity == 4:
-        modifiers["karma"] = -6
-        modifiers["stability_loss_chance"] = 0.4
-        modifiers["food_consumption_per_pop"] = 0.333333333333334
-    elif over_capacity == 3:
-        modifiers["karma"] = -4
-        modifiers["stability_loss_chance"] = 0.3
-        modifiers["food_consumption_per_pop"] = 0.25
-    elif over_capacity == 2:
-        modifiers["karma"] = -2
-        modifiers["stability_loss_chance"] = 0.25
-    elif over_capacity == 1:
-        modifiers["karma"] = -2
-        modifiers["stability_loss_chance"] = 0.1
-    
-    return modifiers
+    return {
+        "stability_loss_chance": 0.25 * excess,
+        "food_consumption":      float(excess),
+        "pop_flee_chance":       0.05 * excess,
+    }
 
 _ALL_CHAR_STATS = ["rulership", "cunning", "charisma", "prowess", "magic", "strategy"]
 
@@ -3159,10 +3125,19 @@ def _build_computed_contributions(
     if mg:
         contribs.append(SourceContribution(label="Minorities", source_type="computed",
                                            modifiers={"stability_gain_chance": mg}))
-    pg = pop_count * overall_totals.get("stability_gain_chance_per_pop", 0)
-    if pg:
-        contribs.append(SourceContribution(label="Population", source_type="computed",
-                                           modifiers={"stability_gain_chance": pg}))
+    if tagged_sources:
+        for _src in tagged_sources:
+            _pgp = _src["modifiers"].get("stability_gain_chance_per_pop", 0)
+            if _pgp and pop_count:
+                contribs.append(SourceContribution(
+                    label=_src["label"], source_type="computed",
+                    modifiers={"stability_gain_chance": round(_pgp * pop_count, 4)},
+                ))
+    else:
+        pg = pop_count * overall_totals.get("stability_gain_chance_per_pop", 0)
+        if pg:
+            contribs.append(SourceContribution(label="Population", source_type="computed",
+                                               modifiers={"stability_gain_chance": pg}))
     rg = road_usage * overall_totals.get("stability_gain_chance_per_road_usage", 0)
     if rg:
         contribs.append(SourceContribution(label="Road Usage", source_type="computed",
@@ -3190,10 +3165,19 @@ def _build_computed_contributions(
     if ml:
         contribs.append(SourceContribution(label="Minorities", source_type="computed",
                                            modifiers={"stability_loss_chance": ml}))
-    pl = pop_count * overall_totals.get("stability_loss_chance_per_pop", 0)
-    if pl:
-        contribs.append(SourceContribution(label="Population", source_type="computed",
-                                           modifiers={"stability_loss_chance": pl}))
+    if tagged_sources:
+        for _src in tagged_sources:
+            _plp = _src["modifiers"].get("stability_loss_chance_per_pop", 0)
+            if _plp and pop_count:
+                contribs.append(SourceContribution(
+                    label=_src["label"], source_type="computed",
+                    modifiers={"stability_loss_chance": round(_plp * pop_count, 4)},
+                ))
+    else:
+        pl = pop_count * overall_totals.get("stability_loss_chance_per_pop", 0)
+        if pl:
+            contribs.append(SourceContribution(label="Population", source_type="computed",
+                                               modifiers={"stability_loss_chance": pl}))
     rl = road_usage * overall_totals.get("stability_loss_chance_per_road_usage", 0)
     if rl:
         contribs.append(SourceContribution(label="Road Usage", source_type="computed",
@@ -3324,24 +3308,24 @@ def _build_computed_contributions(
 
     # ── Over-capacity penalties (population & territory) ─────────────────────
     pop_cap_mods = calculate_effective_pop_capacity_modifiers(target)
-    if pop_cap_mods.get("karma"):
+    if pop_cap_mods:
         eff_cap = int(calculated_values.get("effective_pop_capacity", target.get("effective_pop_capacity", 0)))
-        over = int(calculated_values.get("pop_count", target.get("pop_count", 0))) - eff_cap
+        over = max(0, int(calculated_values.get("pop_count", target.get("pop_count", 0))) - eff_cap)
         contribs.append(SourceContribution(
             label=f"Over Population Capacity ({over} over)",
             source_type="computed",
-            modifiers={k: v for k, v in pop_cap_mods.items() if k == "karma"},
+            modifiers=dict(pop_cap_mods),
         ))
 
     terr_mods = calculate_effective_territory_modifiers(target, schema_properties)
-    if terr_mods.get("karma"):
+    if terr_mods:
         eff_terr = int(calculated_values.get("effective_territory", target.get("effective_territory", 0)))
         curr_terr = int(calculated_values.get("current_territory", target.get("current_territory", 0)))
-        over = curr_terr - eff_terr
+        over = max(0, curr_terr - eff_terr)
         contribs.append(SourceContribution(
             label=f"Over Territory Capacity ({over} over)",
             source_type="computed",
-            modifiers={k: v for k, v in terr_mods.items() if k == "karma"},
+            modifiers=dict(terr_mods),
         ))
 
     # ── Vassal tribute ────────────────────────────────────────────────────────

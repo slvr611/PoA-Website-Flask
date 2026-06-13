@@ -1265,6 +1265,13 @@ class NationForm(BaseSchemaForm):
     imperial_district = FormField(DistrictDict)
     cities = FieldList(FormField(CityDict), min_entries=0)
     
+    # Dark Ages Stance
+    prosperity_role = SelectField(
+        "Dark Ages Stance",
+        choices=[("None", "None"), ("Savior", "Savior"), ("Ravager", "Ravager")],
+        default="None",
+    )
+
     # Misc fields
     origin = SelectField("Origin", choices=[])
     modifiers = FieldList(FormField(ModifierForm), min_entries=0)

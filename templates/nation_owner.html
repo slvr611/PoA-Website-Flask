@@ -217,6 +217,12 @@
 							<th>{{ schema.properties.infamy.label }}:</th>
 							<td>{{ pf(nation.infamy, pn.get("infamy")) }}</td>
 						</tr>
+						{% if nation.get("prosperity_role", "None") != "None" %}
+						<tr>
+							<th>{{ schema.properties.prosperity_role.label }}:</th>
+							<td>{{ pf(nation.get("prosperity_role", "None"), pn.get("prosperity_role")) }}</td>
+						</tr>
+						{% endif %}
 						<tr>
 							<th>{{ schema.properties.karma.label }}:</th>
 							<td>

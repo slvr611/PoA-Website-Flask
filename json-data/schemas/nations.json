@@ -230,8 +230,8 @@
       },
       "prosperity_role": {
         "bsonType": "enum",
-        "label": "Prosperity Role",
-        "description": "Whether this nation acts as a Savior or Ravager in its region, applying prosperity-tier bonuses and penalties",
+        "label": "Dark Ages Stance",
+        "description": "Whether this nation acts as a Savior or Ravager during the dark ages, applying bonuses or penalties based on the region's prosperity tier",
         "enum": ["None", "Savior", "Ravager"],
         "default": "None"
       },
@@ -1168,12 +1168,12 @@
           },
           "Acceptance": {
              "_modifiers": [
-              { "modifier_type": "stability_loss_chance", "value": 0.02, "scope": "nation_self", "scaling": "per_x_minority_cultures_and_religions", "scaling_x": 1, "max_value": 0.3 }
+              { "modifier_type": "stability_gain_chance", "value": 0.02, "scope": "nation_self", "scaling": "per_x_minority_cultures_and_religions", "scaling_x": 1, "max_value": 0.3 }
             ]
           },
           "Harmony": {
              "_modifiers": [
-              { "modifier_type": "stability_loss_chance", "value": 0.05, "scope": "nation_self", "scaling": "per_x_minority_cultures_and_religions", "scaling_x": 1, "max_value": 0.3 }
+              { "modifier_type": "stability_gain_chance", "value": 0.05, "scope": "nation_self", "scaling": "per_x_minority_cultures_and_religions", "scaling_x": 1, "max_value": 0.3 }
             ]
           }
         }

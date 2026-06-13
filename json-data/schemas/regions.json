@@ -4,6 +4,9 @@
     "required": [
       "name"
     ],
+    "preview": [
+      "prosperity"
+    ],
     "properties": {
       "name": {
         "bsonType": "string",
