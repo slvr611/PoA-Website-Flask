@@ -438,6 +438,7 @@ def nation_edit_request(item_ref):
     form_data = form.data.copy()
     form_data.pop('csrf_token', None)
     form_data.pop('submit', None)
+    form_data.pop('territory_types', None)  # read-only; managed by hex map sync
     form_data = strip_form_data_to_tier(form_data, visibility_level)
     if "name" in form_data:
         form_data["name"] = form_data.get("name", "").strip()
@@ -500,6 +501,7 @@ def nation_edit_approve(item_ref):
     form_data = form.data.copy()
     form_data.pop('csrf_token', None)
     form_data.pop('submit', None)
+    form_data.pop('territory_types', None)  # read-only; managed by hex map sync
     if "name" in form_data:
         form_data["name"] = form_data.get("name", "").strip()
 
