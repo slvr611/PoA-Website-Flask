@@ -592,18 +592,27 @@ function initClassToggles() {
 
 // ─── Main cost calculation ────────────────────────────────────────────────────
 function calculateCost() {
-  const hpCost    = isOn('has_hp')    ? (getNum('hp') - 1)                        : 0;
+  const isMelee    = isOn('melee');
+  const isCavalry  = isOn('cavalry');
+  const isRanged   = isOn('ranged');
+  const isSupport  = isOn('support');
+  // Infantry = melee, non-cavalry, non-support → 2 free HP
+  const isInfantry = isMelee && !isCavalry && !isSupport;
+
+  const hpCost    = isOn('has_hp')    ? Math.max(0, getNum('hp') - 1 - (isInfantry ? 2 : 0)) : 0;
   const moraleCost= isOn('has_morale')? (getNum('morale') - 1) * 2               : 0;
   const dmgCost   = isOn('has_damage')? getNum('damage') * 3                      : 0;
   const retalCost = isOn('has_retaliation_damage') ? getNum('retaliation_damage') * 2 : 0;
-  const speedCost = isOn('has_speed') ? getNum('speed') * 2                       : 0;
+  // Cavalry → 1 free speed
+  const speedCost = isOn('has_speed') ? Math.max(0, (getNum('speed') - (isCavalry ? 1 : 0)) * 2) : 0;
   const armorCost = isOn('has_armor') ? getNum('armor') * 4                       : 0;
 
   let rangeCost = 0;
   if (isOn('has_range')) {
     const mn = getNum('minimum_range');
     const mx = getNum('maximum_range');
-    rangeCost = (mx - mn) * 2 + (mx - 1) * 4;
+    // Ranged → 1 free max range (reduces the (mx - 1) * 4 portion)
+    rangeCost = (mx - mn) * 2 + Math.max(0, mx - 1 - (isRanged ? 1 : 0)) * 4;
   }
 
   // Traits cost
@@ -887,7 +896,8 @@ document.addEventListener('DOMContentLoaded', function () {
     'has_retaliation_damage','retaliation_damage',
     'has_range','minimum_range','maximum_range',
     'has_speed','speed','has_armor','armor',
-    'has_recruitment_cost','recruitment_cost'
+    'has_recruitment_cost','recruitment_cost',
+    'melee','cavalry','ranged','support'
   ];
   watchIds.forEach(id => {
     const el = document.getElementById(id);

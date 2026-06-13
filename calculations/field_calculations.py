@@ -3269,6 +3269,45 @@ def _build_computed_contributions(
             modifiers={k: v for k, v in terr_mods.items() if k == "karma"},
         ))
 
+    # ── Vassal tribute ────────────────────────────────────────────────────────
+    nation_id_str = str(target.get("_id", ""))
+    if nation_id_str:
+        try:
+            vassals = list(mongo.db.nations.find(
+                {"overlord": nation_id_str},
+                {"name": 1, "pop_count": 1, "vassal_type": 1},
+            ))
+        except Exception:
+            vassals = []
+        for vassal in vassals:
+            v_name    = vassal.get("name", "Unknown Vassal")
+            v_pop     = vassal.get("pop_count", 0)
+            v_type    = vassal.get("vassal_type", "None")
+            v_tribute = _calc_tribute(v_pop, v_type, {})
+            if v_tribute:
+                contribs.append(SourceContribution(
+                    label=f"Vassal: {v_name}",
+                    source_type="computed",
+                    modifiers={res + "_production": v_tribute for res in _TRIBUTE_RESOURCES},
+                ))
+
+    overlord_id = str(target.get("overlord") or "")
+    if overlord_id:
+        v_pop_count   = target.get("pop_count", 0)
+        v_vassal_type = target.get("vassal_type", "None")
+        tribute = _calc_tribute(v_pop_count, v_vassal_type, overall_totals)
+        if tribute:
+            try:
+                overlord = mongo.db.nations.find_one({"_id": ObjectId(overlord_id)}, {"name": 1})
+                overlord_name = overlord.get("name", "Overlord") if overlord else "Overlord"
+            except Exception:
+                overlord_name = "Overlord"
+            contribs.append(SourceContribution(
+                label=f"Tribute to {overlord_name}",
+                source_type="computed",
+                modifiers={res + "_consumption": tribute for res in _TRIBUTE_RESOURCES},
+            ))
+
     return contribs
 
 

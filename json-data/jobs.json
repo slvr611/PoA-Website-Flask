@@ -28,6 +28,9 @@
 	},
 	"banker": {
 		"display_name": "Banker",
+		"requirements":{
+			"district": ["bank"]
+		},
 		"upkeep": {
 			"mounts": 1
 		},
@@ -154,7 +157,7 @@
 		}
 	},
 	"rancher": {
-		"display_name": "Researcher",
+		"display_name": "Rancher",
 		"requirements": {
 			"district": ["ranch"]
 		},

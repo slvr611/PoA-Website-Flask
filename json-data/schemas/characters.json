@@ -544,14 +544,16 @@
         "bsonType": "number",
         "label": "Magic Point Production",
         "description": "The amount of magic points the Character produces each tick",
-        "calculated": true
+        "calculated": true,
+        "show_breakdown": true
       },
       "magic_point_capacity": {
         "bsonType": "number",
         "label": "Magic Point Capacity",
         "description": "The amount of magic points the Character can hold",
         "magic_point_capacity_per_magic": 3,
-        "calculated": true
+        "calculated": true,
+        "show_breakdown": true
       },
       "progress_quests": {
         "bsonType": "array",

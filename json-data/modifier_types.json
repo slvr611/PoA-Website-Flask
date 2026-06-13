@@ -177,7 +177,13 @@
         "name": "Magic Point Income",
         "value_format": "number",
         "field_template": "magic_point_income",
-        "applicable_to": ["nation"]
+        "applicable_to": ["character"]
+    },
+    "magic_point_capacity": {
+        "name": "Magic Point Capacity",
+        "value_format": "number",
+        "field_template": "magic_point_capacity",
+        "applicable_to": ["character"]
     },
     "migration_distance": {
         "name": "Migration Distance",
