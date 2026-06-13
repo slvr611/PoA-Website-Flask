@@ -732,6 +732,19 @@ class BaseSchemaForm(FlaskForm):
                 slot_name = slot_type.replace("_", " ").title()
                 raise ValidationError(f"Too many quests assigned to {slot_name}. Available: {available_count}, Used: {used_count}")
 
+    def _resolve_nation_for_slots(self, nation):
+        """Return the DB nation when available so slot calculations see all modifiers."""
+        nation_name = nation.get("name", "")
+        if nation_name:
+            try:
+                from app_core import mongo
+                db_nation = mongo.db.nations.find_one({"name": nation_name})
+                if db_nation:
+                    return db_nation
+            except Exception:
+                pass
+        return nation
+
     def get_available_slots(self, nation, schema):
         """Get available slot options based on nation's centralization law and modifiers"""
 
@@ -750,15 +763,7 @@ class BaseSchemaForm(FlaskForm):
         # Always use the DB nation for calculation — form-derived data excludes
         # external modifiers (wonders, rulers) and the AJAX endpoint strips
         # all modifiers- fields entirely, making the calculation unreliable.
-        nation_name = nation.get("name", "")
-        if nation_name:
-            try:
-                from app_core import mongo
-                db_nation = mongo.db.nations.find_one({"name": nation_name})
-                if db_nation:
-                    nation = db_nation
-            except Exception:
-                pass  # fall back to form-provided data
+        nation = self._resolve_nation_for_slots(nation)
 
         # Recalculate nation to get current modifiers
         calculated_nation = calculate_all_fields(nation, schema, "nation")
@@ -794,6 +799,7 @@ class BaseSchemaForm(FlaskForm):
 
     def get_slot_dict(self, nation, schema):
         """Get a dictionary of available slots for the nation"""
+        nation = self._resolve_nation_for_slots(nation)
         calculated_nation = calculate_all_fields(nation, schema, "nation")
         slot_dict = {}
         for slot_key, slot_count in calculated_nation.items():
