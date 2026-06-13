@@ -2540,23 +2540,34 @@ def collect_external_modifiers_from_object(object, required_fields, linked_objec
 
                 elif field_type == "array" and req_field == "modifiers":
                     _sd = json_data.get("scope_definitions", {})
+                    _mtype_data = json_data.get("modifier_types", {})
                     from calculations.source_adapters import _resolve_modifier_type as _rmt, _is_terrain_rule as _itr
                     for modifier in object[req_field]:
                         if _itr(modifier):
                             continue  # terrain rules handled separately
                         scope = modifier.get("scope", "")
                         if scope:
+                            # Scoped modifier: must match target_data_type
                             if _sd.get(scope, {}).get("target_type", "") != target_data_type:
                                 continue
-                            field = _rmt(modifier)
-                            val = modifier.get("value", 0)
-                            if field and val:
-                                scaling = modifier.get("scaling", "flat")
-                                scaling_x = float(modifier.get("scaling_x") or 1)
-                                scaling_extra = modifier.get("scaling_extra") or ""
-                                if scaling and scaling != "flat" and target is not None:
-                                    val = val * get_scaling_multiplier(scaling, target, scaling_x=scaling_x, scaling_extra=scaling_extra)
-                                collected_modifiers.append({field: val})
+                        else:
+                            # No scope: use applicable_to from the modifier_type definition
+                            # to filter (same approach as collect_modifiers, which keeps
+                            # no-scope modifiers for the nation's own modifiers array).
+                            mod_type = modifier.get("modifier_type", "")
+                            if mod_type:
+                                applicable_to = _mtype_data.get(mod_type, {}).get("applicable_to", [])
+                                if applicable_to and target_data_type not in applicable_to:
+                                    continue
+                        field = _rmt(modifier)
+                        val = modifier.get("value", 0)
+                        if field and val:
+                            scaling = modifier.get("scaling", "flat")
+                            scaling_x = float(modifier.get("scaling_x") or 1)
+                            scaling_extra = modifier.get("scaling_extra") or ""
+                            if scaling and scaling != "flat" and target is not None:
+                                val = val * get_scaling_multiplier(scaling, target, scaling_x=scaling_x, scaling_extra=scaling_extra)
+                            collected_modifiers.append({field: val})
 
                 elif field_type == "enum" and req_field_schema.get("laws"):
                     law_modifiers = req_field_schema["laws"].get(object[req_field], {})
@@ -3249,9 +3260,9 @@ def _build_computed_contributions(
             contribs.append(SourceContribution(label="Stockpile", source_type="computed",
                                                modifiers={"money_income": storage_income}))
 
-    # ── Over-capacity penalties (population & territory) ─────────────────────
-    # These must appear BEFORE consumption conversions so that excess-pop food
-    # penalties are included in the conversion's pre-conversion sum, matching
+    # ── Over-capacity penalties (population, territory, routes) ──────────────
+    # Must appear BEFORE consumption conversions so that any excess-resource
+    # consumption is included in the conversion's pre-conversion sum, matching
     # the actual compute_resource_consumption calculation order.
     pop_cap_mods = calculate_effective_pop_capacity_modifiers(target)
     if pop_cap_mods:
@@ -3272,6 +3283,17 @@ def _build_computed_contributions(
             label=f"Over Territory Capacity ({over} over)",
             source_type="computed",
             modifiers=dict(terr_mods),
+        ))
+
+    route_cap_mods = calculate_route_capacity_modifiers(target)
+    if route_cap_mods:
+        route_cap = int(calculated_values.get("route_capacity", target.get("route_capacity", 0)))
+        road_usage = int(target.get("road_usage", 0))
+        over = max(0, road_usage - route_cap)
+        contribs.append(SourceContribution(
+            label=f"Over Route Capacity ({over} over)",
+            source_type="computed",
+            modifiers=dict(route_cap_mods),
         ))
 
     # ── Consumption conversions ───────────────────────────────────────────────

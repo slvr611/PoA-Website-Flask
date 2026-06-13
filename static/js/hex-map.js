@@ -1851,6 +1851,11 @@ class HexMapViewer {
                 const rKey = nd.resource_type || nd.value || nd.type;
                 html += row('Node', _esc(RESOURCE_NAME[rKey] || rKey || nd.type || ''));
             }
+            if (tile.route && tile.route.owner) {
+                const routeOwnerHtml = `<a href="/nations/item/${encodeURIComponent(tile.route.owner)}" target="_blank">${_esc(tile.route.owner)}</a>`;
+                html += row('Route Owner', routeOwnerHtml);
+                html += row('Route Tier', `Tier ${tile.route.tier || '?'}`);
+            }
             if (this._editMode) html += this._buildEditForm(q, r, tile);
         } else {
             html += `<div class="hex-detail-empty">Empty tile (no data)</div>`;

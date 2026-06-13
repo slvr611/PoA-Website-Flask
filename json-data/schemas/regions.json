@@ -35,7 +35,11 @@
         "queryTargetAttribute": "region",
         "items": {
           "bsonType": "linked_object"
-        }
+        },
+        "preview": [
+          "prosperity_role",
+          "pop_count"
+        ]
       },
       "merchants": {
         "bsonType": "array",
