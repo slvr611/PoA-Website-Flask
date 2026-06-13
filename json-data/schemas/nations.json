@@ -240,6 +240,7 @@
         "label": "Administration",
         "description": "The nation's level of administration",
         "calculated": true,
+        "show_breakdown": true,
         "base_value": 1
       },
       "effective_territory": {
@@ -834,15 +835,17 @@
             "stability_loss_chance": 0.5,
             "stability_loss_chance_cap": 0.5,
             "_modifiers": [
-              { "modifier_type": "effective_territory", "value": 1, "scope": "nation_ruling_characters", "scaling": "per_x_pops", "scaling_x": 1 },
-              { "modifier_type": "trade_speed", "value": 1, "scope": "nation_ruling_characters", "scaling": "per_x_pops", "scaling_x": 3 }
+              { "modifier_type": "effective_territory", "value": 1, "scope": "nation_self", "scaling": "per_x_pops", "scaling_x": 1 },
+              { "modifier_type": "trade_speed", "value": 1, "scope": "nation_self", "scaling": "per_x_pops", "scaling_x": 3 }
             ]
           },
           "Archivist State": {
-            "administration_per_research_production": 3,
-            "max_administration_per_research_production": 3,
-            "effective_territory": -2,
-            "city_slots": 1
+            "city_slots": 1,
+            "_modifiers": [
+              { "modifier_type": "administration", "value": 1, "scope": "nation_self", "scaling": "per_x_district_category", "scaling_x": 1, "scaling_extra": "education"},
+              { "modifier_type": "effective_territory", "value": -10, "scope": "nation_self", "scaling": "per_x_administration", "scaling_x": 1 },
+              { "modifier_type": "tech_cost_modifier", "value": -1, "scope": "nation_self", "scaling": "per_x_administration", "scaling_x": 5 }
+            ]
           },
           "Untamed Lords": {
             "nomadic": 1,

@@ -1254,9 +1254,6 @@ class NationForm(BaseSchemaForm):
     primary_culture = SelectField("Primary Culture", choices=[])
     primary_religion = SelectField("Primary Religion", choices=[])
     
-    # Territory fields
-    road_usage = IntegerField("Road Usage", validators=[NumberRange(min=0)], default=0)
-    
     # Vassalship fields
     overlord = SelectField("Overlord", choices=[])
     vassal_type = SelectField("Vassal Type", choices=[])

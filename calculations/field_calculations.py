@@ -78,6 +78,15 @@ def _build_nation_calc_cache(target):
     religion_count = len({p.get("religion") for p in pops if p.get("religion")})
     slave_count    = sum(1 for p in pops if p.get("slave"))
 
+    # Pre-populate territory_node_counts from raw node_tiles so that scaling
+    # methods (e.g. per_x_magic_nodes) called during collect_external_requirements
+    # have real counts available. calculate_all_fields overwrites this with the
+    # OOR-filtered version once law_totals are known.
+    preliminary_node_counts = {}
+    for _nt in node_tiles:
+        rt = _nt["rt"]
+        preliminary_node_counts[rt] = preliminary_node_counts.get(rt, 0) + 1
+
     return {
         "pops": pops,
         "pop_count": len(pops) - slave_count,
@@ -88,8 +97,9 @@ def _build_nation_calc_cache(target):
         "religion_count": religion_count,
         "slave_count": slave_count,
         "_node_tiles": node_tiles,
-        # territory_node_counts, active_node_counts, and out_of_range_tiles are
-        # populated by calculate_all_fields after law_totals are available.
+        "territory_node_counts": preliminary_node_counts,
+        # territory_node_counts is overwritten by calculate_all_fields with the
+        # OOR-filtered version once law_totals are available.
     }
 
 def calculate_all_fields(target, schema, target_data_type, return_breakdowns=False, instrumentation=None):
@@ -126,6 +136,18 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
     phase_start = perf_counter()
     laws = collect_laws(target, schema)
     law_totals = sum_law_totals(laws)
+    # Process _modifiers (scaling modifier lists) from law values — skipped by sum_law_totals
+    _law_scope_defs = json_data.get("scope_definitions", {})
+    _law_scaled = []
+    for _law in laws:
+        for _m in _law.get("_modifiers", []):
+            _scope = _m.get("scope", "")
+            if _scope and _law_scope_defs.get(_scope, {}).get("target_type", "nation") != "nation":
+                continue
+            _law_scaled.append(_m)
+    if _law_scaled:
+        for _k, _v in sum_modifier_totals(_law_scaled, target).items():
+            law_totals[_k] = law_totals.get(_k, 0) + _v
     record_timing("collect_and_sum_laws_ms", phase_start)
 
     phase_start = perf_counter()
@@ -146,6 +168,12 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
         district_details = json_data["mercenary_districts"]
         districts = collect_mercenary_districts(target, district_details)
     district_totals = sum_district_totals(districts)
+    # Add DB-driven nation district contributions (def_key districts from district_defs collection)
+    if target_data_type in ("nation", "nation_jobs"):
+        from calculations.source_adapters import DistrictAdapter as _DA
+        for _dc in _DA.collect(target, schema, modifier_totals, law_totals, external_modifiers_total):
+            for _k, _v in _dc.modifiers.items():
+                district_totals[_k] = district_totals.get(_k, 0) + _v
     record_timing("district_calculations_ms", phase_start)
 
     city_totals = {}
@@ -172,8 +200,12 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
         technologies = _normalize_technologies(target.get("technologies"))
         tech_totals = sum_tech_totals(technologies)
 
-        loose_nodes = target.get("nodes", {})
-        loose_node_totals = sum_loose_node_totals(loose_nodes, modifier_totals, external_modifiers_total, law_totals, tech_totals)
+        loose_node_totals = {}  # old nodes-field system retired; tile-based nodes handle production
+
+        # Build tagged sources NOW, before OOR filtering overwrites territory_node_counts,
+        # so that scaling modifiers in the tooltip use the same preliminary counts as
+        # collect_external_requirements (line 120) did for the actual calculation.
+        nation_tagged_sources = _build_unit_tagged_sources(target, schema, district_details)
 
         all_terrain_rules = _collect_all_terrain_rules(target)
         proximity_rules = _collect_all_proximity_rules(target)
@@ -217,7 +249,6 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
         job_totals = sum_job_totals(target, jobs_assigned, job_details)
 
         land_units_assigned = collect_land_units_assigned(target)
-        nation_tagged_sources = _build_unit_tagged_sources(target, schema, district_details)
 
         land_unit_details = calculate_unit_details(target, "land", modifier_totals, district_totals, tech_totals, city_totals, law_totals, external_modifiers_total, schema, district_details, nation_tagged_sources)
 
@@ -1601,13 +1632,26 @@ def _build_unit_tagged_sources(target, schema, district_details):
     schema_properties = schema.get("properties", {})
 
     # Laws
+    _tagged_scope_defs = json_data.get("scope_definitions", {})
     for law_name in schema.get("laws", []):
         law_field = schema_properties.get(law_name, {})
         selected = target.get(law_name, "")
         law_data = law_field.get("laws", {}).get(selected)
         if law_data:
             law_label = law_field.get("label", law_name)
-            tagged.append({"label": f"{law_label}: {selected}", "modifiers": law_data})
+            tag_label = f"{law_label}: {selected}"
+            # Flat modifiers — exclude _-prefixed keys like _modifiers
+            flat_mods = {k: v for k, v in law_data.items() if not k.startswith("_")}
+            # Resolve scaling _modifiers into flat values for nation scope
+            for _m in law_data.get("_modifiers", []):
+                _scope = _m.get("scope", "")
+                if _scope and _tagged_scope_defs.get(_scope, {}).get("target_type", "nation") != "nation":
+                    continue
+                for _k, _v in sum_modifier_totals([_m], target).items():
+                    if _v:
+                        flat_mods[_k] = flat_mods.get(_k, 0) + _v
+            if flat_mods:
+                tagged.append({"label": tag_label, "modifiers": flat_mods})
 
     # Districts
     def _synergy_matches(node, requirement):
@@ -1629,10 +1673,41 @@ def _build_unit_tagged_sources(target, schema, district_details):
     for district in target.get("districts", []):
         if not isinstance(district, dict):
             continue
+        district_node = district.get("node", "")
+
+        if district.get("def_key"):
+            # DB-driven district — resolve via district_defs collection
+            from calculations.source_adapters import _db_dist_mods_to_dict as _dmd
+            dd = _resolve_def(district)
+            if not dd:
+                continue
+            district_name = dd.get("display_name", district.get("def_key", ""))
+            mods = _dmd(dd.get("modifiers", []), target_type="nation")
+            node_bonus_applied = False
+            for syn in _get_synergies(dd):
+                if _synergy_matches(district_node, syn.get("requirement", "")):
+                    syn_mods = syn.get("modifiers", {})
+                    if isinstance(syn_mods, list):
+                        syn_mods = _dmd(syn_mods, target_type="nation")
+                    mods.update(syn_mods)
+                    if syn.get("node_active", True) and district_node and not node_bonus_applied:
+                        mods[district_node + "_nodes"] = mods.get(district_node + "_nodes", 0) + 1
+                        node_bonus_applied = True
+            if not node_bonus_applied and district_node:
+                mods[district_node + "_nodes"] = mods.get(district_node + "_nodes", 0) + 1
+            for upg_key in district.get("upgrades", []):
+                upg = next((u for u in dd.get("upgrades", []) if u.get("key") == upg_key), None)
+                if upg:
+                    for k, v in _dmd(upg.get("modifiers", []), target_type="nation").items():
+                        mods[k] = mods.get(k, 0) + v
+            if mods:
+                tagged.append({"label": f"District: {district_name}", "modifiers": mods})
+            continue
+
+        # Legacy type-based district
         district_type = district.get("type", "")
         if not district_type:
             continue
-        district_node = district.get("node", "")
         district_data = district_details.get(district_type, {})
         district_name = district_data.get("display_name", district_type)
         mods = district_data.get("modifiers", {})
