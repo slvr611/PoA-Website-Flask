@@ -3249,6 +3249,31 @@ def _build_computed_contributions(
             contribs.append(SourceContribution(label="Stockpile", source_type="computed",
                                                modifiers={"money_income": storage_income}))
 
+    # ── Over-capacity penalties (population & territory) ─────────────────────
+    # These must appear BEFORE consumption conversions so that excess-pop food
+    # penalties are included in the conversion's pre-conversion sum, matching
+    # the actual compute_resource_consumption calculation order.
+    pop_cap_mods = calculate_effective_pop_capacity_modifiers(target)
+    if pop_cap_mods:
+        eff_cap = int(calculated_values.get("effective_pop_capacity", target.get("effective_pop_capacity", 0)))
+        over = max(0, int(calculated_values.get("pop_count", target.get("pop_count", 0))) - eff_cap)
+        contribs.append(SourceContribution(
+            label=f"Over Population Capacity ({over} over)",
+            source_type="computed",
+            modifiers=dict(pop_cap_mods),
+        ))
+
+    terr_mods = calculate_effective_territory_modifiers(target, schema_properties)
+    if terr_mods:
+        eff_terr = int(calculated_values.get("effective_territory", target.get("effective_territory", 0)))
+        curr_terr = int(calculated_values.get("current_territory", target.get("current_territory", 0)))
+        over = max(0, curr_terr - eff_terr)
+        contribs.append(SourceContribution(
+            label=f"Over Territory Capacity ({over} over)",
+            source_type="computed",
+            modifiers=dict(terr_mods),
+        ))
+
     # ── Consumption conversions ───────────────────────────────────────────────
     # e.g. food_to_magic_consumption_conversion: 0.5 means 50% of food consumption
     # becomes magic consumption instead.  Show this as explicit +/- entries so the
@@ -3305,28 +3330,6 @@ def _build_computed_contributions(
                     source_type="computed",
                     modifiers={"karma": v},
                 ))
-
-    # ── Over-capacity penalties (population & territory) ─────────────────────
-    pop_cap_mods = calculate_effective_pop_capacity_modifiers(target)
-    if pop_cap_mods:
-        eff_cap = int(calculated_values.get("effective_pop_capacity", target.get("effective_pop_capacity", 0)))
-        over = max(0, int(calculated_values.get("pop_count", target.get("pop_count", 0))) - eff_cap)
-        contribs.append(SourceContribution(
-            label=f"Over Population Capacity ({over} over)",
-            source_type="computed",
-            modifiers=dict(pop_cap_mods),
-        ))
-
-    terr_mods = calculate_effective_territory_modifiers(target, schema_properties)
-    if terr_mods:
-        eff_terr = int(calculated_values.get("effective_territory", target.get("effective_territory", 0)))
-        curr_terr = int(calculated_values.get("current_territory", target.get("current_territory", 0)))
-        over = max(0, curr_terr - eff_terr)
-        contribs.append(SourceContribution(
-            label=f"Over Territory Capacity ({over} over)",
-            source_type="computed",
-            modifiers=dict(terr_mods),
-        ))
 
     # ── Vassal tribute ────────────────────────────────────────────────────────
     nation_id_str = str(target.get("_id", ""))
