@@ -11,6 +11,7 @@
     ],
     "laws": [
       "character_type",
+      "character_subtype",
       "health_status"
     ],
     "external_calculation_requirements": {
@@ -146,18 +147,60 @@
         "description": "The subtype of the character",
         "enum": [
           "None",
-          "Artificer",
+          "Administrator",
+          "Barbarian",
+          "Bard",
+          "Champion",
           "Diplomat",
           "Duelist",
+          "Guardian",
+          "Infiltrator",
+          "Magus",
+          "Martyr",
+          "Noble",
           "Orator",
           "Prophet",
-          "Proselytizer",
           "Quartermaster",
           "Scholar",
-          "Statesman",
-          "Tyrant"
+          "Tactician",
+          "Tyrant",
+          "Warlock"
         ],
-        "static": true
+        "static": true,
+        "laws": {
+          "None": {},
+          "Administrator": {},
+          "Barbarian": {},
+          "Bard": {},
+          "Champion": {
+            "_modifiers": [
+              { "modifier_type": "heal_chance", "value": 1, "scope": "self_character" },
+              { "modifier_type": "max_heal_chance", "value": 1, "scope": "self_character" }
+            ]
+          },
+          "Diplomat": {},
+          "Duelist": {},
+          "Guardian": {
+            "_modifiers": [
+              { "modifier_type": "artifact_slots", "value": 8, "scope": "self_character" }
+            ]
+          },
+          "Infiltrator": {},
+          "Magus": {},
+          "Martyr": {},
+          "Noble": {},
+          "Orator": {},
+          "Prophet": {},
+          "Quartermaster": {
+            "_modifiers": [
+              { "modifier_type": "progress_slots", "tier": 0, "value": 1, "scope": "character_ruling_nation" }
+            ]
+          },
+          "Scholar": {},
+          "Tactician": {},
+          "Tyrant": {},
+          "Warlock": {}
+        }
       },
       "strengths": {
         "bsonType": "array",
