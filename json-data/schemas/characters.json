@@ -128,86 +128,16 @@
         ],
         "static": true,
         "laws": {
-          "Steward": {
-            "rulership": 2,
-            "cunning": 1,
-            "charisma": 0,
-            "prowess": -1,
-            "magic": 0,
-            "strategy": 0
-          },
-          "Religious Leader": {
-            "rulership": 1,
-            "cunning": 1,
-            "charisma": 1,
-            "prowess": -1,
-            "magic": 1,
-            "strategy": -1
-          },
-          "Conqueror": {
-            "rulership": 0,
-            "cunning": 0,
-            "charisma": -1,
-            "prowess": 2,
-            "magic": 0,
-            "strategy": 1
-          },
-          "Populist": {
-            "rulership": -1,
-            "cunning": 2,
-            "charisma": 2,
-            "prowess": -1,
-            "magic": 0,
-            "strategy": -1
-          },
-          "Archmage": {
-            "rulership": 0,
-            "cunning": 2,
-            "charisma": -1,
-            "prowess": -2,
-            "magic": 2,
-            "strategy": 0
-          },
-          "Mage": {
-            "rulership": 0,
-            "cunning": 2,
-            "charisma": -1,
-            "prowess": 0,
-            "magic": 2,
-            "strategy": -1
-          },
-          "Warrior": {
-            "rulership": -1,
-            "cunning": 1,
-            "charisma": -1,
-            "prowess": 2,
-            "magic": 0,
-            "strategy": 1
-          },
-          "General": {
-            "rulership": 1,
-            "cunning": 0,
-            "charisma": -1,
-            "prowess": 0,
-            "magic": -1,
-            "strategy": 3
-          },
-          "Merchant": {
-            "rulership": 1,
-            "cunning": 1,
-            "charisma": 2,
-            "prowess": -1,
-            "magic": 0,
-            "strategy": -1
-          },
-          "Rogue": {
-            "rulership": -1,
-            "cunning": 2,
-            "charisma": 1,
-            "prowess": 1,
-            "magic": 0,
-            "strategy": -1
-          }
+          "Steward": {},
+          "Religious Leader": {},
+          "Conqueror": {},
+          "Populist": {},
+          "Archmage": {},
+          "Mage": {},
+          "Warrior": {},
+          "General": {},
+          "Merchant": {},
+          "Rogue": {}
         }
       },
       "character_subtype": {

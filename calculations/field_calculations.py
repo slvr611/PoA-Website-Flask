@@ -3462,7 +3462,7 @@ def compute_nation_breakdowns(
         ignore_elderly = overall_total_modifiers.get("ignore_elderly", 0) > 0
         ignore_elderly_strengths = overall_total_modifiers.get("ignore_elderly_strengths", 0) > 0
 
-        # Skip the combined Laws entry — character_type is treated as inherent base
+        # Per-source contributions, replacing the combined Laws entry with individual law entries
         for c in contributions:
             if c.label == "Laws":
                 continue
@@ -3470,13 +3470,14 @@ def compute_nation_breakdowns(
             if v:
                 entries.append({"label": c.label, "value": v})
 
-        # Health status shown individually with its value name as source
-        _health_status = target.get("health_status", "")
-        if _health_status:
-            _health_mods = schema_properties.get("health_status", {}).get("laws", {}).get(_health_status, {})
-            v = _health_mods.get(field, 0) + _health_mods.get("stats", 0)
-            if v:
-                entries.append({"label": _health_status, "value": v})
+        # Character type and health status shown individually with their value names as sources
+        for _law_field in ("character_type", "health_status"):
+            _law_value = target.get(_law_field, "")
+            if _law_value:
+                _law_mods = schema_properties.get(_law_field, {}).get("laws", {}).get(_law_value, {})
+                v = _law_mods.get(field, 0) + _law_mods.get("stats", 0)
+                if v:
+                    entries.append({"label": _law_value, "value": v})
 
         if field in strengths:
             bonus = overall_total_modifiers.get("stat_bonus_for_strength", 0)
