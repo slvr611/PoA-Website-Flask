@@ -66,25 +66,20 @@
 								{% endif %}
 							{% elif properties.bsonType == "number" %}
 								{% set bd = (breakdowns if breakdowns is defined else {}).get(field, []) %}
+								{% set cap_field = properties.get("max") if (properties.get("max") is string) else none %}
+								{% set cap_bd = (breakdowns if breakdowns is defined else {}).get(cap_field, []) if cap_field else [] %}
+								{% set cap_label = schema.properties.get(cap_field, {}).get('label', cap_field) if cap_field else '' %}
 								{% if properties.get("show_breakdown") and bd %}
 									<td><span class="context-tooltip"
 											  data-tooltip-title="{{ properties.label }}"
 											  data-breakdown='{{ bd | tojson }}'>
 										{% if properties.format == "percentage" %}{{ (item.get(field, 0) * 100)|int }}%
-										{% else %}{{ item.get(field, 0) }}{% endif %}
+										{% else %}{{ item.get(field, 0) }}{% if cap_field %} / {% if cap_bd %}<span class="context-tooltip" data-tooltip-title="{{ cap_label }}" data-breakdown='{{ cap_bd | tojson }}'>{{ item.get(cap_field, 0) }}</span>{% else %}{{ item.get(cap_field, 0) }}{% endif %}{% elif properties.get("max") %} / {{ properties.get("max") }}{% endif %}{% endif %}
 									</span></td>
 								{% elif properties.format == "percentage" %}
 									<td>{{ (item.get(field, 0) * 100)|int }}%</td>
 								{% else %}
-									<td>{{ item.get(field, 0) }}
-										{% if properties.get("max") %}
-											{% if properties.get("max") is string %}
-												/ {{ item.get(properties.get("max"), 0) }}
-											{% else %}
-												/ {{ properties.get("max") }}
-											{% endif %}
-										{% endif %}
-									</td>
+									<td>{{ item.get(field, 0) }}{% if cap_field %} / {% if cap_bd %}<span class="context-tooltip" data-tooltip-title="{{ cap_label }}" data-breakdown='{{ cap_bd | tojson }}'>{{ item.get(cap_field, 0) }}</span>{% else %}{{ item.get(cap_field, 0) }}{% endif %}{% elif properties.get("max") %} / {{ properties.get("max") }}{% endif %}</td>
 								{% endif %}
 							{% elif properties.bsonType == "boolean" %}
 								<td>

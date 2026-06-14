@@ -378,8 +378,9 @@ def data_item(data_type, item_ref):
     schema_props = schema.get("properties", {})
     breakdowns = {}
     if any(v.get("show_breakdown") for v in schema_props.values() if isinstance(v, dict)):
+        singular_type = category_data[data_type]["singularName"].lower()
         calculated_values, breakdowns = calculate_all_fields(
-            item, schema, data_type, return_breakdowns=True
+            item, schema, singular_type, return_breakdowns=True
         )
         item.update(calculated_values)
 

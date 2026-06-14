@@ -407,6 +407,7 @@
         "label": "Rulership Cap",
         "description": "The maximum Rulership stat of the character",
         "calculated": true,
+        "show_breakdown": true,
         "hidden": true,
         "base_value": 4
       },
@@ -415,6 +416,7 @@
         "label": "Cunning Cap",
         "description": "The maximum Cunning stat of the character",
         "calculated": true,
+        "show_breakdown": true,
         "hidden": true,
         "base_value": 4
       },
@@ -423,6 +425,7 @@
         "label": "Charisma Cap",
         "description": "The maximum Charisma stat of the character",
         "calculated": true,
+        "show_breakdown": true,
         "hidden": true,
         "base_value": 4
       },
@@ -431,6 +434,7 @@
         "label": "Prowess Cap",
         "description": "The maximum Prowess stat of the character",
         "calculated": true,
+        "show_breakdown": true,
         "hidden": true,
         "base_value": 4
       },
@@ -439,6 +443,7 @@
         "label": "Magic Cap",
         "description": "The maximum Magic stat of the character",
         "calculated": true,
+        "show_breakdown": true,
         "hidden": true,
         "base_value": 4
       },
@@ -447,6 +452,7 @@
         "label": "Strategy Cap",
         "description": "The maximum Strategy stat of the character",
         "calculated": true,
+        "show_breakdown": true,
         "hidden": true,
         "base_value": 4
       },
@@ -455,6 +461,7 @@
         "label": "Rulership",
         "description": "The Rulership stat of the character",
         "calculated": true,
+        "show_breakdown": true,
         "max": "rulership_cap"
       },
       "cunning": {
@@ -462,6 +469,7 @@
         "label": "Cunning",
         "description": "The Cunning stat of the character",
         "calculated": true,
+        "show_breakdown": true,
         "max": "cunning_cap"
       },
       "charisma": {
@@ -469,6 +477,7 @@
         "label": "Charisma",
         "description": "The Charisma stat of the character",
         "calculated": true,
+        "show_breakdown": true,
         "max": "charisma_cap"
       },
       "prowess": {
@@ -476,6 +485,7 @@
         "label": "Prowess",
         "description": "The Prowess stat of the character",
         "calculated": true,
+        "show_breakdown": true,
         "max": "prowess_cap"
       },
       "magic": {
@@ -483,6 +493,7 @@
         "label": "Magic",
         "description": "The Magic stat of the character",
         "calculated": true,
+        "show_breakdown": true,
         "max": "magic_cap"
       },
       "strategy": {
@@ -490,6 +501,7 @@
         "label": "Strategy",
         "description": "The Strategy stat of the character",
         "calculated": true,
+        "show_breakdown": true,
         "max": "strategy_cap"
       },
       "positive_quirk": {
@@ -538,7 +550,8 @@
       "magic_points": {
         "bsonType": "number",
         "label": "Magic Points",
-        "description": "The amount of magic points the Character currently has in storage"
+        "description": "The amount of magic points the Character currently has in storage",
+        "max": "magic_point_capacity"
       },
       "magic_point_income": {
         "bsonType": "number",
@@ -553,7 +566,8 @@
         "description": "The amount of magic points the Character can hold",
         "magic_point_capacity_per_magic": 3,
         "calculated": true,
-        "show_breakdown": true
+        "show_breakdown": true,
+        "hidden": true
       },
       "progress_quests": {
         "bsonType": "array",

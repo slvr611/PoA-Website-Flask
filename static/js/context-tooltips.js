@@ -25,7 +25,7 @@ document.addEventListener("DOMContentLoaded", () => {
     body.className = "context-tooltip-body";
 
     list.forEach((entry) => {
-      if (entry.label === "Total") {
+      if (entry.label === "Total" || entry.label === "Before Cap") {
         const sep = document.createElement("div");
         sep.className = "context-tooltip-sep";
         body.appendChild(sep);

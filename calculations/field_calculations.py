@@ -494,7 +494,7 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
         component_sources = {
             "base": {},
             "modifiers": modifier_totals,
-            "districts": district_totals if target_data_type == "nation" else {},
+            "districts": district_totals,
             "cities": city_totals if target_data_type == "nation" else {},
             "laws": law_totals,
             "tech": tech_totals if target_data_type == "nation" else {},
@@ -504,7 +504,7 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
             "loose_nodes": loose_node_totals if target_data_type == "nation" else {},
             "external": external_modifiers_total,
             "prestige": prestige_modifiers if target_data_type == "nation" else {},
-            "titles": title_modifiers if target_data_type == "nation" else {},
+            "titles": title_modifiers,
         }
         breakdowns = compute_nation_breakdowns(
             target,
@@ -513,6 +513,7 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
             overall_total_modifiers,
             calculated_values,
             nation_tagged_sources if target_data_type == "nation" else None,
+            target_data_type=target_data_type,
         )
         record_timing("compute_breakdowns_ms", phase_start)
         local_timings["total_calculate_all_fields_ms"] = round((perf_counter() - calc_start) * 1000, 2)
@@ -3398,7 +3399,7 @@ def _build_computed_contributions(
 
 def compute_nation_breakdowns(
     target, schema_properties, component_sources, overall_total_modifiers,
-    calculated_values, tagged_sources=None,
+    calculated_values, tagged_sources=None, target_data_type=None,
 ):
     """Build tooltip-friendly breakdowns for a nation's key fields.
 
@@ -3452,6 +3453,97 @@ def compute_nation_breakdowns(
             entries.append({"label": "Total", "value": round(total * mult, 2) if pct else total})
         return entries
 
+    # ── Character attribute breakdown (field + stats, adjustments, cap) ──────
+    def _stat_bd(field):
+        entries = []
+        strengths = target.get("strengths", [])
+        weaknesses = target.get("weaknesses", [])
+        age_status = target.get("age_status", "Adult")
+        ignore_elderly = overall_total_modifiers.get("ignore_elderly", 0) > 0
+        ignore_elderly_strengths = overall_total_modifiers.get("ignore_elderly_strengths", 0) > 0
+
+        # Skip the combined Laws entry — character_type is treated as inherent base
+        for c in contributions:
+            if c.label == "Laws":
+                continue
+            v = c.modifiers.get(field, 0) + c.modifiers.get("stats", 0)
+            if v:
+                entries.append({"label": c.label, "value": v})
+
+        # Health status shown individually with its value name as source
+        _health_status = target.get("health_status", "")
+        if _health_status:
+            _health_mods = schema_properties.get("health_status", {}).get("laws", {}).get(_health_status, {})
+            v = _health_mods.get(field, 0) + _health_mods.get("stats", 0)
+            if v:
+                entries.append({"label": _health_status, "value": v})
+
+        if field in strengths:
+            bonus = overall_total_modifiers.get("stat_bonus_for_strength", 0)
+            if bonus:
+                entries.append({"label": "Strength Bonus", "value": bonus})
+        elif field in weaknesses:
+            bonus = overall_total_modifiers.get("stat_bonus_for_weakness", 0)
+            if bonus:
+                entries.append({"label": "Weakness Penalty", "value": bonus})
+
+        if age_status == "Child":
+            entries.append({"label": "Child Penalty", "value": -1})
+        elif age_status == "Elderly":
+            if not ignore_elderly and not (ignore_elderly_strengths and field in strengths):
+                entries.append({"label": "Elderly Penalty", "value": -1})
+            elderly_bonus = overall_total_modifiers.get(field + "_bonus_while_elderly", 0)
+            if elderly_bonus:
+                entries.append({"label": "Elderly Bonus", "value": elderly_bonus})
+
+        before_cap = (
+            overall_total_modifiers.get(field, 0)
+            + overall_total_modifiers.get("stats", 0)
+        )
+        if field in strengths:
+            before_cap += overall_total_modifiers.get("stat_bonus_for_strength", 0)
+        elif field in weaknesses:
+            before_cap += overall_total_modifiers.get("stat_bonus_for_weakness", 0)
+        if age_status == "Child":
+            before_cap -= 1
+        elif age_status == "Elderly":
+            if not ignore_elderly and not (ignore_elderly_strengths and field in strengths):
+                before_cap -= 1
+            before_cap += overall_total_modifiers.get(field + "_bonus_while_elderly", 0)
+
+        entries.append({"label": "Before Cap", "value": int(before_cap)})
+        cap = calculated_values.get(field + "_cap", 4)
+        entries.append({"label": "Cap", "value": cap})
+        total = calculated_values.get(field)
+        if total is not None:
+            entries.append({"label": "Total", "value": total})
+        return entries
+
+    # ── Character attribute cap breakdown (base, modifiers, strength/weakness) ─
+    def _stat_cap_bd(field):
+        stat_name = field[:-4]  # Remove "_cap" suffix
+        base = schema_properties.get(field, {}).get("base_value", 4)
+        entries = [{"label": "Base", "value": base}]
+
+        for c in contributions:
+            v = c.modifiers.get(field, 0) + c.modifiers.get("stat_cap", 0)
+            if v:
+                entries.append({"label": c.label, "value": v})
+
+        strengths = target.get("strengths", [])
+        weaknesses = target.get("weaknesses", [])
+        if stat_name in strengths:
+            v = 2 + overall_total_modifiers.get("stat_cap_bonus_for_strength", 0)
+            entries.append({"label": "Strength Bonus", "value": v})
+        elif stat_name in weaknesses:
+            v = -(2 - overall_total_modifiers.get("stat_cap_bonus_for_weakness", 0))
+            entries.append({"label": "Weakness Penalty", "value": v})
+
+        total = calculated_values.get(field)
+        if total is not None:
+            entries.append({"label": "Total", "value": total})
+        return entries
+
     # ── Per-resource breakdown (handles specific + generic keys) ──────────────
     def _resource_bd(resource_key, direction):
         specific = resource_key + "_" + direction
@@ -3482,7 +3574,12 @@ def compute_nation_breakdowns(
     }
     for _f, _fschema in schema_properties.items():
         if isinstance(_fschema, dict) and _fschema.get("calculated") and _fschema.get("show_breakdown"):
-            breakdowns[_f] = _field_bd(_f, pct=_fschema.get("format") == "percentage")
+            if target_data_type == "character" and isinstance(_fschema.get("max"), str) and _fschema["max"].endswith("_cap"):
+                breakdowns[_f] = _stat_bd(_f)
+            elif target_data_type == "character" and _f.endswith("_cap") and isinstance(_fschema.get("base_value"), (int, float)):
+                breakdowns[_f] = _stat_cap_bd(_f)
+            else:
+                breakdowns[_f] = _field_bd(_f, pct=_fschema.get("format") == "percentage")
 
     # effective_territory — inject Administration contribution before Total
     eff_terr_bd = _field_bd("effective_territory")

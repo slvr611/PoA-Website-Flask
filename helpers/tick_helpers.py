@@ -1437,7 +1437,8 @@ def era_resource_stockpile_decay_tick(old_nation, new_nation, schema):
         kept_pct = min(base_kept + all_bonus + per_resource_bonus, 1.0)
         new_storage[resource] = round(amount * kept_pct)
     new_nation["resource_storage"] = new_storage
-    return ""
+    kept_pct_display = round((base_kept + all_bonus) * 100)
+    return f"{old_nation.get('name', 'Unknown')} kept ~{kept_pct_display}% of stockpile after era decay.\n"
 
 
 def era_formal_storage_bonus_tick(old_nation, new_nation, schema):
@@ -1545,7 +1546,8 @@ def era_ai_resource_grant_tick(old_nation, new_nation, schema):
     scale = pop_count / _ERA_AI_REFERENCE_POPS
 
     terrain_weights = _era_ai_terrain_weights(old_nation)
-    storage = dict(new_nation.get("resource_storage", {}))
+    storage = {}  # reset stockpile to zero before granting era resources
+    new_nation["resource_storage"] = storage
     capacity = old_nation.get("nation_resource_capacity", {})
     grants = {}
 
@@ -1644,6 +1646,101 @@ def age_pop_growth_tick():
     return f"Age Pop Growth: grew {count} nation(s) (infertile races skipped).\n"
 
 
+def era_artifact_loss_tick():
+    """Roll artifact loss chance 3 times per character; lose 1 artifact per successful roll."""
+    character_schema, character_db = get_data_on_category("characters")
+    _, artifact_db = get_data_on_category("artifacts")
+
+    characters = list(character_db.find().sort("name", ASCENDING))
+    losses_log = ""
+
+    for character in characters:
+        if character.get("health_status", "Healthy") == "Dead":
+            continue
+
+        character.update(calculate_all_fields(character, character_schema, "character"))
+        artifact_loss_chance = character.get("artifact_loss_chance", 0)
+        if artifact_loss_chance <= 0:
+            continue
+
+        losses = sum(1 for _ in range(3) if random.random() <= artifact_loss_chance)
+        if losses <= 0:
+            continue
+
+        char_id_str = str(character["_id"])
+        unequipped = list(artifact_db.find({"owner": char_id_str, "equipped": False}))
+        equipped = list(artifact_db.find({"owner": char_id_str, "equipped": True}))
+        available = unequipped + equipped  # prefer losing unequipped first
+
+        for _ in range(losses):
+            if not available:
+                break
+            pool = [a for a in available if not a.get("equipped", False)] or available
+            old_artifact = random.choice(pool)
+            new_artifact = deepcopy(old_artifact)
+            new_artifact["owner"] = "Lost"
+            available.remove(old_artifact)
+
+            change_id = system_request_change(
+                data_type="artifacts",
+                item_id=old_artifact["_id"],
+                change_type="Update",
+                before_data=old_artifact,
+                after_data=new_artifact,
+                reason=f"{old_artifact.get('name', 'Unknown')} lost by {character.get('name', 'Unknown')} during era artifact loss",
+            )
+            system_approve_change(change_id)
+            losses_log += f"  {character.get('name', 'Unknown')} lost {old_artifact.get('name', 'Unknown')}.\n"
+
+    if losses_log:
+        return f"Era Artifact Loss:\n{losses_log}"
+    return "Era Artifact Loss: no artifacts lost.\n"
+
+
+def era_character_aging_tick():
+    """Roll 5d4 once; age every living character by that many sessions.
+    Any character whose age exceeds their elderly_age threshold by more than 2 dies."""
+    character_schema, character_db = get_data_on_category("characters")
+
+    age_increase = sum(random.randint(1, 4) for _ in range(5))
+    result = f"Era Character Aging: all characters age by {age_increase} sessions.\n"
+
+    characters = list(character_db.find().sort("name", ASCENDING))
+
+    for character in characters:
+        if character.get("health_status", "Healthy") == "Dead":
+            continue
+
+        character.update(calculate_all_fields(character, character_schema, "character"))
+        new_character = deepcopy(character)
+
+        new_age = character.get("age", 1) + age_increase
+        new_character["age"] = new_age
+
+        elderly_age = character.get("elderly_age", 3)
+        if new_age > elderly_age + 2:
+            new_character["health_status"] = "Dead"
+            new_character["ruling_nation_org"] = None
+            new_character["region"] = None
+            new_character["player"] = None
+            result += (
+                f"{character.get('name', 'Unknown')} died of old age"
+                f" (age {new_age}, elderly threshold {elderly_age}).\n"
+            )
+
+        change_id = system_request_change(
+            data_type="characters",
+            item_id=character["_id"],
+            change_type="Update",
+            before_data=character,
+            after_data=new_character,
+            reason=f"Era Tick: aged {age_increase} session(s)",
+        )
+        system_approve_change(change_id)
+
+    return result
+
+
 ###########################################################
 # Tick Function Constants
 ###########################################################
@@ -1733,22 +1830,41 @@ NATION_CROSS_TICK_FUNCTIONS = {
     "Market Price Tick": market_price_tick,
 }
 
-ERA_NATION_TICK_FUNCTIONS = {
-    "Nation Tech Cost Reduction Tick (Generally Don't Use)": nation_tech_cost_reduction_tick,
-    "Nation Reset Rolling Karma to Zero (Generally Don't Use)": reset_rolling_karma_to_zero,
-    "Nation Reset All Temperaments (Generally Don't Use)": reset_all_temperaments,
-    "Era Reset Stability to Balanced": era_reset_stability_to_balanced_tick,
-    "Era Compliance Decay to Neutral": era_compliance_decay_tick,
-    "Era Resource Stockpile Decay": era_resource_stockpile_decay_tick,
-    "Era Formal Storage Bonus": era_formal_storage_bonus_tick,
-    "Era AI Resource Grant": era_ai_resource_grant_tick,
-}
-
 ERA_GENERAL_TICK_FUNCTIONS = {
     "Backup Database": None,   # handled directly in era_tick() before nation processing
     "Era Relations Decay to Neutral": era_relations_decay_tick,
     "Era Pop Growth (All Nations)": era_pop_growth_tick,
     "Age Pop Growth (Skip Infertile Races)": age_pop_growth_tick,
+    "Era Artifact Loss": era_artifact_loss_tick,
+    "Era Character Aging": era_character_aging_tick,
+}
+
+ERA_NATION_TICK_FUNCTIONS = {
+    "Era Nation Reset Rolling Karma to Zero": reset_rolling_karma_to_zero,
+    "Era Nation Reset All Temperaments": reset_all_temperaments,
+    "Era Reset Stability to Balanced": era_reset_stability_to_balanced_tick,
+    "Era Compliance Decay to Neutral": era_compliance_decay_tick,
+    "Era Resource Stockpile Decay": era_resource_stockpile_decay_tick,
+    "Era Formal Storage Bonus": era_formal_storage_bonus_tick,
+    "Era AI Resource Grant": era_ai_resource_grant_tick,
+    "Age Nation Tech Cost Reduction Tick": nation_tech_cost_reduction_tick,
+}
+
+
+def era_character_magic_decay_tick(old_character, new_character, schema):
+    if old_character.get("health_status", "Healthy") == "Dead":
+        return ""
+    magic_points = old_character.get("magic_points", 0)
+    if not magic_points:
+        return ""
+    kept_pct = random.uniform(0.4, 0.6)
+    new_character["magic_points"] = round(magic_points * kept_pct)
+    kept_display = round(kept_pct * 100)
+    return f"{old_character.get('name', 'Unknown')} kept ~{kept_display}% of magic stockpile ({magic_points} → {new_character['magic_points']}).\n"
+
+
+ERA_CHARACTER_TICK_FUNCTIONS = {
+    "Era Character Magic Stockpile Decay": era_character_magic_decay_tick,
 }
 
 def era_tick(form_data):
@@ -1787,6 +1903,37 @@ def era_tick(form_data):
                 before_data=old_nations[i],
                 after_data=new_nations[i],
                 reason="Era Tick Update for " + old_nations[i]["name"],
+            )
+            system_approve_change(change_id)
+
+    collect_character_data = any(
+        f"run_{label}" in form_data for label in ERA_CHARACTER_TICK_FUNCTIONS
+    )
+
+    if collect_character_data:
+        character_schema, character_db = get_data_on_category("characters")
+        old_characters = list(character_db.find().sort("name", ASCENDING))
+        new_characters = []
+        for character in old_characters:
+            if character:
+                character.update(calculate_all_fields(character, character_schema, "character"))
+                new_characters.append(deepcopy(character))
+
+        for label, fn in ERA_CHARACTER_TICK_FUNCTIONS.items():
+            if f"run_{label}" in form_data:
+                print(label)
+                for i in range(len(old_characters)):
+                    result = fn(old_characters[i], new_characters[i], character_schema)
+                    full_tick_summary += result
+
+        for i in range(len(old_characters)):
+            change_id = system_request_change(
+                data_type="characters",
+                item_id=old_characters[i]["_id"],
+                change_type="Update",
+                before_data=old_characters[i],
+                after_data=new_characters[i],
+                reason="Era Tick Update for " + old_characters[i].get("name", str(old_characters[i]["_id"])),
             )
             system_approve_change(change_id)
 
