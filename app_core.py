@@ -542,130 +542,89 @@ def restore_mongodb(backup_path=None, backup_date=None, s3_key=None, s3_bucket=N
         if not os.path.exists(backup_path):
             return False, f"Backup file not found: {backup_path}"
         
-        # Create a temporary directory for extraction
-        import tempfile
-        temp_dir = tempfile.mkdtemp()
-        
-        # Extract the zip file
-        import zipfile
-        with zipfile.ZipFile(backup_path, 'r') as zip_ref:
-            zip_ref.extractall(temp_dir)
-        
         # Get MongoDB connection details
         mongo_uri = os.getenv("MONGO_URI", "")
-        
-        # Properly extract database name from URI without query parameters
         from urllib.parse import urlparse
-        
-        # Parse the MongoDB URI
         parsed_uri = urlparse(mongo_uri)
-        
-        # Extract just the database name (path without leading slash)
         db_name = parsed_uri.path.lstrip('/')
-        
-        # If there's a question mark in the db_name, only take what's before it
         if '?' in db_name:
             db_name = db_name.split('?')[0]
-        
-        # Use PyMongo to restore
+
         from pymongo import MongoClient
         import json
-        from bson import json_util, ObjectId
-        
+        import io
+        import zipfile
+        from bson import ObjectId
+
         client = MongoClient(mongo_uri)
         db = client[db_name]
-        
-        # Find the extracted db directory
-        db_dir = os.path.join(temp_dir, db_name)
-        if not os.path.exists(db_dir):
-            # Try to find any directory that might contain the backup
-            for root, dirs, files in os.walk(temp_dir):
-                if any(f.endswith('.json') for f in files):
-                    db_dir = root
-                    break
-        
-        if not os.path.exists(db_dir):
-            return False, f"Could not find database directory in the backup"
-        
-        # Get all JSON files (collections)
-        collection_files = [f for f in os.listdir(db_dir) if f.endswith('.json')]
 
-        def iter_json_array(file_path, chunk_size=1024 * 1024):
-            """Yield JSON objects from a file that contains a single top-level JSON array.
-            Avoids loading the entire file into memory.
-            """
+        def iter_json_array_from_fileobj(f, chunk_size=1024 * 1024):
+            """Yield JSON objects from a file-like object containing a single JSON array."""
             decoder = json.JSONDecoder()
-            with open(file_path, 'r', encoding='utf-8') as f:
-                buf = ''
-                pos = 0
-                in_array = False
-                eof = False
+            buf = ''
+            pos = 0
+            in_array = False
+            eof = False
 
-                def ensure(n=1):
-                    nonlocal buf, pos, eof
-                    while len(buf) - pos < n and not eof:
-                        chunk = f.read(chunk_size)
-                        if chunk == '':
-                            eof = True
-                            break
-                        buf += chunk
+            def ensure(n=1):
+                nonlocal buf, pos, eof
+                while len(buf) - pos < n and not eof:
+                    chunk = f.read(chunk_size)
+                    if chunk == '':
+                        eof = True
+                        break
+                    buf += chunk
 
-                # Skip whitespace until '['
+            while True:
+                ensure(1)
+                if pos >= len(buf):
+                    break
+                c = buf[pos]
+                if c.isspace():
+                    pos += 1
+                    continue
+                if c == '[':
+                    in_array = True
+                    pos += 1
+                break
+
+            if not in_array:
+                return
+
+            while True:
                 while True:
                     ensure(1)
                     if pos >= len(buf):
                         break
                     c = buf[pos]
-                    if c.isspace():
+                    if c.isspace() or c == ',':
                         pos += 1
                         continue
-                    if c == '[':
-                        in_array = True
-                        pos += 1
                     break
 
-                if not in_array:
-                    return
+                ensure(1)
+                if pos >= len(buf):
+                    break
+                if buf[pos] == ']':
+                    pos += 1
+                    break
 
                 while True:
-                    # Skip whitespace and commas
-                    while True:
-                        ensure(1)
-                        if pos >= len(buf):
-                            break
-                        c = buf[pos]
-                        if c.isspace() or c == ',':
-                            pos += 1
-                            continue
+                    try:
+                        obj, end = decoder.raw_decode(buf, pos)
+                        yield obj
+                        pos = end
+                        if pos > 1024 * 1024:
+                            buf = buf[pos:]
+                            pos = 0
                         break
-
-                    ensure(1)
-                    if pos >= len(buf):
-                        break
-                    if buf[pos] == ']':
-                        # End of array
-                        pos += 1
-                        break
-
-                    # Try to decode an object from the current position; read more if needed
-                    while True:
-                        try:
-                            obj, end = decoder.raw_decode(buf, pos)
-                            yield obj
-                            pos = end
-                            # compact buffer occasionally
-                            if pos > 1024 * 1024:
-                                buf = buf[pos:]
-                                pos = 0
-                            break
-                        except json.JSONDecodeError:
-                            if eof:
-                                # Can't decode and no more data
-                                raise
-                            ensure(chunk_size)
+                    except json.JSONDecodeError:
+                        if eof:
+                            raise
+                        ensure(chunk_size)
 
         def restore_objectids(obj):
-            """Recursively convert 24-char hex strings back to ObjectId throughout a document."""
             if isinstance(obj, dict):
                 return {k: restore_objectids(v) for k, v in obj.items()}
             elif isinstance(obj, list):
@@ -677,41 +636,59 @@ def restore_mongodb(backup_path=None, backup_date=None, s3_key=None, s3_bucket=N
                     return obj
             return obj
 
-        # Remap old backup collection names to current collection names.
         COLLECTION_RESTORE_RENAME = {
             "map_tiles": "hex_map_tiles",
         }
 
-        for collection_file in collection_files:
-            file_collection_name = collection_file.replace('.json', '')
-            collection_name = COLLECTION_RESTORE_RENAME.get(file_collection_name, file_collection_name)
+        # Stream directly from the zip — no disk extraction, avoiding ephemeral storage exhaustion.
+        results = []
+        with zipfile.ZipFile(backup_path, 'r') as zip_ref:
+            json_members = [m for m in zip_ref.namelist() if m.endswith('.json')]
 
-            # Drop both the target name and the old name to avoid stale collections.
-            existing = db.list_collection_names()
-            for name_to_drop in {collection_name, file_collection_name}:
-                if name_to_drop in existing:
-                    db[name_to_drop].drop()
+            if not json_members:
+                return False, "No collection files found in backup"
 
-            file_path = os.path.join(db_dir, collection_file)
-            batch = []
-            batch_size = 1000
+            for member_path in json_members:
+                basename = member_path.replace('\\', '/').split('/')[-1]
+                file_collection_name = basename.replace('.json', '')
+                collection_name = COLLECTION_RESTORE_RENAME.get(file_collection_name, file_collection_name)
 
-            for doc in iter_json_array(file_path):
-                doc = restore_objectids(doc)
-                batch.append(doc)
-                if len(batch) >= batch_size:
-                    db[collection_name].insert_many(batch, ordered=False)
-                    batch.clear()
+                try:
+                    existing = db.list_collection_names()
+                    for name_to_drop in {collection_name, file_collection_name}:
+                        if name_to_drop in existing:
+                            db[name_to_drop].drop()
 
-            if batch:
-                db[collection_name].insert_many(batch, ordered=False)
-        
-        # Clean up
-        import shutil
-        shutil.rmtree(temp_dir)
-        
-        return True, f"Database restored successfully from {backup_path}"
-    
+                    count = 0
+                    batch = []
+                    batch_size = 200
+
+                    with zip_ref.open(member_path) as zip_entry:
+                        text_stream = io.TextIOWrapper(zip_entry, encoding='utf-8')
+                        try:
+                            for doc in iter_json_array_from_fileobj(text_stream):
+                                doc = restore_objectids(doc)
+                                batch.append(doc)
+                                count += 1
+                                if len(batch) >= batch_size:
+                                    db[collection_name].insert_many(batch, ordered=False)
+                                    batch.clear()
+                        except json.JSONDecodeError as parse_err:
+                            print(f"  RESTORE parse error in {collection_name} at doc {count}: {parse_err}")
+
+                        if batch:
+                            db[collection_name].insert_many(batch, ordered=False)
+
+                    print(f"  RESTORE {collection_name}: {count} documents")
+                    results.append(f"{collection_name}({count})")
+
+                except Exception as collection_err:
+                    print(f"  RESTORE ERROR {collection_name}: {collection_err}")
+                    results.append(f"{collection_name}(FAILED: {collection_err})")
+
+        summary = ", ".join(results)
+        return True, f"Database restored from {backup_path}. Collections: {summary}"
+
     except Exception as e:
         return False, f"Restore failed: {str(e)}"
 
