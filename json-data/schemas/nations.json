@@ -133,6 +133,16 @@
         ],
         "queryTargetAttribute": "ruling_nation_org"
       },
+      "players": {
+        "bsonType": "array",
+        "label": "Direct Players",
+        "description": "Players directly attributed to this nation, granting visibility and ownership without a ruling character",
+        "hidden": true,
+        "items": {
+          "bsonType": "string"
+        },
+        "default": []
+      },
       "ruler_artifact_slots": {
         "bsonType": "number",
         "label": "Ruler Artifact Slots",

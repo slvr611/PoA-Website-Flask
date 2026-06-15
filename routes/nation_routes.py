@@ -153,11 +153,15 @@ def nation_item(item_ref):
     if g.user:
         user = mongo.db.players.find_one({"id": g.user.get("id")})
         if user:
-            user_characters = list(mongo.db.characters.find({"player": str(user["_id"])}))
-            for character in user_characters:
-                if str(character.get("ruling_nation_org", "")) == str(nation["_id"]):
-                    user_is_owner = True
-                    break
+            user_id_str = str(user["_id"])
+            if user_id_str in nation.get("players", []):
+                user_is_owner = True
+            else:
+                user_characters = list(mongo.db.characters.find({"player": user_id_str}))
+                for character in user_characters:
+                    if str(character.get("ruling_nation_org", "")) == str(nation["_id"]):
+                        user_is_owner = True
+                        break
     timings["ownership_check_ms"] = round((perf_counter() - phase_start) * 1000, 2)
     
     if not isinstance(nation.get("jobs"), dict):

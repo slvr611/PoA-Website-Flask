@@ -453,6 +453,81 @@ def tick_session_number(old_target, new_target, schema):
 # Character Tick Functions
 ###########################################################
 
+RULER_TYPE_STATS = {
+    "Steward":          {"strength": "rulership", "weakness": "magic"},
+    "Religious Leader": {"strength": "cunning",   "weakness": "strategy"},
+    "Populist":         {"strength": "charisma",  "weakness": "prowess"},
+    "Conqueror":        {"strength": "prowess",   "weakness": "charisma"},
+    "Archmage":         {"strength": "magic",     "weakness": "rulership"},
+    "General":          {"strength": "strategy",  "weakness": "cunning"},
+}
+
+_RULER_TYPES = list(RULER_TYPE_STATS.keys())
+
+
+def generate_ai_character(org, org_schema, character_schema):
+    """Create and insert an AI ruler for the given nation/org. Returns a log string."""
+    character_type = random.choice(_RULER_TYPES)
+    req_strength = RULER_TYPE_STATS[character_type]["strength"]
+    req_weakness = RULER_TYPE_STATS[character_type]["weakness"]
+
+    remaining = [s for s in character_stats if s not in (req_strength, req_weakness)]
+    rand_strength = random.choice(remaining)
+    remaining_for_weakness = [s for s in remaining if s != rand_strength]
+    rand_weakness = random.choice(remaining_for_weakness)
+
+    strengths = [req_strength, rand_strength]
+    weaknesses = [req_weakness, rand_weakness]
+
+    modifiers = []
+    for s in strengths:
+        modifiers.append({"field": s, "value": random.randint(2, 4), "duration": -1, "source": "Strength"})
+    for w in weaknesses:
+        modifiers.append({"field": w, "value": random.randint(-4, -2), "duration": -1, "source": "Weakness"})
+
+    org_name = org.get("name", "Unknown")
+    base_name = f"{character_type} of {org_name}"
+    name = base_name
+    counter = 2
+    while mongo.db.characters.find_one({"name": name}):
+        name = f"{base_name} {counter}"
+        counter += 1
+
+    char_doc = {
+        "name": name,
+        "character_type": character_type,
+        "character_subtype": "None",
+        "health_status": "Healthy",
+        "age_status": "Adult",
+        "age": 1,
+        "strengths": strengths,
+        "weaknesses": weaknesses,
+        "modifiers": modifiers,
+        "player": None,
+        "creator": None,
+        "ruling_nation_org": str(org["_id"]),
+        "region": str(org["region"]) if org.get("region") else None,
+        "race": str(org["primary_race"]) if org.get("primary_race") else None,
+        "culture": str(org["primary_culture"]) if org.get("primary_culture") else None,
+        "religion": str(org["primary_religion"]) if org.get("primary_religion") else None,
+        "random_stats": 0,
+        "positive_titles": [],
+        "negative_titles": [],
+        "magic_points": 0,
+    }
+
+    change_id = system_request_change(
+        data_type="characters",
+        item_id=None,
+        change_type="Add",
+        before_data={},
+        after_data=char_doc,
+        reason=f"Auto-generated AI ruler for {org_name}",
+    )
+    system_approve_change(change_id)
+    return f"Generated AI ruler '{name}' ({character_type}) for {org_name}.\n"
+
+
 def character_death_tick(old_character, new_character, schema):
     result = ""
     if new_character.get("health_status", "Healthy") == "Dead":
@@ -516,7 +591,10 @@ def character_death_tick(old_character, new_character, schema):
                     reason="Death of " + old_character.get('name', 'Unknown') + " has caused an update for " + old_nation.get('name', 'Unknown')
                 )
                 system_approve_change(change_id)
-    
+
+                if not old_character.get("player") and not old_nation.get("players"):
+                    result += generate_ai_character(old_nation, nation_schema, schema)
+
     return result
 
 def character_heal_tick(old_character, new_character, schema):
@@ -1830,6 +1908,32 @@ NATION_CROSS_TICK_FUNCTIONS = {
     "Market Price Tick": market_price_tick,
 }
 
+def generate_all_ai_rulers_tick():
+    """Generate AI rulers for all nations and mercenary companies without a living ruler or direct players."""
+    result = ""
+    character_schema, _ = get_data_on_category("characters")
+
+    living_ruler_org_ids = {
+        str(c["ruling_nation_org"])
+        for c in mongo.db.characters.find(
+            {"ruling_nation_org": {"$ne": None}, "health_status": {"$ne": "Dead"}},
+            {"ruling_nation_org": 1},
+        )
+        if c.get("ruling_nation_org")
+    }
+
+    for collection_name in ("nations", "mercenaries"):
+        try:
+            org_schema, org_db = get_data_on_category(collection_name)
+        except Exception:
+            continue
+        for org in org_db.find():
+            if str(org["_id"]) not in living_ruler_org_ids and not org.get("players"):
+                result += generate_ai_character(org, org_schema, character_schema)
+
+    return result
+
+
 ERA_GENERAL_TICK_FUNCTIONS = {
     "Backup Database": None,   # handled directly in era_tick() before nation processing
     "Era Relations Decay to Neutral": era_relations_decay_tick,
@@ -1837,6 +1941,7 @@ ERA_GENERAL_TICK_FUNCTIONS = {
     "Age Pop Growth (Skip Infertile Races)": age_pop_growth_tick,
     "Era Artifact Loss": era_artifact_loss_tick,
     "Era Character Aging": era_character_aging_tick,
+    "Era Generate AI Rulers": generate_all_ai_rulers_tick,
 }
 
 ERA_NATION_TICK_FUNCTIONS = {
@@ -1866,6 +1971,7 @@ def era_character_magic_decay_tick(old_character, new_character, schema):
 ERA_CHARACTER_TICK_FUNCTIONS = {
     "Era Character Magic Stockpile Decay": era_character_magic_decay_tick,
 }
+
 
 def era_tick(form_data):
     full_tick_summary = ""

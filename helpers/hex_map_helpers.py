@@ -91,8 +91,20 @@ def axial_neighbors(q, r):
     return [(q + dq, r + dr) for dq, dr in AXIAL_DIRECTIONS]
 
 
+def _coerce_tile(tile):
+    """Recursively convert any ObjectId values to strings so tiles are always JSON-safe."""
+    from bson import ObjectId
+    if isinstance(tile, dict):
+        return {k: _coerce_tile(v) for k, v in tile.items()}
+    if isinstance(tile, list):
+        return [_coerce_tile(v) for v in tile]
+    if isinstance(tile, ObjectId):
+        return str(tile)
+    return tile
+
+
 def get_all_tiles():
-    return list(mongo.db.hex_map_tiles.find({}, {"_id": 0}))
+    return [_coerce_tile(t) for t in mongo.db.hex_map_tiles.find({}, {"_id": 0})]
 
 
 def get_session_tiles(session_num):

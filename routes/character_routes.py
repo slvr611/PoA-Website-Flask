@@ -6,18 +6,10 @@ from helpers.form_helpers import validate_form_with_jsonschema
 from calculations.field_calculations import calculate_all_fields
 from app_core import category_data, mongo, json_data, character_stats
 from helpers.auth_helpers import admin_required
+from helpers.tick_helpers import RULER_TYPE_STATS
 from pymongo import ASCENDING
 from forms import form_generator
 import random
-
-RULER_TYPE_STATS = {
-    "Steward":          {"strength": "rulership", "weakness": "magic"},
-    "Religious Leader": {"strength": "cunning",   "weakness": "strategy"},
-    "Populist":         {"strength": "charisma",  "weakness": "prowess"},
-    "Conqueror":        {"strength": "prowess",   "weakness": "charisma"},
-    "Archmage":         {"strength": "magic",     "weakness": "rulership"},
-    "General":          {"strength": "strategy",  "weakness": "cunning"},
-}
 
 def validate_character_strengths_weaknesses(form_data):
     """Returns an error string or None if valid."""
@@ -102,6 +94,8 @@ def new_character():
     form = form_generator.get_form("new_character", schema)
     form.populate_linked_fields(schema, dropdown_options)
 
+    predecessor_characters = list(db.find({}).sort("name", ASCENDING))
+
     return render_template(
         "new_character.html",
         form=form,
@@ -110,7 +104,8 @@ def new_character():
         dropdown_options=dropdown_options,
         general_resources=json_data["general_resources"],
         unique_resources=json_data["unique_resources"],
-        entity_source_type="character"
+        entity_source_type="character",
+        predecessor_characters=predecessor_characters,
     )
 
 @character_routes.route("/characters/new/request", methods=["POST"])
@@ -184,13 +179,18 @@ def new_character_request():
 
     form_data["magic_points"] = min(calculated_character["magic_point_capacity"], calculated_character["magic_point_income"])
 
+    predecessor_id = request.form.get("predecessor_id", "").strip()
+    reason = form_data.pop("reason", "No Reason Given")
+    if predecessor_id:
+        reason += f" [Successor to character ID: {predecessor_id}]"
+
     change_id = request_change(
         data_type="characters",
         item_id=None,
         change_type="Add",
         before_data={},
         after_data=form_data,
-        reason=form_data.pop("reason", "No Reason Given")
+        reason=reason,
     )
 
     flash(f"Change request #{change_id} created and awaits admin approval.")
@@ -263,15 +263,26 @@ def new_character_approve():
 
     form_data["magic_points"] = min(form_data.get("magic_point_capacity", 0), form_data.get("magic_point_income", 0))
 
+    predecessor_id = request.form.get("predecessor_id", "").strip()
+
     change_id = request_change(
         data_type="characters",
         item_id=None,
         change_type="Add",
         before_data={},
         after_data=form_data,
-        reason=form_data.pop("reason", "No Reason Given")
+        reason=form_data.pop("reason", "No Reason Given"),
     )
-    
+
     approve_change(change_id)
+
+    if predecessor_id:
+        new_char = db.find_one({"name": form_data["name"]})
+        if new_char:
+            mongo.db.artifacts.update_many(
+                {"owner": predecessor_id},
+                {"$set": {"owner": str(new_char["_id"])}}
+            )
+
     flash(f"Change request #{change_id} created and approved.")
     return redirect("/characters/item/" + form_data["name"])

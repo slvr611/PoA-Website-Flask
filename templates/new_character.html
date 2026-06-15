@@ -47,6 +47,18 @@
 				</tr>
 			{% endfor %}
 			<tr>
+				<th><label for="predecessor_id">Predecessor (optional)</label></th>
+				<td>
+					<select name="predecessor_id" id="predecessor_id" class="form-control">
+						<option value="">-- None --</option>
+						{% for char in predecessor_characters %}
+							<option value="{{ char._id }}">{{ char.name }}{% if char.health_status == "Dead" %} (Dead){% endif %}</option>
+						{% endfor %}
+					</select>
+					<small class="form-text text-muted">If selected, all artifacts owned by this character will be transferred to the new character upon creation.</small>
+				</td>
+			</tr>
+			<tr>
 				<th><label for="{{ form.reason.id }}">{{ form.reason.label.text }}</label></th>
 				<td>{{ form.reason(class="form-control") }}</td>
 			</tr>

@@ -66,30 +66,36 @@ def collect_visibility_modifiers(nation: dict) -> list:
     return result
 
 
+_NATION_PROJECTION = {"_id": 1, "region": 1, "overlord": 1, "name": 1, "visibility_modifiers": 1}
+
+
 def get_viewer_nation(g_user) -> dict | None:
     """
     Return the minimal nation document for the logged-in user's ruling nation,
-    or None if they have no ruling nation.
+    or None if they have no nation access. Checks ruling character first, then
+    direct player attribution via nation.players.
     """
     if not g_user:
         return None
     player = mongo.db.players.find_one({"id": g_user.get("id")}, {"_id": 1})
     if not player:
         return None
+    player_id_str = str(player["_id"])
+
     character = mongo.db.characters.find_one(
-        {"player": str(player["_id"]), "ruling_nation_org": {"$exists": True, "$ne": None}},
+        {"player": player_id_str, "ruling_nation_org": {"$exists": True, "$ne": None}},
         {"ruling_nation_org": 1}
     )
-    if not character or not character.get("ruling_nation_org"):
-        return None
-    try:
-        nation_id = ObjectId(str(character["ruling_nation_org"]))
-    except Exception:
-        return None
-    return mongo.db.nations.find_one(
-        {"_id": nation_id},
-        {"_id": 1, "region": 1, "overlord": 1, "name": 1, "visibility_modifiers": 1}
-    )
+    if character and character.get("ruling_nation_org"):
+        try:
+            nation_id = ObjectId(str(character["ruling_nation_org"]))
+            nation = mongo.db.nations.find_one({"_id": nation_id}, _NATION_PROJECTION)
+            if nation:
+                return nation
+        except Exception:
+            pass
+
+    return mongo.db.nations.find_one({"players": player_id_str}, _NATION_PROJECTION)
 
 
 def compute_all_visibilities(viewer_nation: dict) -> dict:

@@ -676,12 +676,20 @@ def restore_mongodb(backup_path=None, backup_date=None, s3_key=None, s3_bucket=N
                     return obj
             return obj
 
-        for collection_file in collection_files:
-            collection_name = collection_file.replace('.json', '')
+        # Remap old backup collection names to current collection names.
+        COLLECTION_RESTORE_RENAME = {
+            "map_tiles": "hex_map_tiles",
+        }
 
-            # Drop the existing collection to avoid duplicates
-            if collection_name in db.list_collection_names():
-                db[collection_name].drop()
+        for collection_file in collection_files:
+            file_collection_name = collection_file.replace('.json', '')
+            collection_name = COLLECTION_RESTORE_RENAME.get(file_collection_name, file_collection_name)
+
+            # Drop both the target name and the old name to avoid stale collections.
+            existing = db.list_collection_names()
+            for name_to_drop in {collection_name, file_collection_name}:
+                if name_to_drop in existing:
+                    db[name_to_drop].drop()
 
             file_path = os.path.join(db_dir, collection_file)
             batch = []
