@@ -71,10 +71,16 @@ def get_linked_objects(schema, item, preview_items=None, exclude_fields=None):
                 elif attributes.get("queryTargetAttribute"):
                     query_target = attributes["queryTargetAttribute"]
                     item_id = str(item["_id"])
+                    # Match both string and ObjectId forms — restore_objectids can convert
+                    # string owner references to ObjectId, so we accept either.
+                    try:
+                        find_query = {query_target: {"$in": [item_id, ObjectId(item_id)]}}
+                    except Exception:
+                        find_query = {query_target: item_id}
 
                     related_items = []
                     for related_collection in related_collections:
-                        items = mongo.db[related_collection].find({query_target: item_id}, query_dict)
+                        items = mongo.db[related_collection].find(find_query, query_dict)
                         if attributes.get("sort_by"):
                             sort_by = attributes["sort_by"]
                             if isinstance(sort_by, list):

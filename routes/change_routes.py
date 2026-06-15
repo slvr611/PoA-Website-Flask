@@ -160,10 +160,11 @@ def archived_change_list(page=1):
     
     # Get paginated results
     skip = (page - 1) * items_per_page
-    archived_changes = list(db.find({"status": {"$ne": "Pending"}}, query_dict)
-                           .sort([("last_modified_time", DESCENDING), ("time_requested", DESCENDING)])
-                           .allow_disk_use(True)
-                           .skip(skip).limit(items_per_page))
+    archived_changes = list(
+        db.find({"status": {"$ne": "Pending"}}, query_dict, allow_disk_use=True)
+        .sort([("last_modified_time", DESCENDING), ("time_requested", DESCENDING)])
+        .skip(skip).limit(items_per_page)
+    )
 
     # Add all collection types that appear in changes
     for change in archived_changes:
@@ -426,12 +427,14 @@ def data_type_archived_changes(data_type, page=1):
     
     # Get paginated results - filter by data_type
     skip = (page - 1) * items_per_page
-    archived_changes = list(db.find(
-        {"status": {"$ne": "Pending"}, "target_collection": data_type},
-        query_dict
-    ).sort([("last_modified_time", DESCENDING), ("time_requested", DESCENDING)])
-     .allow_disk_use(True)
-     .skip(skip).limit(items_per_page))
+    archived_changes = list(
+        db.find(
+            {"status": {"$ne": "Pending"}, "target_collection": data_type},
+            query_dict,
+            allow_disk_use=True,
+        ).sort([("last_modified_time", DESCENDING), ("time_requested", DESCENDING)])
+         .skip(skip).limit(items_per_page)
+    )
 
     # Add the data_type to collections_to_preview
     collections_to_preview[data_type] = data_type
@@ -498,24 +501,27 @@ def item_pending_changes(data_type, item_ref, page=1):
             for collection_name in collection_names:
                 collections_to_preview[preview_item] = collection_name
 
+    # Accept both ObjectId and string forms — restore may leave target as either.
+    target_query = {"$in": [item_id, str(item_id)]}
+
     # Count total documents for pagination - filter by data_type and item_id
     pending_count = db.count_documents({
-        "status": "Pending", 
+        "status": "Pending",
         "target_collection": data_type,
-        "target": item_id
+        "target": target_query
     })
-    
+
     # Calculate pagination
     total_pages = (pending_count + items_per_page - 1) // items_per_page
-    
+
     # Get paginated results - filter by data_type and item_id
     skip = (page - 1) * items_per_page
     pending_changes = list(db.find(
         {
-            "status": "Pending", 
+            "status": "Pending",
             "target_collection": data_type,
-            "target": item_id
-        }, 
+            "target": target_query
+        },
         query_dict
     ).sort([("last_modified_time", ASCENDING), ("time_requested", ASCENDING)])
      .skip(skip).limit(items_per_page))
@@ -588,24 +594,27 @@ def item_archived_changes(data_type, item_ref, page=1):
             for collection_name in collection_names:
                 collections_to_preview[preview_item] = collection_name
 
+    # Accept both ObjectId and string forms — restore may leave target as either.
+    target_query = {"$in": [item_id, str(item_id)]}
+
     # Count total documents for pagination - filter by data_type and item_id
     archived_count = db.count_documents({
-        "status": {"$ne": "Pending"}, 
+        "status": {"$ne": "Pending"},
         "target_collection": data_type,
-        "target": item_id
+        "target": target_query
     })
-    
+
     # Calculate pagination
     total_pages = (archived_count + items_per_page - 1) // items_per_page
-    
+
     # Get paginated results - filter by data_type and item_id
     skip = (page - 1) * items_per_page
     archived_changes = list(db.find(
         {
-            "status": {"$ne": "Pending"}, 
+            "status": {"$ne": "Pending"},
             "target_collection": data_type,
-            "target": item_id
-        }, 
+            "target": target_query
+        },
         query_dict
     ).sort([("last_modified_time", DESCENDING), ("time_requested", DESCENDING)])
      .skip(skip).limit(items_per_page))

@@ -552,15 +552,16 @@ def restore_mongodb(backup_path=None, backup_date=None, s3_key=None, s3_bucket=N
 
         from pymongo import MongoClient
         import json
-        import io
         import zipfile
         from bson import ObjectId
 
         client = MongoClient(mongo_uri)
         db = client[db_name]
 
-        def iter_json_array_from_fileobj(f, chunk_size=1024 * 1024):
-            """Yield JSON objects from a file-like object containing a single JSON array."""
+        def iter_json_array_from_binary(binary_file, chunk_size=4 * 1024 * 1024):
+            """Yield JSON objects from a binary file-like object (e.g. ZipExtFile).
+            Reads binary chunks and decodes to UTF-8 directly, avoiding TextIOWrapper overhead.
+            """
             decoder = json.JSONDecoder()
             buf = ''
             pos = 0
@@ -570,11 +571,11 @@ def restore_mongodb(backup_path=None, backup_date=None, s3_key=None, s3_bucket=N
             def ensure(n=1):
                 nonlocal buf, pos, eof
                 while len(buf) - pos < n and not eof:
-                    chunk = f.read(chunk_size)
-                    if chunk == '':
+                    raw = binary_file.read(chunk_size)
+                    if not raw:
                         eof = True
                         break
-                    buf += chunk
+                    buf += raw.decode('utf-8', errors='replace')
 
             while True:
                 ensure(1)
@@ -615,7 +616,7 @@ def restore_mongodb(backup_path=None, backup_date=None, s3_key=None, s3_bucket=N
                         obj, end = decoder.raw_decode(buf, pos)
                         yield obj
                         pos = end
-                        if pos > 1024 * 1024:
+                        if pos > 4 * 1024 * 1024:
                             buf = buf[pos:]
                             pos = 0
                         break
@@ -624,17 +625,46 @@ def restore_mongodb(backup_path=None, backup_date=None, s3_key=None, s3_bucket=N
                             raise
                         ensure(chunk_size)
 
-        def restore_objectids(obj):
+        def restore_objectids(obj, _parent_key=None):
+            # Only convert to ObjectId when the containing key is '_id' or ends with
+            # '_id'.  Fields like 'owner' and 'creator' store character IDs as plain
+            # strings and must remain strings so that string-based queries still match.
             if isinstance(obj, dict):
-                return {k: restore_objectids(v) for k, v in obj.items()}
+                return {k: restore_objectids(v, _parent_key=k) for k, v in obj.items()}
             elif isinstance(obj, list):
-                return [restore_objectids(item) for item in obj]
-            elif isinstance(obj, str) and len(obj) == 24:
+                return [restore_objectids(item, _parent_key=_parent_key) for item in obj]
+            elif (
+                isinstance(obj, str)
+                and len(obj) == 24
+                and _parent_key is not None
+                and (_parent_key == '_id' or _parent_key.endswith('_id'))
+            ):
                 try:
                     return ObjectId(obj)
                 except Exception:
                     return obj
             return obj
+
+        # Only convert top-level _id and known reference fields for collections that
+        # store large nested blobs (before_data/after_data).  Recursing into those
+        # blobs on 21 000+ documents is extremely slow and converts strings that should
+        # remain as strings.
+        # "target" stores the ObjectId of the item being changed (not a string reference).
+        _SHALLOW_ID_FIELDS = {"_id", "target_id", "target", "requester", "approver"}
+        _SHALLOW_ONLY_COLLECTIONS = {"changes"}
+
+        def restore_top_ids_only(doc):
+            if not isinstance(doc, dict):
+                return doc
+            result = dict(doc)
+            for field in _SHALLOW_ID_FIELDS:
+                val = result.get(field)
+                if isinstance(val, str) and len(val) == 24:
+                    try:
+                        result[field] = ObjectId(val)
+                    except Exception:
+                        pass
+            return result
 
         COLLECTION_RESTORE_RENAME = {
             "map_tiles": "hex_map_tiles",
@@ -652,27 +682,32 @@ def restore_mongodb(backup_path=None, backup_date=None, s3_key=None, s3_bucket=N
                 basename = member_path.replace('\\', '/').split('/')[-1]
                 file_collection_name = basename.replace('.json', '')
                 collection_name = COLLECTION_RESTORE_RENAME.get(file_collection_name, file_collection_name)
+                converter = restore_top_ids_only if collection_name in _SHALLOW_ONLY_COLLECTIONS else restore_objectids
 
                 try:
                     existing = db.list_collection_names()
                     for name_to_drop in {collection_name, file_collection_name}:
                         if name_to_drop in existing:
+                            print(f"  Dropping {name_to_drop}...")
                             db[name_to_drop].drop()
 
+                    print(f"  Restoring {collection_name}...")
                     count = 0
                     batch = []
-                    batch_size = 200
+                    # Larger batches for large collections to reduce network round-trips.
+                    batch_size = 500 if collection_name in _SHALLOW_ONLY_COLLECTIONS else 200
 
                     with zip_ref.open(member_path) as zip_entry:
-                        text_stream = io.TextIOWrapper(zip_entry, encoding='utf-8')
                         try:
-                            for doc in iter_json_array_from_fileobj(text_stream):
-                                doc = restore_objectids(doc)
+                            for doc in iter_json_array_from_binary(zip_entry):
+                                doc = converter(doc)
                                 batch.append(doc)
                                 count += 1
                                 if len(batch) >= batch_size:
                                     db[collection_name].insert_many(batch, ordered=False)
                                     batch.clear()
+                                if count % 2000 == 0:
+                                    print(f"  RESTORE {collection_name}: {count} documents so far...")
                         except json.JSONDecodeError as parse_err:
                             print(f"  RESTORE parse error in {collection_name} at doc {count}: {parse_err}")
 
