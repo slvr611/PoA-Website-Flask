@@ -162,6 +162,7 @@ def archived_change_list(page=1):
     skip = (page - 1) * items_per_page
     archived_changes = list(db.find({"status": {"$ne": "Pending"}}, query_dict)
                            .sort([("last_modified_time", DESCENDING), ("time_requested", DESCENDING)])
+                           .allow_disk_use(True)
                            .skip(skip).limit(items_per_page))
 
     # Add all collection types that appear in changes
@@ -426,9 +427,10 @@ def data_type_archived_changes(data_type, page=1):
     # Get paginated results - filter by data_type
     skip = (page - 1) * items_per_page
     archived_changes = list(db.find(
-        {"status": {"$ne": "Pending"}, "target_collection": data_type}, 
+        {"status": {"$ne": "Pending"}, "target_collection": data_type},
         query_dict
     ).sort([("last_modified_time", DESCENDING), ("time_requested", DESCENDING)])
+     .allow_disk_use(True)
      .skip(skip).limit(items_per_page))
 
     # Add the data_type to collections_to_preview

@@ -16,7 +16,7 @@ from email.utils import formatdate
 from email import encoders
 import boto3
 from threading import Thread
-from pymongo import ASCENDING
+from pymongo import ASCENDING, DESCENDING
 
 load_dotenv(override=True)
 
@@ -100,6 +100,7 @@ def ensure_mongo_indexes():
         "hex_map_history": [[("session", ASCENDING)]],
         "district_defs":       [[("key", ASCENDING)], [("category", ASCENDING), ("tier", ASCENDING)]],
         "district_categories": [[("key", ASCENDING)]],
+        "changes": [[("last_modified_time", DESCENDING), ("time_requested", DESCENDING)]],
     }
 
     for collection_name, specs in index_specs.items():
@@ -713,3 +714,28 @@ def restore_mongodb(backup_path=None, backup_date=None, s3_key=None, s3_bucket=N
     
     except Exception as e:
         return False, f"Restore failed: {str(e)}"
+
+def restore_mongodb_async(backup_path=None, backup_date=None, s3_key=None, s3_bucket=None):
+    """
+    Starts a MongoDB restore in a background thread so the web request returns immediately.
+    After restore completes, re-creates indexes so sort queries work without disk-use errors.
+    """
+    try:
+        def _run_restore_and_log():
+            success, message = restore_mongodb(
+                backup_path=backup_path,
+                backup_date=backup_date,
+                s3_key=s3_key,
+                s3_bucket=s3_bucket,
+            )
+            if success:
+                ensure_mongo_indexes()
+            status = "success" if success else "failure"
+            print(f"Restore completed with {status}: {message}")
+
+        thread = Thread(target=_run_restore_and_log)
+        thread.daemon = True
+        thread.start()
+        return True, "Restore process started in background. Check server logs for completion status."
+    except Exception as e:
+        return False, f"Failed to start restore thread: {str(e)}"

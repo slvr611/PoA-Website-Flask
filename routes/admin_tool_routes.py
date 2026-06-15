@@ -4,7 +4,7 @@ from helpers.data_helpers import get_data_on_category
 from helpers.admin_tool_helpers import grow_all_population_async, roll_events_async, recalculate_all_items_async
 from app_core import category_data, mongo, json_data, temperament_enum
 from pymongo import ASCENDING
-from app_core import restore_mongodb
+from app_core import restore_mongodb_async
 from forms import form_generator
 from io import BytesIO
 from copy import deepcopy
@@ -197,10 +197,10 @@ def restore_database_route():
         s3_parts = backup_path.replace('s3://', '').split('/')
         s3_bucket = s3_parts[0]
         s3_key = '/'.join(s3_parts[1:])
-        success, message = restore_mongodb(s3_key=s3_key, s3_bucket=s3_bucket)
+        success, message = restore_mongodb_async(s3_key=s3_key, s3_bucket=s3_bucket)
     else:
         # Local backup
-        success, message = restore_mongodb(backup_path=backup_path)
+        success, message = restore_mongodb_async(backup_path=backup_path)
     if success:
         flash(f"Database restored successfully: {message}", "success")
     else:
