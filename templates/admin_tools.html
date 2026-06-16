@@ -147,6 +147,19 @@
 
         <div class="admin-tool-card">
             <div class="admin-tool-card-body">
+                <h3 class="admin-tool-card-title">Revert Warning Banner</h3>
+                <p class="admin-tool-card-desc">Show or hide the sitewide banner warning players not to submit change requests while a revert is imminent.</p>
+                <p class="admin-tool-card-desc" style="color: {% if g.revert_warning %}#f90{% else %}#888{% endif %};">
+                    Status: <strong>{{ 'ENABLED' if g.revert_warning else 'Disabled' }}</strong>
+                </p>
+                <a href="/admin/toggle-revert-warning" class="btn btn-{{ 'warning' if g.revert_warning else 'primary' }} btn-sm">
+                    {{ 'Disable' if g.revert_warning else 'Enable' }} Warning
+                </a>
+            </div>
+        </div>
+
+        <div class="admin-tool-card">
+            <div class="admin-tool-card-body">
                 <h3 class="admin-tool-card-title">Randomize AI Laws</h3>
                 <p class="admin-tool-card-desc">Assign weighted-random laws to all AI nations, with weights driven by cultural traits and a configurable JSON file.</p>
                 <a href="/randomize_ai_laws" class="btn btn-primary btn-sm">Open</a>

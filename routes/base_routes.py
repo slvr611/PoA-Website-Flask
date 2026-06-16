@@ -1,12 +1,32 @@
-from flask import Blueprint, render_template, session, redirect, url_for, g, send_from_directory, after_this_request, request, Response, abort
+from flask import Blueprint, render_template, session, redirect, url_for, g, send_from_directory, after_this_request, request, Response, abort, flash
 from pymongo import ASCENDING
 from app_core import mongo
 import datetime
 import os
+import time as _time_mod
 import boto3
 
 
 base_routes = Blueprint('base_routes', __name__)
+
+# ---------------------------------------------------------------------------
+# Revert-warning banner — process-level cache with 30-second TTL so the DB
+# is not hit on every request, but all dynos converge within half a minute.
+# ---------------------------------------------------------------------------
+_revert_cache: dict = {"active": False, "ts": 0.0}
+_REVERT_CACHE_TTL = 30  # seconds
+
+
+def _get_revert_warning() -> bool:
+    now = _time_mod.time()
+    if now - _revert_cache["ts"] < _REVERT_CACHE_TTL:
+        return _revert_cache["active"]
+    doc = mongo.db.global_modifiers.find_one(
+        {"name": "global_modifiers"}, {"revert_warning": 1, "_id": 0}
+    ) or {}
+    active = bool(doc.get("revert_warning"))
+    _revert_cache.update({"active": active, "ts": now})
+    return active
 
 @base_routes.before_app_request
 def inject_now():
@@ -50,11 +70,34 @@ def calculate_user_permissions():
             user_characters = list(mongo.db.characters.find({"player": user_id}))
 
 @base_routes.before_app_request
+def inject_revert_warning():
+    g.revert_warning = _get_revert_warning()
+
+
+@base_routes.before_app_request
 def cache_previous_url():
     if request.endpoint != 'static':
         session['second_previous_url'] = session.get('previous_url', None)
         session['previous_url'] = session.get('current_url', None)
         session['current_url'] = request.url
+
+
+@base_routes.route("/admin/toggle-revert-warning")
+def toggle_revert_warning():
+    if not (g.user and g.user.get("is_admin")):
+        abort(403)
+    doc = mongo.db.global_modifiers.find_one(
+        {"name": "global_modifiers"}, {"revert_warning": 1}
+    ) or {}
+    new_state = not bool(doc.get("revert_warning"))
+    mongo.db.global_modifiers.update_one(
+        {"name": "global_modifiers"},
+        {"$set": {"revert_warning": new_state}},
+        upsert=True,
+    )
+    _revert_cache.update({"active": new_state, "ts": _time_mod.time()})
+    flash(f"Revert warning {'enabled' if new_state else 'disabled'}.")
+    return redirect(request.referrer or "/")
 
 @base_routes.route("/")
 def home():

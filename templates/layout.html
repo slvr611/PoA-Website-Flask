@@ -79,6 +79,7 @@
 									<li><a href="/tick_summaries">Tick Summaries</a></li>
 									<li><a href="/temperament_overview">Temperament Overview</a></li>
 									<li><a href="/traits">View / Edit Unit Traits</a></li>
+									<li><a href="/admin/toggle-revert-warning">{{ 'Disable' if g.revert_warning else 'Enable' }} Revert Warning</a></li>
 								</ul>
 							</li>
 						{% endif %}
@@ -132,6 +133,14 @@
 			</div>
 		</nav>
 	</header>
+	{% if g.revert_warning %}
+	<div class="revert-warning-banner">
+		<span>&#9888; <strong>Warning:</strong> The website may be reverted to a previous state soon. Please do not submit any change requests until this notice is removed.</span>
+		{% if g.user and g.user.is_admin %}
+		<a href="/admin/toggle-revert-warning" class="revert-warning-dismiss">Dismiss Warning</a>
+		{% endif %}
+	</div>
+	{% endif %}
     <main>
 		{% with messages = get_flashed_messages() %}
 		  {% if messages %}
