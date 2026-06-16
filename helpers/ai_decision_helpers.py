@@ -45,10 +45,10 @@ TRAIT_PERSONALITY_BIAS = {
 
 # Multipliers applied per temperament dimension after trait biases
 TEMPERAMENT_BIAS_MULT = {
-    "Hostile":     {"aggression": 1.5,  "military": 1.5},
+    "Aggressive":  {"aggression": 1.5,  "military": 1.5},
     "Supremacist": {"aggression": 1.3,  "expansion": 1.3, "military": 1.2},
     "Curious":     {"economic": 1.5},
-    "Friendly":    {"aggression": 0.4,  "trade": 1.3},
+    "Welcoming":   {"aggression": 0.4,  "trade": 1.3},
     "Withdrawn":   {"aggression": 0.2,  "trade": 0.7,     "expansion": 0.4},
     "Zealous":     {"military": 1.3,    "aggression": 1.2},
     "Neutral":     {},

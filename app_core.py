@@ -159,13 +159,13 @@ json_data = {"general_resources": [
         "pops_per_district_slot": 10
 }
 
-temperament_enum = ["Player", "Neutral", "Friendly", "Hostile", "Withdrawn", "Curious", "Supremacist", "Zealous"]
+temperament_enum = ["Player", "Neutral", "Welcoming", "Aggressive", "Withdrawn", "Curious", "Supremacist", "Zealous"]
 
 base_temperament_odds = {
     "Player": 0,
     "Neutral": 0.15,
-    "Friendly": 0.2,
-    "Hostile": 0.2,
+    "Welcoming": 0.2,
+    "Aggressive": 0.2,
     "Withdrawn": 0.1,
     "Curious": 0.15,
     "Supremacist": 0.1,
@@ -173,18 +173,18 @@ base_temperament_odds = {
 }
 
 cultural_trait_temperament_modifiers = {
-    "Absolutist": {"Player": 0, "Neutral": 0, "Friendly": -0.05, "Hostile": 0, "Withdrawn": 0, "Curious": -0.05, "Supremacist": 0.1, "Zealous": 0},
-    "Communalist": {"Player": 0, "Neutral": -0.05, "Friendly": 0.05, "Hostile": 0, "Withdrawn": 0.05, "Curious": -0.05, "Supremacist": 0, "Zealous": 0},
-    "Egalitarian": {"Player": 0, "Neutral": 0, "Friendly": 0.05, "Hostile": 0.05, "Withdrawn": -0.05, "Curious": 0, "Supremacist": -0.05, "Zealous": 0},
-    "Individualist": {"Player": 0, "Neutral": 0, "Friendly": 0, "Hostile": 0, "Withdrawn": 0.05, "Curious": 0.05, "Supremacist": -0.05, "Zealous": -0.05},
-    "Isolationist": {"Player": 0, "Neutral": -0.05, "Friendly": 0, "Hostile": 0, "Withdrawn": 0.2, "Curious": -0.05, "Supremacist": -0.05, "Zealous": -0.05},
-    "Mercantilist": {"Player": 0, "Neutral": 0, "Friendly": 0.09, "Hostile": -0.09, "Withdrawn": -0.09, "Curious": 0.09, "Supremacist": 0, "Zealous": 0},
-    "Militarist": {"Player": 0, "Neutral": -0.06, "Friendly": -0.09, "Hostile": 0.11, "Withdrawn": -0.06, "Curious": 0, "Supremacist": 0.05, "Zealous": 0.05},
-    "Pacifist": {"Player": 0, "Neutral": -0.05, "Friendly": 0.09, "Hostile": -0.09, "Withdrawn": 0, "Curious": 0, "Supremacist": 0, "Zealous": 0},
-    "Progressive": {"Player": 0, "Neutral": -0.05, "Friendly": 0, "Hostile": 0, "Withdrawn": -0.05, "Curious": 0.1, "Supremacist": 0, "Zealous": 0},
-    "Secular": {"Player": 0, "Neutral": -0.05, "Friendly": 0.04, "Hostile": 0, "Withdrawn": 0, "Curious": 0.06, "Supremacist": 0.04, "Zealous": -0.09},
-    "Spiritualist": {"Player": 0, "Neutral": -0.05, "Friendly": 0, "Hostile": 0, "Withdrawn": 0, "Curious": -0.05, "Supremacist": 0, "Zealous": 0.1},
-    "Traditionalist": {"Player": 0, "Neutral": 0, "Friendly": 0, "Hostile": 0, "Withdrawn": 0, "Curious": -0.09, "Supremacist": 0.05, "Zealous": 0.04}
+    "Absolutist": {"Player": 0, "Neutral": 0, "Welcoming": -0.05, "Aggressive": 0, "Withdrawn": 0, "Curious": -0.05, "Supremacist": 0.1, "Zealous": 0},
+    "Communalist": {"Player": 0, "Neutral": -0.05, "Welcoming": 0.05, "Aggressive": 0, "Withdrawn": 0.05, "Curious": -0.05, "Supremacist": 0, "Zealous": 0},
+    "Egalitarian": {"Player": 0, "Neutral": 0, "Welcoming": 0.05, "Aggressive": 0.05, "Withdrawn": -0.05, "Curious": 0, "Supremacist": -0.05, "Zealous": 0},
+    "Individualist": {"Player": 0, "Neutral": 0, "Welcoming": 0, "Aggressive": 0, "Withdrawn": 0.05, "Curious": 0.05, "Supremacist": -0.05, "Zealous": -0.05},
+    "Isolationist": {"Player": 0, "Neutral": -0.05, "Welcoming": 0, "Aggressive": 0, "Withdrawn": 0.2, "Curious": -0.05, "Supremacist": -0.05, "Zealous": -0.05},
+    "Mercantilist": {"Player": 0, "Neutral": 0, "Welcoming": 0.09, "Aggressive": -0.09, "Withdrawn": -0.09, "Curious": 0.09, "Supremacist": 0, "Zealous": 0},
+    "Militarist": {"Player": 0, "Neutral": -0.06, "Welcoming": -0.09, "Aggressive": 0.11, "Withdrawn": -0.06, "Curious": 0, "Supremacist": 0.05, "Zealous": 0.05},
+    "Pacifist": {"Player": 0, "Neutral": -0.05, "Welcoming": 0.09, "Aggressive": -0.09, "Withdrawn": 0, "Curious": 0, "Supremacist": 0, "Zealous": 0},
+    "Progressive": {"Player": 0, "Neutral": -0.05, "Welcoming": 0, "Aggressive": 0, "Withdrawn": -0.05, "Curious": 0.1, "Supremacist": 0, "Zealous": 0},
+    "Secular": {"Player": 0, "Neutral": -0.05, "Welcoming": 0.04, "Aggressive": 0, "Withdrawn": 0, "Curious": 0.06, "Supremacist": 0.04, "Zealous": -0.09},
+    "Spiritualist": {"Player": 0, "Neutral": -0.05, "Welcoming": 0, "Aggressive": 0, "Withdrawn": 0, "Curious": -0.05, "Supremacist": 0, "Zealous": 0.1},
+    "Traditionalist": {"Player": 0, "Neutral": 0, "Welcoming": 0, "Aggressive": 0, "Withdrawn": 0, "Curious": -0.09, "Supremacist": 0.05, "Zealous": 0.04}
 }
 
 character_stats = ["rulership", "cunning", "charisma", "prowess", "magic", "strategy"]
