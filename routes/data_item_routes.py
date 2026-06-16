@@ -204,6 +204,9 @@ def data_list(data_type):
                 }
             preview_overall_lookup_dict[preview_item] = preview_individual_lookup_dict
 
+    if data_type == "artifacts":
+        query_dict["archived"] = 1
+
     sort_by = schema.get("sort", "name")
 
     items = list(db.find({}, query_dict).sort("name", ASCENDING))
@@ -219,6 +222,17 @@ def data_list(data_type):
         visibility_bypassed = _apply_artifact_list_visibility(
             items, preview_overall_lookup_dict
         )
+        active_artifacts = [a for a in items if not a.get("archived")]
+        archived_artifacts = [a for a in items if a.get("archived")]
+        return render_template(
+            "artifact_list.html",
+            title=category_data["artifacts"]["pluralName"],
+            active_artifacts=active_artifacts,
+            archived_artifacts=archived_artifacts,
+            schema=schema,
+            preview_references=preview_overall_lookup_dict,
+            visibility_bypassed=visibility_bypassed,
+        )
 
     return render_template(
         "dataList.html",
@@ -228,6 +242,46 @@ def data_list(data_type):
         preview_references=preview_overall_lookup_dict,
         visibility_bypassed=visibility_bypassed,
     )
+
+
+@data_item_routes.route("/artifacts/bulk-archive", methods=["POST"])
+@admin_required
+def bulk_archive_artifacts():
+    artifact_ids = request.form.getlist("artifact_ids")
+    if artifact_ids:
+        object_ids = []
+        for aid in artifact_ids:
+            try:
+                object_ids.append(ObjectId(aid))
+            except Exception:
+                pass
+        if object_ids:
+            mongo.db.artifacts.update_many(
+                {"_id": {"$in": object_ids}},
+                {"$set": {"archived": True}}
+            )
+            flash(f"Archived {len(object_ids)} artifact(s).")
+    return redirect("/artifacts")
+
+
+@data_item_routes.route("/artifacts/bulk-unarchive", methods=["POST"])
+@admin_required
+def bulk_unarchive_artifacts():
+    artifact_ids = request.form.getlist("artifact_ids")
+    if artifact_ids:
+        object_ids = []
+        for aid in artifact_ids:
+            try:
+                object_ids.append(ObjectId(aid))
+            except Exception:
+                pass
+        if object_ids:
+            mongo.db.artifacts.update_many(
+                {"_id": {"$in": object_ids}},
+                {"$set": {"archived": False}}
+            )
+            flash(f"Unarchived {len(object_ids)} artifact(s).")
+    return redirect("/artifacts")
 
 
 def _apply_artifact_list_visibility(items, preview_references):

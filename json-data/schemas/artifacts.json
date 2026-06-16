@@ -53,6 +53,11 @@
         "label": "Equipped",
         "description": "Whether the artifact is currently equipped"
       },
+      "archived": {
+        "bsonType": "boolean",
+        "label": "Archived",
+        "description": "Whether the artifact has been retired from active play"
+      },
       "effect_description": {
         "bsonType": "string",
         "label": "Effect Description",

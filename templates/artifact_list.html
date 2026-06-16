@@ -1,0 +1,136 @@
+{% extends "layout.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% macro artifact_row(item, schema, preview_references, is_admin, form_name) %}
+<tr>
+	{% if is_admin %}
+	<td><input type="checkbox" name="artifact_ids" value="{{ item._id|string }}" form="{{ form_name }}"></td>
+	{% endif %}
+	<td><a href="/artifacts/item/{{ item.name }}">{{ item.name }}</a></td>
+	{% for col in schema.preview %}
+		{% set item_value = item[col]|string %}
+		{% if col in preview_references and item_value in preview_references[col] %}
+			{% set ref = preview_references[col][item_value] %}
+			{% if ref.get('link') %}
+				<td><a href="{{ ref['link'] }}">{{ ref['name'] }}</a></td>
+			{% else %}
+				<td>{{ ref['name'] }}</td>
+			{% endif %}
+		{% elif item[col] %}
+			<td>{{ item[col] }}</td>
+		{% else %}
+			<td>None</td>
+		{% endif %}
+	{% endfor %}
+</tr>
+{% endmacro %}
+
+{% block content %}
+<div class="container">
+	{% if g.user is not none %}
+		<a href="/artifacts/new">New Artifact</a>
+	{% endif %}
+
+	<div class="action-links">
+		<a href="/artifacts/changes/pending">View Pending Changes</a>
+		<a href="/artifacts/changes/archived">View Archived Changes</a>
+	</div>
+
+	{% if visibility_bypassed is not none %}
+		{% if g.is_non_player_admin %}
+			<span class="edit-button" style="background:#2d4a5a;cursor:default;">Visibility: Bypassed (RP)</span>
+		{% elif g.user and g.user.get('is_admin') %}
+			{% if visibility_bypassed %}
+				<span class="edit-button" style="background:#2d5a2d;">Visibility: Bypassed</span>
+			{% else %}
+				<form method="POST" action="/visibility/toggle_bypass" style="display:inline;">
+					<input type="hidden" name="page_url" value="{{ request.full_path }}">
+					<input type="hidden" name="nation_name" value="">
+					<button type="submit" class="edit-button" style="background:#5a2d2d;">Visibility: Filtered</button>
+				</form>
+			{% endif %}
+		{% endif %}
+	{% endif %}
+
+	{% set is_admin = g.user and g.user.get('is_admin') %}
+
+	{# ── Active artifacts ─────────────────────────────────────────── #}
+	{% if is_admin %}
+	<form id="archive-form" method="POST" action="/artifacts/bulk-archive"></form>
+	{% endif %}
+
+	<h1>Artifacts ({{ active_artifacts|length }})</h1>
+	<div class="table-wrapper">
+		<table class="info-table">
+			<thead>
+				<tr>
+					{% if is_admin %}<th></th>{% endif %}
+					<th>Name</th>
+					{% for col in schema.preview %}
+						<th>{{ schema.properties[col]["label"] }}</th>
+					{% endfor %}
+				</tr>
+			</thead>
+			<tbody>
+				{% for item in active_artifacts %}
+					{{ artifact_row(item, schema, preview_references, is_admin, "archive-form") }}
+				{% endfor %}
+			</tbody>
+		</table>
+	</div>
+	{% if is_admin %}
+	<button type="submit" form="archive-form" class="btn btn-warning" style="margin-top:8px;">Archive Selected</button>
+	{% endif %}
+
+	{# ── Archived artifacts ───────────────────────────────────────── #}
+	{% if archived_artifacts %}
+	{% if is_admin %}
+	<form id="unarchive-form" method="POST" action="/artifacts/bulk-unarchive"></form>
+	{% endif %}
+
+	<h1>Archived Artifacts ({{ archived_artifacts|length }})</h1>
+	<div class="table-wrapper">
+		<table class="info-table">
+			<thead>
+				<tr>
+					{% if is_admin %}<th></th>{% endif %}
+					<th>Name</th>
+					{% for col in schema.preview %}
+						<th>{{ schema.properties[col]["label"] }}</th>
+					{% endfor %}
+				</tr>
+			</thead>
+			<tbody>
+				{% for item in archived_artifacts %}
+					<tr class="dead-character">
+						{% if is_admin %}
+						<td><input type="checkbox" name="artifact_ids" value="{{ item._id|string }}" form="unarchive-form"></td>
+						{% endif %}
+						<td><a href="/artifacts/item/{{ item.name }}">{{ item.name }}</a></td>
+						{% for col in schema.preview %}
+							{% set item_value = item[col]|string %}
+							{% if col in preview_references and item_value in preview_references[col] %}
+								{% set ref = preview_references[col][item_value] %}
+								{% if ref.get('link') %}
+									<td><a href="{{ ref['link'] }}">{{ ref['name'] }}</a></td>
+								{% else %}
+									<td>{{ ref['name'] }}</td>
+								{% endif %}
+							{% elif item[col] %}
+								<td>{{ item[col] }}</td>
+							{% else %}
+								<td>None</td>
+							{% endif %}
+						{% endfor %}
+					</tr>
+				{% endfor %}
+			</tbody>
+		</table>
+	</div>
+	{% if is_admin %}
+	<button type="submit" form="unarchive-form" class="btn btn-success" style="margin-top:8px;">Unarchive Selected</button>
+	{% endif %}
+	{% endif %}
+</div>
+{% endblock %}
