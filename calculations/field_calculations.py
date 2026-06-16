@@ -193,30 +193,41 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
 
     phase_start = perf_counter()
     if target_data_type == "nation":
+        _sub = perf_counter()
         cities = collect_cities(target)
         city_totals = sum_city_totals(cities)
         city_schema_totals = sum_modifier_totals(collect_city_schema_modifiers(target), target)
+        record_timing("ts_cities_ms", _sub)
 
+        _sub = perf_counter()
         technologies = _normalize_technologies(target.get("technologies"))
         tech_totals = sum_tech_totals(technologies)
+        record_timing("ts_tech_ms", _sub)
 
         loose_node_totals = {}  # old nodes-field system retired; tile-based nodes handle production
 
         # Build tagged sources NOW, before OOR filtering overwrites territory_node_counts,
         # so that scaling modifiers in the tooltip use the same preliminary counts as
         # collect_external_requirements (line 120) did for the actual calculation.
+        _sub = perf_counter()
         nation_tagged_sources = _build_unit_tagged_sources(target, schema, district_details)
+        record_timing("ts_tagged_sources_ms", _sub)
 
+        _sub = perf_counter()
         all_terrain_rules = _collect_all_terrain_rules(target)
         proximity_rules = _collect_all_proximity_rules(target)
+        record_timing("ts_terrain_rules_ms", _sub)
 
         # Compute admin range now that law_totals is available for nomadic detection.
+        _sub = perf_counter()
         _is_nomadic = law_totals.get("nomadic", 0) > 0
         target["is_nomadic"] = _is_nomadic
         _admin_val = target.get("administration", 1) or 1
         from helpers.hex_map_helpers import compute_admin_range_out_of_range as _compute_oor
         _nation_name = target.get("name", "")
         out_of_range = _compute_oor(_nation_name, _admin_val, nomadic=_is_nomadic) if _nation_name else set()
+        record_timing("ts_admin_range_ms", _sub)
+
         # Filter cached node tiles by admin range and populate counts for node correction below.
         _node_tiles = (target.get("_calc_cache") or {}).get("_node_tiles", [])
         _oor_set = out_of_range
@@ -236,6 +247,7 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
         _cache["territory_node_counts"] = territory_node_counts
         _cache["active_node_counts"] = active_node_counts
 
+        _sub = perf_counter()
         if proximity_rules or out_of_range:
             effective_territory_types = apply_proximity_terrain_overrides(target, proximity_rules, out_of_range)
         else:
@@ -243,27 +255,35 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
         # Store for use in breakdown tooltips (same data as the calculation)
         target["_calc_cache"]["effective_territory_types"] = effective_territory_types
         territory_terrain_totals = collect_territory_terrain(effective_territory_types, all_terrain_rules)
+        record_timing("ts_territory_terrain_ms", _sub)
 
+        _sub = perf_counter()
         jobs_assigned = collect_jobs_assigned(target)
         job_details = calculate_job_details(target, modifier_totals, district_totals, tech_totals, city_totals, law_totals, external_modifiers_total)
         job_totals = sum_job_totals(target, jobs_assigned, job_details)
+        record_timing("ts_jobs_ms", _sub)
 
+        _sub = perf_counter()
         land_units_assigned = collect_land_units_assigned(target)
-
         land_unit_details = calculate_unit_details(target, "land", modifier_totals, district_totals, tech_totals, city_totals, law_totals, external_modifiers_total, schema, district_details, nation_tagged_sources)
+        record_timing("ts_land_units_ms", _sub)
 
+        _sub = perf_counter()
         naval_units_assigned = collect_naval_units_assigned(target)
         naval_unit_details = calculate_unit_details(target, "naval", modifier_totals, district_totals, tech_totals, city_totals, law_totals, external_modifiers_total, schema, district_details, nation_tagged_sources)
+        record_timing("ts_naval_units_ms", _sub)
 
+        _sub = perf_counter()
         support_units_assigned = collect_support_units_assigned(target)
         support_unit_details = calculate_unit_details(target, "support", modifier_totals, district_totals, tech_totals, city_totals, law_totals, external_modifiers_total, schema, district_details, nation_tagged_sources)
+        record_timing("ts_support_units_ms", _sub)
 
         unit_totals = sum_all_unit_totals(land_units_assigned, land_unit_details, naval_units_assigned, naval_unit_details, support_units_assigned, support_unit_details)
 
         prestige_modifiers = {}
         if target.get("empire", False):
             prestige_modifiers = calculate_prestige_modifiers(target, schema_properties)
-        
+
         calculate_karma_from_negative_stockpiles(target, modifier_totals)
     elif target_data_type == "nation_jobs":
         job_details = calculate_job_details(target, modifier_totals, district_totals, tech_totals, city_totals, law_totals, external_modifiers_total)
@@ -999,10 +1019,19 @@ def calculate_job_details(target, modifier_totals, district_totals, tech_totals,
     unique_resources = json_data["unique_resources"]
     unique_resources = [resource["key"] for resource in unique_resources]
 
+    # Pre-compute per-nation values shared across all job requirement checks.
+    _job_region = target.get("region", "")
+    try:
+        _job_region_doc = category_data["regions"]["database"].find_one({"_id": ObjectId(_job_region)}, {"name": 1})
+        _job_region_name = _job_region_doc["name"] if _job_region_doc else ""
+    except Exception:
+        _job_region_name = ""
+    _job_def_keys = [d.get("def_key", "") for d in target.get("districts", []) if d.get("def_key")]
+
     new_job_details = {}
     for job, details in job_details.items():
         locked = modifier_totals.get("locks_" + job, 0) + district_totals.get("locks_" + job, 0) + city_totals.get("locks_" + job, 0) + law_totals.get("locks_" + job, 0) + external_modifiers_total.get("locks_" + job, 0)
-        meets_job_requirements = check_job_requirements(target, details, external_modifiers_total)
+        meets_job_requirements = check_job_requirements(target, details, external_modifiers_total, region_name=_job_region_name, def_keys=_job_def_keys)
         if not locked and meets_job_requirements:
             new_details = copy.deepcopy(details)
             original_job_production = details.get("production", {})
@@ -1136,17 +1165,17 @@ def collect_prosperity_modifiers(target):
         return {}
     return dict(_PROSPERITY_EFFECTS.get((tier, role), {}))
 
-def check_job_requirements(target, job_details, overall_total_modifiers):
+def check_job_requirements(target, job_details, overall_total_modifiers, region_name=None, def_keys=None):
     requirements = job_details.get("requirements", {})
     meets_requirements = True
-    region = target.get("region", "")
-    try:
-        region_name = category_data["regions"]["database"].find_one({"_id": ObjectId(region)}, {"name": 1})["name"]
-    except:
-        region_name = ""
-
-    # Collect def_keys from DB-driven districts for requirement checks
-    def_keys = [d.get("def_key", "") for d in target.get("districts", []) if d.get("def_key")]
+    if region_name is None:
+        region = target.get("region", "")
+        try:
+            region_name = category_data["regions"]["database"].find_one({"_id": ObjectId(region)}, {"name": 1})["name"]
+        except Exception:
+            region_name = ""
+    if def_keys is None:
+        def_keys = [d.get("def_key", "") for d in target.get("districts", []) if d.get("def_key")]
 
     for requirement, value in requirements.items():
         if requirement == "district":
@@ -1981,6 +2010,16 @@ def load_db_units(unit_type=None):
     Ruler units are always excluded (they are not field units).
     Units whose name appears in multiple eras are keyed/displayed as "Era Name".
     """
+    # Cache per unit_type on Flask g to avoid re-querying on every nation during a tick.
+    _cache_key = f"_unit_cache_{unit_type}"
+    try:
+        from flask import g as _g
+        _cached = getattr(_g, _cache_key, None)
+        if _cached is not None:
+            return _cached
+    except RuntimeError:
+        pass  # outside request context
+
     query = {"unit_class": {"$ne": "Ruler Unit"}}
     if unit_type == "support":
         query["unit_type"] = "Land"
@@ -2071,6 +2110,12 @@ def load_db_units(unit_type=None):
                 "armor":               unit.get("armor")                 if unit.get("has_armor")                     else None,
             },
         }
+
+    try:
+        from flask import g as _g
+        setattr(_g, _cache_key, db_units)
+    except RuntimeError:
+        pass
     return db_units
 
 

@@ -282,7 +282,8 @@ def count_route_slots(nation_name, statuses=("active", "ending", "pending")):
 def get_connectable_nations(nation_name, nation_trade_speed):
     """Return list of nation dicts that have a road path to this nation.
 
-    Limits candidates by hex proximity first (3 × trade_speed) before BFS.
+    Uses a single aggregation for candidate centroids, one combined tile fetch,
+    and a single multi-target BFS — avoiding N+1 queries.
     """
     from helpers.hex_map_helpers import hex_distance
 
@@ -292,42 +293,94 @@ def get_connectable_nations(nation_name, nation_trade_speed):
     if not my_tiles:
         return []
 
-    # Rough bounding-box centre of this nation's territory
     avg_q = sum(t["q"] for t in my_tiles) // max(len(my_tiles), 1)
     avg_r = sum(t["r"] for t in my_tiles) // max(len(my_tiles), 1)
-
     max_hex_radius = max(3 * (nation_trade_speed or 7), 30)
 
     candidate_nations = list(mongo.db.nations.find(
         {"name": {"$ne": nation_name}},
         {"name": 1, "trade_speed": 1, "_id": 0},
     ))
+    if not candidate_nations:
+        return []
+
+    # Single aggregation to get centroid per candidate nation (replaces N tile queries)
+    all_candidate_names = [c["name"] for c in candidate_nations]
+    pipeline = [
+        {"$match": {"owner": {"$in": all_candidate_names}}},
+        {"$group": {
+            "_id": "$owner",
+            "avg_q": {"$avg": "$q"},
+            "avg_r": {"$avg": "$r"},
+        }},
+    ]
+    centroids = {
+        doc["_id"]: (doc["avg_q"], doc["avg_r"])
+        for doc in mongo.db.hex_map_tiles.aggregate(pipeline)
+    }
+
+    nearby_candidates = {
+        c["name"]: c
+        for c in candidate_nations
+        if c["name"] in centroids
+        and hex_distance(avg_q, avg_r, centroids[c["name"]][0], centroids[c["name"]][1]) <= max_hex_radius
+    }
+    if not nearby_candidates:
+        return []
+
+    # One combined tile fetch for own tiles + all nearby candidates + all road tiles
+    nearby_names = list(nearby_candidates.keys())
+    tiles_raw = list(mongo.db.hex_map_tiles.find(
+        {"$or": [
+            {"owner": {"$in": [nation_name] + nearby_names}},
+            {"route": {"$exists": True, "$ne": None}},
+        ]},
+        {"q": 1, "r": 1, "owner": 1, "route": 1, "_id": 0},
+    ))
+
+    my_tile_set = set()
+    tile_to_candidate = {}
+    traversable = set()
+    for t in tiles_raw:
+        pos = (t["q"], t["r"])
+        owner = t.get("owner", "")
+        if owner == nation_name:
+            my_tile_set.add(pos)
+            traversable.add(pos)
+        elif owner in nearby_candidates:
+            tile_to_candidate[pos] = owner
+            traversable.add(pos)
+        if t.get("route"):
+            traversable.add(pos)
+
+    if not my_tile_set:
+        return []
+
+    # Single multi-target BFS from own territory
+    visited = {}
+    queue = deque()
+    for pos in my_tile_set:
+        visited[pos] = 0
+        queue.append((pos, 0))
+
+    reached = {}
+    while queue and len(reached) < len(nearby_candidates):
+        (q, r), dist = queue.popleft()
+        cname = tile_to_candidate.get((q, r))
+        if cname and cname not in reached:
+            reached[cname] = dist
+        for dq, dr in AXIAL_DIRECTIONS:
+            nb = (q + dq, r + dr)
+            if nb in traversable and nb not in visited:
+                visited[nb] = dist + 1
+                queue.append((nb, dist + 1))
 
     results = []
-    for candidate in candidate_nations:
-        cname = candidate["name"]
-        ctiles = list(mongo.db.hex_map_tiles.find(
-            {"owner": cname}, {"q": 1, "r": 1, "_id": 0}
-        ))
-        if not ctiles:
-            continue
-        # Quick proximity check against centroid
-        cavg_q = sum(t["q"] for t in ctiles) // max(len(ctiles), 1)
-        cavg_r = sum(t["r"] for t in ctiles) // max(len(ctiles), 1)
-        if hex_distance(avg_q, avg_r, cavg_q, cavg_r) > max_hex_radius:
-            continue
-
-        dist, connected = get_road_path_distance(nation_name, cname)
-        if not connected:
-            continue
-
+    for cname, dist in reached.items():
+        candidate = nearby_candidates[cname]
         cspeed = candidate.get("trade_speed") or 7
         delay = compute_delay(dist, nation_trade_speed, cspeed)
-        results.append({
-            "name": cname,
-            "road_distance": dist,
-            "delay": delay,
-        })
+        results.append({"name": cname, "road_distance": dist, "delay": delay})
 
     results.sort(key=lambda x: x["road_distance"])
     return results

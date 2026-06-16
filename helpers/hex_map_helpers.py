@@ -103,8 +103,30 @@ def _coerce_tile(tile):
     return tile
 
 
+_MAP_TILE_PROJECTION = {
+    "_id": 0, "q": 1, "r": 1, "terrain": 1, "owner": 1,
+    "city": 1, "district": 1, "wonder": 1, "capital": 1,
+    "node": 1, "portal": 1, "route": 1, "region": 1,
+}
+
 def get_all_tiles():
-    return [_coerce_tile(t) for t in mongo.db.hex_map_tiles.find({}, {"_id": 0})]
+    return [_coerce_tile(t) for t in mongo.db.hex_map_tiles.find({}, _MAP_TILE_PROJECTION)]
+
+
+def bump_tile_version():
+    """Increment the map tile version counter used for ETag-based HTTP caching.
+
+    Call after any operation that modifies hex_map_tiles or nation colors so that
+    browsers know to re-fetch instead of serving stale cached tile data.
+    """
+    try:
+        mongo.db.global_modifiers.update_one(
+            {"name": "hex_map_config"},
+            {"$inc": {"tile_version": 1}},
+            upsert=True,
+        )
+    except Exception:
+        pass
 
 
 def get_session_tiles(session_num):
@@ -178,10 +200,24 @@ def compute_admin_range_out_of_range(nation_name, admin, nomadic=False, all_tile
     }
 
     if all_tiles is None:
-        all_tiles = list(mongo.db.hex_map_tiles.find(
-            {},
-            {"q": 1, "r": 1, "terrain": 1, "city": 1, "district": 1, "wonder": 1, "capital": 1, "owner": 1, "portal": 1, "route": 1, "_id": 0},
-        ))
+        # Re-use a request-scoped cache so the full tile fetch only happens once
+        # per Flask request (saves ~7s on every subsequent nation in the same tick).
+        try:
+            from flask import g as _g
+            all_tiles = getattr(_g, '_hex_admin_tile_cache', None)
+        except RuntimeError:
+            all_tiles = None  # outside request context (e.g. tests)
+
+        if all_tiles is None:
+            all_tiles = list(mongo.db.hex_map_tiles.find(
+                {},
+                {"q": 1, "r": 1, "terrain": 1, "city": 1, "district": 1, "wonder": 1, "capital": 1, "owner": 1, "portal": 1, "route": 1, "_id": 0},
+            ))
+            try:
+                from flask import g as _g
+                _g._hex_admin_tile_cache = all_tiles
+            except RuntimeError:
+                pass
 
     tile_map = {(t["q"], t["r"]): t for t in all_tiles}
 

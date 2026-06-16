@@ -74,28 +74,50 @@ def get_viewer_nation(g_user) -> dict | None:
     Return the minimal nation document for the logged-in user's ruling nation,
     or None if they have no nation access. Checks ruling character first, then
     direct player attribution via nation.players.
+
+    Result is cached in Flask g for the lifetime of the request so multiple
+    visibility checks in the same request only hit the DB once.
     """
     if not g_user:
         return None
+
+    # Per-request cache keyed by user id so multi-user edge cases stay isolated
+    try:
+        from flask import g as _g
+        cache_key = f"_viewer_nation_{g_user.get('id', '')}"
+        if hasattr(_g, cache_key):
+            return getattr(_g, cache_key)
+    except RuntimeError:
+        cache_key = None
+
     player = mongo.db.players.find_one({"id": g_user.get("id")}, {"_id": 1})
     if not player:
-        return None
-    player_id_str = str(player["_id"])
+        result = None
+    else:
+        player_id_str = str(player["_id"])
 
-    character = mongo.db.characters.find_one(
-        {"player": player_id_str, "ruling_nation_org": {"$exists": True, "$ne": None}},
-        {"ruling_nation_org": 1}
-    )
-    if character and character.get("ruling_nation_org"):
+        character = mongo.db.characters.find_one(
+            {"player": player_id_str, "ruling_nation_org": {"$exists": True, "$ne": None}},
+            {"ruling_nation_org": 1}
+        )
+        result = None
+        if character and character.get("ruling_nation_org"):
+            try:
+                nation_id = ObjectId(str(character["ruling_nation_org"]))
+                result = mongo.db.nations.find_one({"_id": nation_id}, _NATION_PROJECTION)
+            except Exception:
+                pass
+
+        if result is None:
+            result = mongo.db.nations.find_one({"players": player_id_str}, _NATION_PROJECTION)
+
+    if cache_key:
         try:
-            nation_id = ObjectId(str(character["ruling_nation_org"]))
-            nation = mongo.db.nations.find_one({"_id": nation_id}, _NATION_PROJECTION)
-            if nation:
-                return nation
-        except Exception:
+            setattr(_g, cache_key, result)
+        except RuntimeError:
             pass
 
-    return mongo.db.nations.find_one({"players": player_id_str}, _NATION_PROJECTION)
+    return result
 
 
 def compute_all_visibilities(viewer_nation: dict) -> dict:

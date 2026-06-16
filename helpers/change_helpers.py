@@ -1,7 +1,8 @@
 import uuid
 from datetime import datetime, timezone
+from time import perf_counter
 from app_core import mongo, category_data, json_data
-from flask import g, flash
+from flask import g, flash, current_app
 from calculations.field_calculations import calculate_all_fields
 from copy import deepcopy
 from bson import ObjectId
@@ -22,6 +23,8 @@ def _handle_nation_rename(nation_id, old_name, new_name):
         {"_id": nation_id},
         {"$addToSet": {"previous_names": old_name}}
     )
+    from helpers.hex_map_helpers import bump_tile_version
+    bump_tile_version()
 
 
 def _get_natural_key(item):
@@ -168,7 +171,7 @@ def _calculate_and_attach_fields(data_type, target):
             target,
             schema,
             target_data_type,
-            return_breakdowns=True
+            return_breakdowns=True,
         )
         target.update(calculated_fields)
         target["breakdowns"] = breakdowns
@@ -290,6 +293,10 @@ def _approve_hex_map_change(change, change_id, changes_collection, approver, now
         counts = {doc["_id"]: doc["count"] for doc in mongo.db.hex_map_tiles.aggregate(pipeline)}
         mongo.db.nations.update_one({"name": nation_name}, {"$set": {"territory_types": counts}})
 
+    if affected_nations or tiles:
+        from helpers.hex_map_helpers import bump_tile_version
+        bump_tile_version()
+
     changes_collection.update_one({"_id": change_id}, {"$set": {
         "status": "Approved",
         "time_implemented": now,
@@ -364,6 +371,7 @@ def approve_change(change_id):
                 merged = deep_merge(existing, after_data)
                 merged = _calculate_and_attach_fields(change["target_collection"], merged)
                 target_collection.update_one({"_id": change["target"]}, {"$set": merged})
+
                 if change["target_collection"] == "nations":
                     _handle_nation_rename(change["target"], existing.get("name", ""), merged.get("name", ""))
             else:
@@ -378,21 +386,12 @@ def approve_change(change_id):
                 "before_implemented_data": before_data,
                 "after_implemented_data": after_data
             }})
-            if change["change_type"] == "Update":
-                propagate_updates(
-                    changed_data_type=change["target_collection"],
-                    changed_object_id=change["target"],
-                    changed_object=merged,
-                    reason=f"Dependency update from change #{change_id}"
-                )
-            else:
-                propagate_updates(
-                    changed_data_type=change["target_collection"],
-                    changed_object_id=change["target"],
-                    changed_object={},
-                    reason=f"Dependency update from change #{change_id}"
-                )
-
+            propagate_updates(
+                changed_data_type=change["target_collection"],
+                changed_object_id=change["target"],
+                changed_object=merged if change["change_type"] == "Update" else {},
+                reason=f"Dependency update from change #{change_id}"
+            )
             return True
         else:
             flash("Change approval failed because the target has changed since the request was made.")
@@ -908,23 +907,18 @@ def recalculate_object(data_type, object_ref):
         search_dict = {"_id": object_id}
     db.update_one(search_dict, {"$set": object})
 
-def propagate_updates(changed_data_type, changed_object_id, changed_object, reason="Dependency update"):
+def propagate_updates(changed_data_type, changed_object_id, changed_object, reason="Dependency update", _depth=0):
     """Propagate updates to all dependent objects"""
     dependent_objects = get_dependent_objects(changed_data_type, changed_object_id, changed_object)
 
     for dep in dependent_objects:
         try:
-            # Get the object and its schema
             db = mongo.db[dep["data_type"]]
-            schema = category_data[dep["data_type"]]["schema"]
-            
             old_object = db.find_one({"_id": dep["object_id"]["_id"]})
             if not old_object:
                 continue
 
-            propagate_updates(dep["data_type"], dep["object_id"]["_id"], old_object, reason)
-
+            propagate_updates(dep["data_type"], dep["object_id"]["_id"], old_object, reason, _depth=_depth + 1)
             recalculate_object(dep["data_type"], dep["object_id"]["_id"])
-            
         except Exception as e:
             print(f"Error updating {dep['data_type']} {dep['object_id']}: {e}")

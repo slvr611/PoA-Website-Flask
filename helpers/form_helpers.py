@@ -2,17 +2,31 @@ from flask import flash, redirect
 from helpers.change_helpers import request_change
 from jsonschema import validate, ValidationError
 
-def validate_form_with_jsonschema(form, schema):
-    """Validate form data against JSON schema"""
-    
-    # Remove Flask-WTF specific fields
-    form_data = form.data.copy()
-    form_data.pop('csrf_token', None)
-    form_data.pop('submit', None)
+def validate_form_with_jsonschema(form, schema, *, data=None, partial=False):
+    """Validate form data against JSON schema.
+
+    data: pre-built dict to validate; if omitted, form.data is used.
+    partial: if True, remove the schema's required list so absent fields don't fail
+             (correct for visibility-filtered change requests).
+    """
+    if data is not None:
+        form_data = dict(data)
+    else:
+        form_data = form.data.copy()
+        form_data.pop('csrf_token', None)
+        form_data.pop('submit', None)
     form_data.pop('reason', None)
-    
+
+    validation_schema = schema
+    if partial:
+        validation_schema = {k: v for k, v in schema.items() if k != 'required'}
+        # None values mean the field was absent from the submitted form (WTForms
+        # default when a field is not in request.form). Omitting a non-required
+        # field is valid; keeping None triggers enum/type constraints spuriously.
+        form_data = {k: v for k, v in form_data.items() if v is not None}
+
     try:
-        validate(instance=form_data, schema=schema)
+        validate(instance=form_data, schema=validation_schema)
         return True, None
     except ValidationError as e:
         return False, e.message

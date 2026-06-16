@@ -1340,6 +1340,8 @@ def nation_passive_expansion_tick(old_nation, new_nation, schema):
             {"$set": {"territory_types": counts}}
         )
         result += f"{nation_name} expanded into {len(claimed)} tile(s).\n"
+        from helpers.hex_map_helpers import bump_tile_version
+        bump_tile_version()
 
     return result
 

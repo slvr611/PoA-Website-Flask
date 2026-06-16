@@ -760,31 +760,31 @@ class BaseSchemaForm(FlaskForm):
                 ("tier_3_spell_slot", "Tier 3 Spell Slot")
             ]
 
-        # Always use the DB nation for calculation — form-derived data excludes
-        # external modifiers (wonders, rulers) and the AJAX endpoint strips
-        # all modifiers- fields entirely, making the calculation unreliable.
+        # Always use the DB nation — form-derived data excludes external modifiers
+        # (wonders, rulers). The DB nation already stores calculated slot fields
+        # from the last save; only fall back to calculate_all_fields if missing.
         nation = self._resolve_nation_for_slots(nation)
 
-        # Recalculate nation to get current modifiers
-        calculated_nation = calculate_all_fields(nation, schema, "nation")
-        
+        _slot_keys = ["0_progress_slots", "1_progress_slots", "2_progress_slots",
+                      "3_progress_slots", "4_progress_slots"]
+        if any(k in nation for k in _slot_keys):
+            calculated_nation = nation
+        else:
+            calculated_nation = calculate_all_fields(nation, schema, "nation")
+
         # Build available slots
         available_slots = [("no_slot", "No Slot")]
-        
-        # Add progress slots based on centralization
+
         slot_types = [
             ("0_progress_slots", "0 Progress Slot"),
-            ("1_progress_slots", "1 Progress Slot"), 
+            ("1_progress_slots", "1 Progress Slot"),
             ("2_progress_slots", "2 Progress Slot"),
             ("3_progress_slots", "3 Progress Slot"),
             ("4_progress_slots", "4 Progress Slot")
         ]
-        
-        print("Calculated Nation:", calculated_nation)
 
         for slot_key, slot_name in slot_types:
             slot_count = calculated_nation.get(slot_key, 0)
-            print(f"Slot Key: {slot_key}, Slot Count: {slot_count}")
             if slot_count > 0:
                 available_slots.append((slot_key.replace("_slots", "_slot"), slot_name))
         
@@ -1308,14 +1308,20 @@ class NationForm(BaseSchemaForm):
     def create_form_class(cls, schema, job_details, land_unit_details, naval_unit_details, support_unit_details={}):
         """Creates a form class with additional fields from schema"""
         for field_name, field_schema in schema.get("properties", {}).items():
-            if field_schema.get("bsonType") == "enum" and not hasattr(cls, field_name):
+            if field_schema.get("bsonType") == "enum":
                 choices = [(v, v) for v in field_schema.get("enum", [])]
-                field = SelectField(
-                    field_schema.get("label", field_name),
-                    choices=choices,
-                    default=field_schema.get("default")
-                )
-                setattr(cls, field_name, field)
+                if hasattr(cls, field_name):
+                    # Pre-defined fields like vassal_type/compliance have choices=[] — update them.
+                    existing = getattr(cls, field_name)
+                    if hasattr(existing, 'kwargs') and 'choices' in existing.kwargs:
+                        existing.kwargs['choices'] = choices
+                else:
+                    field = SelectField(
+                        field_schema.get("label", field_name),
+                        choices=choices,
+                        default=field_schema.get("default")
+                    )
+                    setattr(cls, field_name, field)
 
         ResourceStorageDict.create_form_class()
         cls.resource_storage = FormField(ResourceStorageDict)
@@ -1360,6 +1366,10 @@ class NationForm(BaseSchemaForm):
     
     def populate_linked_fields(self, schema, dropdown_options):
         """Populates all linked fields with their options"""
+        from time import perf_counter as _pc
+        from flask import current_app as _app
+        _t0 = _pc()
+
         for field_name, field_schema in schema.get("properties", {}).items():
             if field_schema.get("bsonType") == "linked_object":
                 self.populate_select_field(field_name, self[field_name], schema, dropdown_options)
@@ -1367,47 +1377,50 @@ class NationForm(BaseSchemaForm):
                 choices = [(v, v) for v in field_schema.get("enum", [])]
                 field = getattr(self, field_name)
                 field.choices = choices
-        
-        # Populate progress quest slots based on nation's centralization - do this FIRST
+        _t1 = _pc()
+
         if hasattr(self, 'progress_quests'):
-            # Get current form data for slot calculation
             nation_data = {}
             for field_name, field in self._fields.items():
                 if hasattr(field, 'data') and field.data is not None:
                     nation_data[field_name] = field.data
-            
             available_slots = self.get_available_slots(nation_data, schema)
-            
             for quest_field in self.progress_quests:
                 if hasattr(quest_field, 'slot'):
                     quest_field.slot.choices = available_slots
-        
-        #Handle Districts separately
+        _t2 = _pc()
+
         district_choices = [("", "Empty Slot")]
         for district_field in self.districts:
             district_field.form.populate_linked_fields(type_options=district_choices)
+        _t3 = _pc()
 
-        #Handle Imperial Districts separately
         imperial_district_choices = [("", "Empty Slot")]
         imperial_districts = json_data.get("nation_imperial_districts", {})
         for district_key, district_data in imperial_districts.items():
             imperial_district_choices.append((district_key, district_data["display_name"]))
-
         self.imperial_district.form.populate_linked_fields(type_options=imperial_district_choices)
+        _t4 = _pc()
 
-        #Handle Cities separately
         city_choices = [("", "Empty Slot")]
         cities = json_data.get("cities", {})
         for city_key, city_data in cities.items():
             city_choices.append((city_key, city_data["display_name"]))
-
         wall_choices = [("", "No Walls")]
         walls = json_data.get("walls", {})
         for wall_key, wall_data in walls.items():
             wall_choices.append((wall_key, wall_data["display_name"]))
-
         for city_field in self.cities:
             city_field.form.populate_linked_fields(type_options=city_choices, wall_options=wall_choices)
+        _t5 = _pc()
+
+        def _ms(a, b): return f"{(b-a)*1000:.0f}ms"
+        _app.logger.warning(
+            "[POPULATE_LINKED] schema_loop=%s progress_quests=%s districts=%s "
+            "imperial_district=%s cities=%s | TOTAL=%s",
+            _ms(_t0, _t1), _ms(_t1, _t2), _ms(_t2, _t3),
+            _ms(_t3, _t4), _ms(_t4, _t5), _ms(_t0, _t5),
+        )
 
 class JobForm(BaseSchemaForm):
     """Form to change jobs without needing to request a full nation edit"""

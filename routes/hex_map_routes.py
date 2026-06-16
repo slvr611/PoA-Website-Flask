@@ -7,6 +7,7 @@ from app_core import mongo, json_data, upload_bytes_to_s3
 from helpers.auth_helpers import admin_required
 from helpers.hex_map_helpers import (
     get_all_tiles,
+    bump_tile_version,
     get_neighbor_tiles,
     is_tile_legally_controllable,
     get_nation_tile_stats,
@@ -251,9 +252,15 @@ def hex_map_debug_colors():
 @hex_map_routes.route("/api/hex-map/tiles")
 def hex_map_tiles():
     cfg = mongo.db.global_modifiers.find_one({"name": "hex_map_config"}) or {}
+    etag = f'"{cfg.get("tile_version", 0)}"'
+    if request.headers.get("If-None-Match") == etag:
+        return Response(status=304)
     resp = {"tiles": get_all_tiles(), "nation_colors": _get_nation_colors()}
     resp.update(_cfg_fields(cfg))
-    return jsonify(resp)
+    response = jsonify(resp)
+    response.headers["ETag"] = etag
+    response.headers["Cache-Control"] = "no-cache"
+    return response
 
 
 @hex_map_routes.route("/api/hex-map/tiles/<int:session_num>")
@@ -487,6 +494,7 @@ def update_hex_map_tile(q, r):
         if prev_route_owner and prev_route_owner != eff_route_owner:
             _resync_nation_routes(prev_route_owner)
 
+    bump_tile_version()
     return jsonify({"ok": True})
 
 
@@ -514,6 +522,8 @@ def purge_oob_tiles():
         {"name": {"$nin": list(owned)}, "territory_types": {"$exists": True}},
         {"$set": {"territory_types": {}}},
     )
+    if deleted:
+        bump_tile_version()
     return jsonify({"ok": True, "tiles_deleted": deleted, "nations_resynced": len(nation_counts)})
 
 
@@ -567,6 +577,8 @@ def normalize_tile_coords():
         mongo.db.hex_map_tiles.delete_many({"_id": {"$in": stale_ids}})
         dupes_removed += len(stale_ids)
 
+    if type_fixed or dupes_removed:
+        bump_tile_version()
     return jsonify({"ok": True, "types_fixed": type_fixed, "duplicates_removed": dupes_removed})
 
 
@@ -601,6 +613,7 @@ def sync_all_territory():
         {"name": {"$nin": list(owned_nations)}, "territory_types": {"$exists": True}},
         {"$set": {"territory_types": {}}},
     )
+    bump_tile_version()
     return jsonify({"ok": True, "nations_updated": updated})
 
 
@@ -964,6 +977,8 @@ def save_hex_map_edits():
         "after_image": after_image,
     }
     result = mongo.db.changes.insert_one(change_doc)
+    if after_tiles:
+        bump_tile_version()
     return jsonify({"ok": True, "saved": len(after_tiles), "change_id": str(result.inserted_id)})
 
 

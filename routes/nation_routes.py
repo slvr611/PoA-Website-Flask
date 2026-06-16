@@ -21,6 +21,32 @@ nation_routes = Blueprint("nation_routes", __name__)
 
 POP_PAGE_SIZE = 100
 
+# Process-level cache for static game config data (cleared by process restart)
+import time as _time
+_DISTRICT_CACHE: dict = {}
+_DISTRICT_CACHE_TTL = 300  # 5 minutes
+
+def _get_district_defs():
+    """Return (district_defs_full, district_defs_map, district_categories), cached."""
+    now = _time.time()
+    if _DISTRICT_CACHE and _DISTRICT_CACHE.get("ts", 0) + _DISTRICT_CACHE_TTL > now:
+        return (
+            _DISTRICT_CACHE["defs"],
+            _DISTRICT_CACHE["defs_map"],
+            _DISTRICT_CACHE["categories"],
+        )
+    from pymongo import ASCENDING as _ASC
+    defs_full = list(mongo.db.district_defs.find(
+        {}, {"_id": 0}
+    ).sort([("category", _ASC), ("tier", _ASC), ("display_name", _ASC)]))
+    defs_map = {d["key"]: d for d in defs_full if "key" in d}
+    categories = {
+        c["key"]: c.get("display_name", c["key"])
+        for c in mongo.db.district_categories.find({}, {"key": 1, "display_name": 1, "_id": 0})
+    }
+    _DISTRICT_CACHE.update({"ts": now, "defs": defs_full, "defs_map": defs_map, "categories": categories})
+    return defs_full, defs_map, categories
+
 
 def _validate_tech_costs(form_data):
     """Return (True, None) or (False, error_message) checking each tech's submitted
@@ -362,21 +388,31 @@ def _render_nation_edit(item_ref, form=None):
     Pass form=None to load from DB (GET path).  Pass a pre-built form populated
     from request.form to preserve submitted values after a validation failure.
     """
-    schema, db, nation = get_data_on_item("nations", item_ref)
+    _r0 = perf_counter()
 
+    schema, db, nation = get_data_on_item("nations", item_ref)
+    _r1 = perf_counter()
+
+    # Only query for linked_object fields — NationForm.populate_linked_fields
+    # only calls populate_select_field for those; array fields (vassals, pops,
+    # diplo_relations, etc.) never consume dropdown_options.
     dropdown_options = {}
+    _coll_cache: dict = {}
     for field, attributes in schema["properties"].items():
-        if attributes.get("collections"):
-            related_collections = attributes.get("collections")
+        if attributes.get("bsonType") == "linked_object" and attributes.get("collections"):
             dropdown_options[field] = []
-            for related_collection in related_collections:
-                dropdown_options[field] += list(
-                    mongo.db[related_collection].find(
-                        {}, {"name": 1, "_id": 1}
-                    ).sort("name", ASCENDING)
-                )
+            for related_collection in attributes["collections"]:
+                if related_collection not in _coll_cache:
+                    _coll_cache[related_collection] = list(
+                        mongo.db[related_collection].find(
+                            {}, {"name": 1, "_id": 1}
+                        ).sort("name", ASCENDING)
+                    )
+                dropdown_options[field] += _coll_cache[related_collection]
+    _r2 = perf_counter()
 
     linked_objects = get_linked_objects(schema, nation)
+    _r3 = perf_counter()
 
     if "concessions" in nation and nation["concessions"] is not None:
         if not isinstance(nation["concessions"], dict):
@@ -387,14 +423,17 @@ def _render_nation_edit(item_ref, form=None):
     if form is None:
         form = form_generator.get_form("nations", schema, item=nation)
         form.concessions.data = json.dumps(nation.get("concessions", {}))
+    _r4 = perf_counter()
 
     form.populate_linked_fields(schema, dropdown_options)
+    _r5 = perf_counter()
 
     def _opts(collection):
-        return [
-            {"id": str(item["_id"]), "name": item.get("name", "")}
-            for item in mongo.db[collection].find({}, {"_id": 1, "name": 1}).sort("name", ASCENDING)
-        ]
+        # Reuse _coll_cache when available (already fetched for dropdown_options)
+        docs = _coll_cache.get(collection) or list(
+            mongo.db[collection].find({}, {"_id": 1, "name": 1}).sort("name", ASCENDING)
+        )
+        return [{"id": str(d["_id"]), "name": d.get("name", "")} for d in docs]
 
     bulk_edit_options = {
         "nations": _opts("nations"),
@@ -402,18 +441,11 @@ def _render_nation_edit(item_ref, form=None):
         "cultures": _opts("cultures"),
         "religions": _opts("religions"),
     }
+    _r6 = perf_counter()
 
-    # District defs grouped by category for the district type picker and card display
-    from pymongo import ASCENDING as _ASC
-    district_defs_full = list(mongo.db.district_defs.find(
-        {}, {"_id": 0}
-    ).sort([("category", _ASC), ("tier", _ASC), ("display_name", _ASC)]))
-    district_defs = district_defs_full
-    district_defs_map = {d["key"]: d for d in district_defs_full if "key" in d}
-    district_categories = {
-        c["key"]: c.get("display_name", c["key"])
-        for c in mongo.db.district_categories.find({}, {"key": 1, "display_name": 1, "_id": 0})
-    }
+    # District defs — served from a 5-minute process-level cache (static config data)
+    district_defs, district_defs_map, district_categories = _get_district_defs()
+    _r7 = perf_counter()
 
     # Trade routes
     nation_name = nation.get("name", item_ref)
@@ -425,6 +457,7 @@ def _render_nation_edit(item_ref, form=None):
     current_session = _gm.get("session_counter", 0) if _gm else 0
     from helpers.trade_route_helpers import get_connectable_nations
     connectable_nations = get_connectable_nations(nation_name, nation.get("trade_speed", 1))
+    _r8 = perf_counter()
 
     visibility_level, visibility_bypassed = get_item_visibility(
         "nations", nation,
@@ -439,8 +472,9 @@ def _render_nation_edit(item_ref, form=None):
             source="nation_edit",
             user=g.user,
         )
+    _r9 = perf_counter()
 
-    return render_template(
+    rendered = render_template(
         "nation_owner_edit.html",
         form=form,
         form_json=wtform_to_json(form),
@@ -462,6 +496,21 @@ def _render_nation_edit(item_ref, form=None):
         visibility_level=visibility_level,
         visibility_bypassed=visibility_bypassed,
     )
+    _r10 = perf_counter()
+
+    def _ms(a, b): return f"{(b-a)*1000:.0f}ms"
+    current_app.logger.warning(
+        "[EDIT_PAGE] %s | get_nation=%s dropdown_options=%s linked_objects=%s "
+        "get_form=%s populate_linked=%s bulk_edit_opts=%s district_defs=%s "
+        "trade_routes=%s visibility=%s render_template=%s | TOTAL=%s",
+        item_ref,
+        _ms(_r0, _r1), _ms(_r1, _r2), _ms(_r2, _r3),
+        _ms(_r3, _r4), _ms(_r4, _r5), _ms(_r5, _r6), _ms(_r6, _r7),
+        _ms(_r7, _r8), _ms(_r8, _r9), _ms(_r9, _r10),
+        _ms(_r0, _r10),
+    )
+
+    return rendered
 
 
 @nation_routes.route("/nations/edit/<item_ref>", methods=["GET"])
@@ -482,11 +531,17 @@ def nation_edit_request(item_ref):
     )
 
     form = form_generator.get_form("nations", schema, formdata=request.form)
-    form.populate_linked_fields(schema, get_dropdown_options(schema))
 
-    if not form.validate():
-        flash(f"Form validation failed: {form.errors}")
-        return _render_nation_edit(item_ref, form=form)
+    # Validate CSRF token only; skip WTForms field-level validation entirely.
+    # Hidden SelectFields (outside the player's visibility tier) always submit ""
+    # which fails choice validation — but those fields are stripped before submission
+    # anyway. jsonschema below validates the visible field values instead.
+    from flask_wtf.csrf import validate_csrf as _validate_csrf, ValidationError as _CSRFError
+    try:
+        _validate_csrf(request.form.get('csrf_token', ''))
+    except _CSRFError:
+        flash("Security token expired. Please refresh and try again.")
+        return redirect(f"/nations/edit/{item_ref}")
 
     form_data = form.data.copy()
     form_data.pop('csrf_token', None)
@@ -512,19 +567,20 @@ def nation_edit_request(item_ref):
             except (json.JSONDecodeError, TypeError):
                 dist['upgrades'] = []
 
-    valid, error = validate_form_with_jsonschema(form, schema)
+    # Validate only the stripped fields (partial update — skip required-field check).
+    valid, error = validate_form_with_jsonschema(form, schema, data=form_data, partial=True)
     if not valid:
         flash(f"Validation Error: {error}")
-        return _render_nation_edit(item_ref, form=form)
+        return redirect(f"/nations/edit/{item_ref}")
 
     valid, error = _validate_tech_costs(form_data)
     if not valid:
         flash(f"Validation Error: {error}")
-        return _render_nation_edit(item_ref, form=form)
+        return redirect(f"/nations/edit/{item_ref}")
 
     if form_data["name"] != item_ref and db.find_one({"name": form_data["name"]}):
         flash("Name must be unique!")
-        return _render_nation_edit(item_ref, form=form)
+        return redirect(f"/nations/edit/{item_ref}")
 
     change_id = request_change(
         data_type="nations",
@@ -544,17 +600,32 @@ def nation_edit_approve(item_ref):
     """Handle nation edit approval"""
     schema, db, nation = get_data_on_item("nations", item_ref)
 
-    form = form_generator.get_form("nations", schema, formdata=request.form)
-    form.populate_linked_fields(schema, get_dropdown_options(schema))
+    visibility_level, _ = get_item_visibility(
+        "nations", nation,
+        user=g.user,
+        view_access_level=g.view_access_level,
+        is_non_player_admin=g.is_non_player_admin,
+    )
+    is_partial = visibility_level < 4
 
-    if not form.validate():
-        flash(f"Form validation failed: {form.errors}")
-        return _render_nation_edit(item_ref, form=form)
+    form = form_generator.get_form("nations", schema, formdata=request.form)
+
+    # Validate CSRF only; skip WTForms field-level choice validation.
+    # When visibility is filtered some SelectFields are hidden and submit "" which
+    # isn't a valid choice.  jsonschema below validates the submitted values instead.
+    from flask_wtf.csrf import validate_csrf as _validate_csrf, ValidationError as _CSRFError
+    try:
+        _validate_csrf(request.form.get('csrf_token', ''))
+    except _CSRFError:
+        flash("Security token expired. Please refresh and try again.")
+        return redirect(f"/nations/edit/{item_ref}")
 
     form_data = form.data.copy()
     form_data.pop('csrf_token', None)
     form_data.pop('submit', None)
     form_data.pop('territory_types', None)  # read-only; managed by hex map sync
+    if is_partial:
+        form_data = strip_form_data_to_tier(form_data, visibility_level)
     if "name" in form_data:
         form_data["name"] = form_data.get("name", "").strip()
 
@@ -574,19 +645,19 @@ def nation_edit_approve(item_ref):
             except (json.JSONDecodeError, TypeError):
                 dist['upgrades'] = []
 
-    valid, error = validate_form_with_jsonschema(form, schema)
+    valid, error = validate_form_with_jsonschema(form, schema, data=form_data, partial=is_partial)
     if not valid:
         flash(f"Validation Error: {error}")
-        return _render_nation_edit(item_ref, form=form)
+        return redirect(f"/nations/edit/{item_ref}")
 
     valid, error = _validate_tech_costs(form_data)
     if not valid:
         flash(f"Validation Error: {error}")
-        return _render_nation_edit(item_ref, form=form)
+        return redirect(f"/nations/edit/{item_ref}")
 
     if form_data["name"] != item_ref and db.find_one({"name": form_data["name"]}):
         flash("Name must be unique!")
-        return _render_nation_edit(item_ref, form=form)
+        return redirect(f"/nations/edit/{item_ref}")
 
     change_id = request_change(
         data_type="nations",
@@ -596,8 +667,8 @@ def nation_edit_approve(item_ref):
         after_data=form_data,
         reason=form_data.pop("reason", "No Reason Given")
     )
-
     approve_change(change_id)
+
     flash(f"Change request #{change_id} created and approved.")
     return redirect("/nations/item/" + form_data["name"])
 
@@ -688,10 +759,15 @@ def nation_cosmetics_save(item_ref):
         "flag_url":   request.form.get("flag_url",   "").strip(),
     }
     accent = request.form.get("accent_color", "").strip()
+    accent_changed = False
     if _ACCENT_COLOR_RE.match(accent):
         updates["accent_color"] = accent
+        accent_changed = True
 
     mongo.db.nations.update_one({"_id": nation["_id"]}, {"$set": updates})
+    if accent_changed:
+        from helpers.hex_map_helpers import bump_tile_version
+        bump_tile_version()
     flash("Customization saved.")
     return redirect(f"/nations/item/{nation.get('name', item_ref)}")
 

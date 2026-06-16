@@ -184,7 +184,7 @@
           "Supremacist",
           "Zealous"
         ],
-        "view_access_level": 10
+        "view_access_level": 2
       },
       "sessions_since_temperament_change": {
         "bsonType": "number",

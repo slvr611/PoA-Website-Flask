@@ -71,8 +71,14 @@ def elected_candidates_generator():
 def karma_helper():
     schema, db = get_data_on_category("nations")
 
-    player_nations = list(db.find({"temperament": "Player"}).sort("name", ASCENDING))
-    ai_nations = list(db.find({"temperament": {"$ne": "Player"}}).sort("name", ASCENDING))
+    _karma_fields = {
+        "_id": 0, "name": 1,
+        "event_type": 1, "event_roll": 1, "raw_roll": 1,
+        "previous_karma": 1, "previous_rolling_karma": 1, "previous_temporary_karma": 1,
+        "karma": 1, "rolling_karma": 1, "temporary_karma": 1,
+    }
+    player_nations = list(db.find({"temperament": "Player"}, _karma_fields).sort("name", ASCENDING))
+    ai_nations = list(db.find({"temperament": {"$ne": "Player"}}, _karma_fields).sort("name", ASCENDING))
 
     return render_template("karma_helper.html",
                            player_nations=player_nations,
