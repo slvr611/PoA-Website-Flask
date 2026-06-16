@@ -271,6 +271,18 @@ def nation_item(item_ref):
     _gm = mongo.db.global_modifiers.find_one({"name": "global_modifiers"}, {"session_counter": 1})
     current_session = _gm.get("session_counter", 0) if _gm else 0
 
+    all_players = []
+    nation_players = []
+    if g.user and g.user.get("is_admin"):
+        all_players = list(mongo.db.players.find({}, {"_id": 1, "name": 1}).sort("name", 1))
+        player_ids = nation.get("players", [])
+        if player_ids:
+            try:
+                obj_ids = [ObjectId(pid) for pid in player_ids]
+                nation_players = list(mongo.db.players.find({"_id": {"$in": obj_ids}}, {"_id": 1, "name": 1}))
+            except Exception:
+                nation_players = []
+
     phase_start = perf_counter()
     rendered = render_template(
         "nation_owner.html",
@@ -294,6 +306,8 @@ def nation_item(item_ref):
         current_session=current_session,
         editable=False,
         connectable_nations=[],
+        all_players=all_players,
+        nation_players=nation_players,
     )
     timings["render_template_ms"] = round((perf_counter() - phase_start) * 1000, 2)
     timings["total_request_ms"] = round((perf_counter() - request_start) * 1000, 2)
@@ -306,6 +320,41 @@ def nation_item(item_ref):
     # )
 
     return rendered
+
+
+@nation_routes.route("/nations/item/<item_ref>/set_player", methods=["POST"])
+@admin_required
+def nation_set_player(item_ref):
+    schema, db, nation = get_data_on_item("nations", item_ref)
+    action = request.form.get("action")
+    player_id = request.form.get("player_id", "").strip()
+
+    current_players = list(nation.get("players", []))
+
+    if action == "add":
+        if not player_id:
+            flash("No player selected.", "warning")
+            return redirect(f"/nations/item/{item_ref}")
+        if player_id not in current_players:
+            try:
+                player = mongo.db.players.find_one({"_id": ObjectId(player_id)}, {"name": 1})
+            except Exception:
+                player = None
+            if not player:
+                flash("Player not found.", "error")
+                return redirect(f"/nations/item/{item_ref}")
+            current_players.append(player_id)
+            db.update_one({"_id": nation["_id"]}, {"$set": {"players": current_players}})
+            flash(f"Assigned {player.get('name', player_id)} to {nation['name']}.", "success")
+
+    elif action == "remove":
+        if player_id in current_players:
+            current_players.remove(player_id)
+            db.update_one({"_id": nation["_id"]}, {"$set": {"players": current_players}})
+            flash("Player removed.", "success")
+
+    return redirect(f"/nations/item/{item_ref}")
+
 
 def _render_nation_edit(item_ref, form=None):
     """Build and return the nation edit page.

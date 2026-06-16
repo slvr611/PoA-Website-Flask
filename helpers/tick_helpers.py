@@ -462,12 +462,53 @@ RULER_TYPE_STATS = {
     "General":          {"strength": "strategy",  "weakness": "cunning"},
 }
 
+RULER_SUBTYPES = {
+    "Steward":          ["Quartermaster", "Administrator", "Noble"],
+    "Religious Leader": ["Prophet", "Martyr", "Guardian"],
+    "Populist":         ["Orator", "Diplomat", "Bard"],
+    "Conqueror":        ["Duelist", "Champion", "Barbarian"],
+    "Archmage":         ["Magus", "Warlock", "Scholar"],
+    "General":          ["Tactician", "Tyrant", "Infiltrator"],
+}
+
 _RULER_TYPES = list(RULER_TYPE_STATS.keys())
 
 
-def generate_ai_character(org, org_schema, character_schema):
+def _pick_succession_title(succession_type, previous_leader):
+    """Return a title key based on succession type, or None if nothing is available."""
+    positive_titles = json_data.get("positive_titles", {})
+    positive_only = {k: v for k, v in positive_titles.items() if v.get("type") == "positive"}
+    keys_ordered = list(positive_only.keys())
+
+    # Group consecutive positive titles into lines of 3 (tier 1 → 2 → 3)
+    title_lines = [keys_ordered[i:i + 3] for i in range(0, len(keys_ordered), 3)]
+    title_to_line = {k: line for line in title_lines for k in line}
+
+    tier1 = [k for k, v in positive_only.items() if v.get("tier") == 1]
+    tier3 = [k for k, v in positive_only.items() if v.get("tier") == 3]
+
+    if succession_type == "Elected":
+        return random.choice(tier1) if tier1 else None
+
+    if succession_type == "Strength":
+        return random.choice(tier3) if tier3 else None
+
+    # Inherited: use previous leader's title line if available
+    if previous_leader:
+        prev_titles = previous_leader.get("positive_titles", [])
+        inherited_line_title = next(
+            (t for t in prev_titles if t in title_to_line), None
+        )
+        if inherited_line_title:
+            return title_to_line[inherited_line_title][0]  # tier-1 of that line
+
+    return random.choice(tier1) if tier1 else None
+
+
+def generate_ai_character(org, org_schema, character_schema, previous_leader=None):
     """Create and insert an AI ruler for the given nation/org. Returns a log string."""
     character_type = random.choice(_RULER_TYPES)
+    character_subtype = random.choice(RULER_SUBTYPES[character_type])
     req_strength = RULER_TYPE_STATS[character_type]["strength"]
     req_weakness = RULER_TYPE_STATS[character_type]["weakness"]
 
@@ -486,6 +527,32 @@ def generate_ai_character(org, org_schema, character_schema):
         modifiers.append({"field": w, "value": random.randint(-4, -2), "duration": -1, "source": "Weakness"})
 
     org_name = org.get("name", "Unknown")
+    succession_type = org.get("succession_type", "Inherited")
+
+    # Determine ruler demographics and whether to update nation primaries
+    ruler_race = str(org["primary_race"]) if org.get("primary_race") else None
+    ruler_culture = str(org["primary_culture"]) if org.get("primary_culture") else None
+    ruler_religion = str(org["primary_religion"]) if org.get("primary_religion") else None
+    pop_selected = None
+
+    if succession_type in ("Elected", "Strength"):
+        nation_pops = list(mongo.db.pops.find({"nation": str(org["_id"])}))
+        if nation_pops:
+            pop_selected = random.choice(nation_pops)
+            ruler_race = str(pop_selected["race"]) if pop_selected.get("race") else ruler_race
+            ruler_culture = str(pop_selected["culture"]) if pop_selected.get("culture") else ruler_culture
+            ruler_religion = str(pop_selected["religion"]) if pop_selected.get("religion") else ruler_religion
+
+    title = _pick_succession_title(succession_type, previous_leader)
+
+    char_props = character_schema.get("properties", {})
+    positive_quirk_options = [q for q in char_props.get("positive_quirk", {}).get("enum", []) if q != "None"]
+    negative_quirk_options = [q for q in char_props.get("negative_quirk", {}).get("enum", []) if q != "None"]
+    positive_quirk = random.choice(positive_quirk_options) if positive_quirk_options else "None"
+    negative_quirk = random.choice(negative_quirk_options) if negative_quirk_options else "None"
+
+    magic_points = max(0, sum(m["value"] for m in modifiers if m.get("field") == "magic"))
+
     base_name = f"{character_type} of {org_name}"
     name = base_name
     counter = 2
@@ -496,7 +563,7 @@ def generate_ai_character(org, org_schema, character_schema):
     char_doc = {
         "name": name,
         "character_type": character_type,
-        "character_subtype": "None",
+        "character_subtype": character_subtype,
         "health_status": "Healthy",
         "age_status": "Adult",
         "age": 1,
@@ -507,13 +574,15 @@ def generate_ai_character(org, org_schema, character_schema):
         "creator": None,
         "ruling_nation_org": str(org["_id"]),
         "region": str(org["region"]) if org.get("region") else None,
-        "race": str(org["primary_race"]) if org.get("primary_race") else None,
-        "culture": str(org["primary_culture"]) if org.get("primary_culture") else None,
-        "religion": str(org["primary_religion"]) if org.get("primary_religion") else None,
+        "race": ruler_race,
+        "culture": ruler_culture,
+        "religion": ruler_religion,
         "random_stats": 0,
-        "positive_titles": [],
+        "positive_titles": [title] if title else [],
         "negative_titles": [],
-        "magic_points": 0,
+        "positive_quirk": positive_quirk,
+        "negative_quirk": negative_quirk,
+        "magic_points": magic_points,
     }
 
     change_id = system_request_change(
@@ -525,7 +594,43 @@ def generate_ai_character(org, org_schema, character_schema):
         reason=f"Auto-generated AI ruler for {org_name}",
     )
     system_approve_change(change_id)
-    return f"Generated AI ruler '{name}' ({character_type}) for {org_name}.\n"
+    new_char_change = mongo.db.changes.find_one({"_id": change_id})
+    new_char_id = new_char_change.get("target") if new_char_change else None
+    result = f"Generated AI ruler '{name}' ({character_type} / {character_subtype}) for {org_name}.\n"
+
+    if pop_selected:
+        new_org = deepcopy(org)
+        new_org["primary_race"] = ruler_race
+        new_org["primary_culture"] = ruler_culture
+        new_org["primary_religion"] = ruler_religion
+        change_id = system_request_change(
+            data_type="nations",
+            item_id=org["_id"],
+            change_type="Update",
+            before_data=org,
+            after_data=new_org,
+            reason=f"Succession ({succession_type}): primary demographics updated for {org_name}",
+        )
+        system_approve_change(change_id)
+        result += f"  → Updated {org_name} primary demographics via {succession_type} succession.\n"
+
+    if new_char_id and previous_leader:
+        prev_id_str = str(previous_leader["_id"])
+        predecessor_artifacts = list(mongo.db.artifacts.find({"owner": prev_id_str, "archived": {"$ne": True}}))
+        for artifact in predecessor_artifacts:
+            art_change_id = system_request_change(
+                data_type="artifacts",
+                item_id=artifact["_id"],
+                change_type="Update",
+                before_data=artifact,
+                after_data={"owner": str(new_char_id)},
+                reason=f"Artifact inherited by {name} from predecessor",
+            )
+            system_approve_change(art_change_id)
+        if predecessor_artifacts:
+            result += f"  → Transferred {len(predecessor_artifacts)} artifact(s) from predecessor.\n"
+
+    return result
 
 
 def character_death_tick(old_character, new_character, schema):
@@ -593,7 +698,7 @@ def character_death_tick(old_character, new_character, schema):
                 system_approve_change(change_id)
 
                 if not old_character.get("player") and not old_nation.get("players"):
-                    result += generate_ai_character(old_nation, nation_schema, schema)
+                    result += generate_ai_character(old_nation, nation_schema, schema, previous_leader=old_character)
 
     return result
 
@@ -721,22 +826,45 @@ def character_age_tick(old_character, new_character, schema):
 
 def character_stat_gain_tick(old_character, new_character, schema):
     result = ""
-    if old_character.get("stat_gain_chance", 0) <= 0 or old_character.get("health_status", "Healthy") == "Dead":
+    if old_character.get("health_status", "Healthy") == "Dead":
         return ""
-    stat_gain_roll = random.random()
-    new_character["stat_gain_roll"] = stat_gain_roll
-    new_character["stat_gain_chance_at_tick"] = old_character.get("stat_gain_chance", 0)
-    if stat_gain_roll <= old_character.get("stat_gain_chance", 0):
-        possible_stats = []
+
+    effective_chance = old_character.get("stat_gain_chance", 0)
+    is_ai = not old_character.get("player")
+    name = old_character.get("name", "Unknown")
+
+    if is_ai:
+        cunning = old_character.get("cunning", 0)
+        is_immortal = old_character.get("elderly_age", 3) > 500
+        effective_chance += cunning * 0.1  # doubles the base cunning contribution
+        effective_chance += 0.25 if is_immortal else 0.5
+        # no cap for AI — effective_chance above 1.0 guarantees gains
+
+    if effective_chance <= 0:
+        return ""
+
+    new_character["stat_gain_chance_at_tick"] = effective_chance
+
+    if is_ai:
+        modifiers = new_character.get("modifiers", [])
+        new_character["modifiers"] = modifiers
         for stat in character_stats:
             if old_character.get(stat, 0) < old_character.get(stat + "_cap", 4):
-                possible_stats.append(stat)
-        if possible_stats and len(possible_stats) > 0:
-            stat = random.choice(possible_stats)
-            modifiers = new_character.get("modifiers", [])
-            modifiers.append({"_id": uuid.uuid4().hex[:8], "field": stat, "value": 1, "duration": -1, "source": "Stat gain tick"})
-            new_character["modifiers"] = modifiers
-            result = f"{old_character.get('name', 'Unknown')} has gained a level of {stat}.\n"
+                if random.random() <= effective_chance:
+                    modifiers.append({"_id": uuid.uuid4().hex[:8], "field": stat, "value": 1, "duration": -1, "source": "Stat gain tick"})
+                    result += f"{name} has gained a level of {stat}.\n"
+    else:
+        stat_gain_roll = random.random()
+        new_character["stat_gain_roll"] = stat_gain_roll
+        if stat_gain_roll <= effective_chance:
+            possible_stats = [s for s in character_stats if old_character.get(s, 0) < old_character.get(s + "_cap", 4)]
+            if possible_stats:
+                stat = random.choice(possible_stats)
+                modifiers = new_character.get("modifiers", [])
+                modifiers.append({"_id": uuid.uuid4().hex[:8], "field": stat, "value": 1, "duration": -1, "source": "Stat gain tick"})
+                new_character["modifiers"] = modifiers
+                result = f"{name} has gained a level of {stat}.\n"
+
     return result
 
 def artifact_loss_tick(old_character, new_character, schema):
@@ -1523,7 +1651,7 @@ def era_formal_storage_bonus_tick(old_nation, new_nation, schema):
     if not old_nation.get("technologies", {}).get("formal_storage", {}).get("researched", False):
         return ""
 
-    general_resources = [r["key"] for r in json_data["general_resources"] if r["key"] != "research"]
+    general_resources = [r["key"] for r in json_data["general_resources"] if r["key"] not in ("research", "gunpowder")]
     unique_resources = [r["key"] for r in json_data["unique_resources"]]
     resource_pool = general_resources + unique_resources
 
@@ -1936,6 +2064,7 @@ def generate_all_ai_rulers_tick():
 
 ERA_GENERAL_TICK_FUNCTIONS = {
     "Backup Database": None,   # handled directly in era_tick() before nation processing
+    "Era Give Tick Summary": None,  # handled directly in era_tick() after all processing
     "Era Relations Decay to Neutral": era_relations_decay_tick,
     "Era Pop Growth (All Nations)": era_pop_growth_tick,
     "Age Pop Growth (Skip Infertile Races)": age_pop_growth_tick,
@@ -2049,6 +2178,9 @@ def era_tick(form_data):
         if f"run_{label}" in form_data:
             print(label)
             full_tick_summary += fn()
+
+    if "run_Era Give Tick Summary" in form_data:
+        give_tick_summary(full_tick_summary, full_tick_summary)
 
     return full_tick_summary
 

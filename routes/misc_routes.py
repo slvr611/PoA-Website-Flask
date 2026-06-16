@@ -1,10 +1,22 @@
-from flask import Blueprint, render_template, session, redirect, url_for, g, request, jsonify
+from flask import Blueprint, render_template, session, redirect, url_for, g, request, jsonify, Response
 from pymongo import ASCENDING
 from app_core import mongo, json_data, category_data
 from helpers.data_helpers import generate_id_to_name_dict, compute_demographics
 
 
 misc_routes = Blueprint('misc_routes', __name__)
+
+@misc_routes.route('/robots.txt')
+def robots_txt():
+    content = (
+        "User-agent: *\n"
+        "Disallow: /changes/\n"
+        "Disallow: /changes/archived\n"
+        "Disallow: /changes/pending\n"
+        "Disallow: /recalculate_all_objects\n"
+        "Disallow: /recalculate\n"
+    )
+    return Response(content, mimetype='text/plain')
 
 @misc_routes.route('/get_available_slots', methods=['POST'])
 def get_available_slots():
