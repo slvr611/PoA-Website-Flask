@@ -465,6 +465,9 @@ def _render_nation_edit(item_ref, form=None):
         view_access_level=g.view_access_level,
         is_non_player_admin=g.is_non_player_admin,
     )
+    if g.user and g.user.get("is_admin"):
+        visibility_level = 4
+        visibility_bypassed = True
     if visibility_bypassed and g.user and g.user.get("is_admin") and request.args.get("bypass_visibility") == "1":
         log_visibility_bypass(
             page_url=request.url,
