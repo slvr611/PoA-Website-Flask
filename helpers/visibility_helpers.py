@@ -72,6 +72,8 @@ NATION_EDIT_FIELD_TIERS = {
     # Tier 4 — military / resources
     "land_units": 4, "naval_units": 4, "support_units": 4,
     "resource_storage": 4, "money": 4, "jobs": 4,
+    # Tier 4 — admin-only fields (never shown to non-admins on edit form)
+    "rp_mod_notes": 4,
 }
 
 # Maps data_type → field_name → minimum visibility tier required to VIEW the field.

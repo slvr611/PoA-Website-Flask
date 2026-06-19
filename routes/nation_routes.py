@@ -548,6 +548,14 @@ def nation_edit_request(item_ref):
     form_data.pop('submit', None)
     form_data.pop('territory_types', None)  # read-only; managed by hex map sync
     form_data = strip_form_data_to_tier(form_data, visibility_level)
+    # Drop top-level fields that were not actually submitted (WTForms fills absent
+    # fields with "" or None by default). Prevents admin-only or government-type-
+    # specific fields that aren't rendered for this player from overwriting their
+    # existing DB values with empty strings.
+    _submitted = set(request.form.keys()) - {'csrf_token', 'submit', 'territory_types'}
+    for _k in list(form_data.keys()):
+        if _k not in _submitted and form_data[_k] in (None, ""):
+            del form_data[_k]
     if "name" in form_data:
         form_data["name"] = form_data.get("name", "").strip()
 
@@ -606,6 +614,8 @@ def nation_edit_approve(item_ref):
         view_access_level=g.view_access_level,
         is_non_player_admin=g.is_non_player_admin,
     )
+    if g.user and g.user.get("is_admin"):
+        visibility_level = 4
     is_partial = visibility_level < 4
 
     form = form_generator.get_form("nations", schema, formdata=request.form)
@@ -626,6 +636,10 @@ def nation_edit_approve(item_ref):
     form_data.pop('territory_types', None)  # read-only; managed by hex map sync
     if is_partial:
         form_data = strip_form_data_to_tier(form_data, visibility_level)
+        _submitted = set(request.form.keys()) - {'csrf_token', 'submit', 'territory_types'}
+        for _k in list(form_data.keys()):
+            if _k not in _submitted and form_data[_k] in (None, ""):
+                del form_data[_k]
     if "name" in form_data:
         form_data["name"] = form_data.get("name", "").strip()
 
