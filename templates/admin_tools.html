@@ -217,6 +217,32 @@
 
         <div class="admin-tool-card">
             <div class="admin-tool-card-body">
+                <h3 class="admin-tool-card-title">Wipe AI Resource Desires</h3>
+                <p class="admin-tool-card-desc">Clear all resource buy/sell desires from non-player nations. Player nation desires are not affected.</p>
+                <form action="/admin/wipe_ai_desires" method="POST">
+                    <button type="submit" class="btn btn-danger btn-sm"
+                            onclick="return confirm('This will clear resource desires from all non-player nations. Continue?')">
+                        Wipe AI Desires
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <div class="admin-tool-card">
+            <div class="admin-tool-card-body">
+                <h3 class="admin-tool-card-title">Wipe All Concessions</h3>
+                <p class="admin-tool-card-desc">Clear all pending concession demands from every vassal nation.</p>
+                <form action="/admin/wipe_concessions" method="POST">
+                    <button type="submit" class="btn btn-danger btn-sm"
+                            onclick="return confirm('This will clear all concessions from every nation. Continue?')">
+                        Wipe Concessions
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <div class="admin-tool-card">
+            <div class="admin-tool-card-body">
                 <h3 class="admin-tool-card-title">Wipe All Districts</h3>
                 <p class="admin-tool-card-desc">Remove every district from every nation's district slots. Imperial districts are not affected.</p>
                 <form action="/admin/wipe_districts" method="POST">

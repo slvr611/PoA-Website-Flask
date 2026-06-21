@@ -5,7 +5,7 @@
 <div class="container">
     <h1>Randomize AI Laws</h1>
     <p class="text-muted" style="margin-bottom:1rem;">
-        Assigns a new weighted-random law value to every randomizable law for all non-Player nations.
+        Assigns a new weighted-random law value to every nation not directly assigned to a player.
         Weights are configured in <code>json-data/law_randomization_weights.json</code>.
     </p>
 
@@ -27,12 +27,10 @@
 
     <div style="display:flex;gap:1rem;margin-bottom:2rem;flex-wrap:wrap;">
         <form action="/randomize_ai_laws/preview" method="POST">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button type="submit" class="btn btn-primary">Preview Changes</button>
         </form>
         <form action="/randomize_ai_laws/apply" method="POST"
-              onsubmit="return confirm('Apply randomized laws to all {{ ai_nations|length }} AI nations? This cannot be undone.')">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              onsubmit="return confirm('Apply randomized laws to all {{ ai_nations|length }} nations? This cannot be undone.')">
             <button type="submit" class="btn btn-danger">Apply Now</button>
         </form>
         <a href="/admin_tools" class="btn btn-secondary">Back</a>

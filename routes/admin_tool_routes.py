@@ -714,6 +714,39 @@ def wipe_all_nodes():
 
 
 # ---------------------------------------------------------------------------
+# Wipe AI resource desires
+# ---------------------------------------------------------------------------
+
+@admin_tool_routes.route("/admin/wipe_ai_desires", methods=["POST"])
+@admin_required
+def wipe_ai_desires():
+    """Clear resource_desires on all non-player nations."""
+    player_ids = _get_player_nation_ids()
+    result = mongo.db.nations.update_many(
+        {"_id": {"$nin": list(player_ids)}, "resource_desires": {"$exists": True, "$ne": []}},
+        {"$set": {"resource_desires": []}}
+    )
+    flash(f"Cleared resource desires from {result.modified_count} non-player nation(s).", "success")
+    return redirect(url_for("admin_tool_routes.admin_tools"))
+
+
+# ---------------------------------------------------------------------------
+# Wipe concessions
+# ---------------------------------------------------------------------------
+
+@admin_tool_routes.route("/admin/wipe_concessions", methods=["POST"])
+@admin_required
+def wipe_concessions():
+    """Clear the concessions dict on every nation."""
+    result = mongo.db.nations.update_many(
+        {"concessions": {"$exists": True, "$ne": {}}},
+        {"$set": {"concessions": {}}}
+    )
+    flash(f"Wiped concessions from {result.modified_count} nation(s).", "success")
+    return redirect(url_for("admin_tool_routes.admin_tools"))
+
+
+# ---------------------------------------------------------------------------
 # Visibility bypass log viewer
 # ---------------------------------------------------------------------------
 
@@ -887,6 +920,28 @@ def _load_law_weights():
         return _json.load(f)
 
 
+def _get_player_nation_ids():
+    """Return a set of nation _id values (as ObjectIds) that are assigned to a player."""
+    player_nation_ids = set()
+    for char in mongo.db.characters.find(
+        {"player": {"$exists": True, "$ne": None, "$ne": ""},
+         "ruling_nation_org": {"$exists": True, "$ne": None}},
+        {"ruling_nation_org": 1, "_id": 0},
+    ):
+        rno = char.get("ruling_nation_org")
+        if rno:
+            try:
+                player_nation_ids.add(ObjectId(str(rno)))
+            except Exception:
+                pass
+    for nation in mongo.db.nations.find(
+        {"players": {"$exists": True, "$ne": [], "$ne": None}},
+        {"_id": 1},
+    ):
+        player_nation_ids.add(nation["_id"])
+    return player_nation_ids
+
+
 def _pick_law(options, law_key, culture_traits, weights_data):
     """Return a weighted-random choice from options using base + trait weights."""
     base = weights_data.get("base_weights", {}).get(law_key, {})
@@ -934,7 +989,8 @@ def _randomize_nation_laws(nation, schema, weights_data, cultures_by_id):
 @admin_required
 def randomize_ai_laws():
     schema, db = get_data_on_category("nations")
-    ai_nations = list(db.find({"temperament": {"$ne": "Player"}}, {"name": 1, "primary_culture": 1}).sort("name", ASCENDING))
+    player_ids = _get_player_nation_ids()
+    ai_nations = list(db.find({"_id": {"$nin": list(player_ids)}}, {"name": 1, "primary_culture": 1}).sort("name", ASCENDING))
     weights_data = _load_law_weights()
     excluded = weights_data.get("excluded_law_categories", [])
     law_keys = [k for k in schema.get("laws", []) if k not in excluded]
@@ -950,7 +1006,8 @@ def randomize_ai_laws():
 @admin_required
 def randomize_ai_laws_preview():
     schema, db = get_data_on_category("nations")
-    ai_nations = list(db.find({"temperament": {"$ne": "Player"}}).sort("name", ASCENDING))
+    player_ids = _get_player_nation_ids()
+    ai_nations = list(db.find({"_id": {"$nin": list(player_ids)}}).sort("name", ASCENDING))
     weights_data = _load_law_weights()
     excluded = weights_data.get("excluded_law_categories", [])
     law_keys = [k for k in schema.get("laws", []) if k not in excluded]
@@ -987,7 +1044,8 @@ def randomize_ai_laws_apply():
     from copy import deepcopy
 
     schema, db = get_data_on_category("nations")
-    ai_nations = list(db.find({"temperament": {"$ne": "Player"}}).sort("name", ASCENDING))
+    player_ids = _get_player_nation_ids()
+    ai_nations = list(db.find({"_id": {"$nin": list(player_ids)}}).sort("name", ASCENDING))
     weights_data = _load_law_weights()
 
     culture_ids = list({ObjectId(n["primary_culture"]) for n in ai_nations if n.get("primary_culture")})
