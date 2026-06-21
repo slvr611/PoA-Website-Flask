@@ -373,9 +373,16 @@
                 {% elif ptype == 'district' %}
                   <select class="form-control" name="prerequisites-{{ pidx }}-value" id="prerequisites-{{ pidx }}-value">
                     <option value="">(select)</option>
-                    {% for cat in district_categories %}
-                      <option value="{{ cat.key }}"{% if pval == cat.key %} selected{% endif %}>{{ cat.label }}</option>
+                    {% set ns = namespace(cur_group='') %}
+                    {% for opt in district_options %}
+                      {% if opt.group != ns.cur_group %}
+                        {% if ns.cur_group %}</optgroup>{% endif %}
+                        <optgroup label="{{ opt.group }}">
+                        {% set ns.cur_group = opt.group %}
+                      {% endif %}
+                      <option value="{{ opt.key }}"{% if pval == opt.key %} selected{% endif %}>{{ opt.label }}</option>
                     {% endfor %}
+                    {% if ns.cur_group %}</optgroup>{% endif %}
                   </select>
                 {% elif ptype in ('nation', 'name', 'defensive_pact', 'military_alliance') %}
                   {{ prereq_select('prerequisites-' ~ pidx ~ '-value', nations_options, pval) }}
@@ -529,8 +536,12 @@ const MONEY_DIVISORS = {
 // Cost per unit of upkeep (negative = reduces total cost)
 const UPKEEP_MULTIPLIERS = {
   food: -3, wood: -3, stone: -3, mounts: -3, research: -3,
-  magic: -4, bronze: -4, iron: -4, prestige: -6
+  magic: -4, prestige: -6
 };
+// All unique resources reduce cost at -4 per unit
+for (const key of {{ unique_resource_keys | tojson }}) {
+  UPKEEP_MULTIPLIERS[key] = -4;
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function getNum(id) {
@@ -793,7 +804,7 @@ function addSpecialAbility() {
 }
 
 const TECH_OPTIONS = {{ tech_options | tojson }};
-const DISTRICT_CATEGORIES = {{ district_categories | tojson }};
+const DISTRICT_OPTIONS = {{ district_options | tojson }};
 const NATIONS_OPTIONS = {{ nations_options | tojson }};
 const ARTIFACTS_OPTIONS = {{ artifacts_options | tojson }};
 const SPELLS_OPTIONS = {{ spells_options | tojson }};
@@ -808,8 +819,17 @@ function makeNameSelect(n, names, selectedValue) {
 
 function makePrereqValueCell(n, type, selectedValue) {
   if (type === 'district') {
-    let opts = '<option value="">(select)</option>' +
-      DISTRICT_CATEGORIES.map(c => `<option value="${c.key}"${c.key === selectedValue ? ' selected' : ''}>${c.label}</option>`).join('');
+    let opts = '<option value="">(select)</option>';
+    let curGroup = '';
+    for (const opt of DISTRICT_OPTIONS) {
+      if (opt.group !== curGroup) {
+        if (curGroup) opts += '</optgroup>';
+        opts += `<optgroup label="${opt.group}">`;
+        curGroup = opt.group;
+      }
+      opts += `<option value="${opt.key}"${opt.key === selectedValue ? ' selected' : ''}>${opt.label}</option>`;
+    }
+    if (curGroup) opts += '</optgroup>';
     return `<select class="form-control" name="prerequisites-${n}-value" id="prerequisites-${n}-value">${opts}</select>`;
   } else if (type === 'technology') {
     let opts = '<option value="">(select)</option>' +

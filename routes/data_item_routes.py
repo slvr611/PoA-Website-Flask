@@ -56,42 +56,49 @@ def _build_unit_edit_extras(item=None):
         key=lambda x: x["display_name"]
     )
 
-    # Build district key→category lookup and sorted category list
-    district_key_to_cat = {}
-    cat_set = set()
-    for fname in _DISTRICT_FILES:
-        for key, data in json_data.get(fname, {}).items():
-            cat = data.get("type", "")
-            if cat:
-                district_key_to_cat[key] = cat
-                cat_set.add(cat)
-    district_categories = sorted(
-        [{"key": c, "label": c.replace("_", " ").title()} for c in cat_set],
-        key=lambda x: x["label"]
-    )
+    # District options from DB: categories + individual district defs
+    district_categories_raw = list(mongo.db.district_categories.find(
+        {}, {"key": 1, "display_name": 1, "_id": 0}
+    ).sort("display_name", ASCENDING))
+    district_defs_raw = list(mongo.db.district_defs.find(
+        {}, {"key": 1, "display_name": 1, "category": 1, "_id": 0}
+    ).sort("display_name", ASCENDING))
+    district_options = []
+    for cat in district_categories_raw:
+        district_options.append({
+            "key": cat["key"],
+            "label": cat.get("display_name", cat["key"]),
+            "group": "Categories",
+        })
+    for d in district_defs_raw:
+        cat_name = d.get("category", "")
+        cat_label = next(
+            (c.get("display_name", c["key"]) for c in district_categories_raw if c["key"] == cat_name),
+            cat_name,
+        )
+        district_options.append({
+            "key": d["key"],
+            "label": d.get("display_name", d["key"]),
+            "group": cat_label or "Other",
+        })
 
     def _names(col):
         return [d["name"] for d in category_data[col]["database"].find({}, {"_id": 0, "name": 1}).sort("name", ASCENDING)]
 
-    # Migrate any era-specific district keys to their category in-place
-    if item and "prerequisites" in item:
-        for pre in item["prerequisites"]:
-            if pre.get("type") == "district":
-                val = pre.get("value", "")
-                if val in district_key_to_cat:
-                    pre["value"] = district_key_to_cat[val]
-
     races_options = _names("races")
+
+    unique_resource_keys = [r["key"] for r in json_data.get("unique_resources", [])]
 
     return dict(
         all_traits=all_traits,
         tech_options=tech_options,
-        district_categories=district_categories,
+        district_options=district_options,
         nations_options=_names("nations"),
         artifacts_options=_names("artifacts"),
         spells_options=_names("spells"),
         mercenaries_options=_names("mercenaries"),
         races_options=races_options,
+        unique_resource_keys=unique_resource_keys,
     )
 
 

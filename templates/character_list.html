@@ -9,8 +9,11 @@
         <a href="/characters/new">Create New Character</a>
     {% endif %}
 
-    <h1>Living Characters ({{ living_characters|length }})</h1>
-    {{ render_data_table(living_characters, schema, preview_references, base_url=request.path) }}
+    <h1>Player Characters ({{ player_characters|length }})</h1>
+    {{ render_data_table(player_characters, schema, preview_references, base_url=request.path) }}
+
+    <h1>AI Characters ({{ ai_characters|length }})</h1>
+    {{ render_data_table(ai_characters, schema, preview_references, base_url=request.path) }}
 
     <h1>Dead Characters ({{ dead_characters|length }})</h1>
     {{ render_data_table(dead_characters, schema, preview_references, base_url=request.path, row_class='dead-character') }}

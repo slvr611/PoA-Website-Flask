@@ -55,20 +55,24 @@ def character_list():
     # Get all characters
     all_characters = list(db.find().sort("name", ASCENDING))
     
-    # Separate living and dead characters
-    living_characters = []
+    # Separate into player, AI, and dead characters
+    player_characters = []
+    ai_characters = []
     dead_characters = []
-    
+
     for character in all_characters:
         if character.get("health_status") == "Dead":
             dead_characters.append(character)
+        elif character.get("player"):
+            player_characters.append(character)
         else:
-            living_characters.append(character)
-    
+            ai_characters.append(character)
+
     return render_template(
         "character_list.html",
         title="Characters",
-        living_characters=living_characters,
+        player_characters=player_characters,
+        ai_characters=ai_characters,
         dead_characters=dead_characters,
         schema=schema,
         preview_references=preview_overall_lookup_dict
