@@ -598,20 +598,120 @@ def _apply_district_cost_mod(raw_cost, cost_mod):
     return {r: max(1, math.ceil(amt * factor)) for r, amt in raw_cost.items()}
 
 
-def _district_modifier_value(modifiers_list, need_weights):
-    """Sum the weighted value of a list of modifier objects against current needs."""
+def _price_scale(resource_key, prices):
+    """Return a normalisation factor so 1 unit of any resource maps to a comparable
+    gold-equivalent value.  Money itself is scaled at 1/100 so that +150 money_income
+    is comparable to +2 food (food base price ~50–100)."""
+    if resource_key == "money":
+        return 0.01
+    return prices.get(resource_key, 50) / 50.0
+
+
+def _district_modifier_value(modifiers_list, need_weights, prices):
+    """Sum the weighted value of a list of modifier objects against current needs,
+    normalised by market price so money and resources are comparable.
+
+    Returns (total, breakdown) where breakdown is a list of
+    (field, raw_value, weight, price_scale, contribution) tuples.
+    """
     from calculations.source_adapters import _resolve_modifier_type
     total = 0.0
+    breakdown = []
     for m in modifiers_list or []:
         field = _resolve_modifier_type(m)
         value = m.get("value", 0)
-        # Map field to a stockpile key if needed
+        contrib = 0.0
+        weight = 0.0
+        scale = 1.0
+        matched = False
         if field in need_weights:
-            total += need_weights[field] * value
+            weight = need_weights[field]
+            scale = _price_scale(field, prices)
+            contrib = weight * value * scale
+            matched = True
         elif field in PRODUCTION_FIELD_MAP:
-            _, base_w = PRODUCTION_FIELD_MAP[field]
-            total += base_w * value
-    return total
+            stockpile_key, base_w = PRODUCTION_FIELD_MAP[field]
+            weight = base_w
+            scale = _price_scale(stockpile_key, prices) if stockpile_key else 1.0
+            contrib = base_w * value * scale
+            matched = True
+        elif field.endswith("_production"):
+            resource_key = field[: -len("_production")]
+            if resource_key in need_weights:
+                weight = need_weights[resource_key]
+                scale = _price_scale(resource_key, prices)
+                contrib = weight * value * scale
+                matched = True
+        elif field.endswith("_node_value"):
+            resource_key = field[: -len("_node_value")]
+            if resource_key in need_weights:
+                weight = need_weights[resource_key]
+                scale = _price_scale(resource_key, prices) * 0.5
+                contrib = weight * value * scale
+                matched = True
+        total += contrib
+        breakdown.append((field, value, round(weight, 2), round(scale, 2), round(contrib, 2), matched))
+    return total, breakdown
+
+
+def _unlocked_jobs_value(district_key, state, need_weights, prices):
+    """Score the jobs that would become available if this district were built.
+
+    Returns (total_value, [(job_display_name, job_score), ...]) so callers can
+    include a breakdown in the rationale.  Only considers jobs whose *sole*
+    missing requirement is this district.
+    """
+    jobs_data = json_data.get("jobs", {})
+    current_districts = state["existing_def_keys"] | state["existing_types"]
+    hypothetical_districts = current_districts | {district_key}
+
+    total = 0.0
+    unlocked = []
+    for jk, jdata in jobs_data.items():
+        if jk in state.get("available_jobs", {}):
+            continue
+        req_districts = jdata.get("requirements", {}).get("district", [])
+        if not req_districts:
+            continue
+        already_meets = any(d in current_districts for d in req_districts)
+        if already_meets:
+            continue
+        would_meet = any(d in hypothetical_districts for d in req_districts)
+        if not would_meet:
+            continue
+        non_district_reqs = {k: v for k, v in jdata.get("requirements", {}).items() if k != "district"}
+        if non_district_reqs:
+            continue
+
+        prod_value = 0.0
+        upkeep_cost = 0.0
+        for field, amount in jdata.get("production", {}).items():
+            if field in need_weights:
+                prod_value += need_weights[field] * amount * _price_scale(field, prices)
+            elif field in PRODUCTION_FIELD_MAP:
+                stockpile_key, base_w = PRODUCTION_FIELD_MAP[field]
+                scale = _price_scale(stockpile_key, prices) if stockpile_key else 1.0
+                if stockpile_key and stockpile_key in need_weights:
+                    prod_value += need_weights[stockpile_key] * amount * scale
+                else:
+                    prod_value += base_w * amount * scale
+            elif field.endswith("_production"):
+                resource_key = field[: -len("_production")]
+                if resource_key in need_weights:
+                    prod_value += need_weights[resource_key] * amount * _price_scale(resource_key, prices)
+        for field, amount in jdata.get("upkeep", {}).items():
+            w = need_weights.get(field, 1.0)
+            upkeep_cost += w * amount * _price_scale(field, prices)
+
+        job_score = max(0.0, prod_value - upkeep_cost)
+        if job_score > 0:
+            idle = state.get("idle_pops", 0)
+            pop_scale = min(1.0, idle / 3.0) if idle > 0 else 0.3
+            scaled = job_score * pop_scale
+            total += scaled
+            unlocked.append((jdata.get("display_name", jk), round(scaled, 2)))
+
+    return total, unlocked
 
 
 def score_buildable_districts(old_nation, state, need_weights, market_buy_prices):
@@ -639,14 +739,16 @@ def score_buildable_districts(old_nation, state, need_weights, market_buy_prices
         raw_cost    = dd.get("cost", {})
         actual_cost = _apply_district_cost_mod(raw_cost, state["district_cost_mod"])
 
-        # Check nation can pay (rough check; money handled separately)
         can_afford_now = all(
             state["stockpiles"].get(r, 0) >= amt
             for r, amt in actual_cost.items()
             if r != "money"
         ) and state["money"] >= actual_cost.get("money", 0)
 
-        mod_value    = _district_modifier_value(dd.get("modifiers", []), need_weights)
+        mod_value, mod_breakdown = _district_modifier_value(dd.get("modifiers", []), need_weights, market_buy_prices)
+
+        job_value, unlocked_jobs = _unlocked_jobs_value(dk, state, need_weights, market_buy_prices)
+
         market_bonus = sum(
             need_weights.get(r, 0.5) * v
             for r, v in market_buy_prices.items()
@@ -655,24 +757,29 @@ def score_buildable_districts(old_nation, state, need_weights, market_buy_prices
                 _try_resolve_field(m) == r
                 for m in dd.get("modifiers", [])
             )
-        ) * 0.3  # discount: market opportunity is a bonus, not the primary driver
+        ) * 0.3
 
         cost_penalty = sum(
-            need_weights.get(r, 1.0) * amt
+            need_weights.get(r, 1.0) * amt * _price_scale(r, market_buy_prices)
             for r, amt in actual_cost.items()
             if r != "money"
         ) * 0.15 + (actual_cost.get("money", 0) / max(state["money"] + 1, 1)) * 5
 
-        score = mod_value + market_bonus - cost_penalty
+        score = mod_value + job_value + market_bonus - cost_penalty
         if score <= 0:
             continue
 
-        rationale = (
-            f"{dd.get('display_name', dk)}: modifier value {mod_value:.1f}"
-            + (f", market opportunity +{market_bonus:.1f}" if market_bonus > 0.5 else "")
-            + (f" [can afford]" if can_afford_now else f" [saving]")
-        )
-        results.append((score, dk, dd.get("display_name", dk), actual_cost, rationale, "db"))
+        parts = [f"modifiers {mod_value:.1f}"]
+        if unlocked_jobs:
+            job_names = ", ".join(f"{n} ({s})" for n, s in unlocked_jobs)
+            parts.append(f"unlocks jobs +{job_value:.1f} [{job_names}]")
+        if market_bonus > 0.5:
+            parts.append(f"market +{market_bonus:.1f}")
+        parts.append(f"cost penalty -{cost_penalty:.1f}")
+        parts.append("[can afford]" if can_afford_now else "[saving]")
+        rationale = "; ".join(parts)
+
+        results.append((score, dk, dd.get("display_name", dk), actual_cost, rationale, "db", mod_breakdown))
 
     results.sort(key=lambda x: x[0], reverse=True)
     return results
@@ -700,7 +807,7 @@ def update_district_plan(old_nation, new_nation, state, goals, personality, mark
     if not scored:
         return None
 
-    best_score, best_key, best_name, best_cost, best_rationale, best_src = scored[0]
+    best_score, best_key, best_name, best_cost, best_rationale, best_src = scored[0][:6]
 
     # If current plan is still in top-3 candidates, keep it (avoid constant churn)
     top_keys = {s[1] for s in scored[:3]}

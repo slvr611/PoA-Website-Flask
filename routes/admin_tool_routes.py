@@ -747,6 +747,22 @@ def wipe_concessions():
 
 
 # ---------------------------------------------------------------------------
+# Delete units by era
+# ---------------------------------------------------------------------------
+
+@admin_tool_routes.route("/admin/delete_units_by_era", methods=["POST"])
+@admin_required
+def delete_units_by_era():
+    era = request.form.get("era", "").strip()
+    if not era:
+        flash("No era specified.", "danger")
+        return redirect(url_for("admin_tool_routes.admin_tools"))
+    result = mongo.db.units.delete_many({"era": era})
+    flash(f"Deleted {result.deleted_count} unit(s) from the {era} era.", "success")
+    return redirect(url_for("admin_tool_routes.admin_tools"))
+
+
+# ---------------------------------------------------------------------------
 # Visibility bypass log viewer
 # ---------------------------------------------------------------------------
 
@@ -1166,7 +1182,7 @@ def ai_goals_preview():
         get_ai_personality, evaluate_nation_state,
         compute_need_weights, assign_ai_jobs, generate_goals,
         generate_resource_desires, get_stored_market_prices,
-        update_district_plan,
+        update_district_plan, score_buildable_districts, score_jobs,
     )
     from calculations.field_calculations import calculate_all_fields
     from copy import deepcopy
@@ -1203,11 +1219,15 @@ def ai_goals_preview():
     goals = []
     personality = {}
     state = {}
+    need_weights = {}
+    job_scores = {}
     job_assignments = {}
     job_log = []
     desires = []
     district_plan = None
     district_log = []
+    district_scores = []
+    resource_detail = {}
 
     try:
         calculated = calculate_all_fields(nation, schema, "nation")
@@ -1217,6 +1237,7 @@ def ai_goals_preview():
         state = evaluate_nation_state(nation)
         market_prices = get_stored_market_prices(nation)
         need_weights = compute_need_weights(state, market_prices)
+        job_scores = score_jobs(state, need_weights)
         job_assignments, job_log = assign_ai_jobs(state, need_weights, market_prices)
         goals = generate_goals(nation, state, job_assignments, personality)
 
@@ -1228,21 +1249,26 @@ def ai_goals_preview():
         )
         district_log = district_log_list
 
+        district_scores = score_buildable_districts(
+            nation, state, need_weights, market_prices,
+        )
+
         desires = generate_resource_desires(state, goals, personality, market_prices)
+
+        for r in state.get("net_production", {}):
+            net = state["net_production"].get(r, 0)
+            stock = state["stockpiles"].get(r, 0)
+            sessions = state["sessions_until_empty"].get(r, float("inf"))
+            resource_detail[r] = {
+                "net": round(net, 2),
+                "stock": round(stock, 1),
+                "sessions_left": round(sessions, 1) if sessions != float("inf") else "inf",
+                "weight": round(need_weights.get(r, 0), 2),
+                "market_price": round(market_prices.get(r, 0), 1),
+            }
     except Exception as e:
         import traceback
         error = traceback.format_exc()
-
-    deficits = {}
-    surpluses = {}
-    if state:
-        for r, net in state.get("net_production", {}).items():
-            if net < 0:
-                deficits[r] = {"net": round(net, 1), "stock": state["stockpiles"].get(r, 0),
-                               "sessions_left": round(state["sessions_until_empty"].get(r, 0), 1)}
-            elif (state["sessions_until_empty"].get(r, 0) == float("inf")
-                  and state["stockpiles"].get(r, 0) > 20 and net > 0):
-                surpluses[r] = {"net": round(net, 1), "stock": state["stockpiles"].get(r, 0)}
 
     return render_template(
         "ai_goals_preview.html",
@@ -1255,12 +1281,14 @@ def ai_goals_preview():
         personality=personality,
         goals=goals,
         state=state,
-        deficits=deficits,
-        surpluses=surpluses,
+        need_weights=need_weights,
+        resource_detail=resource_detail,
+        job_scores=job_scores,
         job_assignments=job_assignments,
         job_log=job_log,
         desires=desires,
         district_plan=district_plan,
         district_log=district_log,
+        district_scores=district_scores,
         error=error,
     )

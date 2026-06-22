@@ -494,6 +494,7 @@
         <tr><td>Armor</td><td id="disp-cost-armor">—</td></tr>
         <tr class="cost-sep"><td>Traits</td><td id="disp-cost-traits">—</td></tr>
         <tr><td>Upkeep</td><td id="disp-cost-upkeep">—</td></tr>
+        <tr><td>District Tier</td><td id="disp-cost-district">—</td></tr>
         <tr class="cost-total">
           <td>Total</td>
           <td id="disp-cost-total" style="font-size:1.1rem;">—</td>
@@ -547,6 +548,13 @@ const UPKEEP_MULTIPLIERS = {
 // All unique resources reduce cost at -4 per unit
 for (const key of {{ unique_resource_keys | tojson }}) {
   UPKEEP_MULTIPLIERS[key] = -4;
+}
+// District tier → point cost reduction
+const DISTRICT_TIER_DISCOUNT = { 1: -1, 2: -3, 3: -5 };
+// Build district key → tier lookup from district options
+const DISTRICT_TIER_MAP = {};
+for (const opt of {{ district_options | tojson }}) {
+  if (opt.tier) DISTRICT_TIER_MAP[opt.key] = opt.tier;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -664,7 +672,20 @@ function calculateCost() {
     if (divisor) upkeepCost += Math.floor(-getNum('recruitment_cost') / divisor);
   }
 
-  const total = hpCost + moraleCost + dmgCost + retalCost + rangeCost + speedCost + armorCost + traitsCost + upkeepCost;
+  // District prerequisite tier discount (OR logic — use lowest tier)
+  let districtDiscount = 0;
+  let lowestTier = 0;
+  document.querySelectorAll('#prerequisites-tbody tr').forEach(row => {
+    const typeEl = row.querySelector('[name$="-type"]');
+    const valEl  = row.querySelector('[name$="-value"]');
+    if (typeEl && valEl && typeEl.value === 'district') {
+      const tier = DISTRICT_TIER_MAP[valEl.value] || 0;
+      if (tier > 0 && (lowestTier === 0 || tier < lowestTier)) lowestTier = tier;
+    }
+  });
+  if (lowestTier > 0) districtDiscount = DISTRICT_TIER_DISCOUNT[lowestTier] || 0;
+
+  const total = hpCost + moraleCost + dmgCost + retalCost + rangeCost + speedCost + armorCost + traitsCost + upkeepCost + districtDiscount;
   const maxCost = MAX_COSTS[unitClass] ?? null;
 
   // Update stat column displays
@@ -688,6 +709,9 @@ function calculateCost() {
 
   const upkeepEl = document.getElementById('disp-cost-upkeep');
   if (upkeepEl) { upkeepEl.textContent = upkeepCost ? (upkeepCost > 0 ? '+' : '') + upkeepCost : '—'; upkeepEl.style.color = upkeepCost < 0 ? '#fa6' : ''; }
+
+  const distEl = document.getElementById('disp-cost-district');
+  if (distEl) { distEl.textContent = districtDiscount ? districtDiscount : '—'; distEl.style.color = districtDiscount < 0 ? '#fa6' : ''; }
 
   const totalEl = document.getElementById('disp-cost-total');
   if (totalEl) { totalEl.textContent = total; }
@@ -879,6 +903,9 @@ function addPrerequisite() {
     `<td>${valueHtml}</td>` +
     `<td><button type="button" class="btn-remove" onclick="removeRow(this,'prerequisites')">×</button></td>`;
   tbody.appendChild(row);
+  const valSelect = row.querySelector('[name$="-value"]');
+  if (valSelect) valSelect.addEventListener('change', calculateCost);
+  calculateCost();
 }
 
 function onPrereqTypeChange(selectEl) {
@@ -889,7 +916,12 @@ function onPrereqTypeChange(selectEl) {
   if (!cell) return;
   cell.innerHTML = makePrereqValueCell(n, type, '');
   const input = cell.querySelector('input, select');
-  if (input) { input.name = `prerequisites-${n}-value`; input.id = `prerequisites-${n}-value`; }
+  if (input) {
+    input.name = `prerequisites-${n}-value`;
+    input.id = `prerequisites-${n}-value`;
+    input.addEventListener('change', calculateCost);
+  }
+  calculateCost();
 }
 
 function addUpkeep() {

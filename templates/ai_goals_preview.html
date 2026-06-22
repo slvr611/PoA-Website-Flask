@@ -11,31 +11,33 @@
 .goal-prio { color: #8af; font-family: monospace; min-width: 28px; text-align: right; }
 .goal-type { font-weight: 600; min-width: 150px; }
 .goal-rationale { color: var(--text-muted, #888); }
-.res-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
-.res-table th { text-align: left; color: #888; font-weight: normal; padding: 0.2rem 0.5rem; }
-.res-table td { padding: 0.2rem 0.5rem; }
-.res-deficit { color: #f88; }
-.res-surplus { color: #8f8; }
-.tag { display: inline-block; border-radius: 3px; padding: 0.1rem 0.4rem; font-size: 0.75rem; margin: 0.1rem 0.15rem; }
-.tag-deficit { background: #5a2222; border: 1px solid #a44; }
-.tag-surplus { background: #1a3a1a; border: 1px solid #4a4; }
+.dbg-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+.dbg-table th { text-align: left; color: #888; font-weight: normal; padding: 0.2rem 0.5rem; border-bottom: 1px solid #333; }
+.dbg-table td { padding: 0.2rem 0.5rem; }
+.dbg-table tr:hover { background: rgba(255,255,255,0.03); }
+.res-neg { color: #f88; }
+.res-pos { color: #8f8; }
+.res-neut { color: #aaa; }
+.w-high { color: #f88; font-weight: 600; }
+.w-med { color: #fa6; }
+.w-low { color: #8f8; }
 .dim-bar { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.2rem; font-size: 0.82rem; }
 .dim-label { min-width: 80px; color: #aaa; }
 .dim-track { flex: 1; max-width: 200px; height: 8px; background: #333; border-radius: 4px; position: relative; }
 .dim-fill { height: 100%; border-radius: 4px; position: absolute; top: 0; }
 .dim-val { min-width: 36px; font-family: monospace; color: #ccc; }
 .log-line { font-size: 0.82rem; color: var(--text-muted, #888); margin-bottom: 0.15rem; }
+.score-bar { display: inline-block; height: 10px; background: #4caf50; border-radius: 2px; vertical-align: middle; }
 </style>
 
 <div class="container">
     <h1 style="margin-bottom:0.25rem;">AI Goals Preview</h1>
     <p class="text-muted" style="margin-bottom:0.75rem;">
-        Read-only — runs the goal pipeline without applying any changes.
+        Read-only — runs the full AI pipeline without applying changes.
     </p>
 
     <div class="ai-nav">
         <a href="/ai_goals_preview?nation={{ prev_name|urlencode }}" class="btn btn-secondary btn-sm">&larr; {{ prev_name }}</a>
-
         <form method="GET" action="/ai_goals_preview" style="display:flex;gap:0.4rem;align-items:center;">
             <select name="nation" class="form-control" style="font-size:0.85rem;min-width:180px;">
                 {% for name in ai_names %}
@@ -44,10 +46,8 @@
             </select>
             <button type="submit" class="btn btn-primary btn-sm">Go</button>
         </form>
-
         <a href="/ai_goals_preview" class="btn btn-secondary btn-sm">Random</a>
         <a href="/ai_goals_preview?nation={{ next_name|urlencode }}" class="btn btn-secondary btn-sm">{{ next_name }} &rarr;</a>
-
         <a href="/admin_tools" class="btn btn-secondary btn-sm" style="margin-left:auto;">Back</a>
     </div>
 
@@ -58,8 +58,8 @@
         {{ nation.get("temperament", "?") }}
         {% if region_name %} · {{ region_name }}{% endif %}
         · {{ state.get("total_pops", 0) }} pops ({{ state.get("idle_pops", 0) }} idle)
-        · Money income: {{ state.get("money_income", 0) }}
-        · Money: {{ nation.get("money", 0) }}
+        · Money: {{ nation.get("money", 0) }} ({{ "%+d"|format(state.get("money_income", 0)) }}/session)
+        · District slots: {{ state.get("open_district_slots", 0) }} open
     </p>
 
     {% if error %}
@@ -69,8 +69,8 @@
     </div>
     {% endif %}
 
+    <!-- Row 1: Personality + Goals -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
-        <!-- Personality -->
         <div class="ai-panel">
             <h3>Personality</h3>
             {% for dim, val in personality.items() %}
@@ -85,7 +85,6 @@
             {% endfor %}
         </div>
 
-        <!-- Goals -->
         <div class="ai-panel">
             <h3>Goals (priority order)</h3>
             {% for goal in goals %}
@@ -99,58 +98,97 @@
         </div>
     </div>
 
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
-        <!-- Resource Deficits -->
-        <div class="ai-panel">
-            <h3>Resource Deficits</h3>
-            {% if deficits %}
-            <table class="res-table">
-                <tr><th>Resource</th><th>Net/Session</th><th>Stock</th><th>Sessions Left</th></tr>
-                {% for r, d in deficits.items() %}
-                <tr class="res-deficit">
+    <!-- Row 2: Full Resource Breakdown -->
+    <div class="ai-panel">
+        <h3>Resource State &amp; Need Weights</h3>
+        <p class="text-muted" style="font-size:0.78rem;margin-bottom:0.5rem;">
+            Weight drives all AI decisions: higher = more urgently needed. Critical (&ge;3) drives deficit-fixing goals. Surplus (&lt;1) may trigger sell orders.
+        </p>
+        <table class="dbg-table">
+            <thead>
+                <tr>
+                    <th>Resource</th>
+                    <th>Net/Session</th>
+                    <th>Stockpile</th>
+                    <th>Sessions Until Empty</th>
+                    <th>Market Price</th>
+                    <th>Need Weight</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r, d in resource_detail|dictsort %}
+                <tr>
                     <td>{{ r }}</td>
-                    <td>{{ d.net }}</td>
+                    <td class="{% if d.net < 0 %}res-neg{% elif d.net > 0 %}res-pos{% else %}res-neut{% endif %}">
+                        {{ "%+.1f"|format(d.net) }}
+                    </td>
                     <td>{{ d.stock }}</td>
                     <td>{{ d.sessions_left }}</td>
+                    <td>{{ d.market_price }}</td>
+                    <td class="{% if d.weight >= 3 %}w-high{% elif d.weight >= 1.5 %}w-med{% else %}w-low{% endif %}">
+                        {{ d.weight }}
+                    </td>
                 </tr>
                 {% endfor %}
-            </table>
-            {% else %}<p class="text-muted" style="font-size:0.85rem;">No deficits.</p>{% endif %}
-        </div>
-
-        <!-- Resource Surpluses -->
-        <div class="ai-panel">
-            <h3>Resource Surpluses</h3>
-            {% if surpluses %}
-            <table class="res-table">
-                <tr><th>Resource</th><th>Net/Session</th><th>Stock</th></tr>
-                {% for r, s in surpluses.items() %}
-                <tr class="res-surplus">
-                    <td>{{ r }}</td>
-                    <td>{{ s.net }}</td>
-                    <td>{{ s.stock }}</td>
+                {% if need_weights.get("money") is not none %}
+                <tr style="border-top:1px solid #444;">
+                    <td>money</td>
+                    <td class="{% if state.get('money_income', 0) < 0 %}res-neg{% elif state.get('money_income', 0) > 0 %}res-pos{% else %}res-neut{% endif %}">
+                        {{ "%+d"|format(state.get("money_income", 0)) }}
+                    </td>
+                    <td>{{ nation.get("money", 0) }}</td>
+                    <td>—</td>
+                    <td>—</td>
+                    <td class="{% if need_weights.get('money', 0) >= 2 %}w-high{% else %}w-low{% endif %}">
+                        {{ "%.2f"|format(need_weights.get("money", 0)) }}
+                    </td>
                 </tr>
-                {% endfor %}
-            </table>
-            {% else %}<p class="text-muted" style="font-size:0.85rem;">No surpluses.</p>{% endif %}
-        </div>
+                {% endif %}
+            </tbody>
+        </table>
     </div>
 
+    <!-- Row 3: Job Scores + Assignments -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
-        <!-- Job Assignments -->
         <div class="ai-panel">
-            <h3>Job Assignments</h3>
-            {% set active_jobs = {} %}
-            {% for jk, cnt in job_assignments.items() if cnt > 0 %}
-            <div style="font-size:0.85rem;margin-bottom:0.15rem;">
+            <h3>Job Scores (initial weights)</h3>
+            <p class="text-muted" style="font-size:0.78rem;margin-bottom:0.5rem;">
+                Score = (production × need weight) - (upkeep × need weight), with district bonus if applicable. Pops assigned greedily to highest-scoring job, recalculating weights after each assignment.
+            </p>
+            <table class="dbg-table">
+                <thead><tr><th>Job</th><th>Score</th><th></th></tr></thead>
+                <tbody>
+                    {% set max_score = job_scores.values()|list|sort|last if job_scores else 1 %}
+                    {% for jk, sc in job_scores|dictsort(by='value', reverse=true) %}
+                    {% if sc > 0 %}
+                    <tr>
+                        <td>{{ jk.replace("_", " ").title() }}</td>
+                        <td style="font-family:monospace;">{{ "%.2f"|format(sc) }}</td>
+                        <td><span class="score-bar" style="width:{{ (sc / (max_score if max_score > 0 else 1) * 120)|int }}px;"></span></td>
+                    </tr>
+                    {% endif %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="ai-panel">
+            <h3>Final Job Assignments</h3>
+            <p class="text-muted" style="font-size:0.78rem;margin-bottom:0.5rem;">
+                {{ state.get("idle_pops", 0) }} idle pops to assign. Each pop placed on highest-scoring job; weights recalculated after each.
+            </p>
+            {% for jk, cnt in job_assignments|dictsort(by='value', reverse=true) %}
+            {% if cnt > 0 %}
+            <div style="font-size:0.85rem;margin-bottom:0.2rem;">
                 <strong>{{ jk.replace("_", " ").title() }}</strong>: {{ cnt }} pop{{ "s" if cnt != 1 }}
             </div>
+            {% endif %}
             {% endfor %}
             {% if not job_assignments or job_assignments.values()|select("greaterthan", 0)|list|length == 0 %}
             <p class="text-muted" style="font-size:0.85rem;">No jobs assigned.</p>
             {% endif %}
             {% if job_log %}
-            <details style="margin-top:0.5rem;">
+            <details style="margin-top:0.5rem;" open>
                 <summary style="font-size:0.8rem;color:#888;cursor:pointer;">Assignment log ({{ job_log|length }})</summary>
                 {% for line in job_log %}
                 <div class="log-line">{{ line }}</div>
@@ -158,19 +196,72 @@
             </details>
             {% endif %}
         </div>
+    </div>
 
-        <!-- District Plan -->
+    <!-- Row 4: District Scores + Plan -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+        <div class="ai-panel">
+            <h3>District Scores (top 10)</h3>
+            <p class="text-muted" style="font-size:0.78rem;margin-bottom:0.5rem;">
+                Score = modifier value + unlocked jobs + market opportunity - cost penalty.
+                {{ state.get("open_district_slots", 0) }} open slot{{ "s" if state.get("open_district_slots", 0) != 1 }}.
+                Values normalised by market price (weight &times; amount &times; price_scale).
+            </p>
+            {% if district_scores %}
+            {% for score, dk, name, cost, rationale, src, mod_bd in district_scores[:10] %}
+            <div style="border:1px solid #333;border-radius:4px;padding:0.5rem 0.75rem;margin-bottom:0.5rem;{% if loop.first %}border-color:#4caf50;{% endif %}">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.3rem;">
+                    <strong style="font-size:0.9rem;">{{ name }}</strong>
+                    <span style="font-family:monospace;font-size:0.9rem;{% if loop.first %}color:#8f8;{% else %}color:#8af;{% endif %}">{{ "%.2f"|format(score) }}</span>
+                </div>
+                <div style="font-size:0.78rem;color:#888;margin-bottom:0.3rem;">
+                    Cost: {% for r, amt in cost.items() %}{{ r }}:{{ amt }}{% if not loop.last %}, {% endif %}{% endfor %}
+                </div>
+                <div style="font-size:0.78rem;color:#aaa;margin-bottom:0.3rem;">{{ rationale }}</div>
+                {% if mod_bd %}
+                <details{% if loop.first %} open{% endif %}>
+                    <summary style="font-size:0.75rem;color:#888;cursor:pointer;">Modifier breakdown ({{ mod_bd|length }})</summary>
+                    <table class="dbg-table" style="margin-top:0.25rem;">
+                        <thead><tr><th>Field</th><th>Value</th><th>Weight</th><th>Price Scale</th><th>Contrib</th></tr></thead>
+                        <tbody>
+                            {% for field, val, weight, scale, contrib, matched in mod_bd %}
+                            <tr style="{% if not matched %}opacity:0.4;{% elif contrib > 0 %}color:#8f8;{% elif contrib < 0 %}color:#f88;{% endif %}">
+                                <td>{{ field }}</td>
+                                <td style="font-family:monospace;">{{ val }}</td>
+                                <td style="font-family:monospace;">{{ weight }}</td>
+                                <td style="font-family:monospace;">{{ scale }}×</td>
+                                <td style="font-family:monospace;">{{ "%+.2f"|format(contrib) }}{% if not matched %} <span style="color:#f88;">(no match)</span>{% endif %}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </details>
+                {% endif %}
+            </div>
+            {% endfor %}
+            {% elif state.get("open_district_slots", 0) <= 0 %}
+            <p class="text-muted" style="font-size:0.85rem;">No open district slots.</p>
+            {% else %}
+            <p class="text-muted" style="font-size:0.85rem;">No districts scored above 0. Modifier values may not match any current need weights.</p>
+            {% endif %}
+        </div>
+
         <div class="ai-panel">
             <h3>District Plan</h3>
             {% if district_plan %}
             <div style="font-size:0.85rem;">
-                <strong>{{ district_plan.get("display_name", district_plan.get("def_key", "?")) }}</strong><br>
+                <strong>{{ district_plan.get("display_name", district_plan.get("key", "?")) }}</strong><br>
                 <span class="text-muted">{{ district_plan.get("rationale", "") }}</span><br>
                 Sessions saving: {{ district_plan.get("sessions_saving", 0) }}
+                <br>
+                Cost:
+                {% for r, amt in district_plan.get("cost", {}).items() %}
+                    {{ r }}: {{ amt }}{% if not loop.last %}, {% endif %}
+                {% endfor %}
             </div>
             {% else %}<p class="text-muted" style="font-size:0.85rem;">No district plan.</p>{% endif %}
             {% if district_log %}
-            <details style="margin-top:0.5rem;">
+            <details style="margin-top:0.5rem;" open>
                 <summary style="font-size:0.8rem;color:#888;cursor:pointer;">District log ({{ district_log|length }})</summary>
                 {% for line in district_log %}
                 <div class="log-line">{{ line }}</div>
@@ -180,20 +271,22 @@
         </div>
     </div>
 
-    <!-- Trade Desires -->
+    <!-- Row 5: Trade Desires -->
     <div class="ai-panel">
         <h3>Generated Trade Desires</h3>
         {% if desires %}
-        <table class="res-table">
-            <tr><th>Resource</th><th>Type</th><th>Qty</th><th>Price</th></tr>
-            {% for d in desires %}
-            <tr>
-                <td>{{ d.resource }}</td>
-                <td>{{ d.trade_type }}</td>
-                <td>{{ d.quantity }}</td>
-                <td>{{ d.price }}</td>
-            </tr>
-            {% endfor %}
+        <table class="dbg-table">
+            <thead><tr><th>Resource</th><th>Type</th><th>Qty</th><th>Price</th></tr></thead>
+            <tbody>
+                {% for d in desires %}
+                <tr>
+                    <td>{{ d.resource }}</td>
+                    <td>{{ d.trade_type }}</td>
+                    <td>{{ d.quantity }}</td>
+                    <td>{{ d.price }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
         </table>
         {% else %}<p class="text-muted" style="font-size:0.85rem;">No trade desires generated.</p>{% endif %}
     </div>

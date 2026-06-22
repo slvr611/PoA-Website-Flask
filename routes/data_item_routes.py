@@ -61,7 +61,7 @@ def _build_unit_edit_extras(item=None):
         {}, {"key": 1, "display_name": 1, "_id": 0}
     ).sort("display_name", ASCENDING))
     district_defs_raw = list(mongo.db.district_defs.find(
-        {}, {"key": 1, "display_name": 1, "category": 1, "_id": 0}
+        {}, {"key": 1, "display_name": 1, "category": 1, "tier": 1, "_id": 0}
     ).sort("display_name", ASCENDING))
     district_options = []
     for cat in district_categories_raw:
@@ -80,6 +80,7 @@ def _build_unit_edit_extras(item=None):
             "key": d["key"],
             "label": d.get("display_name", d["key"]),
             "group": cat_label or "Other",
+            "tier": d.get("tier", 1),
         })
 
     def _names(col):
