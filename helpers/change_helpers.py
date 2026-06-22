@@ -141,6 +141,21 @@ def _all_have_ids(lst):
     return bool(lst) and all(isinstance(item, dict) and item.get('_id') for item in lst)
 
 
+def _ensure_starting_techs(nation):
+    """Ensure the nation has all Starting-type techs researched."""
+    tech_json = json_data.get("tech", {})
+    technologies = nation.get("technologies")
+    if not isinstance(technologies, dict):
+        technologies = {}
+        nation["technologies"] = technologies
+    for tech_id, tech_def in tech_json.items():
+        if tech_def.get("type") == "Starting":
+            if tech_id not in technologies or not isinstance(technologies[tech_id], dict):
+                technologies[tech_id] = {"researched": True, "investing": 0, "cost": 0}
+            elif not technologies[tech_id].get("researched"):
+                technologies[tech_id]["researched"] = True
+
+
 def _update_tech_costs(nation):
     """Re-evaluate tech costs based on the nation's current cost modifier.
 
@@ -167,6 +182,7 @@ def _calculate_and_attach_fields(data_type, target):
     target_data_type = category_data[data_type]["singularName"].lower()
 
     if data_type == "nations":
+        _ensure_starting_techs(target)
         calculated_fields, breakdowns = calculate_all_fields(
             target,
             schema,

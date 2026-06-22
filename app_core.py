@@ -137,7 +137,7 @@ json_data = {"general_resources": [
             {"key": "medicinal_herbs", "name": "Medicinal Herbs", "base_storage": 10, "base_price": 400, "color": "#0b9d11"},
             {"key": "dyes",            "name": "Dyes",            "base_storage": 10, "base_price": 400, "color": "#ff009c"},
             {"key": "magical_crystals","name": "Magical Crystals","base_storage": 10, "base_price": 400, "color": "#00ffcc"},
-            {"key": "gold",            "name": "Gold",            "base_storage": 10, "base_price": 400, "color": "#f1c232"},
+            {"key": "gold",            "name": "Gold",            "base_storage": 10, "base_price": 600, "color": "#f1c232"},
             {"key": "moonstone",       "name": "Moonstone",       "base_storage": 10, "base_price": 400, "color": "#ead1dc"},
             {"key": "furs",            "name": "Furs",            "base_storage": 10, "base_price": 400, "color": "#fcb893"},
             {"key": "quintessence",    "name": "Quintessence",    "base_storage": 10, "base_price": 400, "color": "#d379ff"},

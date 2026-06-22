@@ -60,8 +60,20 @@
                 }
             }
         }
-        
-        return (allPrereqsMet && onePrereqMet) ? "available" : "unavailable";
+
+        // Check if at least two of the "two of" prerequisites are met
+        let twoPrereqMet = true;
+        if (tech.prerequisites_two && tech.prerequisites_two.length > 0) {
+            let count = 0;
+            for (const prereq of tech.prerequisites_two) {
+                if (nation_techs[prereq] && typeof nation_techs[prereq] === 'object' && nation_techs[prereq].researched === true) {
+                    count++;
+                }
+            }
+            twoPrereqMet = count >= 2;
+        }
+
+        return (allPrereqsMet && onePrereqMet && twoPrereqMet) ? "available" : "unavailable";
     }
     
     // Function to format tech label
@@ -146,6 +158,18 @@
                 }
             });
         });
+
+        (tech.prerequisites_two || []).forEach(prereq => {
+            elements.push({
+                data: {
+                    id: prereq + "~>" + id,
+                    source: prereq,
+                    target: id,
+                    type: "two",
+                    met: nation_techs[prereq] && typeof nation_techs[prereq] === 'object' && nation_techs[prereq].researched === true
+                }
+            });
+        });
     }
 
     // Color mappings based on tech type
@@ -194,23 +218,32 @@
             {
                 selector: "edge",
                 style: {
-                    "width": 3, // Increased width for better visibility
+                    "width": 3,
                     "line-color": "#aaa",
                     "target-arrow-color": "#aaa",
                     "target-arrow-shape": "triangle",
                     "curve-style": "bezier",
-                    "line-style": ele => ele.data("type") === "one" ? "dashed" : "solid",
-                    "line-dash-pattern": [8, 4], // Explicit dash pattern for "one" type edges
+                    "line-style": ele => {
+                        const t = ele.data("type");
+                        return t === "one" ? "dashed" : t === "two" ? "dotted" : "solid";
+                    },
+                    "line-dash-pattern": ele => {
+                        const t = ele.data("type");
+                        return t === "one" ? [8, 4] : t === "two" ? [3, 3] : undefined;
+                    },
                     "line-dash-offset": 0
                 }
             },
             {
                 selector: "edge[met]",
                 style: {
-                    "width": 3, // Increased width for better visibility
+                    "width": 3,
                     "line-color": ele => ele.data("met") ? "lime" : "#aaa",
                     "target-arrow-color": ele => ele.data("met") ? "lime" : "#aaa",
-                    "line-dash-pattern": ele => ele.data("type") === "one" ? [8, 4] : undefined // Keep dash pattern for "one" type
+                    "line-dash-pattern": ele => {
+                        const t = ele.data("type");
+                        return t === "one" ? [8, 4] : t === "two" ? [3, 3] : undefined;
+                    }
                 }
             },
             {
@@ -258,33 +291,19 @@
     // Define the rows and their node order
     const rowDefinitions = [
         // Row 1 (tier 1)
-        ["frame_saddles", "sewers", "political_philosophy", "trade_records", "chests"],
+        ["dawn_to_dusk"],
         // Row 2 (tier 2)
-        ["aqueducts", "public_programs", "mints", "caravansaries", "metal_hooks"],
+        ["iron_harbors", , "maleficium", "cantle_saddles", "bread_and_circus", , "telescope"],
         // Row 3 (tier 3)
-        ["dynastic_hunters", "pit_mining", "mine_shafts", "lumber_yards", "fermentation"],
+        ["crop_rotation", "professional_peddlers", "cold-struck_coinage", "schools_of_magic", "chivalry", "pilgrim_caravans", "common_law", "standing_army", "legitimacy"],
         // Row 4 (tier 4)
-        ["levers_and_pulleys", "city_defense", "ramparts", "military_wages", "cosmology", "public_zeal"],
+        ["windmills", "hourglass", "standard_measurements", "mage_college", "internal_development", "national_force", "central_heating", "strongholds", "advanced_numerals"],
         // Row 5 (tier 5)
-        ["deep_hulls", "rig_and_sail", "official_courts", "war_engineers", "mote_stabilization", "novitiates"],
+        ["agricultural_estate", , "niter_grinding", , , "mortar_masonry", , "siegeworks"],
         // Row 6 (tier 6)
-        ["philosophy", "national_identity", "citizenship"],
+        ["manorialism", , "prejudice", , "casus_belli"],
         // Row 7 (tier 7)
-        ["academics", "penitent_faith", "metal_silos"],
-        // Row 8 (tier 8)
-        ["bureacratic_legacies", "communal_baths", "collection_teams", "public_awareness", "deep_cellars", "riveted_armor"],
-        // Row 9 (tier 9)
-        ["dedicated_magery", "violent_destiny", "public_safety", "mentor_smiths", "market_control", "formal_storage", "asymmetrical_warfare", "draught_armor"],
-        // Row 10 (tier 10)
-        ["summoning_circles", "naval_bombardment", "", "archival_history", "poultices", "", "cutting_edge_weaponry", "mobile_governance"],
-        // Row 11 (tier 11)
-        ["stylized_buildings", "drastic_action", "subsidized_labor"],
-        // Row 12 (tier 12)
-        ["cultural_prophecy", "tenant_farming"],
-        // Row 13 (tier 13)
-        ["national_fervor"],
-        // Row 14 (tier 14)
-        ["dawn_till_dusk"]
+        ["archaic_inspirations", , , "cultural_rebirth", , , "crusade"],
     ];
 
     // Apply custom layout
@@ -515,6 +534,7 @@
         // Format prerequisites
         const allPrereqs = (tech.prerequisites_all || []).map(p => techs[p]?.display_name || p).join(", ");
         const onePrereqs = (tech.prerequisites_one || []).map(p => techs[p]?.display_name || p).join(", ");
+        const twoPrereqs = (tech.prerequisites_two || []).map(p => techs[p]?.display_name || p).join(", ");
         
         // Format modifiers
         let modifiersHtml = '';
@@ -536,6 +556,7 @@
             <p><strong>Invested:</strong> ${currentInvestment} / ${getCost(techId)}</p>
             ${allPrereqs ? `<p><strong>Required Prerequisites:</strong> ${allPrereqs}</p>` : ''}
             ${onePrereqs ? `<p><strong>One of Prerequisites:</strong> ${onePrereqs}</p>` : ''}
+            ${twoPrereqs ? `<p><strong>Two of Prerequisites:</strong> ${twoPrereqs}</p>` : ''}
             ${modifiersHtml ? `<p><strong>Modifiers:</strong></p><ul>${modifiersHtml}</ul>` : ''}
             <p><strong>Status:</strong> ${status}</p>
         `;
@@ -597,7 +618,7 @@
             {% set all_prereqs_met = false %}
         {% endif %}
     {% endfor %}
-    
+
     {% set one_prereq_met = true %}
     {% if tech.prerequisites_one|default([]) %}
         {% set one_prereq_met = false %}
@@ -607,8 +628,19 @@
             {% endif %}
         {% endfor %}
     {% endif %}
-    
-    {{ all_prereqs_met and one_prereq_met }}
+
+    {% set ns = namespace(two_count=0) %}
+    {% set two_prereq_met = true %}
+    {% if tech.prerequisites_two|default([]) %}
+        {% for prereq in tech.prerequisites_two %}
+            {% if nation_techs[prereq] and nation_techs[prereq].researched %}
+                {% set ns.two_count = ns.two_count + 1 %}
+            {% endif %}
+        {% endfor %}
+        {% set two_prereq_met = ns.two_count >= 2 %}
+    {% endif %}
+
+    {{ all_prereqs_met and one_prereq_met and two_prereq_met }}
 {% endmacro %}
 
 

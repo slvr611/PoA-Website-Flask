@@ -1075,3 +1075,81 @@ def randomize_ai_laws_apply():
 
     flash(f"Randomized laws for {updated} AI nations.", "success")
     return redirect(url_for("admin_tool_routes.randomize_ai_laws"))
+
+
+# ---------------------------------------------------------------------------
+# AI Government Editor
+# ---------------------------------------------------------------------------
+
+_AI_GOV_FIELDS = ["government_type", "succession_type", "prosperity_role"]
+
+
+@admin_tool_routes.route("/ai_government", methods=["GET"])
+@admin_required
+def ai_government():
+    schema, db = get_data_on_category("nations")
+    player_ids = _get_player_nation_ids()
+    ai_nations = list(db.find(
+        {"_id": {"$nin": list(player_ids)}},
+        {"name": 1, "region": 1, "government_type": 1, "succession_type": 1, "prosperity_role": 1},
+    ).sort("name", ASCENDING))
+
+    region_ids = list({ObjectId(n["region"]) for n in ai_nations if n.get("region")})
+    region_names = {
+        str(r["_id"]): r.get("name", "Unknown")
+        for r in mongo.db.regions.find({"_id": {"$in": region_ids}}, {"name": 1})
+    }
+
+    grouped = {}
+    for nation in ai_nations:
+        rname = region_names.get(str(nation.get("region", "")), "No Region")
+        grouped.setdefault(rname, []).append(nation)
+
+    props = schema.get("properties", {})
+    enums = {f: props.get(f, {}).get("enum", []) for f in _AI_GOV_FIELDS}
+
+    return render_template(
+        "ai_government.html",
+        grouped=grouped,
+        enums=enums,
+        fields=_AI_GOV_FIELDS,
+    )
+
+
+@admin_tool_routes.route("/ai_government/save", methods=["POST"])
+@admin_required
+def ai_government_save():
+    from helpers.change_helpers import system_request_change, system_approve_change
+    from copy import deepcopy
+
+    schema, db = get_data_on_category("nations")
+    player_ids = _get_player_nation_ids()
+    ai_nations = list(db.find({"_id": {"$nin": list(player_ids)}}))
+    nations_by_id = {str(n["_id"]): n for n in ai_nations}
+
+    updated = 0
+    for nation_id_str, nation in nations_by_id.items():
+        changes = {}
+        for field in _AI_GOV_FIELDS:
+            form_key = f"{nation_id_str}__{field}"
+            new_val = request.form.get(form_key)
+            if new_val is not None and new_val != nation.get(field, ""):
+                changes[field] = new_val
+        if not changes:
+            continue
+        old_data = deepcopy(nation)
+        new_data = deepcopy(nation)
+        new_data.update(changes)
+        change_id = system_request_change(
+            data_type="nations",
+            item_id=nation["_id"],
+            change_type="Update",
+            before_data=old_data,
+            after_data=new_data,
+            reason="AI government update via admin tool",
+        )
+        system_approve_change(change_id)
+        updated += 1
+
+    flash(f"Updated government settings for {updated} nation(s).", "success")
+    return redirect(url_for("admin_tool_routes.ai_government"))
