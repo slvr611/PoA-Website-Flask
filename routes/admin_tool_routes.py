@@ -1153,3 +1153,114 @@ def ai_government_save():
 
     flash(f"Updated government settings for {updated} nation(s).", "success")
     return redirect(url_for("admin_tool_routes.ai_government"))
+
+
+# ---------------------------------------------------------------------------
+# AI Goals Preview — read-only goal generation for debugging
+# ---------------------------------------------------------------------------
+
+@admin_tool_routes.route("/ai_goals_preview")
+@admin_required
+def ai_goals_preview():
+    from helpers.ai_decision_helpers import (
+        get_ai_personality, evaluate_nation_state,
+        compute_need_weights, assign_ai_jobs, generate_goals,
+        generate_resource_desires, get_stored_market_prices,
+        update_district_plan,
+    )
+    from calculations.field_calculations import calculate_all_fields
+    from copy import deepcopy
+
+    schema, db = get_data_on_category("nations")
+    player_ids = _get_player_nation_ids()
+    ai_names = [
+        n["name"] for n in db.find(
+            {"_id": {"$nin": list(player_ids)}}, {"name": 1, "_id": 0}
+        ).sort("name", ASCENDING)
+    ]
+    if not ai_names:
+        flash("No AI nations found.", "warning")
+        return redirect(url_for("admin_tool_routes.admin_tools"))
+
+    selected = request.args.get("nation", "")
+    if selected not in ai_names:
+        selected = random.choice(ai_names)
+
+    cur_idx = ai_names.index(selected)
+    prev_name = ai_names[cur_idx - 1]
+    next_name = ai_names[(cur_idx + 1) % len(ai_names)]
+
+    nation = db.find_one({"name": selected})
+    region_name = ""
+    if nation.get("region"):
+        try:
+            rdoc = mongo.db.regions.find_one({"_id": ObjectId(nation["region"])}, {"name": 1})
+            region_name = rdoc.get("name", "") if rdoc else ""
+        except Exception:
+            pass
+
+    error = None
+    goals = []
+    personality = {}
+    state = {}
+    job_assignments = {}
+    job_log = []
+    desires = []
+    district_plan = None
+    district_log = []
+
+    try:
+        calculated = calculate_all_fields(nation, schema, "nation")
+        nation.update(calculated)
+
+        personality = get_ai_personality(nation)
+        state = evaluate_nation_state(nation)
+        market_prices = get_stored_market_prices(nation)
+        need_weights = compute_need_weights(state, market_prices)
+        job_assignments, job_log = assign_ai_jobs(state, need_weights, market_prices)
+        goals = generate_goals(nation, state, job_assignments, personality)
+
+        dummy = deepcopy(nation)
+        district_log_list = []
+        district_plan = update_district_plan(
+            nation, dummy, state, goals, personality,
+            market_prices, need_weights, district_log_list,
+        )
+        district_log = district_log_list
+
+        desires = generate_resource_desires(state, goals, personality, market_prices)
+    except Exception as e:
+        import traceback
+        error = traceback.format_exc()
+
+    deficits = {}
+    surpluses = {}
+    if state:
+        for r, net in state.get("net_production", {}).items():
+            if net < 0:
+                deficits[r] = {"net": round(net, 1), "stock": state["stockpiles"].get(r, 0),
+                               "sessions_left": round(state["sessions_until_empty"].get(r, 0), 1)}
+            elif (state["sessions_until_empty"].get(r, 0) == float("inf")
+                  and state["stockpiles"].get(r, 0) > 20 and net > 0):
+                surpluses[r] = {"net": round(net, 1), "stock": state["stockpiles"].get(r, 0)}
+
+    return render_template(
+        "ai_goals_preview.html",
+        nation=nation,
+        region_name=region_name,
+        selected=selected,
+        ai_names=ai_names,
+        prev_name=prev_name,
+        next_name=next_name,
+        personality=personality,
+        goals=goals,
+        state=state,
+        deficits=deficits,
+        surpluses=surpluses,
+        job_assignments=job_assignments,
+        job_log=job_log,
+        desires=desires,
+        district_plan=district_plan,
+        district_log=district_log,
+        error=error,
+    )

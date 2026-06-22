@@ -32,7 +32,7 @@
         "bsonType": "enum",
         "label": "Unit Class",
         "description": "The class of the unit, used to determine max cost",
-        "enum": ["Ancient Unit", "Ancient Support Unit", "Ancient Transport Unit", "Classical Unit", "Classical Support Unit", "Classical Transport Unit", "Classical Imperial Unit", "Ruler Unit"]
+        "enum": ["Ancient Unit", "Ancient Support Unit", "Ancient Transport Unit", "Classical Unit", "Classical Support Unit", "Classical Transport Unit", "Classical Imperial Unit", "Medieval Unit", "Medieval Support Unit", "Medieval Transport Unit", "Medieval Imperial Unit", "Ruler Unit"]
       },
       "melee": {
         "bsonType": "boolean",

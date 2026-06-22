@@ -1,0 +1,201 @@
+{% extends "layout.html" %}
+{% block title %}AI Goals — {{ selected }}{% endblock %}
+
+{% block content %}
+<style>
+.ai-nav { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; margin-bottom: 1.25rem; }
+.ai-nav a, .ai-nav button { font-size: 0.85rem; }
+.ai-panel { background: var(--card-bg, #1e1e2e); border: 1px solid var(--border-color, #333); border-radius: 6px; padding: 0.75rem 1rem; margin-bottom: 1rem; }
+.ai-panel h3 { margin: 0 0 0.5rem 0; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; color: #aaa; border-bottom: 1px solid #333; padding-bottom: 0.3rem; }
+.goal-row { display: flex; align-items: baseline; gap: 0.5rem; margin-bottom: 0.25rem; font-size: 0.85rem; }
+.goal-prio { color: #8af; font-family: monospace; min-width: 28px; text-align: right; }
+.goal-type { font-weight: 600; min-width: 150px; }
+.goal-rationale { color: var(--text-muted, #888); }
+.res-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+.res-table th { text-align: left; color: #888; font-weight: normal; padding: 0.2rem 0.5rem; }
+.res-table td { padding: 0.2rem 0.5rem; }
+.res-deficit { color: #f88; }
+.res-surplus { color: #8f8; }
+.tag { display: inline-block; border-radius: 3px; padding: 0.1rem 0.4rem; font-size: 0.75rem; margin: 0.1rem 0.15rem; }
+.tag-deficit { background: #5a2222; border: 1px solid #a44; }
+.tag-surplus { background: #1a3a1a; border: 1px solid #4a4; }
+.dim-bar { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.2rem; font-size: 0.82rem; }
+.dim-label { min-width: 80px; color: #aaa; }
+.dim-track { flex: 1; max-width: 200px; height: 8px; background: #333; border-radius: 4px; position: relative; }
+.dim-fill { height: 100%; border-radius: 4px; position: absolute; top: 0; }
+.dim-val { min-width: 36px; font-family: monospace; color: #ccc; }
+.log-line { font-size: 0.82rem; color: var(--text-muted, #888); margin-bottom: 0.15rem; }
+</style>
+
+<div class="container">
+    <h1 style="margin-bottom:0.25rem;">AI Goals Preview</h1>
+    <p class="text-muted" style="margin-bottom:0.75rem;">
+        Read-only — runs the goal pipeline without applying any changes.
+    </p>
+
+    <div class="ai-nav">
+        <a href="/ai_goals_preview?nation={{ prev_name|urlencode }}" class="btn btn-secondary btn-sm">&larr; {{ prev_name }}</a>
+
+        <form method="GET" action="/ai_goals_preview" style="display:flex;gap:0.4rem;align-items:center;">
+            <select name="nation" class="form-control" style="font-size:0.85rem;min-width:180px;">
+                {% for name in ai_names %}
+                <option value="{{ name }}"{% if name == selected %} selected{% endif %}>{{ name }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="btn btn-primary btn-sm">Go</button>
+        </form>
+
+        <a href="/ai_goals_preview" class="btn btn-secondary btn-sm">Random</a>
+        <a href="/ai_goals_preview?nation={{ next_name|urlencode }}" class="btn btn-secondary btn-sm">{{ next_name }} &rarr;</a>
+
+        <a href="/admin_tools" class="btn btn-secondary btn-sm" style="margin-left:auto;">Back</a>
+    </div>
+
+    <h2 style="margin-bottom:0.25rem;">
+        <a href="/nations/item/{{ selected }}">{{ selected }}</a>
+    </h2>
+    <p class="text-muted" style="margin-bottom:1rem;">
+        {{ nation.get("temperament", "?") }}
+        {% if region_name %} · {{ region_name }}{% endif %}
+        · {{ state.get("total_pops", 0) }} pops ({{ state.get("idle_pops", 0) }} idle)
+        · Money income: {{ state.get("money_income", 0) }}
+        · Money: {{ nation.get("money", 0) }}
+    </p>
+
+    {% if error %}
+    <div class="ai-panel" style="border-color:#a44;">
+        <h3 style="color:#f88;">Error</h3>
+        <pre style="font-size:0.78rem;color:#f88;white-space:pre-wrap;">{{ error }}</pre>
+    </div>
+    {% endif %}
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+        <!-- Personality -->
+        <div class="ai-panel">
+            <h3>Personality</h3>
+            {% for dim, val in personality.items() %}
+            <div class="dim-bar">
+                <span class="dim-label">{{ dim.title() }}</span>
+                <div class="dim-track">
+                    {% set pct = ((val + 1) / 2 * 100)|int %}
+                    <div class="dim-fill" style="left:50%;width:{{ ((val|abs) * 50)|int }}px;{% if val >= 0 %}background:#4caf50;{% else %}left:auto;right:50%;background:#f44;{% endif %}"></div>
+                </div>
+                <span class="dim-val">{{ "%.2f"|format(val) }}</span>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Goals -->
+        <div class="ai-panel">
+            <h3>Goals (priority order)</h3>
+            {% for goal in goals %}
+            <div class="goal-row">
+                <span class="goal-prio">{{ goal.priority }}</span>
+                <span class="goal-type">{{ goal.type.replace("_", " ").title() }}</span>
+                <span class="goal-rationale">{{ goal.rationale }}</span>
+            </div>
+            {% endfor %}
+            {% if not goals %}<p class="text-muted" style="font-size:0.85rem;">No goals generated.</p>{% endif %}
+        </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+        <!-- Resource Deficits -->
+        <div class="ai-panel">
+            <h3>Resource Deficits</h3>
+            {% if deficits %}
+            <table class="res-table">
+                <tr><th>Resource</th><th>Net/Session</th><th>Stock</th><th>Sessions Left</th></tr>
+                {% for r, d in deficits.items() %}
+                <tr class="res-deficit">
+                    <td>{{ r }}</td>
+                    <td>{{ d.net }}</td>
+                    <td>{{ d.stock }}</td>
+                    <td>{{ d.sessions_left }}</td>
+                </tr>
+                {% endfor %}
+            </table>
+            {% else %}<p class="text-muted" style="font-size:0.85rem;">No deficits.</p>{% endif %}
+        </div>
+
+        <!-- Resource Surpluses -->
+        <div class="ai-panel">
+            <h3>Resource Surpluses</h3>
+            {% if surpluses %}
+            <table class="res-table">
+                <tr><th>Resource</th><th>Net/Session</th><th>Stock</th></tr>
+                {% for r, s in surpluses.items() %}
+                <tr class="res-surplus">
+                    <td>{{ r }}</td>
+                    <td>{{ s.net }}</td>
+                    <td>{{ s.stock }}</td>
+                </tr>
+                {% endfor %}
+            </table>
+            {% else %}<p class="text-muted" style="font-size:0.85rem;">No surpluses.</p>{% endif %}
+        </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+        <!-- Job Assignments -->
+        <div class="ai-panel">
+            <h3>Job Assignments</h3>
+            {% set active_jobs = {} %}
+            {% for jk, cnt in job_assignments.items() if cnt > 0 %}
+            <div style="font-size:0.85rem;margin-bottom:0.15rem;">
+                <strong>{{ jk.replace("_", " ").title() }}</strong>: {{ cnt }} pop{{ "s" if cnt != 1 }}
+            </div>
+            {% endfor %}
+            {% if not job_assignments or job_assignments.values()|select("greaterthan", 0)|list|length == 0 %}
+            <p class="text-muted" style="font-size:0.85rem;">No jobs assigned.</p>
+            {% endif %}
+            {% if job_log %}
+            <details style="margin-top:0.5rem;">
+                <summary style="font-size:0.8rem;color:#888;cursor:pointer;">Assignment log ({{ job_log|length }})</summary>
+                {% for line in job_log %}
+                <div class="log-line">{{ line }}</div>
+                {% endfor %}
+            </details>
+            {% endif %}
+        </div>
+
+        <!-- District Plan -->
+        <div class="ai-panel">
+            <h3>District Plan</h3>
+            {% if district_plan %}
+            <div style="font-size:0.85rem;">
+                <strong>{{ district_plan.get("display_name", district_plan.get("def_key", "?")) }}</strong><br>
+                <span class="text-muted">{{ district_plan.get("rationale", "") }}</span><br>
+                Sessions saving: {{ district_plan.get("sessions_saving", 0) }}
+            </div>
+            {% else %}<p class="text-muted" style="font-size:0.85rem;">No district plan.</p>{% endif %}
+            {% if district_log %}
+            <details style="margin-top:0.5rem;">
+                <summary style="font-size:0.8rem;color:#888;cursor:pointer;">District log ({{ district_log|length }})</summary>
+                {% for line in district_log %}
+                <div class="log-line">{{ line }}</div>
+                {% endfor %}
+            </details>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Trade Desires -->
+    <div class="ai-panel">
+        <h3>Generated Trade Desires</h3>
+        {% if desires %}
+        <table class="res-table">
+            <tr><th>Resource</th><th>Type</th><th>Qty</th><th>Price</th></tr>
+            {% for d in desires %}
+            <tr>
+                <td>{{ d.resource }}</td>
+                <td>{{ d.trade_type }}</td>
+                <td>{{ d.quantity }}</td>
+                <td>{{ d.price }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+        {% else %}<p class="text-muted" style="font-size:0.85rem;">No trade desires generated.</p>{% endif %}
+    </div>
+</div>
+{% endblock %}

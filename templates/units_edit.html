@@ -526,12 +526,18 @@ ALL_TRAITS_DATA.forEach(t => {
 const MAX_COSTS = {
   'Ancient Unit': 17, 'Ancient Support Unit': 5, 'Ancient Transport Unit': 13,
   'Classical Unit': 22, 'Classical Support Unit': 10, 'Classical Transport Unit': 18,
-  'Classical Imperial Unit': 27, 'Ruler Unit': 27
+  'Classical Imperial Unit': 27,
+  'Medieval Unit': 27, 'Medieval Support Unit': 15, 'Medieval Transport Unit': 23,
+  'Medieval Imperial Unit': 32,
+  'Ruler Unit': 27
 };
 const MONEY_DIVISORS = {
   'Ancient Unit': 50, 'Ancient Support Unit': 50, 'Ancient Transport Unit': 50,
   'Classical Unit': 75, 'Classical Support Unit': 75, 'Classical Transport Unit': 75,
-  'Classical Imperial Unit': 75, 'Ruler Unit': null
+  'Classical Imperial Unit': 75,
+  'Medieval Unit': 100, 'Medieval Support Unit': 100, 'Medieval Transport Unit': 100,
+  'Medieval Imperial Unit': 100,
+  'Ruler Unit': null
 };
 // Cost per unit of upkeep (negative = reduces total cost)
 const UPKEEP_MULTIPLIERS = {
