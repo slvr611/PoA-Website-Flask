@@ -585,6 +585,11 @@ function computeUnitClass() {
     else if (isTransport) cls = 'Classical Transport Unit';
     else if (isSupport)   cls = 'Classical Support Unit';
     else                  cls = 'Classical Unit';
+  } else if (era === 'Medieval') {
+    if (isImperial)       cls = 'Medieval Imperial Unit';
+    else if (isTransport) cls = 'Medieval Transport Unit';
+    else if (isSupport)   cls = 'Medieval Support Unit';
+    else                  cls = 'Medieval Unit';
   }
 
   const select = document.getElementById('unit_class');
