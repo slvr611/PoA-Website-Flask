@@ -94,7 +94,7 @@
     {%- set is_imperial = 'Imperial' in (unit.get('unit_class') or '') -%}
     {% if unit.get('prerequisites') or is_imperial %}
       <div class="uc-prereq">
-        <b>Prerequisites:</b>
+        <b>Prerequisites: </b>
         {%- if is_imperial %}Empire{% if unit.get('prerequisites') %}, {% endif %}{% endif -%}
         {% for pre in unit.get('prerequisites', []) %}
           {%- set val = pre.get('value', '') -%}

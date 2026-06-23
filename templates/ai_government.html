@@ -5,7 +5,7 @@
 <div class="container">
     <h1>AI Government Editor</h1>
     <p class="text-muted" style="margin-bottom:1rem;">
-        Edit government type, succession type, and dark ages stance for all non-player nations.
+        Edit government type, succession type, dark ages stance, and market safety stances for all non-player nations.
         Changes are applied through the change system.
     </p>
 
@@ -28,15 +28,18 @@
                             {% for f in fields %}
                             <th>{{ f.replace("_", " ").title() }}</th>
                             {% endfor %}
+                            <th>Market Stances</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for nation in nations %}
+                        {% set nid = nation._id|string %}
+                        {% set mlinks = nation_market_links.get(nid, []) %}
                         <tr>
                             <td><a href="/nations/item/{{ nation.name }}">{{ nation.name }}</a></td>
                             {% for f in fields %}
                             <td>
-                                <select class="form-control" name="{{ nation._id }}__{{ f }}"
+                                <select class="form-control" name="{{ nid }}__{{ f }}"
                                         style="font-size:0.82rem;padding:0.2rem 0.3rem;min-width:140px;">
                                     {% for opt in enums[f] %}
                                     <option value="{{ opt }}"{% if nation.get(f) == opt %} selected{% endif %}>{{ opt }}</option>
@@ -44,6 +47,23 @@
                                 </select>
                             </td>
                             {% endfor %}
+                            <td>
+                                {% if mlinks %}
+                                {% for ml in mlinks %}
+                                <div style="display:flex;align-items:center;gap:0.4rem;{% if not loop.last %}margin-bottom:0.3rem;{% endif %}">
+                                    <span style="font-size:0.78rem;color:#888;min-width:80px;">{{ ml.market_name }}</span>
+                                    <select class="form-control" name="ml__{{ ml.link_id }}"
+                                            style="font-size:0.82rem;padding:0.2rem 0.3rem;min-width:100px;">
+                                        {% for opt in stance_enum %}
+                                        <option value="{{ opt }}"{% if ml.stance == opt %} selected{% endif %}>{{ opt }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                {% endfor %}
+                                {% else %}
+                                <span style="font-size:0.78rem;color:#555;">—</span>
+                                {% endif %}
+                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>

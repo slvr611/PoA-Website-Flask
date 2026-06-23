@@ -54,10 +54,10 @@
 {%- if ns.found -%}{{ ns.found }}{%- elif item._id is defined -%}{{ item._id }}{%- else -%}item{%- endif -%}
 {%- endmacro -%}
 
-{# Render all key:value pairs of a dict, skipping _id #}
+{# Render all key:value pairs of a dict, skipping _id and empty values #}
 {% macro _item_fields(item) %}
     {% for k, v in item.items() %}
-        {% if k != '_id' %}
+        {% if k != '_id' and v is not none and v != "" and v != [] and v != {} %}
             <div class="dict-change-item">
                 <span class="dict-key">{{ k }}:</span>
                 <span class="dict-value">{% if v is mapping %}<em>(nested dict)</em>{% elif v is sequence and v is not string %}[{{ v | join(', ') }}]{% else %}{{ _val(v) }}{% endif %}</span>
@@ -511,13 +511,22 @@
 {% endmacro %}
 
 
+{# Fields that are too verbose for the table view — only shown on the
+   individual change detail page (compact=false). #}
+{% set _VERBOSE_FIELDS = [
+    "breakdowns", "land_unit_details", "naval_unit_details", "support_unit_details",
+    "district_details", "job_details", "territory_types", "ai_state",
+    "resource_desires", "visibility_modifiers",
+] %}
+
 {# Render a full change preview for a document.
-   Shows each changed field with its label and a diff of before vs after. #}
-{% macro render_changes_preview(before_data, after_data, target_schema, preview_references, view_access_level) %}
+   Shows each changed field with its label and a diff of before vs after.
+   compact=true (default for table views) hides verbose computed fields. #}
+{% macro render_changes_preview(before_data, after_data, target_schema, preview_references, view_access_level, compact=true) %}
     <div class="changes-preview">
         {% if before_data is mapping and after_data is mapping %}
             {% set all_keys = (before_data.keys()|list + after_data.keys()|list)|unique|list %}
-            {% set ns = namespace(any=false) %}
+            {% set ns = namespace(any=false, hidden=0) %}
             {% for key in all_keys %}
                 {% set before_value = before_data.get(key) %}
                 {% set after_value  = after_data.get(key) %}
@@ -525,6 +534,10 @@
                 {% set required_view_level = field_schema.get("view_access_level", 0) %}
 
                 {% if before_value != after_value or (key in before_data) != (key in after_data) %}
+                    {# In compact mode, skip verbose computed fields #}
+                    {% if compact and key in _VERBOSE_FIELDS %}
+                        {% set ns.hidden = ns.hidden + 1 %}
+                    {% else %}
                     {% set ns.any = true %}
                     <div class="field-change">
                         <div class="field-label">{{ field_schema.get("label", key) }}:</div>
@@ -585,9 +598,15 @@
                             {% endif %}
                         </div>
                     </div>
+                    {% endif %}{# end compact verbose check #}
                 {% endif %}
             {% endfor %}
-            {% if not ns.any %}
+            {% if compact and ns.hidden > 0 %}
+                <div style="font-size:0.78rem;color:#666;margin-top:0.3rem;font-style:italic;">
+                    + {{ ns.hidden }} computed field{{ 's' if ns.hidden != 1 }} (view full change for details)
+                </div>
+            {% endif %}
+            {% if not ns.any and ns.hidden == 0 %}
                 <div class="no-changes">No changes</div>
             {% endif %}
         {% else %}

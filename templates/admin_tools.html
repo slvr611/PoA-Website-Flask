@@ -255,6 +255,19 @@
 
         <div class="admin-tool-card">
             <div class="admin-tool-card-body">
+                <h3 class="admin-tool-card-title">Approve All System Changes</h3>
+                <p class="admin-tool-card-desc">Force-approve all pending changes that were requested by the System. Player-submitted changes are not affected.</p>
+                <form action="/admin/approve_system_changes" method="POST">
+                    <button type="submit" class="btn btn-warning btn-sm"
+                            onclick="return confirm('This will approve all pending System changes. Continue?')">
+                        Approve System Changes
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <div class="admin-tool-card">
+            <div class="admin-tool-card-body">
                 <h3 class="admin-tool-card-title">Wipe AI Resource Desires</h3>
                 <p class="admin-tool-card-desc">Clear all resource buy/sell desires from non-player nations. Player nation desires are not affected.</p>
                 <form action="/admin/wipe_ai_desires" method="POST">

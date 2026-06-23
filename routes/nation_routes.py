@@ -288,8 +288,24 @@ def nation_item(item_ref):
                 if _dd:
                     district_defs_map[_dk] = _dd
 
-    # Trade routes
+    # Build tile-based node lookup from hex map for display
     nation_name = nation.get("name", item_ref)
+    tile_node_map = {}
+    for _tile in mongo.db.hex_map_tiles.find(
+        {"owner": nation_name, "node.resource_type": {"$exists": True}},
+        {"node.resource_type": 1, "city": 1, "district": 1, "wonder": 1, "_id": 0},
+    ):
+        _rt = _tile.get("node", {}).get("resource_type", "")
+        if not _rt:
+            continue
+        for _btype in ("city", "district", "wonder"):
+            _ref = _tile.get(_btype)
+            if _ref:
+                _bid = _ref.get("id") or _ref.get("name") or _ref.get("key") or ""
+                if _bid:
+                    tile_node_map.setdefault(_btype, {})[_bid] = _rt
+
+    # Trade routes
     trade_routes = list(mongo.db.trade_routes.find({
         "$or": [{"nation_a": nation_name}, {"nation_b": nation_name}],
         "status": {"$in": ["pending", "active", "ending"]}
@@ -334,6 +350,7 @@ def nation_item(item_ref):
         connectable_nations=[],
         all_players=all_players,
         nation_players=nation_players,
+        tile_node_map=tile_node_map,
     )
     timings["render_template_ms"] = round((perf_counter() - phase_start) * 1000, 2)
     timings["total_request_ms"] = round((perf_counter() - request_start) * 1000, 2)

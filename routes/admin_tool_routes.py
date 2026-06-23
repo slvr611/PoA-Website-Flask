@@ -717,6 +717,32 @@ def wipe_all_nodes():
 # Wipe AI resource desires
 # ---------------------------------------------------------------------------
 
+@admin_tool_routes.route("/admin/approve_system_changes", methods=["POST"])
+@admin_required
+def approve_system_changes():
+    """Force-approve all pending changes with 'System' as requester."""
+    from helpers.change_helpers import system_force_approve_change
+    pending = list(mongo.db.changes.find(
+        {"status": "Pending", "requester.name": "System"},
+        {"_id": 1}
+    ))
+    approved = 0
+    failed = 0
+    for change in pending:
+        try:
+            if system_force_approve_change(change["_id"]):
+                approved += 1
+            else:
+                failed += 1
+        except Exception:
+            failed += 1
+    msg = f"Force-approved {approved} system change(s)."
+    if failed:
+        msg += f" {failed} failed."
+    flash(msg, "success" if failed == 0 else "warning")
+    return redirect(url_for("admin_tool_routes.admin_tools"))
+
+
 @admin_tool_routes.route("/admin/wipe_ai_desires", methods=["POST"])
 @admin_required
 def wipe_ai_desires():
@@ -1124,11 +1150,34 @@ def ai_government():
     props = schema.get("properties", {})
     enums = {f: props.get(f, {}).get("enum", []) for f in _AI_GOV_FIELDS}
 
+    ai_nation_ids = [str(n["_id"]) for n in ai_nations]
+    market_links = list(mongo.db.market_links.find(
+        {"member": {"$in": ai_nation_ids}},
+        {"member": 1, "market": 1, "market_safety_stance": 1},
+    ))
+    market_ids = list({ObjectId(ml["market"]) for ml in market_links if ml.get("market")})
+    market_names = {
+        str(m["_id"]): m.get("name", "?")
+        for m in mongo.db.markets.find({"_id": {"$in": market_ids}}, {"name": 1})
+    }
+    nation_market_links = {}
+    for ml in market_links:
+        nation_market_links.setdefault(str(ml["member"]), []).append({
+            "link_id": str(ml["_id"]),
+            "market_name": market_names.get(str(ml.get("market", "")), "?"),
+            "stance": ml.get("market_safety_stance", "Ignore"),
+        })
+
+    ml_schema = category_data.get("market_links", {}).get("schema", {})
+    stance_enum = ml_schema.get("properties", {}).get("market_safety_stance", {}).get("enum", [])
+
     return render_template(
         "ai_government.html",
         grouped=grouped,
         enums=enums,
         fields=_AI_GOV_FIELDS,
+        nation_market_links=nation_market_links,
+        stance_enum=stance_enum,
     )
 
 
@@ -1167,7 +1216,38 @@ def ai_government_save():
         system_approve_change(change_id)
         updated += 1
 
-    flash(f"Updated government settings for {updated} nation(s).", "success")
+    ml_updated = 0
+    for key, new_stance in request.form.items():
+        if not key.startswith("ml__"):
+            continue
+        link_id_str = key[4:]
+        try:
+            link_oid = ObjectId(link_id_str)
+        except Exception:
+            continue
+        ml_doc = mongo.db.market_links.find_one({"_id": link_oid})
+        if not ml_doc or ml_doc.get("market_safety_stance", "Ignore") == new_stance:
+            continue
+        old_ml = deepcopy(ml_doc)
+        new_ml = deepcopy(ml_doc)
+        new_ml["market_safety_stance"] = new_stance
+        change_id = system_request_change(
+            data_type="market_links",
+            item_id=ml_doc["_id"],
+            change_type="Update",
+            before_data=old_ml,
+            after_data=new_ml,
+            reason="AI market stance update via admin tool",
+        )
+        system_approve_change(change_id)
+        ml_updated += 1
+
+    parts = []
+    if updated:
+        parts.append(f"{updated} nation(s)")
+    if ml_updated:
+        parts.append(f"{ml_updated} market stance(s)")
+    flash(f"Updated {' and '.join(parts)}.", "success") if parts else flash("No changes.", "info")
     return redirect(url_for("admin_tool_routes.ai_government"))
 
 
@@ -1180,9 +1260,11 @@ def ai_government_save():
 def ai_goals_preview():
     from helpers.ai_decision_helpers import (
         get_ai_personality, evaluate_nation_state,
-        compute_need_weights, assign_ai_jobs, generate_goals,
-        generate_resource_desires, get_stored_market_prices,
-        update_district_plan, score_buildable_districts, score_jobs,
+        compute_need_weights, compute_upkeep_floor,
+        select_strategic_goal, evaluate_goal_district,
+        assign_goal_jobs, select_tech_target,
+        generate_goal_trade_desires, get_stored_market_prices,
+        score_buildable_districts, score_jobs,
     )
     from calculations.field_calculations import calculate_all_fields
     from copy import deepcopy
@@ -1216,18 +1298,23 @@ def ai_goals_preview():
             pass
 
     error = None
-    goals = []
     personality = {}
     state = {}
     need_weights = {}
     job_scores = {}
-    job_assignments = {}
-    job_log = []
+    upkeep_assignments = {}
+    goal_assignments = {}
+    upkeep_log = []
+    goal_job_log = []
+    upkeep_ratio = 0.0
+    strategic_goal = {}
+    goal_candidates = []
     desires = []
     district_plan = None
     district_log = []
     district_scores = []
     resource_detail = {}
+    tech_target = None
 
     try:
         calculated = calculate_all_fields(nation, schema, "nation")
@@ -1237,23 +1324,40 @@ def ai_goals_preview():
         state = evaluate_nation_state(nation)
         market_prices = get_stored_market_prices(nation)
         need_weights = compute_need_weights(state, market_prices)
-        job_scores = score_jobs(state, need_weights)
-        job_assignments, job_log = assign_ai_jobs(state, need_weights, market_prices)
-        goals = generate_goals(nation, state, job_assignments, personality)
+        job_scores = score_jobs(state, need_weights, market_prices)
 
+        # Step 1: Upkeep floor
+        upkeep_assignments, remaining_pops, projected_net, upkeep_log, upkeep_ratio = \
+            compute_upkeep_floor(state, market_prices)
+
+        # Step 2: Strategic goal
+        strategic_goal, goal_candidates = select_strategic_goal(
+            nation, state, personality, upkeep_ratio, market_prices
+        )
+
+        # Step 3: Goal-aware district
         dummy = deepcopy(nation)
-        district_log_list = []
-        district_plan = update_district_plan(
-            nation, dummy, state, goals, personality,
-            market_prices, need_weights, district_log_list,
-        )
-        district_log = district_log_list
-
-        district_scores = score_buildable_districts(
-            nation, state, need_weights, market_prices,
+        preview_log = []
+        district_plan, district_scores, district_log = evaluate_goal_district(
+            nation, dummy, state, strategic_goal, need_weights,
+            market_prices, upkeep_assignments, preview_log
         )
 
-        desires = generate_resource_desires(state, goals, personality, market_prices)
+        # Step 4: Goal-driven jobs
+        goal_assignments, goal_job_log, final_projected_net = assign_goal_jobs(
+            state, strategic_goal, remaining_pops, projected_net,
+            district_plan, market_prices
+        )
+
+        # Step 4b: Tech target
+        tech_dummy = deepcopy(nation)
+        tech_target = select_tech_target(nation, tech_dummy, state, strategic_goal, personality)
+
+        # Step 5: Trade desires (uses final projected_net including goal jobs)
+        desires = generate_goal_trade_desires(
+            state, strategic_goal, personality, district_plan,
+            final_projected_net, market_prices
+        )
 
         for r in state.get("net_production", {}):
             net = state["net_production"].get(r, 0)
@@ -1279,13 +1383,18 @@ def ai_goals_preview():
         prev_name=prev_name,
         next_name=next_name,
         personality=personality,
-        goals=goals,
+        strategic_goal=strategic_goal,
+        goal_candidates=goal_candidates,
         state=state,
         need_weights=need_weights,
         resource_detail=resource_detail,
         job_scores=job_scores,
-        job_assignments=job_assignments,
-        job_log=job_log,
+        upkeep_assignments=upkeep_assignments,
+        goal_assignments=goal_assignments,
+        upkeep_log=upkeep_log,
+        goal_job_log=goal_job_log,
+        upkeep_ratio=upkeep_ratio,
+        tech_target=tech_target,
         desires=desires,
         district_plan=district_plan,
         district_log=district_log,

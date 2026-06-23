@@ -8,8 +8,8 @@
 .ai-panel { background: var(--card-bg, #1e1e2e); border: 1px solid var(--border-color, #333); border-radius: 6px; padding: 0.75rem 1rem; margin-bottom: 1rem; }
 .ai-panel h3 { margin: 0 0 0.5rem 0; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; color: #aaa; border-bottom: 1px solid #333; padding-bottom: 0.3rem; }
 .goal-row { display: flex; align-items: baseline; gap: 0.5rem; margin-bottom: 0.25rem; font-size: 0.85rem; }
-.goal-prio { color: #8af; font-family: monospace; min-width: 28px; text-align: right; }
-.goal-type { font-weight: 600; min-width: 150px; }
+.goal-prio { color: #8af; font-family: monospace; min-width: 36px; text-align: right; }
+.goal-type { font-weight: 600; min-width: 170px; }
 .goal-rationale { color: var(--text-muted, #888); }
 .dbg-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
 .dbg-table th { text-align: left; color: #888; font-weight: normal; padding: 0.2rem 0.5rem; border-bottom: 1px solid #333; }
@@ -28,6 +28,14 @@
 .dim-val { min-width: 36px; font-family: monospace; color: #ccc; }
 .log-line { font-size: 0.82rem; color: var(--text-muted, #888); margin-bottom: 0.15rem; }
 .score-bar { display: inline-block; height: 10px; background: #4caf50; border-radius: 2px; vertical-align: middle; }
+.upkeep-panel { border-color: #a86; }
+.upkeep-panel h3 { color: #fa6; }
+.goal-panel { border-color: #4caf50; }
+.goal-panel h3 { color: #8f8; }
+.strategic-badge { display: inline-block; padding: 0.15rem 0.6rem; border-radius: 4px; font-size: 0.85rem; font-weight: 600; background: #2a4a2a; color: #8f8; border: 1px solid #4caf50; }
+.source-survival { color: #fa6; }
+.source-goal { color: #8f8; }
+.source-opportunistic { color: #8af; }
 </style>
 
 <div class="container">
@@ -59,7 +67,7 @@
         {% if region_name %} · {{ region_name }}{% endif %}
         · {{ state.get("total_pops", 0) }} pops ({{ state.get("idle_pops", 0) }} idle)
         · Money: {{ nation.get("money", 0) }} ({{ "%+d"|format(state.get("money_income", 0)) }}/session)
-        · District slots: {{ state.get("open_district_slots", 0) }} open
+        · Districts: {{ nation.get("districts", [])|length }} built / {{ nation.get("district_slots", 0) }} slots ({{ state.get("open_district_slots", 0) }} open)
     </p>
 
     {% if error %}
@@ -69,7 +77,7 @@
     </div>
     {% endif %}
 
-    <!-- Row 1: Personality + Goals -->
+    <!-- Row 1: Personality + Strategic Goal -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
         <div class="ai-panel">
             <h3>Personality</h3>
@@ -85,16 +93,41 @@
             {% endfor %}
         </div>
 
-        <div class="ai-panel">
-            <h3>Goals (priority order)</h3>
-            {% for goal in goals %}
-            <div class="goal-row">
-                <span class="goal-prio">{{ goal.priority }}</span>
-                <span class="goal-type">{{ goal.type.replace("_", " ").title() }}</span>
-                <span class="goal-rationale">{{ goal.rationale }}</span>
+        <div class="ai-panel goal-panel">
+            <h3>Strategic Goal</h3>
+            {% if strategic_goal %}
+            <div style="margin-bottom:0.5rem;">
+                <span class="strategic-badge">{{ strategic_goal.get("display_name", "?") }}</span>
+                <span style="font-family:monospace;font-size:0.9rem;color:#8af;margin-left:0.5rem;">
+                    score: {{ strategic_goal.get("score", 0) }}
+                </span>
+                {% if strategic_goal.get("sessions_held", 0) > 1 %}
+                <span style="font-size:0.78rem;color:#888;margin-left:0.5rem;">
+                    (held {{ strategic_goal.get("sessions_held", 1) }} sessions)
+                </span>
+                {% endif %}
             </div>
-            {% endfor %}
-            {% if not goals %}<p class="text-muted" style="font-size:0.85rem;">No goals generated.</p>{% endif %}
+            <div style="font-size:0.82rem;color:#aaa;margin-bottom:0.5rem;">
+                {{ strategic_goal.get("rationale", "") }}
+            </div>
+            <div style="font-size:0.78rem;color:#888;margin-bottom:0.3rem;">
+                Upkeep ratio: <strong style="{% if upkeep_ratio > 0.4 %}color:#fa6;{% elif upkeep_ratio > 0.6 %}color:#f88;{% else %}color:#8f8;{% endif %}">
+                    {{ "%.0f"|format(upkeep_ratio * 100) }}%
+                </strong> of workforce on upkeep
+            </div>
+            {% endif %}
+            {% if goal_candidates %}
+            <details style="margin-top:0.5rem;">
+                <summary style="font-size:0.8rem;color:#888;cursor:pointer;">All candidates ({{ goal_candidates|length }})</summary>
+                {% for gc in goal_candidates %}
+                <div class="goal-row" style="{% if gc.type == strategic_goal.get('type') %}background:rgba(76,175,80,0.1);border-radius:3px;padding:0.15rem 0.3rem;{% endif %}">
+                    <span class="goal-prio">{{ gc.score }}</span>
+                    <span class="goal-type">{{ gc.display_name }}</span>
+                    <span class="goal-rationale">{{ gc.rationale }}</span>
+                </div>
+                {% endfor %}
+            </details>
+            {% endif %}
         </div>
     </div>
 
@@ -148,12 +181,12 @@
         </table>
     </div>
 
-    <!-- Row 3: Job Scores + Assignments -->
+    <!-- Row 3: Job Scores + Split Assignments -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
         <div class="ai-panel">
             <h3>Job Scores (initial weights)</h3>
             <p class="text-muted" style="font-size:0.78rem;margin-bottom:0.5rem;">
-                Score = (production × need weight) - (upkeep × need weight), with district bonus if applicable. Pops assigned greedily to highest-scoring job, recalculating weights after each assignment.
+                Score = (production × need weight) - (upkeep × need weight), with district bonus if applicable.
             </p>
             <table class="dbg-table">
                 <thead><tr><th>Job</th><th>Score</th><th></th></tr></thead>
@@ -172,46 +205,101 @@
             </table>
         </div>
 
-        <div class="ai-panel">
-            <h3>Final Job Assignments</h3>
-            <p class="text-muted" style="font-size:0.78rem;margin-bottom:0.5rem;">
-                {{ state.get("idle_pops", 0) }} idle pops to assign. Each pop placed on highest-scoring job; weights recalculated after each.
-            </p>
-            {% for jk, cnt in job_assignments|dictsort(by='value', reverse=true) %}
-            {% if cnt > 0 %}
-            <div style="font-size:0.85rem;margin-bottom:0.2rem;">
-                <strong>{{ jk.replace("_", " ").title() }}</strong>: {{ cnt }} pop{{ "s" if cnt != 1 }}
-            </div>
-            {% endif %}
-            {% endfor %}
-            {% if not job_assignments or job_assignments.values()|select("greaterthan", 0)|list|length == 0 %}
-            <p class="text-muted" style="font-size:0.85rem;">No jobs assigned.</p>
-            {% endif %}
-            {% if job_log %}
-            <details style="margin-top:0.5rem;" open>
-                <summary style="font-size:0.8rem;color:#888;cursor:pointer;">Assignment log ({{ job_log|length }})</summary>
-                {% for line in job_log %}
-                <div class="log-line">{{ line }}</div>
+        <div>
+            <!-- Upkeep Assignments -->
+            <div class="ai-panel upkeep-panel" style="margin-bottom:0.75rem;">
+                <h3>Upkeep Assignments (survival floor)</h3>
+                <p class="text-muted" style="font-size:0.78rem;margin-bottom:0.5rem;">
+                    Minimum pops to prevent resource depletion.
+                    Upkeep ratio: <strong>{{ "%.0f"|format(upkeep_ratio * 100) }}%</strong>
+                </p>
+                {% for jk, cnt in upkeep_assignments|dictsort(by='value', reverse=true) %}
+                {% if cnt > 0 %}
+                <div style="font-size:0.85rem;margin-bottom:0.2rem;">
+                    <strong>{{ jk.replace("_", " ").title() }}</strong>: {{ cnt }} pop{{ "s" if cnt != 1 }}
+                </div>
+                {% endif %}
                 {% endfor %}
-            </details>
-            {% endif %}
+                {% if not upkeep_assignments %}
+                <p class="text-muted" style="font-size:0.85rem;">No upkeep jobs needed — economy self-sustaining.</p>
+                {% endif %}
+                {% if upkeep_log %}
+                <details style="margin-top:0.5rem;">
+                    <summary style="font-size:0.8rem;color:#888;cursor:pointer;">Upkeep log ({{ upkeep_log|length }})</summary>
+                    {% for line in upkeep_log %}
+                    <div class="log-line">{{ line }}</div>
+                    {% endfor %}
+                </details>
+                {% endif %}
+            </div>
+
+            <!-- Goal Assignments -->
+            <div class="ai-panel goal-panel">
+                <h3>Goal Assignments ({{ strategic_goal.get("display_name", "?") }})</h3>
+                <p class="text-muted" style="font-size:0.78rem;margin-bottom:0.5rem;">
+                    Remaining pops assigned towards the strategic goal.
+                </p>
+                {% for jk, cnt in goal_assignments|dictsort(by='value', reverse=true) %}
+                {% if cnt > 0 %}
+                <div style="font-size:0.85rem;margin-bottom:0.2rem;">
+                    <strong>{{ jk.replace("_", " ").title() }}</strong>: {{ cnt }} pop{{ "s" if cnt != 1 }}
+                </div>
+                {% endif %}
+                {% endfor %}
+                {% if not goal_assignments or goal_assignments.values()|select("greaterthan", 0)|list|length == 0 %}
+                <p class="text-muted" style="font-size:0.85rem;">No pops available for goal work.</p>
+                {% endif %}
+                {% if goal_job_log %}
+                <details style="margin-top:0.5rem;" open>
+                    <summary style="font-size:0.8rem;color:#888;cursor:pointer;">Goal job log ({{ goal_job_log|length }})</summary>
+                    {% for line in goal_job_log %}
+                    <div class="log-line">{{ line }}</div>
+                    {% endfor %}
+                </details>
+                {% endif %}
+            </div>
         </div>
     </div>
+
+    <!-- Row 3b: Tech Target -->
+    {% if tech_target %}
+    <div class="ai-panel" style="border-color:#8af;">
+        <h3 style="color:#8af;">Tech Target</h3>
+        <div style="font-size:0.85rem;">
+            <strong>{{ tech_target.get("display_name", "?") }}</strong>
+            <span style="color:#888;margin-left:0.5rem;">({{ tech_target.get("type", "?") }})</span>
+            <span style="font-family:monospace;color:#8af;margin-left:0.5rem;">score: {{ tech_target.get("score", 0) }}</span>
+        </div>
+        <div style="font-size:0.78rem;color:#aaa;margin-top:0.2rem;">
+            {{ tech_target.get("rationale", "") }}
+        </div>
+    </div>
+    {% endif %}
 
     <!-- Row 4: District Scores + Plan -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
         <div class="ai-panel">
-            <h3>District Scores (top 10)</h3>
+            <h3>District Scores (top 10) — Goal: {{ strategic_goal.get("display_name", "?") }}</h3>
             <p class="text-muted" style="font-size:0.78rem;margin-bottom:0.5rem;">
-                Score = modifier value + unlocked jobs + market opportunity - cost penalty.
+                Score = modifier value + unlocked jobs + market opportunity - cost penalty. Goal-aligned districts get a bonus multiplier.
                 {{ state.get("open_district_slots", 0) }} open slot{{ "s" if state.get("open_district_slots", 0) != 1 }}.
-                Values normalised by market price (weight &times; amount &times; price_scale).
             </p>
             {% if district_scores %}
-            {% for score, dk, name, cost, rationale, src, mod_bd in district_scores[:10] %}
-            <div style="border:1px solid #333;border-radius:4px;padding:0.5rem 0.75rem;margin-bottom:0.5rem;{% if loop.first %}border-color:#4caf50;{% endif %}">
+            {% for entry in district_scores[:10] %}
+            {% set score = entry[0] %}
+            {% set dk = entry[1] %}
+            {% set name = entry[2] %}
+            {% set cost = entry[3] %}
+            {% set rationale = entry[4] %}
+            {% set mod_bd = entry[6] if entry|length > 6 else [] %}
+            {% set ujobs = entry[7] if entry|length > 7 else [] %}
+            {% set has_goal_tag = "[GOAL:" in rationale %}
+            <div style="border:1px solid #333;border-radius:4px;padding:0.5rem 0.75rem;margin-bottom:0.5rem;{% if loop.first %}border-color:#4caf50;{% elif has_goal_tag %}border-color:#2a4a2a;{% endif %}">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.3rem;">
-                    <strong style="font-size:0.9rem;">{{ name }}</strong>
+                    <strong style="font-size:0.9rem;">
+                        {{ name }}
+                        {% if has_goal_tag %}<span style="font-size:0.72rem;color:#8f8;margin-left:0.3rem;">GOAL-ALIGNED</span>{% endif %}
+                    </strong>
                     <span style="font-family:monospace;font-size:0.9rem;{% if loop.first %}color:#8f8;{% else %}color:#8af;{% endif %}">{{ "%.2f"|format(score) }}</span>
                 </div>
                 <div style="font-size:0.78rem;color:#888;margin-bottom:0.3rem;">
@@ -235,6 +323,47 @@
                             {% endfor %}
                         </tbody>
                     </table>
+                </details>
+                {% endif %}
+                {% if ujobs %}
+                <details{% if loop.first %} open{% endif %}>
+                    <summary style="font-size:0.75rem;color:#888;cursor:pointer;">Unlocked jobs ({{ ujobs|length }})</summary>
+                    {% for j in ujobs %}
+                    <div style="margin-top:0.35rem;padding:0.3rem 0.5rem;background:rgba(255,255,255,0.02);border-radius:3px;">
+                        <div style="display:flex;justify-content:space-between;font-size:0.82rem;margin-bottom:0.2rem;">
+                            <strong>{{ j.name }}</strong>
+                            <span style="font-family:monospace;color:#8af;">
+                                <strong>{{ j.scaled_score }}</strong>
+                            </span>
+                        </div>
+                        <div style="font-size:0.75rem;color:#aaa;margin-bottom:0.2rem;">
+                            Per-pop score: {{ j.raw_score }}
+                            {% if j.comparison_type == "replaces" %}
+                                — {{ j.comparison_type }} {{ j.comparison_name }} ({{ j.comparison_score }})
+                                → marginal: {{ "%+.2f"|format(j.marginal) }}/pop × {{ j.est_pops }} pops on role
+                            {% else %}
+                                — {{ j.comparison_type }} vs {{ j.comparison_name }} ({{ j.comparison_score }})
+                                → marginal: {{ "%+.2f"|format(j.marginal) }}/pop × {{ j.est_pops }} est. pops
+                            {% endif %}
+                        </div>
+                        {% if j.production %}
+                        <div style="font-size:0.75rem;color:#8f8;margin-bottom:0.1rem;">
+                            Produces:
+                            {% for p in j.production %}
+                                {{ p.field }} {{ p.amount }} (w:{{ p.weight }} × s:{{ p.scale }} = {{ "%+.2f"|format(p.contrib) }}){% if not loop.last %},{% endif %}
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                        {% if j.upkeep %}
+                        <div style="font-size:0.75rem;color:#fa6;">
+                            Upkeep:
+                            {% for u in j.upkeep %}
+                                {{ u.field }} {{ u.amount }} (w:{{ u.weight }} × s:{{ u.scale }} = -{{ "%.2f"|format(u.contrib) }}){% if not loop.last %},{% endif %}
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
                 </details>
                 {% endif %}
             </div>
@@ -276,7 +405,7 @@
         <h3>Generated Trade Desires</h3>
         {% if desires %}
         <table class="dbg-table">
-            <thead><tr><th>Resource</th><th>Type</th><th>Qty</th><th>Price</th></tr></thead>
+            <thead><tr><th>Resource</th><th>Type</th><th>Qty</th><th>Price</th><th>Source</th></tr></thead>
             <tbody>
                 {% for d in desires %}
                 <tr>
@@ -284,6 +413,7 @@
                     <td>{{ d.trade_type }}</td>
                     <td>{{ d.quantity }}</td>
                     <td>{{ d.price }}</td>
+                    <td class="source-{{ d.get('source', 'opportunistic') }}">{{ d.get("source", "?") }}</td>
                 </tr>
                 {% endfor %}
             </tbody>

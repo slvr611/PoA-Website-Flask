@@ -96,7 +96,7 @@
 							{{ tile_count }} tile{{ 's' if tile_count != 1 else '' }} changed
 						</div>
 					{% else %}
-						{{ render_changes_preview(before_data, after_data, target_schema, linked_objects, view_access_level) }}
+						{{ render_changes_preview(before_data, after_data, target_schema, linked_objects, view_access_level, compact=false) }}
 					{% endif %}
 				</td>
 			</tr>

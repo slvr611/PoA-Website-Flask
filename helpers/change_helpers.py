@@ -11,13 +11,17 @@ _NATURAL_KEY_FIELDS = ['name', 'quest_name', 'source', 'modifier_type', 'scope',
 
 
 def _handle_nation_rename(nation_id, old_name, new_name):
-    """When a nation is renamed: update all hex_map_tiles owner references and
-    record the old name in previous_names so old links can redirect."""
+    """When a nation is renamed: update all hex_map_tiles owner and route.owner
+    references, and record the old name in previous_names so old links can redirect."""
     if not old_name or not new_name or old_name == new_name:
         return
     mongo.db.hex_map_tiles.update_many(
         {"owner": old_name},
         {"$set": {"owner": new_name}}
+    )
+    mongo.db.hex_map_tiles.update_many(
+        {"route.owner": old_name},
+        {"$set": {"route.owner": new_name}}
     )
     mongo.db.nations.update_one(
         {"_id": nation_id},
@@ -535,6 +539,54 @@ def force_approve_change(change_id):
         changed_object_id=change["target"],
         changed_object=merged if change["change_type"] == "Update" else after_data,
         reason=f"Force-approved change #{change_id}"
+    )
+    return True
+
+
+def system_force_approve_change(change_id):
+    """Force-approve a change using the System player as approver,
+    without checking g.user or running check_no_other_changes."""
+    approver = mongo.db.players.find_one({"name": "System"})
+    if approver is None:
+        return False
+
+    changes_collection = mongo.db.changes
+    now = datetime.now(timezone.utc)
+    global_modifiers = mongo.db["global_modifiers"].find_one({"name": "global_modifiers"})
+    session_number = global_modifiers.get("session_counter", 0) if global_modifiers else 0
+    change = changes_collection.find_one({"_id": change_id})
+    if not change or change.get("status") != "Pending":
+        return False
+
+    target_collection = category_data[change["target_collection"]]["database"]
+    after_data = change["after_requested_data"]
+    before_data = change["before_requested_data"]
+
+    if change["change_type"] == "Update":
+        existing = target_collection.find_one({"_id": change["target"]})
+        merged = deep_merge(existing, after_data)
+        merged = _calculate_and_attach_fields(change["target_collection"], merged)
+        target_collection.update_one({"_id": change["target"]}, {"$set": merged})
+    elif change["change_type"] == "Add":
+        after_data = _calculate_and_attach_fields(change["target_collection"], after_data)
+        change["target"] = target_collection.insert_one(after_data).inserted_id
+    else:
+        target_collection.delete_one({"_id": change["target"]})
+
+    changes_collection.update_one({"_id": change_id}, {"$set": {
+        "status": "Approved",
+        "time_implemented": now,
+        "last_modified_time": now,
+        "approver": approver["_id"],
+        "session_number": session_number,
+        "before_implemented_data": before_data,
+        "after_implemented_data": after_data
+    }})
+    propagate_updates(
+        changed_data_type=change["target_collection"],
+        changed_object_id=change["target"],
+        changed_object=merged if change["change_type"] == "Update" else after_data,
+        reason=f"System force-approved change #{change_id}"
     )
     return True
 

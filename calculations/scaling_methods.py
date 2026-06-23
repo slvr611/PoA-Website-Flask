@@ -64,24 +64,31 @@ def per_x_pops(target, scaling_x=1, scaling_extra="", context=None):
     return int(pops / divisor)
 
 
+def _count_recruited(units):
+    """Sum recruited counts from a units dict ({type_key: count}) or list."""
+    if isinstance(units, dict):
+        return sum(v for v in units.values() if isinstance(v, (int, float)))
+    return len(units)
+
+
 def per_x_units(target, scaling_x=1, scaling_extra="", context=None):
     naval_units = target.get("naval_units", []) or []
     land_units = target.get("land_units", []) or []
     divisor = float(scaling_x) if scaling_x else 1
-    total_unit_count = len(land_units) + len(naval_units)
+    total_unit_count = _count_recruited(land_units) + _count_recruited(naval_units)
     return int(total_unit_count / divisor)
 
 
 def per_x_naval_units(target, scaling_x=1, scaling_extra="", context=None):
     units = target.get("naval_units", []) or []
     divisor = float(scaling_x) if scaling_x else 1
-    return int(len(units) / divisor)
+    return int(_count_recruited(units) / divisor)
 
 
 def per_x_land_units(target, scaling_x=1, scaling_extra="", context=None):
     units = target.get("land_units", []) or []
     divisor = float(scaling_x) if scaling_x else 1
-    return int(len(units) / divisor)
+    return int(_count_recruited(units) / divisor)
 
 
 def per_x_turns_library(target, scaling_x=1, scaling_extra="", context=None):

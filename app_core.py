@@ -119,12 +119,12 @@ json_files = ["jobs", "tech", "nation_imperial_districts", "mercenary_districts"
                 "scaling_types", "scope_definitions"]
 json_data = {"general_resources": [
             # color: optional hex string for map node rendering; omit to auto-generate
-            {"key": "food",     "name": "Food",     "base_storage": 20, "base_price": 50,  "color": "#00ff00"},
+            {"key": "food",     "name": "Food",     "base_storage": 25, "base_price": 50,  "color": "#00ff00"},
             {"key": "wood",     "name": "Wood",     "base_storage": 15, "base_price": 100,  "color": "#b47e5a"},
             {"key": "stone",    "name": "Stone",    "base_storage": 15, "base_price": 100,  "color": "#96e3ef"},
             {"key": "mounts",   "name": "Mounts",   "base_storage": 15, "base_price": 100,  "color": "#ffeb00"},
             {"key": "research", "name": "Research", "base_storage": 0,                     "color": "#ff00b8"},
-            {"key": "magic",    "name": "Magic",    "base_storage": 10, "base_price": 125, "color": "#ba00ff"},
+            {"key": "magic",    "name": "Magic",    "base_storage": 15, "base_price": 125, "color": "#ba00ff"},
         ],
         "unique_resources": [
             {"key": "iron",   "name": "Iron",   "base_storage": 10,  "base_price": 200, "color": "#828282"},
