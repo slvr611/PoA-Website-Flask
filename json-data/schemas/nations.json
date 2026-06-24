@@ -878,7 +878,7 @@
           "Imperial Council": {
             "city_slots": 6,
             "_modifiers": [
-              { "modifier_type": "trade_risk", "value": 0.02, "scope": "nation_market", "scaling": "per_x_units", "scaling_x": 1 },
+              { "modifier_type": "trade_risk", "value": -0.02, "scope": "nation_market", "scaling": "per_x_units", "scaling_x": 1 },
               { "modifier_type": "trade_slots", "value": 1, "scope": "nation_self", "scaling": "per_x_units", "scaling_x": 2 },
               { "modifier_type": "trade_speed", "value": 1, "scope": "nation_self", "scaling": "per_x_units", "scaling_x": 2 }
             ]
@@ -956,7 +956,7 @@
             "mounts_consumption": 1,
             "hunter_food_production": -1,
             "hunter_stone_production": 1,
-            "trade_slots": 3
+            "trade_slots": 2
           },
           "Encampment": {
             "wood_consumption": 1,
@@ -989,13 +989,13 @@
         ],
         "default": "Moderate",
         "laws": {
-          "Moderate": {
-            "recruit_percentage": 0.2
-          },
           "Low": {
             "recruit_percentage": 0.1,
             "strength": 1,
             "karma": 1
+          },
+          "Moderate": {
+            "recruit_percentage": 0.2
           },
           "High": {
             "recruit_percentage": 0.3,
@@ -1042,7 +1042,7 @@
           "Manifest": {
             "magic_node_value": -2,
             "_modifiers": [
-              { "modifier_type": "karma", "value": 2, "scope": "nation_self", "scaling": "per_x_resource_nodes", "scaling_x": 1, "scaling_extra": "magic"}
+              { "modifier_type": "karma", "value": 2, "scope": "nation_self", "scaling": "per_x_resource_nodes", "scaling_x": 1, "scaling_extra": "magic", "max_value": 8}
             ]
           },
           "Persecution": {
@@ -1343,7 +1343,7 @@
             "karma": -4
           },
           "Revolutionary": {
-            "research_production": 6,
+            "research_production": 8,
             "stability_loss_chance_per_pop": 0.05,
             "karma": -4,
             "ignore_nodes": 1
@@ -1516,7 +1516,7 @@
             "slave_capacity": 2,
             "slave_death_chance": 0.01,
             "_modifiers": [
-              { "modifier_type": "stability_loss_chance", "value": 0.15, "scope": "nation_self", "scaling": "per_x_slaves", "scaling_x": 1},
+              { "modifier_type": "stability_loss_chance", "value": 0.25, "scope": "nation_self", "scaling": "per_x_slaves", "scaling_x": 1},
               { "modifier_type": "administration", "value": 1, "scope": "nation_self", "scaling": "per_x_slaves", "scaling_x": 1}
             ]
           },
@@ -1525,7 +1525,7 @@
             "slave_capacity": 4,
             "slave_death_chance": 0.03,
             "_modifiers": [
-              { "modifier_type": "stability_loss_chance", "value": 0.15, "scope": "nation_self", "scaling": "per_x_slaves", "scaling_x": 1},
+              { "modifier_type": "stability_loss_chance", "value": 0.20, "scope": "nation_self", "scaling": "per_x_slaves", "scaling_x": 1},
               { "modifier_type": "money_income", "value": 250, "scope": "nation_self", "scaling": "per_x_slaves", "scaling_x": 1}
             ]
           },

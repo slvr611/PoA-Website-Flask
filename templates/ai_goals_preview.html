@@ -135,42 +135,54 @@
     <div class="ai-panel">
         <h3>Resource State &amp; Need Weights</h3>
         <p class="text-muted" style="font-size:0.78rem;margin-bottom:0.5rem;">
-            Weight drives all AI decisions: higher = more urgently needed. Critical (&ge;3) drives deficit-fixing goals. Surplus (&lt;1) may trigger sell orders.
+            Net/session shown at three stages: baseline (no jobs), after upkeep jobs, and after all jobs.
+            Weight is computed from post-upkeep production.
         </p>
         <table class="dbg-table">
             <thead>
                 <tr>
                     <th>Resource</th>
-                    <th>Net/Session</th>
+                    <th>Baseline</th>
+                    <th>After Upkeep</th>
+                    <th>After All Jobs</th>
                     <th>Stockpile</th>
-                    <th>Sessions Until Empty</th>
-                    <th>Market Price</th>
-                    <th>Need Weight</th>
+                    <th>Price</th>
+                    <th>Weight</th>
                 </tr>
             </thead>
             <tbody>
-                {% for r, d in resource_detail|dictsort %}
+                {% macro resource_row(r) %}
+                {% set d = resource_detail.get(r, {}) %}
+                {% if d %}
                 <tr>
                     <td>{{ r }}</td>
-                    <td class="{% if d.net < 0 %}res-neg{% elif d.net > 0 %}res-pos{% else %}res-neut{% endif %}">
-                        {{ "%+.1f"|format(d.net) }}
+                    <td class="{% if d.baseline_net < 0 %}res-neg{% elif d.baseline_net > 0 %}res-pos{% else %}res-neut{% endif %}">
+                        {{ "%+.1f"|format(d.baseline_net) }}
+                    </td>
+                    <td class="{% if d.upkeep_net < 0 %}res-neg{% elif d.upkeep_net > 0 %}res-pos{% else %}res-neut{% endif %}">
+                        {{ "%+.1f"|format(d.upkeep_net) }}
+                    </td>
+                    <td class="{% if d.final_net < 0 %}res-neg{% elif d.final_net > 0 %}res-pos{% else %}res-neut{% endif %}">
+                        {{ "%+.1f"|format(d.final_net) }}
                     </td>
                     <td>{{ d.stock }}</td>
-                    <td>{{ d.sessions_left }}</td>
                     <td>{{ d.market_price }}</td>
                     <td class="{% if d.weight >= 3 %}w-high{% elif d.weight >= 1.5 %}w-med{% else %}w-low{% endif %}">
                         {{ d.weight }}
                     </td>
                 </tr>
+                {% endif %}
+                {% endmacro %}
+                {% for r in primary_resource_keys %}
+                    {{ resource_row(r) }}
                 {% endfor %}
                 {% if need_weights.get("money") is not none %}
                 <tr style="border-top:1px solid #444;">
                     <td>money</td>
-                    <td class="{% if state.get('money_income', 0) < 0 %}res-neg{% elif state.get('money_income', 0) > 0 %}res-pos{% else %}res-neut{% endif %}">
+                    <td class="{% if state.get('money_income', 0) < 0 %}res-neg{% elif state.get('money_income', 0) > 0 %}res-pos{% else %}res-neut{% endif %}" colspan="3">
                         {{ "%+d"|format(state.get("money_income", 0)) }}
                     </td>
                     <td>{{ nation.get("money", 0) }}</td>
-                    <td>—</td>
                     <td>—</td>
                     <td class="{% if need_weights.get('money', 0) >= 2 %}w-high{% else %}w-low{% endif %}">
                         {{ "%.2f"|format(need_weights.get("money", 0)) }}
@@ -179,6 +191,29 @@
                 {% endif %}
             </tbody>
         </table>
+        {% if luxury_resource_keys %}
+        <details style="margin-top:0.5rem;">
+            <summary style="font-size:0.8rem;color:#888;cursor:pointer;">Luxury Resources ({{ luxury_resource_keys|length }})</summary>
+            <table class="dbg-table" style="margin-top:0.25rem;">
+                <thead>
+                    <tr>
+                        <th>Resource</th>
+                        <th>Baseline</th>
+                        <th>After Upkeep</th>
+                        <th>After All Jobs</th>
+                        <th>Stockpile</th>
+                        <th>Price</th>
+                        <th>Weight</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in luxury_resource_keys %}
+                        {{ resource_row(r) }}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </details>
+        {% endif %}
     </div>
 
     <!-- Row 3: Job Scores + Split Assignments -->
@@ -420,5 +455,18 @@
         </table>
         {% else %}<p class="text-muted" style="font-size:0.85rem;">No trade desires generated.</p>{% endif %}
     </div>
+
+    <!-- Diagnostic Dump -->
+    {% if diagnostic_json %}
+    <div class="ai-panel" style="border-color:#555;">
+        <h3 style="color:#888;">Diagnostic Dump</h3>
+        <p class="text-muted" style="font-size:0.78rem;margin-bottom:0.5rem;">
+            Copy and paste this JSON for debugging. Click to select all.
+        </p>
+        <textarea readonly
+            onclick="this.select()"
+            style="width:100%;min-height:200px;max-height:500px;font-family:monospace;font-size:0.75rem;background:#111;color:#ccc;border:1px solid #333;border-radius:4px;padding:0.5rem;resize:vertical;">{{ diagnostic_json }}</textarea>
+    </div>
+    {% endif %}
 </div>
 {% endblock %}

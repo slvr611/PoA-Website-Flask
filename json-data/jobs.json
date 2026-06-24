@@ -5,7 +5,7 @@
 			"ruler_artifact_slots": 4
 		},
 		"upkeep": {
-			"bronze": 2
+			"iron": 2
 		}
 	},
 	"apprentice": {
@@ -35,7 +35,7 @@
 			"mounts": 1
 		},
 		"production": {
-			"money_income": 150
+			"money_income": 250
 		}
 	},
 	"brewer": {
@@ -47,7 +47,7 @@
 			"food": 1
 		},
 		"production": {
-			"stability_gain_chance": 0.15
+			"stability_gain_chance": 0.30
 		}
 	},
 	"entertainer": {
@@ -60,7 +60,7 @@
 		},
 		"upkeep": {
 			"wood": 2,
-			"bronze": 1
+			"iron": 1
 		}
 	},
 	"farmer": {
@@ -72,7 +72,8 @@
 			"wood": 1
 		},
 		"production": {
-			"food": 4
+			"food": 4,
+			"stability_gain_chance": 0.1
 		}
 	},
 	"firefather_priest": {
@@ -93,7 +94,8 @@
 			"district": ["dock"]
 		},
 		"production": {
-			"food": 3
+			"food": 3,
+			"money_income": 50
 		}
 	},
 	"guard": {
@@ -165,7 +167,7 @@
 			"food": 1
 		},
 		"production": {
-			"mounts": 1
+			"mounts": 2
 		}
 	},
 	"researcher": {

@@ -1264,7 +1264,7 @@ def ai_goals_preview():
         select_strategic_goal, evaluate_goal_district,
         assign_goal_jobs, select_tech_target,
         generate_goal_trade_desires, get_stored_market_prices,
-        score_buildable_districts, score_jobs,
+        score_buildable_districts, score_jobs, _weights_from_net,
     )
     from calculations.field_calculations import calculate_all_fields
     from copy import deepcopy
@@ -1315,6 +1315,8 @@ def ai_goals_preview():
     district_scores = []
     resource_detail = {}
     tech_target = None
+    primary_resource_keys = []
+    luxury_keys = []
 
     try:
         calculated = calculate_all_fields(nation, schema, "nation")
@@ -1323,25 +1325,35 @@ def ai_goals_preview():
         personality = get_ai_personality(nation)
         state = evaluate_nation_state(nation)
         market_prices = get_stored_market_prices(nation)
-        need_weights = compute_need_weights(state, market_prices)
-        job_scores = score_jobs(state, need_weights, market_prices)
 
-        # Step 1: Upkeep floor
-        upkeep_assignments, remaining_pops, projected_net, upkeep_log, upkeep_ratio = \
+        # Step 1: Upkeep floor (runs before need_weights so weights reflect post-upkeep reality)
+        upkeep_assignments, remaining_pops, projected_net, upkeep_log, upkeep_ratio, _ = \
             compute_upkeep_floor(state, market_prices)
+
+        # Compute need weights from post-upkeep production (no cap penalty here —
+        # cap is enforced dynamically during job assignment loops)
+        need_weights = _weights_from_net(
+            projected_net, state["stockpiles"], market_prices, state["money_income"],
+        )
+        job_scores = score_jobs(state, need_weights, market_prices)
 
         # Step 2: Strategic goal
         strategic_goal, goal_candidates = select_strategic_goal(
             nation, state, personality, upkeep_ratio, market_prices
         )
+        initial_goal = dict(strategic_goal)
 
-        # Step 3: Goal-aware district
+        # Step 3: Goal-aware district (may build multiple, re-evaluates upkeep after each)
         dummy = deepcopy(nation)
         preview_log = []
-        district_plan, district_scores, district_log = evaluate_goal_district(
+        district_plan, district_scores, district_log, upkeep_assignments, strategic_goal = evaluate_goal_district(
             nation, dummy, state, strategic_goal, need_weights,
             market_prices, upkeep_assignments, preview_log
         )
+
+        # Re-compute upkeep floor with final state after district builds
+        upkeep_assignments, remaining_pops, projected_net, _, upkeep_ratio, unresolved_deficits = \
+            compute_upkeep_floor(state, market_prices)
 
         # Step 4: Goal-driven jobs
         goal_assignments, goal_job_log, final_projected_net = assign_goal_jobs(
@@ -1356,23 +1368,74 @@ def ai_goals_preview():
         # Step 5: Trade desires (uses final projected_net including goal jobs)
         desires = generate_goal_trade_desires(
             state, strategic_goal, personality, district_plan,
-            final_projected_net, market_prices
+            final_projected_net, market_prices, old_nation_ref=nation,
+            upkeep_projected_net=projected_net, unresolved_deficits=unresolved_deficits
         )
 
+        from app_core import json_data as jd
+        general_keys = [r["key"] for r in jd.get("general_resources", [])]
+        unique_keys = [r["key"] for r in jd.get("unique_resources", [])]
+        luxury_keys = [r["key"] for r in jd.get("luxury_resources", [])]
+        primary_resource_keys = general_keys + unique_keys
+
         for r in state.get("net_production", {}):
-            net = state["net_production"].get(r, 0)
+            baseline_net = state["net_production"].get(r, 0)
+            upkeep_net = projected_net.get(r, baseline_net)
+            final_net = final_projected_net.get(r, upkeep_net)
             stock = state["stockpiles"].get(r, 0)
             sessions = state["sessions_until_empty"].get(r, float("inf"))
             resource_detail[r] = {
-                "net": round(net, 2),
+                "baseline_net": round(baseline_net, 2),
+                "upkeep_net": round(upkeep_net, 2),
+                "final_net": round(final_net, 2),
                 "stock": round(stock, 1),
                 "sessions_left": round(sessions, 1) if sessions != float("inf") else "inf",
                 "weight": round(need_weights.get(r, 0), 2),
                 "market_price": round(market_prices.get(r, 0), 1),
             }
+        # Build diagnostic dump
+        import json
+        diag_data = {
+            "_ai_code_version": "2026-06-23-v5",
+            "nation": selected,
+            "temperament": nation.get("temperament", "?"),
+            "pops": state.get("total_pops", 0),
+            "idle_pops": state.get("idle_pops", 0),
+            "money": state.get("money", 0),
+            "money_income": state.get("money_income", 0),
+            "open_district_slots": state.get("open_district_slots", 0),
+            "personality": {k: round(v, 2) for k, v in personality.items()},
+            "initial_goal": initial_goal.get("type", "?") + f" ({initial_goal.get('score', 0)})",
+            "strategic_goal": strategic_goal,
+            "upkeep_ratio": round(upkeep_ratio, 2),
+            "upkeep_assignments": upkeep_assignments,
+            "goal_assignments": goal_assignments,
+            "need_weights": {k: round(v, 2) for k, v in need_weights.items() if v != 1.3},
+            "resource_state": {
+                r: {"baseline": d["baseline_net"], "upkeep": d["upkeep_net"], "final": d["final_net"], "stock": d["stock"], "weight": d["weight"]}
+                for r, d in resource_detail.items()
+                if d["baseline_net"] != 0 or d["upkeep_net"] != 0 or d["final_net"] != 0 or d["stock"] > 0 or d["weight"] >= 3
+            },
+            "district_scores": [
+                {"name": e[2], "score": round(e[0], 2), "rationale": e[4]}
+                for e in (district_scores or [])[:8]
+            ],
+            "district_plan": {
+                "name": district_plan.get("display_name", "?"),
+                "cost": district_plan.get("cost", {}),
+                "rationale": district_plan.get("rationale", ""),
+                "source": district_plan.get("source", ""),
+            } if district_plan else None,
+            "district_log": district_log,
+            "tech_target": tech_target,
+            "desires": desires,
+        }
+        diagnostic_json = json.dumps(diag_data, indent=2, default=str)
+
     except Exception as e:
         import traceback
         error = traceback.format_exc()
+        diagnostic_json = ""
 
     return render_template(
         "ai_goals_preview.html",
@@ -1399,5 +1462,8 @@ def ai_goals_preview():
         district_plan=district_plan,
         district_log=district_log,
         district_scores=district_scores,
+        diagnostic_json=diagnostic_json,
+        primary_resource_keys=primary_resource_keys,
+        luxury_resource_keys=luxury_keys,
         error=error,
     )
