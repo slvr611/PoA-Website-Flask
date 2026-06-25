@@ -857,16 +857,15 @@
               { "modifier_type": "tech_cost_modifier", "value": -1, "scope": "nation_self", "scaling": "per_x_administration", "scaling_x": 5 }
             ]
           },
-          "Untamed Lords": {
+          "Chaotic Throng": {
             "nomadic": 1,
             "hunter_food_production": 1,
             "max_passive_expansion_chance": 0
           },
-          "Far Travelers": {
+          "Misfit Band": {
             "nomadic": 1,
             "hunter_food_production": 1,
-            "max_passive_expansion_chance": 0,
-            "effective_territory": -20
+            "max_passive_expansion_chance": 0
           },
           "Iron-Fisted Dictatorship": {
             "resource_production": 1,
@@ -889,7 +888,7 @@
               { "modifier_type": "stability_gain_chance", "value": 0.01, "scope": "nation_self", "scaling": "per_x_foreign_religious_pops", "scaling_x": 1, "max": 0.5 }
             ]
           },
-          "Great Khanate:": {
+          "Great Khanate": {
             "unit_morale": 2,
             "nomadic": 1,
             "hunter_food_production": 1,
@@ -1322,8 +1321,7 @@
           "Puritanical": {
             "karma": 2,
             "stability_gain_chance": 0.25,
-            "researcher_research_production": -1,
-            "researcher_karma_production": 1
+            "replace_researcher_research_with_karma": 10
           },
           "Conservative": {
             "karma": 2,
@@ -2003,6 +2001,12 @@
         "description": "The distance at which the nation can trade with other nations or merchant companies",
         "calculated": true,
         "base_value": 8
+      },
+      "diplomatic_range": {
+        "bsonType": "number",
+        "label": "Diplomatic Range",
+        "description": "The maximum hex distance at which this nation can engage in diplomacy. Calculated as 5 × administration + 2 × trade speed.",
+        "calculated": true
       },
       "0_progress_slots": {
         "bsonType": "number",

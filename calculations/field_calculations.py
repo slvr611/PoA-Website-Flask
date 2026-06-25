@@ -48,7 +48,7 @@ def _build_nation_calc_cache(target):
             pass
     
     primary_religion_pop_count = 0
-    primary_religion = target.get("primary_culture", "")
+    primary_religion = target.get("primary_religion", "")
     if primary_religion:
         try:
             primary_religion_pop_count = category_data["pops"]["database"].count_documents(
@@ -57,22 +57,80 @@ def _build_nation_calc_cache(target):
         except Exception:
             pass
 
+    nation_id_str = str(target.get("_id", ""))
+
+    foreign_culture_pop_count = 0
+    if primary_culture and nation_id_str:
+        try:
+            foreign_culture_pop_count = category_data["pops"]["database"].count_documents(
+                {"culture": primary_culture, "nation": {"$ne": nation_id_str}}
+            )
+        except Exception:
+            pass
+
+    foreign_religion_pop_count = 0
+    if primary_religion and nation_id_str:
+        try:
+            foreign_religion_pop_count = category_data["pops"]["database"].count_documents(
+                {"religion": primary_religion, "nation": {"$ne": nation_id_str}}
+            )
+        except Exception:
+            pass
+
+    vassal_counts = {}
+    if nation_id_str:
+        try:
+            for v in mongo.db.nations.find(
+                {"overlord": nation_id_str},
+                {"vassal_type": 1, "_id": 0},
+            ):
+                vt = v.get("vassal_type", "None")
+                vassal_counts[vt] = vassal_counts.get(vt, 0) + 1
+        except Exception:
+            pass
+
     nation_name = target.get("name", "")
 
     # Load raw node tiles — admin-range filtering happens later in calculate_all_fields
     # once law_totals are available (needed for the nomadic multiplier check).
     node_tiles = []
+    metropolis_bonus = 0
+    _all_nation_tiles = {}
     if nation_name:
         for tile in mongo.db.hex_map_tiles.find(
-            {"owner": nation_name, "node.resource_type": {"$exists": True}},
-            {"q": 1, "r": 1, "node.resource_type": 1, "city": 1, "district": 1, "wonder": 1, "_id": 0}
+            {"owner": nation_name},
+            {"q": 1, "r": 1, "terrain": 1, "node.resource_type": 1, "city": 1, "district": 1, "wonder": 1, "_id": 0}
         ):
+            coord = (tile.get("q"), tile.get("r"))
+            _all_nation_tiles[coord] = tile
             rt = tile.get("node", {}).get("resource_type")
             if rt:
                 node_tiles.append({
-                    "q": tile.get("q"), "r": tile.get("r"), "rt": rt,
+                    "q": coord[0], "r": coord[1], "rt": rt,
                     "has_building": bool(tile.get("city") or tile.get("district") or tile.get("wonder")),
                 })
+
+        from helpers.hex_map_helpers import axial_neighbors as _axial_neighbors
+        _WATER_TERRAINS = {"shallow_water", "deep_water"}
+        for coord, tile in _all_nation_tiles.items():
+            city_ref = tile.get("city")
+            if not city_ref or city_ref.get("type") != "metropolis":
+                continue
+            adj_count = 0
+            for nq, nr in _axial_neighbors(coord[0], coord[1]):
+                nb = _all_nation_tiles.get((nq, nr))
+                if not nb:
+                    continue
+                if nb.get("city") or nb.get("district") or nb.get("wonder"):
+                    adj_count += 1
+                elif nb.get("terrain", "") in _WATER_TERRAINS:
+                    adj_count += 1
+            if adj_count >= 5:
+                metropolis_bonus += 3
+            elif adj_count >= 3:
+                metropolis_bonus += 2
+            elif adj_count >= 1:
+                metropolis_bonus += 1
 
     culture_count  = len({p.get("culture")  for p in pops if p.get("culture")})
     religion_count = len({p.get("religion") for p in pops if p.get("religion")})
@@ -93,13 +151,15 @@ def _build_nation_calc_cache(target):
         "bloodthirsty_pop_count": bloodthirsty_pop_count,
         "primary_culture_pop_count": primary_culture_pop_count,
         "primary_religion_pop_count": primary_religion_pop_count,
+        "foreign_culture_pop_count": foreign_culture_pop_count,
+        "foreign_religion_pop_count": foreign_religion_pop_count,
+        "vassal_counts": vassal_counts,
+        "metropolis_bonus": metropolis_bonus,
         "culture_count": culture_count,
         "religion_count": religion_count,
         "slave_count": slave_count,
         "_node_tiles": node_tiles,
         "territory_node_counts": preliminary_node_counts,
-        # territory_node_counts is overwritten by calculate_all_fields with the
-        # OOR-filtered version once law_totals are available.
     }
 
 def calculate_all_fields(target, schema, target_data_type, return_breakdowns=False, instrumentation=None):
@@ -765,6 +825,10 @@ def collect_cities(target):
         if city_node:
             collected_modifiers.append({city_node + "_nodes": 1})
 
+    metro_bonus = (target.get("_calc_cache") or {}).get("metropolis_bonus", 0)
+    if metro_bonus > 0:
+        collected_modifiers.append({"effective_pop_capacity": metro_bonus})
+
     return collected_modifiers
 
 def collect_city_schema_modifiers(target):
@@ -1098,8 +1162,31 @@ def calculate_job_details(target, modifier_totals, district_totals, tech_totals,
                         new_upkeep = int(round(new_upkeep))
                     new_details["upkeep"][resource] = new_upkeep
 
+            # Job resource replacement: replace_{job}_{from}_with_{to} = max_total
+            # Removes from_resource production entirely and adds to_resource at the
+            # same per-pop rate. max_total (the modifier value) caps the TOTAL output
+            # across all workers (enforced in sum_job_totals via _production_caps).
+            _prefix = f"replace_{job}_"
+            for source in modifier_sources:
+                for mod_key, max_total in source.items():
+                    if not mod_key.startswith(_prefix) or "_with_" not in mod_key:
+                        continue
+                    remainder = mod_key[len(_prefix):]
+                    parts = remainder.split("_with_", 1)
+                    if len(parts) != 2:
+                        continue
+                    res_from, res_to = parts
+                    prod = new_details.get("production", {})
+                    from_val = prod.get(res_from, 0)
+                    if from_val > 0:
+                        prod[res_from] = 0
+                        prod[res_to] = prod.get(res_to, 0) + from_val
+                        if max_total > 0:
+                            caps = new_details.setdefault("_production_caps", {})
+                            caps[res_to] = min(caps.get(res_to, max_total), max_total)
+
             new_job_details[job] = new_details
-    
+
     return new_job_details
 
 _PROSPERITY_EFFECTS = {
@@ -2876,7 +2963,13 @@ def sum_job_totals(target, jobs_assigned, job_details):
                     count += 3
             
             total_value = val * count
-            
+
+            # Enforce total production caps from job_resource_replacement
+            _caps = job_details.get(job, {}).get("_production_caps", {})
+            _raw_field = field.replace("_production", "") if field.endswith("_production") else field
+            if _raw_field in _caps:
+                total_value = min(total_value, _caps[_raw_field])
+
             if round_result:
                 if val > original_job_production.get(field, 0):
                     total_value = int(math.floor(total_value))
@@ -2884,7 +2977,7 @@ def sum_job_totals(target, jobs_assigned, job_details):
                     total_value = int(math.ceil(total_value))
                 else:
                     total_value = int(round(total_value))
-            
+
             totals[field] = totals.get(field, 0) + total_value
 
         for field, val in job_details.get(job, {}).get("upkeep", {}).items():
@@ -3022,6 +3115,12 @@ def _apply_vassal_tribute_modifiers(target, overall_total_modifiers):
             overall_total_modifiers[f"{resource}_consumption"] = (
                 overall_total_modifiers.get(f"{resource}_consumption", 0) + tribute
             )
+        if vassal_type == "Provincial":
+            own_research = target.get("resource_production", {}).get("research", 0)
+            if own_research > 0:
+                overall_total_modifiers["research_production"] = (
+                    overall_total_modifiers.get("research_production", 0) - own_research
+                )
 
     # ── Overlord side (this nation receives tribute from vassals) ─────────
     if "_id" not in target:
@@ -3037,15 +3136,18 @@ def _apply_vassal_tribute_modifiers(target, overall_total_modifiers):
     for vassal in vassals:
         v_pop   = vassal.get("pop_count", 0)
         v_type  = vassal.get("vassal_type", "None")
-        # Use an empty modifiers dict for the vassal's tribute modifiers since we
-        # don't re-run the full calculation here; the per-resource formula is the
-        # canonical source of truth and additional scaling can be added via
-        # overlord_nation_* modifiers on the vassal_type law.
         v_tribute = _calc_tribute(v_pop, v_type, {})
         for resource in _TRIBUTE_RESOURCES:
             overall_total_modifiers[f"{resource}_production"] = (
                 overall_total_modifiers.get(f"{resource}_production", 0) + v_tribute
             )
+        if v_type == "Provincial":
+            v_research = vassal.get("resource_production", {}).get("research", 0)
+            if v_research > 0:
+                transfer = math.ceil(v_research * 0.5)
+                overall_total_modifiers["research_production"] = (
+                    overall_total_modifiers.get("research_production", 0) + transfer
+                )
 
 
 

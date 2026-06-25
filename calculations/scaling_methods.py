@@ -64,45 +64,88 @@ def per_x_pops(target, scaling_x=1, scaling_extra="", context=None):
     return int(pops / divisor)
 
 
-def _count_recruited(units):
-    """Sum recruited counts from a units dict ({type_key: count}) or list."""
-    if isinstance(units, dict):
-        return sum(v for v in units.values() if isinstance(v, (int, float)))
-    return len(units)
+def _get_unit_defs_cache():
+    """Lazy-load and cache unit definitions for subtype filtering."""
+    if not hasattr(_get_unit_defs_cache, "_cache"):
+        db = category_data["units"]["database"]
+        _get_unit_defs_cache._cache = {
+            u["name"]: u for u in db.find(
+                {}, {"name": 1, "melee": 1, "ranged": 1, "cavalry": 1,
+                     "support": 1, "traits": 1, "_id": 0}
+            )
+        }
+    return _get_unit_defs_cache._cache
+
+
+def _count_filtered(units_dict, subtype=""):
+    """Count units matching a subtype filter from a {unit_key: count} dict.
+    subtype: '' or 'all' = count everything; 'infantry' = melee non-cavalry;
+             'cavalry', 'ranged', 'magical', 'mundane'.
+    """
+    if not isinstance(units_dict, dict) or not units_dict:
+        return 0
+    if not subtype or subtype == "all":
+        return sum(v for v in units_dict.values() if isinstance(v, (int, float)))
+
+    defs = _get_unit_defs_cache()
+    total = 0
+    for unit_key, count in units_dict.items():
+        if not isinstance(count, (int, float)) or count <= 0:
+            continue
+        # Unit keys may be era-prefixed (e.g. "classical_swordsman"); try both
+        udef = defs.get(unit_key) or {}
+        is_melee = bool(udef.get("melee"))
+        is_cavalry = bool(udef.get("cavalry"))
+        is_ranged = bool(udef.get("ranged"))
+        is_magical = any(
+            t.lower() == "magical" for t in (udef.get("traits") or [])
+        )
+
+        if subtype == "infantry" and is_melee and not is_cavalry:
+            total += count
+        elif subtype == "cavalry" and is_cavalry:
+            total += count
+        elif subtype == "ranged" and is_ranged:
+            total += count
+        elif subtype == "magical" and is_magical:
+            total += count
+        elif subtype == "mundane" and not is_magical:
+            total += count
+    return total
 
 
 def per_x_units(target, scaling_x=1, scaling_extra="", context=None):
-    naval_units = target.get("naval_units", []) or []
-    land_units = target.get("land_units", []) or []
+    land = target.get("land_units", {}) or {}
+    naval = target.get("naval_units", {}) or {}
     divisor = float(scaling_x) if scaling_x else 1
-    total_unit_count = _count_recruited(land_units) + _count_recruited(naval_units)
-    return int(total_unit_count / divisor)
+    total = _count_filtered(land, scaling_extra) + _count_filtered(naval, scaling_extra)
+    return int(total / divisor)
 
 
 def per_x_naval_units(target, scaling_x=1, scaling_extra="", context=None):
-    units = target.get("naval_units", []) or []
+    units = target.get("naval_units", {}) or {}
     divisor = float(scaling_x) if scaling_x else 1
-    return int(_count_recruited(units) / divisor)
+    return int(_count_filtered(units, scaling_extra) / divisor)
 
 
 def per_x_land_units(target, scaling_x=1, scaling_extra="", context=None):
-    units = target.get("land_units", []) or []
+    units = target.get("land_units", {}) or {}
     divisor = float(scaling_x) if scaling_x else 1
-    return int(_count_recruited(units) / divisor)
+    return int(_count_filtered(units, scaling_extra) / divisor)
 
 
-def per_x_turns_library(target, scaling_x=1, scaling_extra="", context=None):
+def per_x_sessions_with_library(target, scaling_x=1, scaling_extra="", context=None):
     modifiers = target.get("modifiers", []) or []
-    library_turns = 0
+    sessions = 0
     for m in modifiers:
-        if isinstance(m, dict) and m.get("source") == "Library District":
+        if isinstance(m, dict) and m.get("field") == "Turns with Library":
             try:
-                library_turns = int(m.get("value", 0))
+                sessions = int(m.get("value", 0))
             except (TypeError, ValueError):
                 pass
             break
     divisor = float(scaling_x) if scaling_x else 1
-    return int(library_turns / divisor)
+    return int(sessions / divisor)
 
 
 def per_x_terrain_tiles(target, scaling_x=1, scaling_extra="", context=None):
@@ -200,6 +243,60 @@ def per_x_money_income(target, scaling_x=1, scaling_extra="", context=None):
     return int(income / divisor)
 
 
+def per_x_foreign_culture_pops(target, scaling_x=1, scaling_extra="", context=None):
+    cache = target.get("_calc_cache", {}) or {}
+    divisor = float(scaling_x) if scaling_x else 1
+    return int(cache.get("foreign_culture_pop_count", 0) / divisor)
+
+
+def per_x_foreign_religion_pops(target, scaling_x=1, scaling_extra="", context=None):
+    cache = target.get("_calc_cache", {}) or {}
+    divisor = float(scaling_x) if scaling_x else 1
+    return int(cache.get("foreign_religion_pop_count", 0) / divisor)
+
+
+def per_x_vassals(target, scaling_x=1, scaling_extra="", context=None):
+    cache = target.get("_calc_cache", {}) or {}
+    vassal_counts = cache.get("vassal_counts", {})
+    if not scaling_extra or scaling_extra == "all":
+        count = sum(vassal_counts.values())
+    else:
+        count = vassal_counts.get(scaling_extra, 0)
+    divisor = float(scaling_x) if scaling_x else 1
+    return int(count / divisor)
+
+
+def per_x_excess_resource(target, scaling_x=1, scaling_extra="", context=None):
+    if not scaling_extra:
+        return 0
+    excess = target.get("resource_excess", {}) or {}
+    amount = max(0, float(excess.get(scaling_extra, 0) or 0))
+    divisor = float(scaling_x) if scaling_x else 1
+    return int(amount / divisor)
+
+
+def per_x_nations_in_shared_market(target, scaling_x=1, scaling_extra="", context=None):
+    from app_core import mongo as _mongo
+    nation_id = str(target.get("_id", ""))
+    if not nation_id:
+        return 0
+    try:
+        my_links = list(_mongo.db.market_links.find({"member": nation_id}, {"market": 1}))
+        my_market_ids = [lnk["market"] for lnk in my_links if lnk.get("market")]
+        if not my_market_ids:
+            return 0
+        partner_links = _mongo.db.market_links.find(
+            {"market": {"$in": my_market_ids}, "member": {"$ne": nation_id}},
+            {"member": 1},
+        )
+        unique_partners = {lnk["member"] for lnk in partner_links if lnk.get("member")}
+        count = len(unique_partners)
+    except Exception:
+        count = 0
+    divisor = float(scaling_x) if scaling_x else 1
+    return int(count / divisor)
+
+
 # Registry — each key must match scaling_types.json (plus legacy aliases).
 SCALING_METHODS = {
     "flat": flat,
@@ -214,7 +311,7 @@ SCALING_METHODS = {
     "per_x_units": per_x_units,
     "per_x_naval_units": per_x_naval_units,
     "per_x_land_units": per_x_land_units,
-    "per_x_turns_library": per_x_turns_library,
+    "per_x_sessions_with_library": per_x_sessions_with_library,
     "per_x_terrain_tiles": per_x_terrain_tiles,
     "per_x_district_category": per_x_district_category,
     "per_x_administration": per_x_administration,
@@ -228,6 +325,11 @@ SCALING_METHODS = {
     "per_x_minority_cultures_and_religions": per_x_minority_cultures_and_religions,
     "per_x_slaves": per_x_slaves,
     "per_x_money_income": per_x_money_income,
+    "per_x_foreign_culture_pops": per_x_foreign_culture_pops,
+    "per_x_foreign_religion_pops": per_x_foreign_religion_pops,
+    "per_x_vassals": per_x_vassals,
+    "per_x_excess_resource": per_x_excess_resource,
+    "per_x_nations_in_shared_market": per_x_nations_in_shared_market,
 }
 
 

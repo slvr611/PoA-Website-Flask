@@ -225,6 +225,14 @@
                   <option value="">-- Resource --</option>
                   {% for resource in all_resources %}<option value="{{ resource.key }}" {% if resource.key == cur_extra %}selected{% endif %}>{{ resource.name }}</option>{% endfor %}
                 </select>
+              {% elif scaling_meta.get('has_dropdown') == 'unit_subtype' %}
+                <select class="form-control" name="{{ field_name }}-{{ idx }}-scaling_extra" id="{{ field_name }}-{{ idx }}-scaling_extra">
+                  {% for opt in ["all", "infantry", "cavalry", "ranged", "magical", "mundane"] %}<option value="{{ opt }}" {% if opt == cur_extra %}selected{% endif %}>{{ opt|title }}</option>{% endfor %}
+                </select>
+              {% elif scaling_meta.get('has_dropdown') == 'vassal_type' %}
+                <select class="form-control" name="{{ field_name }}-{{ idx }}-scaling_extra" id="{{ field_name }}-{{ idx }}-scaling_extra">
+                  {% for opt in ["all", "Enclave", "Martial", "Mercantile", "Protectorate", "Provincial", "Tributary"] %}<option value="{{ opt }}" {% if opt == cur_extra %}selected{% endif %}>{{ opt }}</option>{% endfor %}
+                </select>
               {% else %}
                 <input type="hidden" name="{{ field_name }}-{{ idx }}-scaling_extra" id="{{ field_name }}-{{ idx }}-scaling_extra" value="{{ cur_extra }}">
               {% endif %}
@@ -418,6 +426,10 @@
                 <select class="form-control" name="{{ modifier_field.form.scaling_extra.name }}" id="{{ modifier_field.form.scaling_extra.id }}">
                   <option value="">-- Resource --</option>
                   {% for resource in all_resources %}<option value="{{ resource.key }}" {% if resource.key == cur_extra %}selected{% endif %}>{{ resource.name }}</option>{% endfor %}
+                </select>
+              {% elif scaling_meta.get('has_dropdown') == 'unit_subtype' %}
+                <select class="form-control" name="{{ modifier_field.form.scaling_extra.name }}" id="{{ modifier_field.form.scaling_extra.id }}">
+                  {% for opt in ["all", "infantry", "cavalry", "ranged", "magical", "mundane"] %}<option value="{{ opt }}" {% if opt == cur_extra %}selected{% endif %}>{{ opt|title }}</option>{% endfor %}
                 </select>
               {% else %}
                 <input type="hidden" name="{{ modifier_field.form.scaling_extra.name }}" id="{{ modifier_field.form.scaling_extra.id }}" value="{{ cur_extra }}">

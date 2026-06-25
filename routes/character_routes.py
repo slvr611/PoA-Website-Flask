@@ -148,9 +148,9 @@ def new_character_request():
     form_data["_id"] = "None"
 
     for strength in form_data["strengths"]:
-        form_data["modifiers"].append({"field": strength, "value": random.randint(2, 4), "duration": -1, "source": "Strength"})
+        form_data["modifiers"].append({"modifier_type": "attribute", "attribute": strength, "value": random.randint(2, 4), "duration": -1, "source": "Strength"})
     for weakness in form_data["weaknesses"]:
-        form_data["modifiers"].append({"field": weakness, "value": random.randint(-4, -2), "duration": -1, "source": "Weakness"})
+        form_data["modifiers"].append({"modifier_type": "attribute", "attribute": weakness, "value": random.randint(-4, -2), "duration": -1, "source": "Weakness"})
 
     calculated_fields = calculate_all_fields(form_data, schema, "character")
 
@@ -161,7 +161,7 @@ def new_character_request():
         stat_cap = calculated_character.get(stat + "_cap", 4)
         if calculated_character[stat] > stat_cap:
             for modifier in form_data["modifiers"]:
-                if modifier["field"] == stat:
+                if modifier.get("attribute") == stat or modifier.get("field") == stat:
                     modifier["value"] -= calculated_character[stat] - stat_cap
                     break
 
@@ -174,7 +174,7 @@ def new_character_request():
             random_stats[random_stat] = random_stats.get(random_stat, 0) + 1
 
     for stat, value in random_stats.items():
-        form_data["modifiers"].append({"field": stat, "value": value, "duration": -1, "source": "Random stats at character creation"})
+        form_data["modifiers"].append({"modifier_type": "attribute", "attribute": stat, "value": value, "duration": -1, "source": "Random stats at character creation"})
 
     calculated_fields = calculate_all_fields(calculated_character, schema, "character")
 
@@ -237,9 +237,9 @@ def new_character_approve():
     form_data["_id"] = "None"
 
     for strength in form_data["strengths"]:
-        form_data["modifiers"].append({"field": strength, "value": random.randint(2, 4), "duration": -1, "source": "Strength"})
+        form_data["modifiers"].append({"modifier_type": "attribute", "attribute": strength, "value": random.randint(2, 4), "duration": -1, "source": "Strength"})
     for weakness in form_data["weaknesses"]:
-        form_data["modifiers"].append({"field": weakness, "value": random.randint(-4, -2), "duration": -1, "source": "Weakness"})
+        form_data["modifiers"].append({"modifier_type": "attribute", "attribute": weakness, "value": random.randint(-4, -2), "duration": -1, "source": "Weakness"})
 
     calculated_fields = calculate_all_fields(form_data, schema, "character")
 
@@ -250,7 +250,7 @@ def new_character_approve():
         stat_cap = calculated_character.get(stat + "_cap", 4)
         if calculated_character[stat] > stat_cap:
             for modifier in form_data["modifiers"]:
-                if modifier["field"] == stat:
+                if modifier.get("attribute") == stat or modifier.get("field") == stat:
                     modifier["value"] -= calculated_character[stat] - stat_cap
                     break
 
@@ -263,7 +263,7 @@ def new_character_approve():
             random_stats[random_stat] = random_stats.get(random_stat, 0) + 1
 
     for stat, value in random_stats.items():
-        form_data["modifiers"].append({"field": stat, "value": value, "duration": -1, "source": "Random stats at character creation"})
+        form_data["modifiers"].append({"modifier_type": "attribute", "attribute": stat, "value": value, "duration": -1, "source": "Random stats at character creation"})
 
     form_data["magic_points"] = min(form_data.get("magic_point_capacity", 0), form_data.get("magic_point_income", 0))
 

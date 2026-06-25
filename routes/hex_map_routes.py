@@ -220,6 +220,13 @@ def wonder_list_for_map():
     return jsonify(result)
 
 
+@hex_map_routes.route("/api/hex-map/market-list")
+def market_list_for_map():
+    """Returns all markets for bandit camp placement."""
+    markets = list(mongo.db.markets.find({}, {"name": 1, "_id": 1}))
+    return jsonify([{"id": str(m["_id"]), "name": m.get("name", "")} for m in markets])
+
+
 @hex_map_routes.route("/api/hex-map/debug-colors")
 def hex_map_debug_colors():
     """Debug endpoint: shows the raw accent_color field and computed map color for every nation."""
@@ -398,7 +405,7 @@ def update_hex_map_tile(q, r):
     if getattr(g, "edit_access_level", 0) < 10:
         return jsonify({"error": "Unauthorized"}), 403
     data = request.get_json() or {}
-    allowed = {"terrain", "node", "city", "district", "wonder", "owner", "capital", "region", "portal", "route"}
+    allowed = {"terrain", "node", "city", "district", "wonder", "owner", "capital", "region", "portal", "route", "bandit_camp"}
     update = {k: v for k, v in data.items() if k in allowed}
     if not update:
         return jsonify({"ok": True})
@@ -912,7 +919,7 @@ def save_hex_map_edits():
         except (ValueError, TypeError):
             continue
 
-        allowed = {"terrain", "node", "city", "district", "wonder", "owner", "capital", "region", "portal", "route"}
+        allowed = {"terrain", "node", "city", "district", "wonder", "owner", "capital", "region", "portal", "route", "bandit_camp"}
         update = {k: v for k, v in tile_data.items() if k in allowed}
         if not update:
             continue

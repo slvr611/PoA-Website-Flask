@@ -41,25 +41,28 @@
     },
     "per_x_units": {
         "name": "Per X Units",
-        "description": "Multiplied by the nation's total units divided by X, floored.",
+        "description": "Multiplied by the nation's total units (land + naval) divided by X, floored. Subtype filters by role or magic status.",
         "has_x": true,
-        "default_x": 1
+        "default_x": 1,
+        "has_dropdown": "unit_subtype"
     },
     "per_x_naval_units": {
         "name": "Per X Naval Units",
-        "description": "Multiplied by the nation's total naval units divided by X, floored.",
+        "description": "Multiplied by the nation's naval units divided by X, floored. Subtype filters by role or magic status.",
         "has_x": true,
-        "default_x": 1
+        "default_x": 1,
+        "has_dropdown": "unit_subtype"
     },
     "per_x_land_units": {
         "name": "Per X Land Units",
-        "description": "Multiplied by the nation's total land units divided by X, floored.",
+        "description": "Multiplied by the nation's land units divided by X, floored. Subtype filters by role or magic status.",
         "has_x": true,
-        "default_x": 1
+        "default_x": 1,
+        "has_dropdown": "unit_subtype"
     },
-    "per_x_turns_library": {
-        "name": "Per X Turns with Library",
-        "description": "Multiplied by the number of turns the nation has had a library divided by X, floored.",
+    "per_x_sessions_with_library": {
+        "name": "Per X Sessions with Library",
+        "description": "Multiplied by the number of sessions the nation has had a library divided by X, floored. Uses the 'Turns with Library' modifier from the library tick.",
         "has_x": true,
         "default_x": 1
     },
@@ -155,6 +158,38 @@
     "per_x_slaves": {
         "name": "Per X Slaves",
         "description": "Multiplied by the number of enslaved pops in the nation divided by X, floored.",
+        "has_x": true,
+        "default_x": 1
+    },
+    "per_x_foreign_culture_pops": {
+        "name": "Per X Foreign Culture Pops",
+        "description": "Multiplied by the number of pops in other nations that share this nation's primary culture divided by X, floored.",
+        "has_x": true,
+        "default_x": 1
+    },
+    "per_x_foreign_religion_pops": {
+        "name": "Per X Foreign Religion Pops",
+        "description": "Multiplied by the number of pops in other nations that share this nation's primary religion divided by X, floored.",
+        "has_x": true,
+        "default_x": 1
+    },
+    "per_x_vassals": {
+        "name": "Per X Vassals",
+        "description": "Multiplied by the number of vassals this nation has divided by X, floored. Filter by vassal type or count all.",
+        "has_x": true,
+        "default_x": 1,
+        "has_dropdown": "vassal_type"
+    },
+    "per_x_excess_resource": {
+        "name": "Per X Excess Resource",
+        "description": "Multiplied by the nation's positive net production (production minus consumption) of a resource divided by X, floored. Negative net production counts as 0.",
+        "has_x": true,
+        "default_x": 1,
+        "has_dropdown": "resource"
+    },
+    "per_x_nations_in_shared_market": {
+        "name": "Per X Nations in Shared Market",
+        "description": "Multiplied by the number of other nations that share at least one market with this nation divided by X, floored. Nations in multiple shared markets are only counted once.",
         "has_x": true,
         "default_x": 1
     }

@@ -244,6 +244,7 @@ class HexMapViewer {
         this._nationOverlords = {};   // name -> overlord name string
         this._nationBuildings = {};    // name -> {cities, districts}
         this._wonderList      = null;  // [{id, name, owner_nation}]
+        this._marketList      = null;  // [{id, name}]
 
         // Nation/region label caches — rebuilt when tile data changes
         this._nationLabels = null;  // Map<name, {wx, wy, wBboxW, wBboxH}>
@@ -255,6 +256,8 @@ class HexMapViewer {
         this._cityTypeImages  = {};    // city_type -> HTMLImageElement | null
         // Default wonder image shown for all wonders on the map
         this._wonderDefaultImage = null;   // HTMLImageElement | null
+        // Default capital image shown for all capitals on the map
+        this._capitalDefaultImage = null;  // HTMLImageElement | null
 
         // Tile data
         this.tiles        = new Map();   // "q,r" -> tile object
@@ -451,18 +454,20 @@ class HexMapViewer {
         const url  = sessionNum != null
             ? `/api/hex-map/tiles/${sessionNum}`
             : '/api/hex-map/tiles';
-        const [resp, imgResp, wonderImgResp, cityImgResp, visResp] = await Promise.all([
+        const [resp, imgResp, wonderImgResp, cityImgResp, capitalImgResp, visResp] = await Promise.all([
             fetch(url),
             fetch('/api/district-defs/image-map'),
             fetch('/api/wonders/default-image'),
             fetch('/api/cities/image-map'),
+            fetch('/api/capitals/default-image'),
             fetch('/api/hex-map/visibility'),
         ]);
-        const data          = await resp.json();
-        const imgMap        = await imgResp.json().catch(() => ({}));
-        const wonderImgData = await wonderImgResp.json().catch(() => ({}));
-        const cityImgMap    = await cityImgResp.json().catch(() => ({}));
-        this._visibilityMap = await visResp.json().catch(() => ({}));
+        const data           = await resp.json();
+        const imgMap         = await imgResp.json().catch(() => ({}));
+        const wonderImgData  = await wonderImgResp.json().catch(() => ({}));
+        const cityImgMap     = await cityImgResp.json().catch(() => ({}));
+        const capitalImgData = await capitalImgResp.json().catch(() => ({}));
+        this._visibilityMap  = await visResp.json().catch(() => ({}));
 
         this.tiles = new Map();
         for (const tile of (data.tiles || [])) {
@@ -471,10 +476,11 @@ class HexMapViewer {
         this.nationColors = data.nation_colors || {};
         this._rgbaCache   = {};
 
-        // Preload district images, city type images, and single default wonder image
+        // Preload district images, city type images, wonder and capital default images
         this._loadDistrictImages(imgMap);
         this._loadCityTypeImages(cityImgMap);
         this._loadWonderDefaultImage(wonderImgData.url || '');
+        this._loadCapitalDefaultImage(capitalImgData.url || '');
 
         // Apply session-specific grid dimensions when present
         let recenter = false;
@@ -537,6 +543,14 @@ class HexMapViewer {
         const img = new Image();
         img.onload  = () => { this._wonderDefaultImage = img; this.render(); };
         img.onerror = () => { this._wonderDefaultImage = null; };
+        img.src = url;
+    }
+
+    _loadCapitalDefaultImage(url) {
+        if (!url) return;
+        const img = new Image();
+        img.onload  = () => { this._capitalDefaultImage = img; this.render(); };
+        img.onerror = () => { this._capitalDefaultImage = null; };
         img.src = url;
     }
 
@@ -1195,9 +1209,9 @@ class HexMapViewer {
 
     _drawBuildings(ctx, cx, cy, tile) {
         const s       = this.hexSize;
-        const szCity  = Math.max(10, s * 1);   // city — drawn on top
-        const szWond  = Math.max(10, s * 1.2);   // wonder — larger, drawn beneath city
-        const szDist  = Math.max(10, s * 0.55);  // district
+        const szCity  = Math.max(10, s * 1.5);  // city
+        const szWond  = Math.max(10, s * 1.5);  // wonder
+        const szDist  = Math.max(10, s * 1.5);  // district
         ctx.shadowColor = 'rgba(0,0,0,0.85)';
         ctx.shadowBlur  = 3;
 
@@ -1214,10 +1228,26 @@ class HexMapViewer {
             }
         };
 
-        // Draw order: capital (bottom) → wonder → city (top) → district
+        // Draw order: capital (bottom) → wonder → bandit camp → city (top) → district
         const showDistrict = tile.district && this._canSeePrivate(tile.owner);
         if (tile.capital) this._drawCapital(ctx, cx, cy, tile);
         if (tile.wonder)   _drawImg(this._wonderDefaultImage, '✦', szWond);
+        if (tile.bandit_camp) {
+            const bcSz = Math.max(10, s * 1.5);
+            ctx.fillStyle = '#000000';
+            ctx.beginPath();
+            ctx.arc(cx, cy, bcSz / 2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#ff4444';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            const fSz = Math.max(7, s * 0.4);
+            ctx.font = `bold ${fSz}px sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = '#ff4444';
+            ctx.fillText('⚔', cx, cy);
+        }
         if (tile.city || showDistrict) ctx.globalAlpha = 0.6;
         if (tile.city)        _drawImg(tile.city.type ? this._cityTypeImages[tile.city.type] : undefined, '🏛', szCity);
         if (showDistrict)     _drawImg(tile.district.def_key ? this._districtImages[tile.district.def_key] : undefined, '⬡', szDist);
@@ -1235,7 +1265,7 @@ class HexMapViewer {
 
         const col = RESOURCE_COLORS[rKey] || '#aaaaaa';
         // Scale with hex size but guarantee a minimum screen footprint at any zoom level.
-        const sz  = Math.max(3 / this.zoom, s * 0.5);
+        const sz  = Math.max(3 / this.zoom, s * 0.75);
         ctx.fillStyle   = col;
         ctx.strokeStyle = 'rgba(0,0,0,0.7)';
         ctx.lineWidth   = 1 / this.zoom;
@@ -1255,14 +1285,18 @@ class HexMapViewer {
         if (!tile.capital) return;
         const s  = this.hexSize;
         const sz = Math.max(10, s * 1.5);
-        ctx.font         = `${sz}px sans-serif`;
-        ctx.textAlign    = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.shadowColor  = 'rgba(0,0,0,0.85)';
-        ctx.shadowBlur   = 4;
-        ctx.fillStyle    = '#ffd700';
-        ctx.fillText('★', cx, cy);
-        ctx.shadowBlur   = 0;
+        ctx.shadowColor = 'rgba(0,0,0,0.85)';
+        ctx.shadowBlur  = 4;
+        if (this._capitalDefaultImage) {
+            ctx.drawImage(this._capitalDefaultImage, cx - sz / 2, cy - sz / 2, sz, sz);
+        } else {
+            ctx.font         = `${sz}px sans-serif`;
+            ctx.textAlign    = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle    = '#ffd700';
+            ctx.fillText('★', cx, cy);
+        }
+        ctx.shadowBlur = 0;
     }
 
     // -----------------------------------------------------------------------
@@ -1840,6 +1874,10 @@ class HexMapViewer {
                     : wLabel;
                 html += row('Wonder', wLink);
             }
+            if (tile.bandit_camp) {
+                const bc = tile.bandit_camp;
+                html += row('Bandit Camp', `${_esc(bc.name || 'Unnamed')} — Tier ${bc.tier || '?'}${bc.market ? ' (' + _esc(bc.market) + ')' : ''}`);
+            }
             if (tile.region) {
                 html += row('Region', _esc(tile.region));
             }
@@ -1944,6 +1982,16 @@ class HexMapViewer {
       <select name="wonder_id" data-current="${_esc(curWonderId)}">
         <option value="">Loading…</option>
       </select>
+    </fieldset>
+    <fieldset><legend>Bandit Camp</legend>
+      <label>Name<input name="bandit_name" type="text" value="${_esc(tile.bandit_camp?.name || '')}" placeholder="Camp name"></label>
+      <label>Tier<select name="bandit_tier">
+        <option value="">None</option>
+        ${[1,2,3,4,5].map(t => `<option value="${t}"${t==(tile.bandit_camp?.tier||0)?' selected':''}>${t}</option>`).join('')}
+      </select></label>
+      <label>Market<select name="bandit_market" data-current="${_esc(tile.bandit_camp?.market || '')}">
+        <option value="">Loading…</option>
+      </select></label>
     </fieldset>
     <button type="button" class="hex-save-btn btn" data-q="${q}" data-r="${r}">Save</button>
   </div>
@@ -2141,6 +2189,13 @@ class HexMapViewer {
         try {
             this._wonderList = await (await fetch('/api/hex-map/wonder-list')).json();
         } catch (_) { this._wonderList = []; }
+    }
+
+    async _ensureMarketList() {
+        if (this._marketList) return;
+        try {
+            this._marketList = await (await fetch('/api/hex-map/market-list')).json();
+        } catch (_) { this._marketList = []; }
     }
 
     // Flat-top hex axial neighbors: the 6 directions adjacent to any (q, r).
@@ -2370,6 +2425,18 @@ class HexMapViewer {
 
         refreshBuildings(ownerInput?.value?.trim() || '');
 
+        // Populate market select for bandit camp
+        const banditMarketSel = root.querySelector('[name="bandit_market"]');
+        if (banditMarketSel) {
+            this._ensureMarketList().then(() => {
+                const curMkt = banditMarketSel.dataset.current || '';
+                banditMarketSel.innerHTML = '<option value="">None</option>' +
+                    (this._marketList || []).map(m =>
+                        `<option value="${_esc(m.name)}"${m.name===curMkt?' selected':''}>${_esc(m.name)}</option>`
+                    ).join('');
+            });
+        }
+
         // Reload city/district selects when owner changes
         if (ownerInput) {
             ownerInput.addEventListener('change', () => {
@@ -2401,6 +2468,12 @@ class HexMapViewer {
             const wonderObj = (this._wonderList || []).find(w => w.id === wonderId);
             const wonder    = wonderId ? (wonderObj || { id: wonderId }) : null;
 
+            // Resolve bandit camp
+            const banditName   = val('bandit_name');
+            const banditTier   = val('bandit_tier');
+            const banditMarket = val('bandit_market');
+            const bandit_camp  = (banditName && banditTier) ? { name: banditName, tier: parseInt(banditTier), market: banditMarket || '' } : null;
+
             const capital      = root.querySelector('[name="capital"]')?.checked || false;
             const portalColor  = val('portal_color');
             const portal       = portalColor ? { color: portalColor } : null;
@@ -2427,6 +2500,7 @@ class HexMapViewer {
                 city,
                 district,
                 wonder,
+                bandit_camp,
                 capital,
                 portal,
                 route,

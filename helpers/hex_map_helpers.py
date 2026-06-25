@@ -107,6 +107,7 @@ _MAP_TILE_PROJECTION = {
     "_id": 0, "q": 1, "r": 1, "terrain": 1, "owner": 1,
     "city": 1, "district": 1, "wonder": 1, "capital": 1,
     "node": 1, "portal": 1, "route": 1, "region": 1,
+    "bandit_camp": 1,
 }
 
 def get_all_tiles():

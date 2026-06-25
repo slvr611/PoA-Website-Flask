@@ -241,6 +241,10 @@
 							<th>{{ schema.properties.temporary_karma.label }}:</th>
 							<td>{{ pf(nation.temporary_karma, pn.get("temporary_karma")) }}</td>
 						</tr>
+						<tr>
+							<th>{{ schema.properties.diplomatic_range.label }}:</th>
+							<td>{{ pf(nation.diplomatic_range, pn.get("diplomatic_range")) }}</td>
+						</tr>
 						{% if nation.nomadic > 0 %}
 							<tr>
 								<th>{{ schema.properties.migration_distance.label }}:</th>

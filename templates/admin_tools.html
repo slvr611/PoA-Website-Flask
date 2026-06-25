@@ -104,6 +104,49 @@
 
         <div class="admin-tool-card">
             <div class="admin-tool-card-body">
+                <h3 class="admin-tool-card-title">Map Icon Uploads</h3>
+                <p class="admin-tool-card-desc">Upload custom icons for capitals and wonders on the hex map.</p>
+                <div style="display:flex;flex-direction:column;gap:0.5rem;">
+                    <div>
+                        <label style="font-size:0.82rem;color:#aaa;">Capital Icon</label>
+                        <form id="capital-icon-form" style="display:flex;gap:0.4rem;align-items:center;margin-top:0.2rem;">
+                            <input type="file" name="image" accept="image/*" style="font-size:0.78rem;max-width:160px;">
+                            <button type="submit" class="btn btn-primary btn-sm">Upload</button>
+                        </form>
+                        <div id="capital-icon-status" style="font-size:0.78rem;margin-top:0.2rem;"></div>
+                    </div>
+                    <div>
+                        <label style="font-size:0.82rem;color:#aaa;">Wonder Icon</label>
+                        <form id="wonder-icon-form" style="display:flex;gap:0.4rem;align-items:center;margin-top:0.2rem;">
+                            <input type="file" name="image" accept="image/*" style="font-size:0.78rem;max-width:160px;">
+                            <button type="submit" class="btn btn-primary btn-sm">Upload</button>
+                        </form>
+                        <div id="wonder-icon-status" style="font-size:0.78rem;margin-top:0.2rem;"></div>
+                    </div>
+                </div>
+                <script>
+                    function uploadIcon(formId, url, statusId) {
+                        document.getElementById(formId).addEventListener('submit', async (e) => {
+                            e.preventDefault();
+                            const fd = new FormData(e.target);
+                            const st = document.getElementById(statusId);
+                            st.textContent = 'Uploading...';
+                            try {
+                                const resp = await fetch(url, { method: 'POST', body: fd });
+                                const data = await resp.json();
+                                st.textContent = data.success ? 'Uploaded!' : ('Error: ' + data.error);
+                                st.style.color = data.success ? '#8f8' : '#f88';
+                            } catch (err) { st.textContent = 'Upload failed'; st.style.color = '#f88'; }
+                        });
+                    }
+                    uploadIcon('capital-icon-form', '/capitals/upload-default-image', 'capital-icon-status');
+                    uploadIcon('wonder-icon-form', '/wonders/upload-default-image', 'wonder-icon-status');
+                </script>
+            </div>
+        </div>
+
+        <div class="admin-tool-card">
+            <div class="admin-tool-card-body">
                 <h3 class="admin-tool-card-title">Market Prices</h3>
                 <p class="admin-tool-card-desc">View current market buy and sell prices for all resources.</p>
                 <a href="/market_prices" class="btn btn-primary btn-sm">Open</a>

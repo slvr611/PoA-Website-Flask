@@ -145,6 +145,18 @@
         ],
         "applicable_to": ["nation"]
     },
+    "job_resource_replacement": {
+        "name": "Job Resource Replacement",
+        "description": "Replaces a job's production of one resource with another. Value = maximum units of the replacement resource per pop.",
+        "value_format": "number",
+        "field_template": "replace_{job}_{resource_from}_with_{resource_to}",
+        "extra_fields": [
+            {"key": "job", "label": "Job", "source": "jobs"},
+            {"key": "resource_from", "label": "Original Resource", "source": "all_resources"},
+            {"key": "resource_to", "label": "Replacement Resource", "source": "all_resources"}
+        ],
+        "applicable_to": ["nation"]
+    },
     "job_resource_upkeep": {
         "name": "Job Resource Upkeep",
         "value_format": "number",
@@ -267,6 +279,23 @@
         "name": "Resource Consumption",
         "value_format": "number",
         "field_template": "{resource}_consumption",
+        "extra_fields": [
+            {"key": "resource", "label": "Resource", "source": "all_resources"}
+        ],
+        "applicable_to": ["nation"]
+    },
+    "resource_node_value": {
+        "name": "Resource Node Value (All)",
+        "description": "Increases the production value of all resource nodes. Each node produces 2 + node_value per session.",
+        "value_format": "number",
+        "field_template": "resource_node_value",
+        "applicable_to": ["nation"]
+    },
+    "specific_resource_node_value": {
+        "name": "Resource Node Value (Specific)",
+        "description": "Increases the production value of nodes for a specific resource. Each node produces 2 + node_value per session.",
+        "value_format": "number",
+        "field_template": "{resource}_node_value",
         "extra_fields": [
             {"key": "resource", "label": "Resource", "source": "all_resources"}
         ],
@@ -408,6 +437,13 @@
         "field_template": "stability_gain_chance",
         "applicable_to": ["nation"]
     },
+    "max_stability_gain_chance": {
+        "name": "Stability Gain Chance Cap",
+        "description": "Increases the maximum stability gain chance. Base cap is 100%.",
+        "value_format": "percentage",
+        "field_template": "max_stability_gain_chance",
+        "applicable_to": ["nation"]
+    },
     "stability_loss_chance": {
         "name": "Stability Loss Chance",
         "value_format": "percentage",
@@ -436,6 +472,18 @@
         "name": "Trade Slots",
         "value_format": "number",
         "field_template": "trade_slots",
+        "applicable_to": ["nation", "merchant"]
+    },
+    "export_slots": {
+        "name": "Export Slots",
+        "value_format": "number",
+        "field_template": "export_slots",
+        "applicable_to": ["nation", "merchant"]
+    },
+    "import_slots": {
+        "name": "Import Slots",
+        "value_format": "number",
+        "field_template": "import_slots",
         "applicable_to": ["nation", "merchant"]
     },
     "turns_with_library": {
