@@ -1274,6 +1274,7 @@
             const SORTED_SCALING_KEYS = {{ sorted_scaling_type_keys | tojson | safe }};
             const ALL_TERRAINS = {{ all_terrains | tojson | safe }};
             const ALL_DISTRICT_CATEGORIES = {{ all_district_categories | tojson | safe }};
+            const ALL_DISTRICT_DEFS = {{ all_district_defs | tojson | safe }};
             const DISTRICT_DEFS_MAP = {{ district_defs_map | tojson | safe }};
 
             // ── District card preview helpers ─────────────────────────────────────
@@ -1622,6 +1623,46 @@
                     const typeDef = MODIFIER_TYPES[modType] || {};
                     hint.textContent = 'Decimal (0.1 = 10%)';
                     hint.style.display = typeDef.value_format === 'percentage' ? '' : 'none';
+                }
+            }
+
+            function onScalingChange(select) {
+                const row = select.closest('tr') || select.closest('div');
+                if (!row) return;
+                const scalingKey = select.value;
+                const meta = SCALING_TYPES[scalingKey] || {};
+                const xField = row.querySelector('.modifier-scaling-x-field');
+                const extraField = row.querySelector('.modifier-scaling-extra-field');
+                const maxField = row.querySelector('.modifier-max-field');
+                if (xField) xField.style.display = meta.has_x ? '' : 'none';
+                if (maxField) maxField.style.display = scalingKey === 'flat' ? 'none' : '';
+                if (extraField) {
+                    const dd = meta.has_dropdown || '';
+                    extraField.style.display = dd ? '' : 'none';
+                    if (dd) {
+                        const extraSelect = extraField.querySelector('select');
+                        const extraInput = extraField.querySelector('input[type="hidden"]');
+                        const curVal = extraSelect ? extraSelect.value : (extraInput ? extraInput.value : '');
+                        let html = '';
+                        if (dd === 'terrain') {
+                            html = '<option value="">-- Terrain --</option>' + (typeof ALL_TERRAINS !== 'undefined' ? ALL_TERRAINS : []).map(t => `<option value="${t.key}"${t.key===curVal?' selected':''}>${t.name}</option>`).join('');
+                        } else if (dd === 'district_category') {
+                            html = '<option value="">-- Category --</option>' + (typeof ALL_DISTRICT_CATEGORIES !== 'undefined' ? ALL_DISTRICT_CATEGORIES : []).map(c => `<option value="${c.key}"${c.key===curVal?' selected':''}>${c.name}</option>`).join('');
+                        } else if (dd === 'resource') {
+                            html = '<option value="">-- Resource --</option>' + (typeof ALL_RESOURCES !== 'undefined' ? ALL_RESOURCES : []).map(r => `<option value="${r.key}"${r.key===curVal?' selected':''}>${r.name}</option>`).join('');
+                        } else if (dd === 'unit_subtype') {
+                            html = ['all','infantry','cavalry','ranged','magical','mundane'].map(o => `<option value="${o}"${o===curVal?' selected':''}>${o.charAt(0).toUpperCase()+o.slice(1)}</option>`).join('');
+                        } else if (dd === 'vassal_type') {
+                            html = ['all','Enclave','Martial','Mercantile','Protectorate','Provincial','Tributary'].map(o => `<option value="${o}"${o===curVal?' selected':''}>${o}</option>`).join('');
+                        } else if (dd === 'district_def') {
+                            html = '<option value="">-- District --</option>' + (typeof ALL_DISTRICT_DEFS !== 'undefined' ? ALL_DISTRICT_DEFS : []).map(d => `<option value="${d.key}"${d.key===curVal?' selected':''}>${d.display_name}</option>`).join('');
+                        }
+                        if (html) {
+                            const nameAttr = extraSelect ? extraSelect.name : (extraInput ? extraInput.name : '');
+                            const idAttr = extraSelect ? extraSelect.id : (extraInput ? extraInput.id : '');
+                            extraField.innerHTML = `<select class="form-control" name="${nameAttr}" id="${idAttr}">${html}</select>`;
+                        }
+                    }
                 }
             }
 
