@@ -25,6 +25,16 @@
 							<div class="checkbox-group">
 								{{ field(class="form-check-input") }}
 							</div>
+						{% elif field.type == 'FieldList' and field.name == 'negative_titles' %}
+							<div id="negative-titles-container">
+								{% for entry in field %}
+								<div class="neg-title-row" style="display:flex;gap:0.4rem;align-items:center;margin-bottom:0.3rem;">
+									{{ entry(class="form-control", style="max-width:300px;") }}
+									<button type="button" class="btn btn-danger btn-sm" onclick="this.parentElement.remove(); reindexNegTitles();">Remove</button>
+								</div>
+								{% endfor %}
+							</div>
+							<button type="button" class="btn btn-primary btn-sm" onclick="addNegativeTitle()">Add Negative Title</button>
 						{% elif field.type == 'FieldList' and field.name == 'modifiers' %}
 							{{ modifier_table(field, scopes_by_source_type.get('character', []),
 							                  field_name=field.name, entity_source_type='character',
@@ -46,6 +56,15 @@
 					</td>
 				</tr>
 			{% endfor %}
+			<tr>
+				<th><label for="start_as_child">Start as Child</label></th>
+				<td>
+					<label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;">
+						<input type="checkbox" name="start_as_child" id="start_as_child" value="1">
+						Start at age 0 (all stats reduced by 1, reduced starting magic points)
+					</label>
+				</td>
+			</tr>
 			<tr>
 				<th><label for="predecessor_id">Predecessor (optional)</label></th>
 				<td>
@@ -73,6 +92,36 @@
 
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 <script>
+const NEGATIVE_TITLES = {{ json_data.get("negative_titles", {})|tojson|safe }};
+{% if db_negative_titles is defined %}
+for (const t of {{ db_negative_titles|tojson|safe }}) {
+    if (!(t.name in NEGATIVE_TITLES)) NEGATIVE_TITLES[t.name] = t;
+}
+{% endif %}
+
+function addNegativeTitle() {
+    const container = document.getElementById('negative-titles-container');
+    const idx = container.querySelectorAll('.neg-title-row').length;
+    let opts = '<option value="">-- Select Title --</option>';
+    for (const [key, data] of Object.entries(NEGATIVE_TITLES)) {
+        opts += `<option value="${key}">${data.display_name || key}</option>`;
+    }
+    const row = document.createElement('div');
+    row.className = 'neg-title-row';
+    row.style = 'display:flex;gap:0.4rem;align-items:center;margin-bottom:0.3rem;';
+    row.innerHTML = `<select class="form-control" name="negative_titles-${idx}" id="negative_titles-${idx}" style="max-width:300px;">${opts}</select>` +
+        `<button type="button" class="btn btn-danger btn-sm" onclick="this.parentElement.remove(); reindexNegTitles();">Remove</button>`;
+    container.appendChild(row);
+}
+
+function reindexNegTitles() {
+    const rows = document.querySelectorAll('#negative-titles-container .neg-title-row');
+    rows.forEach((row, i) => {
+        const sel = row.querySelector('select');
+        if (sel) { sel.name = `negative_titles-${i}`; sel.id = `negative_titles-${i}`; }
+    });
+}
+
 const MODIFIER_TYPES = {{ modifier_types | tojson | safe }};
 const SORTED_MODIFIER_KEYS = {{ sorted_modifier_types | map(attribute=0) | list | tojson | safe }};
 const SCALING_TYPES = {{ scaling_types | tojson | safe }};

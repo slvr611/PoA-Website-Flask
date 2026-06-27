@@ -61,10 +61,17 @@
         "has_dropdown": "unit_subtype"
     },
     "per_x_sessions_with_library": {
-        "name": "Per X Sessions with Library",
-        "description": "Multiplied by the number of sessions the nation has had a library divided by X, floored. Uses the 'Turns with Library' modifier from the library tick.",
+        "name": "Per X Sessions with Library (Legacy)",
+        "description": "Legacy alias — redirects to per_x_district_sessions with def_key 'library'.",
         "has_x": true,
         "default_x": 1
+    },
+    "per_x_district_sessions": {
+        "name": "Per X District Sessions",
+        "description": "Multiplied by the number of sessions a specific district has been active divided by X, floored. The district must have a District Duration Scaling modifier. Select the district def_key.",
+        "has_x": true,
+        "default_x": 1,
+        "has_dropdown": "district_def"
     },
     "per_x_terrain_tiles": {
         "name": "Per X Tiles of Terrain",

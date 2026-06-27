@@ -100,6 +100,10 @@ def new_character():
 
     predecessor_characters = list(db.find({}).sort("name", ASCENDING))
 
+    db_negative_titles = list(mongo.db.titles.find(
+        {"type": "negative"}, {"_id": 0, "name": 1, "display_name": 1, "tier": 1, "type": 1, "modifiers": 1}
+    ))
+
     return render_template(
         "new_character.html",
         form=form,
@@ -110,6 +114,8 @@ def new_character():
         unique_resources=json_data["unique_resources"],
         entity_source_type="character",
         predecessor_characters=predecessor_characters,
+        json_data=json_data,
+        db_negative_titles=db_negative_titles,
     )
 
 @character_routes.route("/characters/new/request", methods=["POST"])
@@ -144,7 +150,8 @@ def new_character_request():
         flash(f"Validation Error: {error}")
         return redirect("/characters/new")
 
-    form_data["age"] = 1
+    is_child = bool(request.form.get("start_as_child"))
+    form_data["age"] = 0 if is_child else 1
     form_data["_id"] = "None"
 
     for strength in form_data["strengths"]:
@@ -233,7 +240,8 @@ def new_character_approve():
         flash(f"Validation Error: {error}")
         return redirect("/characters/new")
 
-    form_data["age"] = 1
+    is_child = bool(request.form.get("start_as_child"))
+    form_data["age"] = 0 if is_child else 1
     form_data["_id"] = "None"
 
     for strength in form_data["strengths"]:

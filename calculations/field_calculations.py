@@ -112,7 +112,7 @@ def _build_nation_calc_cache(target):
                 })
 
         from helpers.hex_map_helpers import axial_neighbors as _axial_neighbors
-        _WATER_TERRAINS = {"shallow_water", "deep_water"}
+        _WATER_TERRAINS = {"shallow_water", "deep_water", "river"}
         for coord, tile in _all_nation_tiles.items():
             city_ref = tile.get("city")
             if not city_ref or city_ref.get("type") != "metropolis":
@@ -802,10 +802,23 @@ def collect_mercenary_districts(target, district_details):
     
     return collected_modifiers
 
-def calculate_title_modifiers(titles, target_data_type, schema_properties):
-    title_modifiers = {}
+def _get_all_titles():
+    """Return combined title data from JSON files and the DB titles collection."""
     title_data = deepcopy(json_data["positive_titles"])
     title_data.update(json_data["negative_titles"])
+    try:
+        for t in mongo.db.titles.find({}, {"_id": 0}):
+            key = t.get("name", "")
+            if key:
+                title_data[key] = t
+    except Exception:
+        pass
+    return title_data
+
+
+def calculate_title_modifiers(titles, target_data_type, schema_properties):
+    title_modifiers = {}
+    title_data = _get_all_titles()
     for title in titles:
         specific_title_data = copy.deepcopy(title_data.get(title, {}))
         for key, value in specific_title_data.get("modifiers", {}).items():
@@ -2296,11 +2309,8 @@ WATER_TERRAINS = {"shallow_water", "deep_water", "hazardous_water"}
 
 
 def _hex_neighbors(q, r):
-    """Return the 6 hex neighbors for even-q offset coordinates."""
-    if q % 2 == 0:
-        return [(q, r-1), (q, r+1), (q-1, r-1), (q-1, r), (q+1, r-1), (q+1, r)]
-    else:
-        return [(q, r-1), (q, r+1), (q-1, r), (q-1, r+1), (q+1, r), (q+1, r+1)]
+    """Return the 6 hex neighbors for axial coordinates."""
+    return [(q+1, r), (q-1, r), (q, r+1), (q, r-1), (q+1, r-1), (q-1, r+1)]
 
 
 def _compute_legal_placement(nation):
@@ -2320,10 +2330,13 @@ def _compute_legal_placement(nation):
     if "_legal_placement_cache" in nation:
         return nation["_legal_placement_cache"]
 
-    result = {
+    _empty_result = {
         "has_land": False, "has_coastal": False, "has_water": False,
         "land_nodes": [], "coastal_nodes": [], "water_nodes": [],
+        "legal_land_tiles": [],
+        "metropolis_coords": [],
     }
+    result = dict(_empty_result)
     try:
         from app_core import mongo
         nation_name = nation.get("name", "")
@@ -2341,6 +2354,7 @@ def _compute_legal_placement(nation):
         node_map = {}
         building_coords = set()
         water_coords = set()
+        metropolis_coords = []
 
         for t in owned_tiles:
             coord = (t["q"], t["r"])
@@ -2348,18 +2362,26 @@ def _compute_legal_placement(nation):
             tile_map[coord] = terrain
 
             node = t.get("node")
-            if node:
-                node_key = node.get("resource", node) if isinstance(node, dict) else node
+            if node and isinstance(node, dict):
+                node_key = node.get("resource_type") or node.get("resource", "")
                 if node_key and node_key != "none":
                     node_map[coord] = node_key
+            elif node and isinstance(node, str) and node != "none":
+                node_map[coord] = node
 
             has_building = bool(
                 t.get("district") or t.get("city") or t.get("wonder")
             )
             if has_building:
                 building_coords.add(coord)
-            if terrain in WATER_TERRAINS:
+            if terrain in WATER_TERRAINS or terrain == "river":
                 water_coords.add(coord)
+
+            city_ref = t.get("city")
+            if city_ref and isinstance(city_ref, dict) and city_ref.get("type") == "metropolis":
+                metropolis_coords.append(coord)
+
+        result["metropolis_coords"] = metropolis_coords
 
         if not building_coords:
             capital_tile = None
@@ -2385,28 +2407,47 @@ def _compute_legal_placement(nation):
 
             node_res = node_map.get(coord)
             is_water = terrain in WATER_TERRAINS
-            is_coastal = (not is_water) and any(
+            is_river = terrain == "river"
+            is_adjacent_water = any(
                 n in water_coords for n in _hex_neighbors(*coord)
             )
 
-            if is_water:
+            # Rivers count as both land and water
+            if is_water or is_river:
                 result["has_water"] = True
                 if node_res:
                     result["water_nodes"].append(node_res)
-            else:
+            if not is_water:  # land tiles and rivers
                 result["has_land"] = True
                 if node_res:
                     result["land_nodes"].append(node_res)
-                if is_coastal:
+                if is_adjacent_water or is_river:
                     result["has_coastal"] = True
                     if node_res:
                         result["coastal_nodes"].append(node_res)
 
+                # Store legal land tiles with node info for city placement scoring
+                adj_nodes = []
+                adj_water_or_building = 0
+                for nq, nr in _hex_neighbors(*coord):
+                    adj_node = node_map.get((nq, nr))
+                    if adj_node:
+                        adj_nodes.append(adj_node)
+                    nb_terrain = tile_map.get((nq, nr), "")
+                    if (nb_terrain in WATER_TERRAINS or nb_terrain == "river"
+                            or (nq, nr) in building_coords):
+                        adj_water_or_building += 1
+
+                result["legal_land_tiles"].append({
+                    "coord": coord,
+                    "node": node_res,
+                    "adj_nodes": adj_nodes,
+                    "adj_water_or_building": adj_water_or_building,
+                })
+
     except Exception:
-        result = {
-            "has_land": True, "has_coastal": False, "has_water": False,
-            "land_nodes": [], "coastal_nodes": [], "water_nodes": [],
-        }
+        result = dict(_empty_result)
+        result["has_land"] = True
 
     nation["_legal_placement_cache"] = result
     return result
@@ -3900,6 +3941,46 @@ def compute_nation_breakdowns(
     if rc_per_admin and admin_val:
         route_cap_bd.insert(-1, {"label": "Administration", "value": rc_per_admin * admin_val})
     breakdowns["route_capacity"] = route_cap_bd
+
+    # prestige_gain — custom breakdown matching compute_prestige_gain logic
+    if target.get("empire"):
+        pg_bd = _field_bd("prestige_gain")
+        if pg_bd and pg_bd[-1].get("label") == "Total":
+            pg_bd.pop()
+        _pg_decay = target.get("empire_prestige_decay", 0)
+        if _pg_decay:
+            pg_bd.append({"label": "Empire Decay", "value": -_pg_decay})
+        if target.get("overlord") and target["overlord"] != "" and target["overlord"] != "None":
+            pg_bd.append({"label": "Has Overlord", "value": -15})
+        _pg_target_id = str(target.get("_id", ""))
+        _pg_pacts = list(category_data["diplo_relations"]["database"].find({
+            "$or": [{"nation_1": _pg_target_id}, {"nation_2": _pg_target_id}],
+            "pact_type": {"$in": ["Defensive Pact", "Military Alliance"]},
+        }, {"pact_type": 1}))
+        _pg_pact_loss = sum(5 for p in _pg_pacts)
+        if _pg_pact_loss:
+            pg_bd.append({"label": f"Diplomatic Pacts ({len(_pg_pacts)})", "value": -min(_pg_pact_loss, 10)})
+        _pg_vassals = list(category_data["nations"]["database"].find(
+            {"overlord": _pg_target_id}, {"compliance": 1, "_id": 0}
+        ))
+        _pg_loyal = sum(1 for v in _pg_vassals if v.get("compliance") == "Loyal")
+        _pg_disloyal = sum(2 for v in _pg_vassals if v.get("compliance") in ("Rebellious", "Defiant"))
+        if _pg_disloyal:
+            pg_bd.append({"label": "Disloyal Vassals", "value": -min(_pg_disloyal, 10)})
+        if _pg_loyal:
+            pg_bd.append({"label": "Loyal Vassals", "value": min(_pg_loyal, 3)})
+        _pg_rulers = list(category_data["characters"]["database"].find(
+            {"ruling_nation_org": _pg_target_id}, {"_id": 1}
+        ))
+        _pg_mythical = 0
+        for _r in _pg_rulers:
+            _pg_mythical += category_data["artifacts"]["database"].count_documents(
+                {"owner": str(_r["_id"]), "equipped": True, "rarity": "Mythical"}
+            )
+        if _pg_mythical:
+            pg_bd.append({"label": "Mythical Artifacts", "value": min(_pg_mythical, 1)})
+        pg_bd.append({"label": "Total", "value": calculated_values.get("prestige_gain", 0)})
+        breakdowns["prestige_gain"] = pg_bd
 
     # Karma — strip _field_bd's premature Total, inject rolling/temporary before the real one
     karma_bd = _field_bd("karma")

@@ -115,6 +115,9 @@ def inject_modifier_data():
     _db_cats = list(mongo.db.district_categories.find({}, {"_id": 0, "key": 1, "display_name": 1}).sort("sort_order", 1))
     all_district_categories = [{"key": c["key"], "name": c.get("display_name") or c["key"]} for c in _db_cats]
 
+    _db_defs = list(mongo.db.district_defs.find({}, {"_id": 0, "key": 1, "display_name": 1}).sort("display_name", 1))
+    all_district_defs = [{"key": d["key"], "display_name": d.get("display_name") or d["key"]} for d in _db_defs]
+
     all_unit_categories = [
         {"key": "naval", "name": "Naval"},
         {"key": "cavalry", "name": "Cavalry"},
@@ -167,6 +170,7 @@ def inject_modifier_data():
         "sorted_scaling_type_keys": sorted_scaling_type_keys,
         "all_terrains": all_terrains,
         "all_district_categories": all_district_categories,
+        "all_district_defs": all_district_defs,
         "all_unit_categories": all_unit_categories,
         "all_unit_stats": all_unit_stats,
         "all_progress_tiers": all_progress_tiers,

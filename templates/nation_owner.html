@@ -141,7 +141,7 @@
 			{% if nation.empire %}
 				<span>Empire</span>
 				<span>{{ schema.properties.prestige.label }}: {{ pf(nation.prestige, pn.get("prestige")) }}</span>
-				<span>{{ schema.properties.prestige_gain.label }}: {{ pf(nation.prestige_gain, pn.get("prestige_gain")) }}</span>
+				<span>{{ schema.properties.prestige_gain.label }}: {{ pfbd(nation.prestige_gain, pn.get("prestige_gain"), breakdowns.get("prestige_gain", []), pbd.get("prestige_gain", []), "Prestige Gain") }}</span>
 			{% endif %}
 			{% if "rulers" in linked_objects and linked_objects["rulers"] is not none %}
 				<span>

@@ -368,11 +368,14 @@ def global_modifiers():
         global_modifiers = {"name": "global_modifiers"}
         mongo.db.global_modifiers.insert_one(global_modifiers)
     
-    return render_template('dataItem.html', 
-                          item=global_modifiers, 
-                          title="Global Modifier", 
+    return render_template('dataItem.html',
+                          item=global_modifiers,
+                          title="Global Modifier",
                           category="global_modifiers",
-                          schema=category_data["global_modifiers"]["schema"])
+                          schema=category_data["global_modifiers"]["schema"],
+                          field_tiers=None,
+                          visibility_level=None,
+                          visibility_bypassed=False)
 
 @admin_tool_routes.route('/global_modifiers/edit/global_modifiers', methods=['GET'])
 @admin_required

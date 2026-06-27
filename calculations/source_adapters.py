@@ -395,14 +395,13 @@ class TitleAdapter:
 
     @classmethod
     def collect(cls, target: dict, target_data_type: str, schema_properties: dict) -> list:
-        from calculations.field_calculations import calculate_title_modifiers
+        from calculations.field_calculations import calculate_title_modifiers, _get_all_titles
         contributions = []
-        title_data = copy.deepcopy(json_data.get("positive_titles", {}))
-        title_data.update(json_data.get("negative_titles", {}))
+        title_data = _get_all_titles()
         for title_key in target.get("positive_titles", []) + target.get("negative_titles", []):
             mods = calculate_title_modifiers([title_key], target_data_type, schema_properties)
             if mods:
-                label = title_data.get(title_key, {}).get("name", title_key)
+                label = title_data.get(title_key, {}).get("display_name", title_key)
                 contributions.append(SourceContribution(label=label, source_type=cls.source_type, modifiers=mods))
         return contributions
 

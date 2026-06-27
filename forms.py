@@ -826,9 +826,21 @@ class BaseSchemaForm(FlaskForm):
         
         elif field_name == "positive_titles":
             choices += [(title, json_data["positive_titles"][title]["display_name"]) for title in json_data["positive_titles"]]
-        
+            try:
+                for t in mongo.db.titles.find({"type": "positive"}, {"name": 1, "display_name": 1, "_id": 0}):
+                    if t.get("name") and t["name"] not in json_data.get("positive_titles", {}):
+                        choices.append((t["name"], t.get("display_name", t["name"])))
+            except Exception:
+                pass
+
         elif field_name == "negative_titles":
             choices += [(title, json_data["negative_titles"][title]["display_name"]) for title in json_data["negative_titles"]]
+            try:
+                for t in mongo.db.titles.find({"type": "negative"}, {"name": 1, "display_name": 1, "_id": 0}):
+                    if t.get("name") and t["name"] not in json_data.get("negative_titles", {}):
+                        choices.append((t["name"], t.get("display_name", t["name"])))
+            except Exception:
+                pass
         
         elif field_name == "support_units":
             units_list = list(category_data["units"]["database"].find(

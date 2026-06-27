@@ -1,4 +1,12 @@
 {
+    "district_duration": {
+        "name": "District Duration Scaling",
+        "description": "Tracks how many sessions this district has been active. The value field is ignored — place this on a district to enable session tracking. Other modifiers on the district can then use the 'Per X District Sessions' scaling method.",
+        "value_format": "number",
+        "field_template": "_district_duration_flag",
+        "is_district_duration": true,
+        "applicable_to": ["nation"]
+    },
     "administration": {
         "name": "Administration",
         "value_format": "number",

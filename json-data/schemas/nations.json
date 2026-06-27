@@ -122,7 +122,8 @@
         "bsonType": "number",
         "label": "Prestige Gain",
         "description": "The amount of prestige the empire gains each session",
-        "calculated": true
+        "calculated": true,
+        "show_breakdown": true
       },
       "rulers": {
         "bsonType": "array",

@@ -1575,36 +1575,73 @@ def reset_all_temperaments(old_nation, new_nation, schema):
     new_nation["sessions_since_temperament_change"] = 1
     return result
 
-def library_tick(old_nation, new_nation, schema):
-    districts = new_nation.get("districts", [])
-    for district in districts:
-        if district.get("type", "") and "library" in district.get("type", ""):
-            library_details = {}  # legacy JSON district — treated as inactive
-            required_turns = library_details.get("modifiers", {}).get("research_production_per_turns_with_library", 0)
-            max_research = library_details.get("modifiers", {}).get("max_research_production_per_turns_with_library", 0)
-            modifiers = new_nation.get("modifiers", [])
-            for modifier in modifiers:
-                if modifier.get("field", "") == "Turns with Library" and modifier.get("source", "") == "Library District":
-                    modifier["value"] += 1
-                    if int(modifier["value"]) % required_turns == 0:
-                        for modifier_2 in modifiers:
-                            if modifier_2.get("field", "") == "research_production" and modifier_2.get("source", "") == "Library District":
-                                modifier_2["value"] = min(modifier["value"] / required_turns, max_research)
-                                new_nation["modifiers"] = modifiers
-                                return f"{old_nation.get('name', 'Unknown')} has had their research production increased by 1 because the library district has been active for {modifier['value']} turns.\n"
-                            
-                        modifiers.append({"field": "research_production", "value": 1, "duration": -1, "source": "Library District"})
-                        new_nation["modifiers"] = modifiers
-                        return f"{old_nation.get('name', 'Unknown')} has had their research production increased by 1 because the library district has been active for {modifier['value']} turns.\n"
-                    
-                    new_nation["modifiers"] = modifiers
-                    return f"{old_nation.get('name', 'Unknown')} has had their Turns with Library modifier increased by 1.\n"
-                
-            modifiers.append({"field": "Turns with Library", "value": 1, "duration": -1, "source": "Library District"})
-            new_nation["modifiers"] = modifiers
-            return f"{old_nation.get('name', 'Unknown')} has had their Turns with Library modifier increased by 1.\n"
-
+def empire_prestige_decay_tick(old_nation, new_nation, schema):
+    if not old_nation.get("empire"):
+        return ""
+    current = old_nation.get("empire_prestige_decay", 0)
+    new_nation["empire_prestige_decay"] = current + 1
     return ""
+
+
+def district_duration_tick(old_nation, new_nation, schema):
+    """Increment session counters for districts that have the district_duration modifier.
+
+    For each district with def_key that has a district_duration modifier in its
+    definition, finds or creates a nation-level modifier tracking sessions:
+      {"field": "district_sessions_{def_key}", "value": N, "duration": -1,
+       "source": "District: {display_name}"}
+    If the nation no longer has the district, the counter modifier is removed.
+    """
+    from calculations.field_calculations import _resolve_def
+
+    districts = new_nation.get("districts", [])
+    modifier_types_data = json_data.get("modifier_types", {})
+    modifiers = list(new_nation.get("modifiers", []))
+    result = ""
+
+    active_def_keys = {}
+    for d in districts:
+        if not isinstance(d, dict):
+            continue
+        dk = d.get("def_key", "")
+        if not dk:
+            continue
+        dd = _resolve_def(d)
+        if not dd:
+            continue
+        has_duration = any(
+            modifier_types_data.get(m.get("modifier_type", ""), {}).get("is_district_duration")
+            for m in dd.get("modifiers", [])
+            if isinstance(m, dict)
+        )
+        if has_duration:
+            active_def_keys[dk] = dd.get("display_name", dk)
+
+    for dk, display_name in active_def_keys.items():
+        field_key = f"district_sessions_{dk}"
+        source = f"District: {display_name}"
+        found = False
+        for m in modifiers:
+            if m.get("field") == field_key and m.get("source") == source:
+                m["value"] = m.get("value", 0) + 1
+                found = True
+                result += f"{old_nation.get('name', '?')}: {display_name} session count → {m['value']}\n"
+                break
+        if not found:
+            modifiers.append({"field": field_key, "value": 1, "duration": -1, "source": source})
+            result += f"{old_nation.get('name', '?')}: {display_name} session count → 1 (new)\n"
+
+    stale = []
+    for i, m in enumerate(modifiers):
+        f = m.get("field", "")
+        if f.startswith("district_sessions_") and f[len("district_sessions_"):] not in active_def_keys:
+            stale.append(i)
+    for i in reversed(stale):
+        removed = modifiers.pop(i)
+        result += f"{old_nation.get('name', '?')}: removed stale counter for {removed.get('source', '?')}\n"
+
+    new_nation["modifiers"] = modifiers
+    return result
 
 ###########################################################
 # Era / Age Tick Functions
@@ -2022,7 +2059,8 @@ NATION_TICK_FUNCTIONS = {
     "Nation Pop Loss Tick": pop_loss_tick,
     "Nation Pop Flee Tick": pop_flee_tick,
     "Nation Temperament Tick": temperament_tick,
-    "Nation Library Tick": library_tick,
+    "District Duration Tick": district_duration_tick,
+    "Empire Prestige Decay Tick": empire_prestige_decay_tick,
 }
 
 def ongoing_trade_route_tick(_old_nations, _new_nations, _schema):

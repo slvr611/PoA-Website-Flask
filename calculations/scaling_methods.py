@@ -135,10 +135,22 @@ def per_x_land_units(target, scaling_x=1, scaling_extra="", context=None):
 
 
 def per_x_sessions_with_library(target, scaling_x=1, scaling_extra="", context=None):
+    return per_x_district_sessions(target, scaling_x=scaling_x, scaling_extra="library", context=context)
+
+
+def per_x_district_sessions(target, scaling_x=1, scaling_extra="", context=None):
+    """Count sessions a district (by def_key) has been active.
+
+    Reads from nation modifiers with field 'district_sessions_{def_key}'.
+    scaling_extra = the district def_key to look up.
+    """
+    if not scaling_extra:
+        return 0
+    field_key = f"district_sessions_{scaling_extra}"
     modifiers = target.get("modifiers", []) or []
     sessions = 0
     for m in modifiers:
-        if isinstance(m, dict) and m.get("field") == "Turns with Library":
+        if isinstance(m, dict) and m.get("field") == field_key:
             try:
                 sessions = int(m.get("value", 0))
             except (TypeError, ValueError):
@@ -312,6 +324,7 @@ SCALING_METHODS = {
     "per_x_naval_units": per_x_naval_units,
     "per_x_land_units": per_x_land_units,
     "per_x_sessions_with_library": per_x_sessions_with_library,
+    "per_x_district_sessions": per_x_district_sessions,
     "per_x_terrain_tiles": per_x_terrain_tiles,
     "per_x_district_category": per_x_district_category,
     "per_x_administration": per_x_administration,

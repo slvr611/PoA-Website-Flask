@@ -17,10 +17,7 @@ def compute_field_default(field, target, base_value, field_schema, overall_total
 def compute_prestige_gain(field, target, base_value, field_schema, overall_total_modifiers):
     value = base_value
 
-    #Lose 1 prestige per session since Strife started (geometric growth)
-    current_session = category_data["global_modifiers"]["database"].find_one({"name": "global_modifiers"}).get("session_counter", 1)
-    value -= 1 * (current_session - 55)
-    #print(f"Session Prestige Decay: {value}")
+    value -= target.get("empire_prestige_decay", 0)
 
     overlord = target.get("overlord", {})
     if overlord and overlord != "" and overlord != "None":

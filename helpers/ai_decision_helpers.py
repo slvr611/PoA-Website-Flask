@@ -1417,6 +1417,16 @@ def score_buildable_districts(old_nation, state, need_weights, market_buy_prices
     nation_jobs = job_assignments if job_assignments is not None else old_nation.get("jobs", {})
     results = []
 
+    # Compute baseline weights (pre-upkeep) for unlocked job scoring.
+    # Post-upkeep weights make covered resources look cheap, hiding the efficiency
+    # value of better producers (e.g. farmer replacing hunter). Baseline weights
+    # reflect the true deficit the upkeep jobs are covering.
+    baseline_weights = _weights_from_net(
+        state["net_production"], state["stockpiles"],
+        market_buy_prices if market_buy_prices is not None else _base_prices(),
+        state["money_income"],
+    )
+
     # Pre-compute discretionary pop info once for all district evaluations.
     upkeep_total = sum(nation_jobs.values()) if nation_jobs else 0
     remaining_pops = max(0, state["idle_pops"] - upkeep_total)
@@ -1474,9 +1484,9 @@ def score_buildable_districts(old_nation, state, need_weights, market_buy_prices
             if r != "money"
         ) and state["money"] >= actual_cost.get("money", 0)
 
-        mod_value, mod_breakdown = _district_modifier_value(dd.get("modifiers", []), need_weights, market_buy_prices, state.get("territory_types"), nation_jobs, state, discretionary_info)
+        mod_value, mod_breakdown = _district_modifier_value(dd.get("modifiers", []), baseline_weights, market_buy_prices, state.get("territory_types"), nation_jobs, state, discretionary_info)
 
-        job_value, unlocked_jobs = _unlocked_jobs_value(dk, state, need_weights, market_buy_prices, nation_jobs)
+        job_value, unlocked_jobs = _unlocked_jobs_value(dk, state, baseline_weights, market_buy_prices, nation_jobs)
 
         # Node value: score the best available node on legal tiles for this district
         node_value = 0.0
@@ -1519,6 +1529,28 @@ def score_buildable_districts(old_nation, state, need_weights, market_buy_prices
         node_value = best_node_value
         if best_node_res:
             node_desc = f"{best_node_res} node +{node_value:.1f}"
+
+        # Metropolis adjacency bonus: if the nation has a metropolis, a new district
+        # placed adjacent to it increases its pop cap. Each adjacent building/water
+        # tile contributes to the metropolis's tiered bonus (1/3/5 adj → +1/+2/+3 pop cap).
+        metro_coords = legal_placement.get("metropolis_coords", [])
+        if metro_coords and tile_req in ("land", "coastal"):
+            from calculations.field_calculations import _hex_neighbors as _axial_nb
+            metro_adj_bonus = 0
+            for tile_info in legal_placement.get("legal_land_tiles", []):
+                coord = tile_info["coord"]
+                for mc in metro_coords:
+                    if coord in _axial_nb(*mc):
+                        metro_adj_bonus = 3.0
+                        break
+                if metro_adj_bonus > 0:
+                    break
+            if metro_adj_bonus > 0:
+                node_value += metro_adj_bonus
+                if node_desc:
+                    node_desc += f"; metropolis adj +{metro_adj_bonus:.1f}"
+                else:
+                    node_desc = f"metropolis adj +{metro_adj_bonus:.1f}"
 
         market_bonus = sum(
             need_weights.get(r, 0.5) * v
@@ -1739,11 +1771,72 @@ def _estimate_city_pop_cap(city_type, cities_data, nation):
     return total
 
 
+def _score_best_city_tile(legal_placement, city_type, need_weights, prices):
+    """Find the best legal land tile to place a city on, scoring by node value.
+
+    Nodes on the tile count as 2x production, adjacent nodes as 1x.
+    For a metropolis, also score adjacent water/building tiles for the pop cap bonus.
+    Returns (best_coord, best_score, rationale) or (None, 0, "").
+    """
+    luxury_set = set(_luxury_keys())
+    best_coord = None
+    best_score = 0
+    best_rationale = ""
+
+    for tile_info in legal_placement.get("legal_land_tiles", []):
+        score = 0
+        parts = []
+
+        # Node on the tile itself (worth 2x production)
+        node_on = tile_info.get("node")
+        if node_on:
+            is_lux = node_on in luxury_set
+            prod = 1 if is_lux else 2
+            w = need_weights.get(node_on, 1.3)
+            val = w * prod * 2 * _price_scale(node_on, prices)
+            score += val
+            parts.append(f"{node_on} on tile (+{val:.1f})")
+
+        # Adjacent nodes (worth 1x production)
+        for adj_node in tile_info.get("adj_nodes", []):
+            is_lux = adj_node in luxury_set
+            prod = 1 if is_lux else 2
+            w = need_weights.get(adj_node, 1.3)
+            val = w * prod * _price_scale(adj_node, prices)
+            score += val
+
+        if tile_info.get("adj_nodes"):
+            parts.append(f"{len(tile_info['adj_nodes'])} adj nodes")
+
+        # Metropolis bonus: more adjacent water/buildings = more pop cap
+        if city_type == "metropolis":
+            adj_count = tile_info.get("adj_water_or_building", 0)
+            if adj_count >= 5:
+                metro_pop = 3
+            elif adj_count >= 3:
+                metro_pop = 2
+            elif adj_count >= 1:
+                metro_pop = 1
+            else:
+                metro_pop = 0
+            score += metro_pop * 5
+            if metro_pop > 0:
+                parts.append(f"metropolis +{metro_pop} pop cap ({adj_count} adj)")
+
+        if score > best_score:
+            best_score = score
+            best_coord = tile_info["coord"]
+            best_rationale = ", ".join(parts) if parts else ""
+
+    return best_coord, best_score, best_rationale
+
+
 def _select_best_city(old_nation, state, exclude_types=None):
     """
     For grow_population: pick the best city to build (or replace).
     Evaluates conditional modifiers against the nation's current state to find
     the city type that would give the most effective_pop_capacity.
+    Also scores the best tile placement for node and metropolis bonuses.
     exclude_types: set of city types built this session (to prevent duplicates).
     Returns a plan dict with source='city', or None if no city avenue exists.
     """
@@ -1759,10 +1852,12 @@ def _select_best_city(old_nation, state, exclude_types=None):
 
     # Score each city type by total pop cap including conditional bonuses.
     # At equal pop cap, prefer cheaper cities (lower total resource cost).
-    # Exclude city types the nation already has or built this session (max 1 of each).
+    # Exclude city types the nation already has or built this session (max 1 of each),
+    # except generic cities which can be built multiple times.
     existing_city_types = {c.get("type", "") for c in existing_cities}
     if exclude_types:
         existing_city_types = existing_city_types | exclude_types
+    existing_city_types.discard("generic")
     city_scores = []
     for ct, cdata in cities_data.items():
         if ct in existing_city_types:
@@ -1778,15 +1873,35 @@ def _select_best_city(old_nation, state, exclude_types=None):
     city_scores.sort(key=lambda x: (x[2], -x[4]), reverse=True)
 
     if open_city_slots > 0 and city_scores:
+        # Score tile placement for each candidate and pick the best combo
+        from calculations.field_calculations import _compute_legal_placement
+        legal = _compute_legal_placement(old_nation)
+        prices = _base_prices()
+        baseline_w = _weights_from_net(
+            state["net_production"], state["stockpiles"], prices, state["money_income"]
+        )
+
         best = city_scores[0]
-        return {
+        tile_coord, tile_score, tile_rationale = _score_best_city_tile(
+            legal, best[0], baseline_w, prices
+        )
+        placement_info = ""
+        if tile_coord:
+            placement_info = f" tile ({tile_coord[0]},{tile_coord[1]})"
+            if tile_rationale:
+                placement_info += f" [{tile_rationale}]"
+
+        plan = {
             "key": best[0],
             "display_name": f"City: {best[1]}",
             "cost": best[3],
-            "rationale": f"Build new city (+{best[2]} pop cap), {open_city_slots} slot(s) open",
+            "rationale": f"Build new city (+{best[2]} pop cap), {open_city_slots} slot(s) open{placement_info}",
             "sessions_saving": 0,
             "source": "city",
         }
+        if tile_coord:
+            plan["placement"] = {"q": tile_coord[0], "r": tile_coord[1]}
+        return plan
 
     # No open slots or no new types available — check if we can replace
     # the weakest existing city with a better type not already owned

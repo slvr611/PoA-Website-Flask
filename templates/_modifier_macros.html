@@ -233,6 +233,11 @@
                 <select class="form-control" name="{{ field_name }}-{{ idx }}-scaling_extra" id="{{ field_name }}-{{ idx }}-scaling_extra">
                   {% for opt in ["all", "Enclave", "Martial", "Mercantile", "Protectorate", "Provincial", "Tributary"] %}<option value="{{ opt }}" {% if opt == cur_extra %}selected{% endif %}>{{ opt }}</option>{% endfor %}
                 </select>
+              {% elif scaling_meta.get('has_dropdown') == 'district_def' %}
+                <select class="form-control" name="{{ field_name }}-{{ idx }}-scaling_extra" id="{{ field_name }}-{{ idx }}-scaling_extra">
+                  <option value="">-- District --</option>
+                  {% for dd in all_district_defs|default([]) %}<option value="{{ dd.key }}" {% if dd.key == cur_extra %}selected{% endif %}>{{ dd.display_name }}</option>{% endfor %}
+                </select>
               {% else %}
                 <input type="hidden" name="{{ field_name }}-{{ idx }}-scaling_extra" id="{{ field_name }}-{{ idx }}-scaling_extra" value="{{ cur_extra }}">
               {% endif %}
