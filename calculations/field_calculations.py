@@ -96,19 +96,39 @@ def _build_nation_calc_cache(target):
     node_tiles = []
     metropolis_bonus = 0
     _all_nation_tiles = {}
+    _node_debug_log = []
     if nation_name:
+        _tile_count = 0
         for tile in mongo.db.hex_map_tiles.find(
             {"owner": nation_name},
-            {"q": 1, "r": 1, "terrain": 1, "node.resource_type": 1, "city": 1, "district": 1, "wonder": 1, "_id": 0}
+            {"q": 1, "r": 1, "terrain": 1, "node": 1, "city": 1, "district": 1, "wonder": 1, "_id": 0}
         ):
+            _tile_count += 1
             coord = (tile.get("q"), tile.get("r"))
             _all_nation_tiles[coord] = tile
-            rt = tile.get("node", {}).get("resource_type")
-            if rt:
+            _node = tile.get("node") or {}
+            rt = _node.get("resource_type") or _node.get("value") or _node.get("type")
+            if rt and rt != "resource":
+                _has_city = bool(tile.get("city"))
+                _has_dist = bool(tile.get("district"))
+                _has_wonder = bool(tile.get("wonder"))
+                _has_building = _has_city or _has_dist or _has_wonder
                 node_tiles.append({
                     "q": coord[0], "r": coord[1], "rt": rt,
-                    "has_building": bool(tile.get("city") or tile.get("district") or tile.get("wonder")),
+                    "has_building": _has_building,
                 })
+                _node_debug_log.append(
+                    f"({coord[0]},{coord[1]}) node={rt} city={tile.get('city')} "
+                    f"dist={tile.get('district')} wonder={tile.get('wonder')} "
+                    f"has_building={_has_building}"
+                )
+        import logging
+        _logger = logging.getLogger(__name__)
+        _logger.warning(
+            "[NODE_DEBUG] %s: %d tiles, %d node tiles. Details: %s",
+            nation_name, _tile_count, len(node_tiles),
+            " | ".join(_node_debug_log) if _node_debug_log else "none"
+        )
 
         from helpers.hex_map_helpers import axial_neighbors as _axial_neighbors
         _WATER_TERRAINS = {"shallow_water", "deep_water"}
@@ -294,9 +314,11 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
         territory_node_counts = {}
         active_node_counts = {}
         _luxury_resource_keys = {r["key"] for r in json_data["luxury_resources"]}
+        _oor_skipped = []
         for _nt in _node_tiles:
             _coord = (_nt["q"], _nt["r"])
             if _coord in _oor_set:
+                _oor_skipped.append(f"({_coord[0]},{_coord[1]}) {_nt['rt']}")
                 continue
             _res = _nt["rt"]
             territory_node_counts[_res] = territory_node_counts.get(_res, 0) + 1
@@ -306,6 +328,17 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
         _cache["out_of_range_tiles"] = out_of_range
         _cache["territory_node_counts"] = territory_node_counts
         _cache["active_node_counts"] = active_node_counts
+
+        import logging
+        _logger = logging.getLogger(__name__)
+        _logger.warning(
+            "[NODE_DEBUG] %s OOR filter: %d node_tiles in cache, %d OOR skipped (%s), "
+            "territory_counts=%s, active_counts=%s, admin=%s, nomadic=%s",
+            _nation_name, len(_node_tiles), len(_oor_skipped),
+            ", ".join(_oor_skipped) if _oor_skipped else "none",
+            territory_node_counts, active_node_counts,
+            _admin_val, _is_nomadic,
+        )
 
         _sub = perf_counter()
         if proximity_rules or out_of_range:
@@ -399,6 +432,7 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
     # nomadic nations every territory node tile is automatically active.
     _cache = target.get("_calc_cache") or {}
     _territory_node_counts = _cache.get("territory_node_counts", {})
+    _node_corrections = []
     if _territory_node_counts:
         _active_node_counts = _cache.get("active_node_counts", {})
         _is_nomadic = law_totals.get("nomadic", 0) > 0
@@ -408,10 +442,21 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
             if _is_nomadic:
                 _corrected = _territory_count
             else:
-                # Cap at distinct activated tiles (not territory count, not building count)
                 _corrected = _active_node_counts.get(_res, 0)
+            _node_corrections.append(
+                f"{_res}: before={_current} territory={_territory_count} "
+                f"active={_active_node_counts.get(_res, 0)} -> {_corrected}"
+            )
             if _corrected != _current:
                 overall_total_modifiers[_key] = _corrected
+
+    import logging
+    _logger = logging.getLogger(__name__)
+    _logger.warning(
+        "[NODE_DEBUG] %s correction: %s",
+        target.get("name", "?"),
+        " | ".join(_node_corrections) if _node_corrections else "no node tiles"
+    )
 
     record_timing("build_overall_modifiers_ms", phase_start)
     
@@ -530,8 +575,26 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
                 for key, value in d.items():
                     overall_total_modifiers[key] = overall_total_modifiers.get(key, 0) + value
 
-            #print(overall_total_modifiers)
-                        
+            # Re-apply all direct modifications to overall_total_modifiers that
+            # were lost when it was reset to {} above.
+
+            # Node count corrections from tile data
+            _re_cache = target.get("_calc_cache") or {}
+            _re_territory = _re_cache.get("territory_node_counts", {})
+            _re_active = _re_cache.get("active_node_counts", {})
+            _re_nomadic = law_totals.get("nomadic", 0) > 0
+            for _res, _tcount in _re_territory.items():
+                _key = _res + "_nodes"
+                overall_total_modifiers[_key] = _tcount if _re_nomadic else _re_active.get(_res, 0)
+
+            overall_total_modifiers = parse_meta_modifiers(target, overall_total_modifiers)
+
+            if target.get("infamy", 0) >= 50:
+                overall_total_modifiers["defensive_pact_slots"] = overall_total_modifiers.get("defensive_pact_slots", 0) - 1
+                overall_total_modifiers["military_alliance_slots"] = overall_total_modifiers.get("military_alliance_slots", 0) - 1
+
+            _apply_vassal_tribute_modifiers(target, overall_total_modifiers)
+
             calculated_values["stability_loss_chance"] = compute_field(
                 "stability_loss_chance", target, schema_properties.get("stability_loss_chance", {}).get("base_value", 0), schema_properties.get("stability_loss_chance", {}),
                 overall_total_modifiers
