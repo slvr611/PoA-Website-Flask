@@ -133,6 +133,27 @@
       </select>
     </div>
 
+    <div class="de-row">
+      <label>Placement</label>
+      <div style="display:flex;gap:1.5rem;">
+        <label style="display:flex;align-items:center;gap:0.3rem;min-width:unset;cursor:pointer;">
+          <input type="checkbox" name="allow_multiple" {% if item and item.allow_multiple %}checked{% endif %}>
+          Allow Multiple
+        </label>
+        <label style="display:flex;align-items:center;gap:0.3rem;min-width:unset;cursor:pointer;">
+          <input type="checkbox" name="free_placement" {% if item and item.free_placement %}checked{% endif %}>
+          Free Placement
+        </label>
+      </div>
+    </div>
+
+    <div class="de-row">
+      <label>Map Count</label>
+      <input name="map_count" type="number" min="1" max="10" class="form-control" style="max-width:80px;"
+             value="{{ item.map_count if item and item.map_count else 1 }}">
+      <span style="font-size:0.75rem;color:#888;">Tiles placed on the map per build (default 1)</span>
+    </div>
+
     <div class="de-row-block">
       <label>Description</label>
       <textarea name="description" class="form-control" rows="3" style="width:100%;">{{ item.description if item else '' }}</textarea>

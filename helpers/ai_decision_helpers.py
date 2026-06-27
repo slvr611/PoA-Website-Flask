@@ -1469,7 +1469,10 @@ def score_buildable_districts(old_nation, state, need_weights, market_buy_prices
 
     for dd in defs:
         dk = dd.get("key", "")
-        if not dk or dk in state["existing_def_keys"]:
+        if not dk:
+            continue
+        # Skip already-built districts unless allow_multiple is set
+        if dk in state["existing_def_keys"] and not dd.get("allow_multiple", False):
             continue
 
         if not check_district_requirements(req_check_nation, dd):
@@ -1489,9 +1492,33 @@ def score_buildable_districts(old_nation, state, need_weights, market_buy_prices
         job_value, unlocked_jobs = _unlocked_jobs_value(dk, state, baseline_weights, market_buy_prices, nation_jobs)
 
         # Node value: score the best available node on legal tiles for this district
+        # For free_placement districts, use city-style tile scoring (any owned tile)
         node_value = 0.0
         node_desc = ""
+        is_free_placement = dd.get("free_placement", False)
         tile_req = dd.get("tile_requirement", "land")
+
+        map_count = dd.get("map_count", 1)
+        if is_free_placement and tile_req in ("land", "coastal"):
+            _bp = market_buy_prices if market_buy_prices else _base_prices()
+            if map_count <= 1:
+                tile_coord, tile_score, tile_rationale = _score_best_city_tile(
+                    legal_placement, dk, baseline_weights, _bp
+                )
+                if tile_score > 0:
+                    node_value = tile_score
+                    node_desc = f"placement ({tile_coord[0]},{tile_coord[1]}): {tile_rationale}" if tile_coord else ""
+            else:
+                # Score all tiles and take the best N
+                all_tile_scores = _score_all_city_tiles(
+                    legal_placement, dk, baseline_weights, _bp
+                )
+                top_tiles = all_tile_scores[:map_count]
+                if top_tiles:
+                    node_value = sum(ts[1] for ts in top_tiles)
+                    tile_descs = [f"({ts[0][0]},{ts[0][1]})" for ts in top_tiles if ts[0]]
+                    node_desc = f"{map_count} placements: {', '.join(tile_descs)} +{node_value:.1f}"
+
         if tile_req == "water":
             available_nodes = legal_placement.get("water_nodes", [])
         elif tile_req == "coastal":
@@ -1551,6 +1578,22 @@ def score_buildable_districts(old_nation, state, need_weights, market_buy_prices
                     node_desc += f"; metropolis adj +{metro_adj_bonus:.1f}"
                 else:
                     node_desc = f"metropolis adj +{metro_adj_bonus:.1f}"
+
+        # Admin range bonus: districts granting +administration are more valuable
+        # when the nation has OOR tiles that more admin would bring into range
+        oor_count = len(legal_placement.get("oor_tiles", set()))
+        if oor_count > 0:
+            admin_grant = 0
+            for m in dd.get("modifiers", []):
+                if m.get("modifier_type") == "administration":
+                    admin_grant += m.get("value", 0)
+            if admin_grant > 0:
+                admin_bonus = min(10, oor_count * 0.3) * admin_grant
+                node_value += admin_bonus
+                if node_desc:
+                    node_desc += f"; +admin ({oor_count} OOR tiles, +{admin_bonus:.1f})"
+                else:
+                    node_desc = f"+admin ({oor_count} OOR tiles, +{admin_bonus:.1f})"
 
         market_bonus = sum(
             need_weights.get(r, 0.5) * v
@@ -1771,64 +1814,82 @@ def _estimate_city_pop_cap(city_type, cities_data, nation):
     return total
 
 
-def _score_best_city_tile(legal_placement, city_type, need_weights, prices):
-    """Find the best legal land tile to place a city on, scoring by node value.
+def _score_tile(tile_info, city_type, need_weights, prices, luxury_set):
+    """Score a single tile for city/district placement by node value,
+    admin range, and metropolis bonuses."""
+    score = 0
+    parts = []
 
-    Nodes on the tile count as 2x production, adjacent nodes as 1x.
-    For a metropolis, also score adjacent water/building tiles for the pop cap bonus.
+    node_on = tile_info.get("node")
+    if node_on:
+        is_lux = node_on in luxury_set
+        prod = 1 if is_lux else 2
+        w = need_weights.get(node_on, 1.3)
+        val = w * prod * 2 * _price_scale(node_on, prices)
+        score += val
+        parts.append(f"{node_on} on tile (+{val:.1f})")
+
+    for adj_node in tile_info.get("adj_nodes", []):
+        is_lux = adj_node in luxury_set
+        prod = 1 if is_lux else 2
+        w = need_weights.get(adj_node, 1.3)
+        val = w * prod * _price_scale(adj_node, prices)
+        score += val
+
+    if tile_info.get("adj_nodes"):
+        parts.append(f"{len(tile_info['adj_nodes'])} adj nodes")
+
+    # Range extension bonus: value OOR tiles this building would bring into range
+    nearby_oor = tile_info.get("nearby_oor", 0)
+    if nearby_oor > 0:
+        range_val = nearby_oor * 0.5
+        score += range_val
+        parts.append(f"extends range to {nearby_oor} tiles (+{range_val:.1f})")
+        # Bonus for OOR nodes that become active
+        for oor_node in tile_info.get("nearby_oor_nodes", []):
+            is_lux = oor_node in luxury_set
+            prod = 1 if is_lux else 2
+            w = need_weights.get(oor_node, 1.3)
+            val = w * prod * _price_scale(oor_node, prices) * 0.5
+            score += val
+
+    if city_type == "metropolis":
+        adj_count = tile_info.get("adj_water_or_building", 0)
+        if adj_count >= 5:
+            metro_pop = 3
+        elif adj_count >= 3:
+            metro_pop = 2
+        elif adj_count >= 1:
+            metro_pop = 1
+        else:
+            metro_pop = 0
+        score += metro_pop * 5
+        if metro_pop > 0:
+            parts.append(f"metropolis +{metro_pop} pop cap ({adj_count} adj)")
+
+    return tile_info["coord"], score, ", ".join(parts) if parts else ""
+
+
+def _score_all_city_tiles(legal_placement, city_type, need_weights, prices):
+    """Score all legal land tiles, return sorted list of (coord, score, rationale)."""
+    luxury_set = set(_luxury_keys())
+    results = []
+    for tile_info in legal_placement.get("legal_land_tiles", []):
+        coord, score, rationale = _score_tile(tile_info, city_type, need_weights, prices, luxury_set)
+        if score > 0:
+            results.append((coord, score, rationale))
+    results.sort(key=lambda x: x[1], reverse=True)
+    return results
+
+
+def _score_best_city_tile(legal_placement, city_type, need_weights, prices):
+    """Find the best legal land tile to place a city/district on.
     Returns (best_coord, best_score, rationale) or (None, 0, "").
     """
-    luxury_set = set(_luxury_keys())
-    best_coord = None
-    best_score = 0
-    best_rationale = ""
-
-    for tile_info in legal_placement.get("legal_land_tiles", []):
-        score = 0
-        parts = []
-
-        # Node on the tile itself (worth 2x production)
-        node_on = tile_info.get("node")
-        if node_on:
-            is_lux = node_on in luxury_set
-            prod = 1 if is_lux else 2
-            w = need_weights.get(node_on, 1.3)
-            val = w * prod * 2 * _price_scale(node_on, prices)
-            score += val
-            parts.append(f"{node_on} on tile (+{val:.1f})")
-
-        # Adjacent nodes (worth 1x production)
-        for adj_node in tile_info.get("adj_nodes", []):
-            is_lux = adj_node in luxury_set
-            prod = 1 if is_lux else 2
-            w = need_weights.get(adj_node, 1.3)
-            val = w * prod * _price_scale(adj_node, prices)
-            score += val
-
-        if tile_info.get("adj_nodes"):
-            parts.append(f"{len(tile_info['adj_nodes'])} adj nodes")
-
-        # Metropolis bonus: more adjacent water/buildings = more pop cap
-        if city_type == "metropolis":
-            adj_count = tile_info.get("adj_water_or_building", 0)
-            if adj_count >= 5:
-                metro_pop = 3
-            elif adj_count >= 3:
-                metro_pop = 2
-            elif adj_count >= 1:
-                metro_pop = 1
-            else:
-                metro_pop = 0
-            score += metro_pop * 5
-            if metro_pop > 0:
-                parts.append(f"metropolis +{metro_pop} pop cap ({adj_count} adj)")
-
-        if score > best_score:
-            best_score = score
-            best_coord = tile_info["coord"]
-            best_rationale = ", ".join(parts) if parts else ""
-
-    return best_coord, best_score, best_rationale
+    results = _score_all_city_tiles(legal_placement, city_type, need_weights, prices)
+    if results:
+        return results[0]
+    return None, 0, ""
 
 
 def _select_best_city(old_nation, state, exclude_types=None):
@@ -1873,7 +1934,6 @@ def _select_best_city(old_nation, state, exclude_types=None):
     city_scores.sort(key=lambda x: (x[2], -x[4]), reverse=True)
 
     if open_city_slots > 0 and city_scores:
-        # Score tile placement for each candidate and pick the best combo
         from calculations.field_calculations import _compute_legal_placement
         legal = _compute_legal_placement(old_nation)
         prices = _base_prices()
@@ -1882,9 +1942,25 @@ def _select_best_city(old_nation, state, exclude_types=None):
         )
 
         best = city_scores[0]
-        tile_coord, tile_score, tile_rationale = _score_best_city_tile(
-            legal, best[0], baseline_w, prices
-        )
+        has_city = len(existing_cities) > 0 and any(c.get("type") for c in existing_cities)
+        capital_coord = legal.get("capital_coord")
+
+        if not has_city:
+            # First city must be placed on the capital.
+            # If no capital exists, pick the best tile as both capital and city site.
+            if capital_coord:
+                tile_coord = capital_coord
+                tile_rationale = "capital (first city)"
+            else:
+                tile_coord, _, tile_rationale = _score_best_city_tile(
+                    legal, best[0], baseline_w, prices
+                )
+                tile_rationale = f"auto-capital: {tile_rationale}" if tile_rationale else "auto-capital"
+        else:
+            tile_coord, _, tile_rationale = _score_best_city_tile(
+                legal, best[0], baseline_w, prices
+            )
+
         placement_info = ""
         if tile_coord:
             placement_info = f" tile ({tile_coord[0]},{tile_coord[1]})"
@@ -1901,6 +1977,8 @@ def _select_best_city(old_nation, state, exclude_types=None):
         }
         if tile_coord:
             plan["placement"] = {"q": tile_coord[0], "r": tile_coord[1]}
+            if not capital_coord:
+                plan["set_capital"] = True
         return plan
 
     # No open slots or no new types available — check if we can replace

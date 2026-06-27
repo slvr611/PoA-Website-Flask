@@ -1622,11 +1622,18 @@ def district_duration_tick(old_nation, new_nation, schema):
         source = f"District: {display_name}"
         found = False
         for m in modifiers:
-            if m.get("field") == field_key and m.get("source") == source:
+            if m.get("field") == field_key:
                 m["value"] = m.get("value", 0) + 1
                 found = True
                 result += f"{old_nation.get('name', '?')}: {display_name} session count → {m['value']}\n"
                 break
+            elif m.get("modifier_type") == "district_duration":
+                m_src = (m.get("source") or "").lower()
+                if dk.lower() in m_src or display_name.lower() in m_src:
+                    m["value"] = m.get("value", 0) + 1
+                    found = True
+                    result += f"{old_nation.get('name', '?')}: {display_name} session count → {m['value']} (legacy)\n"
+                    break
         if not found:
             modifiers.append({"field": field_key, "value": 1, "duration": -1, "source": source})
             result += f"{old_nation.get('name', '?')}: {display_name} session count → 1 (new)\n"

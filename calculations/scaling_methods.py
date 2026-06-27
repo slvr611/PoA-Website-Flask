@@ -142,6 +142,8 @@ def per_x_district_sessions(target, scaling_x=1, scaling_extra="", context=None)
     """Count sessions a district (by def_key) has been active.
 
     Reads from nation modifiers with field 'district_sessions_{def_key}'.
+    Also checks for modifiers with modifier_type 'district_duration' whose
+    source contains the district name (legacy/manual format).
     scaling_extra = the district def_key to look up.
     """
     if not scaling_extra:
@@ -150,12 +152,20 @@ def per_x_district_sessions(target, scaling_x=1, scaling_extra="", context=None)
     modifiers = target.get("modifiers", []) or []
     sessions = 0
     for m in modifiers:
-        if isinstance(m, dict) and m.get("field") == field_key:
+        if not isinstance(m, dict):
+            continue
+        if m.get("field") == field_key:
             try:
-                sessions = int(m.get("value", 0))
+                sessions = max(sessions, int(m.get("value", 0)))
             except (TypeError, ValueError):
                 pass
-            break
+        elif m.get("modifier_type") == "district_duration":
+            src = (m.get("source") or "").lower()
+            if scaling_extra.lower() in src:
+                try:
+                    sessions = max(sessions, int(m.get("value", 0)))
+                except (TypeError, ValueError):
+                    pass
     divisor = float(scaling_x) if scaling_x else 1
     return int(sessions / divisor)
 

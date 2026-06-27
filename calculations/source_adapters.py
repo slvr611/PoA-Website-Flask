@@ -255,7 +255,14 @@ class DistrictAdapter:
                 district_node = district.get("node", "")
 
                 # Base modifiers — nation-scoped only
-                dd_mods_list = dd.get("modifiers", [])
+                # Auto-fill scaling_extra for per_x_district_sessions scaling
+                # so the user doesn't have to manually specify the def_key.
+                dd_mods_list = []
+                for _m in dd.get("modifiers", []):
+                    _m_copy = dict(_m)
+                    if _m_copy.get("scaling") == "per_x_district_sessions" and not _m_copy.get("scaling_extra"):
+                        _m_copy["scaling_extra"] = district["def_key"]
+                    dd_mods_list.append(_m_copy)
                 mods = _db_dist_mods_to_dict(dd_mods_list, target_type="nation", target=target)
                 terrain_rules = _extract_terrain_rules_from_list(dd_mods_list, source_label=label)
 
@@ -280,7 +287,12 @@ class DistrictAdapter:
                     for upg_key in unlocked_upgrades:
                         upg = upgrade_map.get(upg_key)
                         if upg:
-                            upg_mods_list = upg.get("modifiers", [])
+                            upg_mods_list = []
+                            for _um in upg.get("modifiers", []):
+                                _um_copy = dict(_um)
+                                if _um_copy.get("scaling") == "per_x_district_sessions" and not _um_copy.get("scaling_extra"):
+                                    _um_copy["scaling_extra"] = district["def_key"]
+                                upg_mods_list.append(_um_copy)
                             upg_mods = _db_dist_mods_to_dict(upg_mods_list, target_type="nation", target=target)
                             for k, v in upg_mods.items():
                                 mods[k] = mods.get(k, 0) + v

@@ -950,9 +950,11 @@ def recalculate_all_objects(data_type):
     """Recalculate all fields for all objects of a given type"""
     db = mongo.db[data_type]
     objects = list(db.find())
-    for object in objects:
-        object = _calculate_and_attach_fields(data_type, object)
-        db.update_one({"_id": object["_id"]}, {"$set": object})
+    for obj in objects:
+        obj = _calculate_and_attach_fields(data_type, obj)
+        obj_id = obj.pop("_id")
+        db.update_one({"_id": obj_id}, {"$set": obj})
+        obj["_id"] = obj_id
 
 def recalculate_object(data_type, object_ref):
     """Recalculate all fields for an object"""
@@ -973,7 +975,8 @@ def recalculate_object(data_type, object_ref):
         search_dict = {"name": object_id}
     else:
         search_dict = {"_id": object_id}
-    db.update_one(search_dict, {"$set": object})
+    save_obj = {k: v for k, v in object.items() if k != "_id"}
+    db.update_one(search_dict, {"$set": save_obj})
 
 def propagate_updates(changed_data_type, changed_object_id, changed_object, reason="Dependency update", _depth=0):
     """Propagate updates to all dependent objects"""

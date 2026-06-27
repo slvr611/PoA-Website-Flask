@@ -229,12 +229,17 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
         district_details = json_data["mercenary_districts"]
         districts = collect_mercenary_districts(target, district_details)
     district_totals = sum_district_totals(districts)
-    # Add DB-driven nation district contributions (def_key districts from district_defs collection)
+    # Add DB-driven nation district contributions (def_key districts from district_defs collection).
+    # Store the SourceContribution objects so _build_unit_tagged_sources can reuse them
+    # instead of recomputing (avoids scaling/target mismatches between the two paths).
+    _district_contributions = []
     if target_data_type in ("nation", "nation_jobs"):
         from calculations.source_adapters import DistrictAdapter as _DA
-        for _dc in _DA.collect(target, schema, modifier_totals, law_totals, external_modifiers_total):
+        _district_contributions = _DA.collect(target, schema, modifier_totals, law_totals, external_modifiers_total)
+        for _dc in _district_contributions:
             for _k, _v in _dc.modifiers.items():
                 district_totals[_k] = district_totals.get(_k, 0) + _v
+
     record_timing("district_calculations_ms", phase_start)
 
     city_totals = {}
@@ -271,7 +276,7 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
         # so that scaling modifiers in the tooltip use the same preliminary counts as
         # collect_external_requirements (line 120) did for the actual calculation.
         _sub = perf_counter()
-        nation_tagged_sources = _build_unit_tagged_sources(target, schema, district_details)
+        nation_tagged_sources = _build_unit_tagged_sources(target, schema, district_details, _district_contributions)
         record_timing("ts_tagged_sources_ms", _sub)
 
         _sub = perf_counter()
@@ -446,8 +451,6 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
         _apply_vassal_tribute_modifiers(target, overall_total_modifiers)
 
     record_timing("capacity_and_meta_modifiers_ms", phase_start)
-
-    #print(overall_total_modifiers)
 
     phase_start = perf_counter()
     for field, field_schema in schema_properties.items():
@@ -1757,8 +1760,11 @@ def _collect_external_labeled(target, schema, target_data_type):
     return tagged
 
 
-def _build_unit_tagged_sources(target, schema, district_details):
+def _build_unit_tagged_sources(target, schema, district_details, district_contributions=None):
     """Build a comprehensive list of labeled modifier sources for nation/unit breakdown.
+
+    district_contributions: pre-computed SourceContribution list from DistrictAdapter.collect.
+    When provided, DB-driven districts are NOT reprocessed — avoids scaling/target mismatches.
 
     Returns list of {"label": str, "modifiers": dict}.  Each entry represents one
     distinct source (a law option, a district, a nation modifier, a technology, a city,
@@ -1806,38 +1812,20 @@ def _build_unit_tagged_sources(target, schema, district_details):
             return [{"requirement": req, "modifiers": mods}]
         return []
 
+    # DB-driven districts: reuse pre-computed SourceContribution objects from
+    # DistrictAdapter.collect (passed in as district_contributions) so that
+    # scaling, target, and auto-fill logic are identical to the calculation path.
+    if district_contributions:
+        for _dc in district_contributions:
+            tagged.append({"label": _dc.label, "modifiers": dict(_dc.modifiers)})
+
     for district in target.get("districts", []):
         if not isinstance(district, dict):
             continue
         district_node = district.get("node", "")
 
         if district.get("def_key"):
-            # DB-driven district — resolve via district_defs collection
-            from calculations.source_adapters import _db_dist_mods_to_dict as _dmd
-            dd = _resolve_def(district)
-            if not dd:
-                continue
-            district_name = dd.get("display_name", district.get("def_key", ""))
-            mods = _dmd(dd.get("modifiers", []), target_type="nation")
-            node_bonus_applied = False
-            for syn in _get_synergies(dd):
-                if _synergy_matches(district_node, syn.get("requirement", "")):
-                    syn_mods = syn.get("modifiers", {})
-                    if isinstance(syn_mods, list):
-                        syn_mods = _dmd(syn_mods, target_type="nation")
-                    mods.update(syn_mods)
-                    if syn.get("node_active", True) and district_node and not node_bonus_applied:
-                        mods[district_node + "_nodes"] = mods.get(district_node + "_nodes", 0) + 1
-                        node_bonus_applied = True
-            if not node_bonus_applied and district_node:
-                mods[district_node + "_nodes"] = mods.get(district_node + "_nodes", 0) + 1
-            for upg_key in district.get("upgrades", []):
-                upg = next((u for u in dd.get("upgrades", []) if u.get("key") == upg_key), None)
-                if upg:
-                    for k, v in _dmd(upg.get("modifiers", []), target_type="nation").items():
-                        mods[k] = mods.get(k, 0) + v
-            if mods:
-                tagged.append({"label": f"District: {district_name}", "modifiers": mods})
+            # Already handled by district_contributions above
             continue
 
         # Legacy type-based district
@@ -2335,6 +2323,11 @@ def _compute_legal_placement(nation):
         "land_nodes": [], "coastal_nodes": [], "water_nodes": [],
         "legal_land_tiles": [],
         "metropolis_coords": [],
+        "capital_coord": None,
+        "oor_tiles": set(),
+        "owned_oor_terrains": {},
+        "owned_oor_nodes": [],
+        "admin_range": 0,
     }
     result = dict(_empty_result)
     try:
@@ -2382,6 +2375,14 @@ def _compute_legal_placement(nation):
                 metropolis_coords.append(coord)
 
         result["metropolis_coords"] = metropolis_coords
+
+        # Find capital tile
+        capital_coord = None
+        for t in owned_tiles:
+            if t.get("capital"):
+                capital_coord = (t["q"], t["r"])
+                break
+        result["capital_coord"] = capital_coord
 
         if not building_coords:
             capital_tile = None
@@ -2445,6 +2446,54 @@ def _compute_legal_placement(nation):
                     "adj_water_or_building": adj_water_or_building,
                 })
 
+        # Compute out-of-range tiles for admin distance awareness
+        admin = nation.get("administration", 1)
+        nomadic = nation.get("government_type", "") in ("Nomadic", "nomadic")
+        admin_range = admin * (4 if nomadic else 2)
+        result["admin_range"] = admin_range
+
+        try:
+            from helpers.hex_map_helpers import compute_admin_range_out_of_range
+            oor = compute_admin_range_out_of_range(nation_name, admin, nomadic, owned_tiles)
+            result["oor_tiles"] = oor
+            # Count OOR terrain and nodes for city placement value estimation
+            oor_terrains = {}
+            oor_nodes = []
+            for coord in oor:
+                t = tile_map.get(coord, "")
+                if t:
+                    oor_terrains[t] = oor_terrains.get(t, 0) + 1
+                n = node_map.get(coord)
+                if n:
+                    oor_nodes.append({"coord": coord, "resource": n})
+            result["owned_oor_terrains"] = oor_terrains
+            result["owned_oor_nodes"] = oor_nodes
+        except Exception:
+            pass
+
+        # Mark each legal land tile as in-range or OOR
+        oor_set = result["oor_tiles"]
+        for tile_info in result["legal_land_tiles"]:
+            tile_info["oor"] = tile_info["coord"] in oor_set
+            # Count OOR owned tiles nearby that a building here would bring into range
+            nearby_oor = 0
+            nearby_oor_nodes = []
+            for nq, nr in _hex_neighbors(*tile_info["coord"]):
+                if (nq, nr) in oor_set:
+                    nearby_oor += 1
+                    n = node_map.get((nq, nr))
+                    if n:
+                        nearby_oor_nodes.append(n)
+                # Check 2nd ring too (rough estimate of range extension)
+                for nq2, nr2 in _hex_neighbors(nq, nr):
+                    if (nq2, nr2) in oor_set and (nq2, nr2) != tile_info["coord"]:
+                        nearby_oor += 1
+                        n = node_map.get((nq2, nr2))
+                        if n:
+                            nearby_oor_nodes.append(n)
+            tile_info["nearby_oor"] = nearby_oor
+            tile_info["nearby_oor_nodes"] = nearby_oor_nodes
+
     except Exception:
         result = dict(_empty_result)
         result["has_land"] = True
@@ -2453,8 +2502,21 @@ def _compute_legal_placement(nation):
     return result
 
 
-def _nation_has_tile_type(nation, tile_requirement):
-    """Check if nation has a legal placement tile matching the requirement."""
+def _nation_has_tile_type(nation, tile_requirement, free_placement=False):
+    """Check if nation has a legal placement tile matching the requirement.
+    If free_placement is True, any owned tile of the right type counts (not just building-adjacent).
+    """
+    if free_placement:
+        territory = nation.get("territory_types", {})
+        if not tile_requirement or tile_requirement == "land":
+            return any(count > 0 for t, count in territory.items() if t not in WATER_TERRAINS)
+        elif tile_requirement == "water":
+            return any(count > 0 for t, count in territory.items() if t in WATER_TERRAINS or t == "river")
+        elif tile_requirement == "coastal":
+            legal = _compute_legal_placement(nation)
+            return legal["has_coastal"]
+        return True
+
     legal = _compute_legal_placement(nation)
     if not tile_requirement or tile_requirement == "land":
         return legal["has_land"]
@@ -2468,7 +2530,8 @@ def _nation_has_tile_type(nation, tile_requirement):
 def check_district_requirements(nation, district_def):
     """Return True if the nation meets all requirements to build the given district definition."""
     tile_req = district_def.get("tile_requirement", "land")
-    if not _nation_has_tile_type(nation, tile_req):
+    free_placement = district_def.get("free_placement", False)
+    if not _nation_has_tile_type(nation, tile_req, free_placement=free_placement):
         return False
 
     tier = district_def.get("tier", 1)
@@ -2484,11 +2547,13 @@ def check_district_requirements(nation, district_def):
         if not has_prev:
             return False
 
-    if any(
-        isinstance(inst, dict) and _resolve_def(inst).get("key") == district_def.get("key")
-        for inst in nation.get("districts", [])
-    ):
-        return False
+    # Uniqueness check — skip if allow_multiple is set
+    if not district_def.get("allow_multiple", False):
+        if any(
+            isinstance(inst, dict) and _resolve_def(inst).get("key") == district_def.get("key")
+            for inst in nation.get("districts", [])
+        ):
+            return False
 
     reqs = _db_prerequisites_to_requirements(district_def.get("requirements", []))
     return _check_requirements_dict(nation, reqs)
