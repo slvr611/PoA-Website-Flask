@@ -34,7 +34,7 @@
         <select id="nation-selector">
             <option value="">— select a nation —</option>
             {% for n in nations %}
-            <option value="{{ n.id }}" data-race="{{ n.race }}" data-culture="{{ n.culture }}" data-religion="{{ n.religion }}">{{ n.name }}</option>
+            <option value="{{ n.id }}" data-race="{{ n.race }}" data-culture="{{ n.culture }}" data-religion="{{ n.religion }}" data-pop-count="{{ n.pop_count }}">{{ n.name }} ({{ n.pop_count }} pops)</option>
             {% endfor %}
         </select>
         <button type="button" onclick="addNation()">Add Nation</button>
@@ -112,6 +112,7 @@ function addNation() {
     const defaultRace = sel.options[sel.selectedIndex].dataset.race || '';
     const defaultCulture = sel.options[sel.selectedIndex].dataset.culture || '';
     const defaultReligion = sel.options[sel.selectedIndex].dataset.religion || '';
+    const popCount = sel.options[sel.selectedIndex].dataset.popCount || '0';
 
     document.getElementById('empty-state').style.display = 'none';
 
@@ -127,7 +128,7 @@ function addNation() {
         section.dataset.defaultReligion = defaultReligion;
         section.innerHTML = `
             <div class="nation-section-header">
-                <h3>${nationName}</h3>
+                <h3>${nationName} <span style="font-size:0.8em;color:#888;font-weight:normal;">(${popCount} pops)</span></h3>
                 <button type="button" onclick="removeNationSection(this)">Remove</button>
             </div>
             <table>

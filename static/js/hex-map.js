@@ -2497,14 +2497,26 @@ class HexMapViewer {
                 terrain:  val('terrain') || 'disconnected',
                 owner:    val('owner'),
                 node,
-                city,
-                district,
-                wonder,
-                bandit_camp,
                 capital,
                 portal,
                 route,
             };
+            // Only include building fields if they differ from the original tile,
+            // so that saving a tile (e.g. to change the node) doesn't wipe
+            // existing buildings whose async-loaded selects weren't touched.
+            const _origTile = this.tiles.get(`${q},${r}`) || {};
+            const _origCity    = _origTile.city?.id    || null;
+            const _origDist    = _origTile.district?.id || null;
+            const _origWonder  = _origTile.wonder?.id  || null;
+            const _origBandit  = _origTile.bandit_camp?.name || null;
+            const _newCityId   = city?.id   || null;
+            const _newDistId   = district?.id || null;
+            const _newWonderId = wonder?.id || null;
+            const _newBanditN  = bandit_camp?.name || null;
+            if (_newCityId   !== _origCity)   update.city = city;
+            if (_newDistId   !== _origDist)   update.district = district;
+            if (_newWonderId !== _origWonder) update.wonder = wonder;
+            if (_newBanditN  !== _origBandit) update.bandit_camp = bandit_camp;
 
             const key = `${q},${r}`;
 

@@ -37,9 +37,10 @@ def pops_bulk_create():
             "race": str(n.get("primary_race", "")),
             "culture": str(n.get("primary_culture", "")),
             "religion": str(n.get("primary_religion", "")),
+            "pop_count": n.get("pop_count", 0),
         }
         for n in mongo.db.nations.find(
-            {}, {"_id": 1, "name": 1, "primary_race": 1, "primary_culture": 1, "primary_religion": 1}
+            {}, {"_id": 1, "name": 1, "primary_race": 1, "primary_culture": 1, "primary_religion": 1, "pop_count": 1}
         ).sort("name", ASCENDING)
     ]
     races = _sorted_options("races")
