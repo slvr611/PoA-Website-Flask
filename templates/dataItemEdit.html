@@ -1,5 +1,6 @@
 {% extends "layout.html" %}
-{% from "_modifier_macros.html" import modifier_table with context %}
+{% from "_modifier_macros.html" import modifier_table, modifier_shared_js with context %}
+{{ modifier_shared_js() }}
 
 {% block title %}Edit {{ title }}{% endblock %}
 
@@ -214,36 +215,6 @@
 			opts += '<option value="' + key + '" ' + (key === sel ? 'selected' : '') + '>' + st.name + '</option>';
 		}
 		return opts;
-	}
-
-	function onScalingChange(select) {
-		const row = select.closest('tr') || select.closest('div');
-		if (!row) return;
-		const scalingKey = select.value;
-		const meta = SCALING_TYPES[scalingKey] || {};
-		const xField = row.querySelector('.modifier-scaling-x-field');
-		const extraField = row.querySelector('.modifier-scaling-extra-field');
-		const maxField = row.querySelector('.modifier-max-field');
-		if (xField) xField.style.display = meta.has_x ? '' : 'none';
-		if (maxField) maxField.style.display = scalingKey === 'flat' ? 'none' : '';
-		if (extraField) {
-			const dd = meta.has_dropdown || '';
-			extraField.style.display = dd ? '' : 'none';
-			if (dd) {
-				const el = extraField.querySelector('select') || extraField.querySelector('input[type="hidden"]');
-				const curVal = el ? el.value : '';
-				const nameAttr = el ? el.name : '';
-				const idAttr = el ? el.id : '';
-				let html = '';
-				if (dd === 'terrain') html = '<option value="">-- Terrain --</option>' + ALL_TERRAINS.map(t => `<option value="${t.key}"${t.key===curVal?' selected':''}>${t.name}</option>`).join('');
-				else if (dd === 'district_category') html = '<option value="">-- Category --</option>' + ALL_DISTRICT_CATEGORIES.map(c => `<option value="${c.key}"${c.key===curVal?' selected':''}>${c.name}</option>`).join('');
-				else if (dd === 'resource') html = '<option value="">-- Resource --</option>' + ALL_RESOURCES.map(r => `<option value="${r.key}"${r.key===curVal?' selected':''}>${r.name}</option>`).join('');
-				else if (dd === 'unit_subtype') html = ['all','infantry','cavalry','ranged','magical','mundane'].map(o => `<option value="${o}"${o===curVal?' selected':''}>${o.charAt(0).toUpperCase()+o.slice(1)}</option>`).join('');
-				else if (dd === 'vassal_type') html = ['all','Enclave','Martial','Mercantile','Protectorate','Provincial','Tributary'].map(o => `<option value="${o}"${o===curVal?' selected':''}>${o}</option>`).join('');
-				else if (dd === 'district_def') html = '<option value="">-- District --</option>' + (typeof ALL_DISTRICT_DEFS !== 'undefined' ? ALL_DISTRICT_DEFS : []).map(d => `<option value="${d.key}"${d.key===curVal?' selected':''}>${d.display_name}</option>`).join('');
-				if (html) extraField.innerHTML = `<select class="form-control" name="${nameAttr}" id="${idAttr}">${html}</select>`;
-			}
-		}
 	}
 
 	function onScopeChange(select) {
@@ -480,6 +451,7 @@
 				onchange="onScalingChange(this)">
 				${buildScalingOptions('flat')}
 			</select><small class="modifier-scaling-x-field" style="display:none">Per <input type="number" step="any" class="form-control d-inline" style="width:70px" placeholder="1" name="${fieldName}-${currentCount}-scaling_x" id="${fieldName}-${currentCount}-scaling_x" value=""></small><small class="modifier-scaling-extra-field" style="display:none"><input type="hidden" name="${fieldName}-${currentCount}-scaling_extra" id="${fieldName}-${currentCount}-scaling_extra" value=""></small><small class="form-text text-muted modifier-max-field" style="display:none">Max: <input type="number" step="any" class="form-control d-inline" style="width:80px" placeholder="None" name="${fieldName}-${currentCount}-max_value" id="${fieldName}-${currentCount}-max_value"></small>`;
+			const conditionHtml = buildConditionHTML(fieldName, currentCount);
 			newRow.innerHTML = `
 				<td>
 					${typeSelect}
@@ -490,7 +462,7 @@
 					<input type="number" step="any" class="form-control" name="${fieldName}-${currentCount}-value" id="${fieldName}-${currentCount}-value" value="1">
 					<small class="form-text text-muted modifier-value-hint" style="display:none">Decimal (0.1 = 10%)</small>
 				</td>
-				<td>${scalingSelect}</td>
+				<td>${scalingSelect}${conditionHtml}</td>
 				<td><input type="number" class="form-control" name="${fieldName}-${currentCount}-duration" id="${fieldName}-${currentCount}-duration" value="-1"></td>
 				<td><input type="text" class="form-control" name="${fieldName}-${currentCount}-source" id="${fieldName}-${currentCount}-source"></td>
 				<td><span class="drag-handle">&#8942;&#8942;</span>

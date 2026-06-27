@@ -1,5 +1,6 @@
 {% extends "layout.html" %}
-{% from "_modifier_macros.html" import modifier_table with context %}
+{% from "_modifier_macros.html" import modifier_table, modifier_shared_js with context %}
+{{ modifier_shared_js() }}
 
 {% block title %}{{ title }}{% endblock %}
 
@@ -336,6 +337,7 @@ function addToArray(fieldName) {
 		onchange="onScalingChange(this)">
 		${buildScalingOptions('flat')}
 	</select><small class="form-text text-muted modifier-max-field" style="display:none">Max: <input type="number" step="any" class="form-control d-inline" style="width:80px" placeholder="None" name="${fieldName}-${currentCount}-max_value" id="${fieldName}-${currentCount}-max_value"></small>`;
+	const conditionHtml = buildConditionHTML(fieldName, currentCount);
 	newRow.innerHTML = `
 		<td>
 			${typeSelect}
@@ -346,7 +348,7 @@ function addToArray(fieldName) {
 			<input type="number" step="any" class="form-control" name="${fieldName}-${currentCount}-value" id="${fieldName}-${currentCount}-value" value="1">
 			<small class="form-text text-muted modifier-value-hint" style="display:none">Decimal (0.1 = 10%)</small>
 		</td>
-		<td>${scalingSelect}</td>
+		<td>${scalingSelect}${conditionHtml}</td>
 		<td><input type="number" class="form-control" name="${fieldName}-${currentCount}-duration" id="${fieldName}-${currentCount}-duration" value="-1"></td>
 		<td><input type="text" class="form-control" name="${fieldName}-${currentCount}-source" id="${fieldName}-${currentCount}-source"></td>
 		<td><span class="drag-handle">&#8942;&#8942;</span>

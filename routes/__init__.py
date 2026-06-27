@@ -138,6 +138,8 @@ def inject_modifier_data():
         {"key": "hp", "name": "HP"},
         {"key": "defense", "name": "Defense"},
         {"key": "attack", "name": "Attack"},
+        {"key": "armor", "name": "Armor"},
+        {"key": "range", "name": "Range"},
     ]
 
     all_visibility_targets = [
