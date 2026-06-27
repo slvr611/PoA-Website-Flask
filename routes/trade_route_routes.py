@@ -94,8 +94,8 @@ def propose_trade_route():
         return redirect(request.referrer or url_for("base_routes.index"))
 
     # Compute delay
-    nation_a_doc = mongo.db.nations.find_one({"name": proposer}, {"trade_speed": 1, "temperament": 1, "export_slots": 1, "import_slots": 1})
-    nation_b_doc = mongo.db.nations.find_one({"name": acceptor}, {"trade_speed": 1})
+    nation_a_doc = mongo.db.nations.find_one({"name": proposer}, {"trade_speed": 1, "temperament": 1, "export_slots": 1, "import_slots": 1, "players": 1})
+    nation_b_doc = mongo.db.nations.find_one({"name": acceptor}, {"trade_speed": 1, "temperament": 1, "players": 1})
     speed_a = (nation_a_doc or {}).get("trade_speed") or 7
     speed_b = (nation_b_doc or {}).get("trade_speed") or 7
     delay = compute_delay(dist, speed_a, speed_b)
@@ -140,8 +140,26 @@ def propose_trade_route():
         "proposal_note": proposal_note,
     }
 
-    is_ai = (nation_a_doc or {}).get("temperament", "Player") != "Player"
-    if is_ai:
+    # Check if either nation is AI (not assigned to a player).
+    # A nation is "AI" if it has no ruling character with a player, and no
+    # entries in its players array.
+    def _is_ai_nation(nation_doc):
+        if not nation_doc:
+            return True
+        if nation_doc.get("players"):
+            return False
+        nid = str(nation_doc.get("_id", ""))
+        if nid:
+            char = mongo.db.characters.find_one({
+                "ruling_nation_org": nid,
+                "player": {"$exists": True, "$ne": None, "$ne": ""},
+            }, {"_id": 1})
+            if char:
+                return False
+        return True
+
+    involves_ai = _is_ai_nation(nation_a_doc) or _is_ai_nation(nation_b_doc)
+    if involves_ai:
         from helpers.change_helpers import request_change
         change_reason = f"Trade route proposed by {proposer} to {acceptor}"
         if proposal_note:
@@ -155,7 +173,7 @@ def propose_trade_route():
             reason=change_reason,
         )
         if change_id:
-            flash(f"Trade route proposal for AI nation {proposer} submitted for moderator approval (change #{change_id}).", "info")
+            flash(f"Trade route involving an AI nation submitted for moderator approval (change #{change_id}).", "info")
         return redirect(request.referrer or url_for("nation_routes.nation_item", item_ref=proposer))
 
     mongo.db.trade_routes.insert_one(route_doc)

@@ -237,8 +237,26 @@ def _nations_share_market(nation_a, nation_b):
 
 
 def _slot_cost_for_direction(resources, slot_capacity):
-    """Total export/import slots consumed by a list of {resource, quantity} entries."""
-    return sum(math.ceil(e["quantity"] / slot_capacity) for e in resources if e.get("quantity", 0) > 0)
+    """Total export/import slots consumed by a list of {resource, quantity} entries.
+
+    Regular resources use slot_capacity units per slot.
+    Money: each resource slot can carry $100 of money for free. Any remaining
+    money beyond what resource slots cover costs $1000 per additional slot.
+    Standalone money (no resources) also costs $1000 per slot.
+    """
+    resource_entries = [e for e in resources if e.get("quantity", 0) > 0 and e.get("resource") != "money"]
+    money_entry = next((e for e in resources if e.get("resource") == "money" and e.get("quantity", 0) > 0), None)
+
+    resource_slots = sum(math.ceil(e["quantity"] / slot_capacity) for e in resource_entries)
+
+    if money_entry:
+        money_amount = money_entry["quantity"]
+        free_money = resource_slots * 100
+        remaining_money = max(0, money_amount - free_money)
+        money_slots = math.ceil(remaining_money / 1000) if remaining_money > 0 else 0
+        return resource_slots + money_slots
+
+    return resource_slots
 
 
 def count_route_slots(nation_name, statuses=("active", "ending", "pending")):
