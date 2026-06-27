@@ -33,7 +33,7 @@ def _build_district_def_form_extras(item=None):
         key=lambda x: x["display_name"]
     )
 
-    all_resources = [
+    all_resources = [{"key": "money", "name": "Money"}] + [
         {"key": r.get("key", ""), "name": r.get("name", "")}
         for category in ("general_resources", "unique_resources", "luxury_resources")
         for r in json_data.get(category, [])
