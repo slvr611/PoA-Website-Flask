@@ -375,7 +375,8 @@ def global_modifiers():
                           schema=category_data["global_modifiers"]["schema"],
                           field_tiers=None,
                           visibility_level=None,
-                          visibility_bypassed=False)
+                          visibility_bypassed=False,
+                          json_data=json_data)
 
 @admin_tool_routes.route('/global_modifiers/edit/global_modifiers', methods=['GET'])
 @admin_required
