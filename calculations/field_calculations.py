@@ -126,11 +126,11 @@ def _build_nation_calc_cache(target):
                     adj_count += 1
                 elif nb.get("terrain", "") in _WATER_TERRAINS:
                     adj_count += 1
-            if adj_count >= 5:
+            if adj_count >= 6:
                 metropolis_bonus += 3
-            elif adj_count >= 3:
+            elif adj_count >= 4:
                 metropolis_bonus += 2
-            elif adj_count >= 1:
+            elif adj_count >= 2:
                 metropolis_bonus += 1
 
     culture_count  = len({p.get("culture")  for p in pops if p.get("culture")})
@@ -3606,6 +3606,15 @@ def _build_computed_contributions(
         if storage_income:
             contribs.append(SourceContribution(label="Stockpile", source_type="computed",
                                                modifiers={"money_income": storage_income}))
+
+    # ── Metropolis adjacency bonus ─────────────────────────────────────────────
+    _metro = (target.get("_calc_cache") or {}).get("metropolis_bonus", 0)
+    if _metro > 0:
+        contribs.append(SourceContribution(
+            label="Metropolis Adjacency",
+            source_type="computed",
+            modifiers={"effective_pop_capacity": _metro},
+        ))
 
     # ── Over-capacity penalties (population, territory, routes) ──────────────
     # Must appear BEFORE consumption conversions so that any excess-resource

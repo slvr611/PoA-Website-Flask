@@ -387,6 +387,7 @@ class CityAdapter:
                 mods[city_node + "_nodes"] = mods.get(city_node + "_nodes", 0) + 1
             if mods:
                 contributions.append(SourceContribution(label=city_label, source_type=cls.source_type, modifiers=mods))
+
         return contributions
 
 
