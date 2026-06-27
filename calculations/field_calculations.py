@@ -96,39 +96,20 @@ def _build_nation_calc_cache(target):
     node_tiles = []
     metropolis_bonus = 0
     _all_nation_tiles = {}
-    _node_debug_log = []
     if nation_name:
-        _tile_count = 0
         for tile in mongo.db.hex_map_tiles.find(
             {"owner": nation_name},
             {"q": 1, "r": 1, "terrain": 1, "node": 1, "city": 1, "district": 1, "wonder": 1, "_id": 0}
         ):
-            _tile_count += 1
             coord = (tile.get("q"), tile.get("r"))
             _all_nation_tiles[coord] = tile
             _node = tile.get("node") or {}
             rt = _node.get("resource_type") or _node.get("value") or _node.get("type")
             if rt and rt != "resource":
-                _has_city = bool(tile.get("city"))
-                _has_dist = bool(tile.get("district"))
-                _has_wonder = bool(tile.get("wonder"))
-                _has_building = _has_city or _has_dist or _has_wonder
                 node_tiles.append({
                     "q": coord[0], "r": coord[1], "rt": rt,
-                    "has_building": _has_building,
+                    "has_building": bool(tile.get("city") or tile.get("district") or tile.get("wonder")),
                 })
-                _node_debug_log.append(
-                    f"({coord[0]},{coord[1]}) node={rt} city={tile.get('city')} "
-                    f"dist={tile.get('district')} wonder={tile.get('wonder')} "
-                    f"has_building={_has_building}"
-                )
-        import logging
-        _logger = logging.getLogger(__name__)
-        _logger.warning(
-            "[NODE_DEBUG] %s: %d tiles, %d node tiles. Details: %s",
-            nation_name, _tile_count, len(node_tiles),
-            " | ".join(_node_debug_log) if _node_debug_log else "none"
-        )
 
         from helpers.hex_map_helpers import axial_neighbors as _axial_neighbors
         _WATER_TERRAINS = {"shallow_water", "deep_water"}
@@ -314,11 +295,9 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
         territory_node_counts = {}
         active_node_counts = {}
         _luxury_resource_keys = {r["key"] for r in json_data["luxury_resources"]}
-        _oor_skipped = []
         for _nt in _node_tiles:
             _coord = (_nt["q"], _nt["r"])
             if _coord in _oor_set:
-                _oor_skipped.append(f"({_coord[0]},{_coord[1]}) {_nt['rt']}")
                 continue
             _res = _nt["rt"]
             territory_node_counts[_res] = territory_node_counts.get(_res, 0) + 1
@@ -328,17 +307,6 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
         _cache["out_of_range_tiles"] = out_of_range
         _cache["territory_node_counts"] = territory_node_counts
         _cache["active_node_counts"] = active_node_counts
-
-        import logging
-        _logger = logging.getLogger(__name__)
-        _logger.warning(
-            "[NODE_DEBUG] %s OOR filter: %d node_tiles in cache, %d OOR skipped (%s), "
-            "territory_counts=%s, active_counts=%s, admin=%s, nomadic=%s",
-            _nation_name, len(_node_tiles), len(_oor_skipped),
-            ", ".join(_oor_skipped) if _oor_skipped else "none",
-            territory_node_counts, active_node_counts,
-            _admin_val, _is_nomadic,
-        )
 
         _sub = perf_counter()
         if proximity_rules or out_of_range:
@@ -432,7 +400,6 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
     # nomadic nations every territory node tile is automatically active.
     _cache = target.get("_calc_cache") or {}
     _territory_node_counts = _cache.get("territory_node_counts", {})
-    _node_corrections = []
     if _territory_node_counts:
         _active_node_counts = _cache.get("active_node_counts", {})
         _is_nomadic = law_totals.get("nomadic", 0) > 0
@@ -443,20 +410,8 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
                 _corrected = _territory_count
             else:
                 _corrected = _active_node_counts.get(_res, 0)
-            _node_corrections.append(
-                f"{_res}: before={_current} territory={_territory_count} "
-                f"active={_active_node_counts.get(_res, 0)} -> {_corrected}"
-            )
             if _corrected != _current:
                 overall_total_modifiers[_key] = _corrected
-
-    import logging
-    _logger = logging.getLogger(__name__)
-    _logger.warning(
-        "[NODE_DEBUG] %s correction: %s",
-        target.get("name", "?"),
-        " | ".join(_node_corrections) if _node_corrections else "no node tiles"
-    )
 
     record_timing("build_overall_modifiers_ms", phase_start)
     
@@ -2337,8 +2292,144 @@ def _check_requirements_dict(nation, requirements):
     return True
 
 
+WATER_TERRAINS = {"shallow_water", "deep_water", "hazardous_water"}
+
+
+def _hex_neighbors(q, r):
+    """Return the 6 hex neighbors for even-q offset coordinates."""
+    if q % 2 == 0:
+        return [(q, r-1), (q, r+1), (q-1, r-1), (q-1, r), (q+1, r-1), (q+1, r)]
+    else:
+        return [(q, r-1), (q, r+1), (q-1, r), (q-1, r+1), (q+1, r), (q+1, r+1)]
+
+
+def _compute_legal_placement(nation):
+    """Compute which tile types have legal placement spots and what nodes are available.
+
+    A legal tile is: owned by the nation, has no existing building (district/city/wonder),
+    and is adjacent to at least one tile that DOES have a building.
+
+    Returns {
+        "has_land": bool, "has_coastal": bool, "has_water": bool,
+        "land_nodes": [resource_key, ...],
+        "coastal_nodes": [resource_key, ...],
+        "water_nodes": [resource_key, ...],
+    }.
+    Results are cached on the nation dict as _legal_placement_cache.
+    """
+    if "_legal_placement_cache" in nation:
+        return nation["_legal_placement_cache"]
+
+    result = {
+        "has_land": False, "has_coastal": False, "has_water": False,
+        "land_nodes": [], "coastal_nodes": [], "water_nodes": [],
+    }
+    try:
+        from app_core import mongo
+        nation_name = nation.get("name", "")
+        if not nation_name:
+            nation["_legal_placement_cache"] = result
+            return result
+
+        owned_tiles = list(mongo.db.hex_map_tiles.find(
+            {"owner": nation_name},
+            {"q": 1, "r": 1, "terrain": 1, "district": 1, "city": 1, "wonder": 1,
+             "capital": 1, "node": 1, "_id": 0}
+        ))
+
+        tile_map = {}
+        node_map = {}
+        building_coords = set()
+        water_coords = set()
+
+        for t in owned_tiles:
+            coord = (t["q"], t["r"])
+            terrain = t.get("terrain", "")
+            tile_map[coord] = terrain
+
+            node = t.get("node")
+            if node:
+                node_key = node.get("resource", node) if isinstance(node, dict) else node
+                if node_key and node_key != "none":
+                    node_map[coord] = node_key
+
+            has_building = bool(
+                t.get("district") or t.get("city") or t.get("wonder")
+            )
+            if has_building:
+                building_coords.add(coord)
+            if terrain in WATER_TERRAINS:
+                water_coords.add(coord)
+
+        if not building_coords:
+            capital_tile = None
+            for t in owned_tiles:
+                if t.get("capital"):
+                    capital_tile = (t["q"], t["r"])
+                    break
+            if capital_tile:
+                building_coords.add(capital_tile)
+            else:
+                nation["_legal_placement_cache"] = result
+                return result
+
+        # Legal = empty tile adjacent to a building (or capital if no buildings)
+        for coord, terrain in tile_map.items():
+            if coord in building_coords:
+                continue
+            adjacent_to_building = any(
+                n in building_coords for n in _hex_neighbors(*coord)
+            )
+            if not adjacent_to_building:
+                continue
+
+            node_res = node_map.get(coord)
+            is_water = terrain in WATER_TERRAINS
+            is_coastal = (not is_water) and any(
+                n in water_coords for n in _hex_neighbors(*coord)
+            )
+
+            if is_water:
+                result["has_water"] = True
+                if node_res:
+                    result["water_nodes"].append(node_res)
+            else:
+                result["has_land"] = True
+                if node_res:
+                    result["land_nodes"].append(node_res)
+                if is_coastal:
+                    result["has_coastal"] = True
+                    if node_res:
+                        result["coastal_nodes"].append(node_res)
+
+    except Exception:
+        result = {
+            "has_land": True, "has_coastal": False, "has_water": False,
+            "land_nodes": [], "coastal_nodes": [], "water_nodes": [],
+        }
+
+    nation["_legal_placement_cache"] = result
+    return result
+
+
+def _nation_has_tile_type(nation, tile_requirement):
+    """Check if nation has a legal placement tile matching the requirement."""
+    legal = _compute_legal_placement(nation)
+    if not tile_requirement or tile_requirement == "land":
+        return legal["has_land"]
+    elif tile_requirement == "water":
+        return legal["has_water"]
+    elif tile_requirement == "coastal":
+        return legal["has_coastal"]
+    return True
+
+
 def check_district_requirements(nation, district_def):
     """Return True if the nation meets all requirements to build the given district definition."""
+    tile_req = district_def.get("tile_requirement", "land")
+    if not _nation_has_tile_type(nation, tile_req):
+        return False
+
     tier = district_def.get("tier", 1)
     if tier > 1:
         needed_tier = tier - 1

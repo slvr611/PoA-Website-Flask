@@ -1467,3 +1467,102 @@ def ai_goals_preview():
         luxury_resource_keys=luxury_keys,
         error=error,
     )
+
+
+# ---------------------------------------------------------------------------
+# Bulk Add Modifiers
+# ---------------------------------------------------------------------------
+
+@admin_tool_routes.route("/admin/bulk_modifiers", methods=["GET"])
+@admin_required
+def bulk_modifiers():
+    schema, db = get_data_on_category("nations")
+    nations = list(db.find({}, {"name": 1, "region": 1, "_id": 1}).sort("name", ASCENDING))
+    region_ids = list({ObjectId(n["region"]) for n in nations if n.get("region")})
+    region_names = {
+        str(r["_id"]): r.get("name", "Unknown")
+        for r in mongo.db.regions.find({"_id": {"$in": region_ids}}, {"name": 1})
+    }
+    for n in nations:
+        n["region_name"] = region_names.get(str(n.get("region", "")), "No Region")
+
+    modifier_types = json_data.get("modifier_types", {})
+    scaling_types = json_data.get("scaling_types", {})
+    scope_definitions = json_data.get("scope_definitions", {})
+    return render_template(
+        "bulk_modifiers.html",
+        nations=nations,
+        modifier_types=modifier_types,
+        scaling_types=scaling_types,
+        scope_definitions=scope_definitions,
+        all_resources=json_data.get("general_resources", []) + json_data.get("unique_resources", []),
+        all_jobs=[{"key": k, "name": v.get("display_name", k)} for k, v in json_data.get("jobs", {}).items()],
+        all_terrains=[{"key": k, "name": v.get("display_name", k)} for k, v in json_data.get("terrains", {}).items()],
+    )
+
+
+@admin_tool_routes.route("/admin/bulk_modifiers/apply", methods=["POST"])
+@admin_required
+def bulk_modifiers_apply():
+    from helpers.change_helpers import system_request_change, system_approve_change
+
+    data = request.get_json() or {}
+    modifiers = data.get("modifiers", [])
+    nation_ids = data.get("nation_ids", [])
+
+    if not modifiers or not nation_ids:
+        return jsonify({"error": "No modifiers or nations selected"}), 400
+
+    schema, db = get_data_on_category("nations")
+    updated = 0
+    for nid in nation_ids:
+        try:
+            oid = ObjectId(nid)
+        except Exception:
+            continue
+        nation = db.find_one({"_id": oid})
+        if not nation:
+            continue
+        old_data = deepcopy(nation)
+        new_data = deepcopy(nation)
+        existing = new_data.get("modifiers", [])
+        if not isinstance(existing, list):
+            existing = []
+        for mod in modifiers:
+            clean = {k: v for k, v in mod.items() if v is not None and v != ""}
+            if "value" in clean:
+                try:
+                    clean["value"] = float(clean["value"])
+                    if clean["value"] == int(clean["value"]):
+                        clean["value"] = int(clean["value"])
+                except (ValueError, TypeError):
+                    pass
+            if "duration" in clean:
+                try:
+                    clean["duration"] = int(clean["duration"])
+                except (ValueError, TypeError):
+                    clean["duration"] = -1
+            if "scaling_x" in clean:
+                try:
+                    clean["scaling_x"] = float(clean["scaling_x"])
+                except (ValueError, TypeError):
+                    del clean["scaling_x"]
+            if "max_value" in clean:
+                try:
+                    clean["max_value"] = float(clean["max_value"])
+                except (ValueError, TypeError):
+                    del clean["max_value"]
+            existing.append(clean)
+        new_data["modifiers"] = existing
+        change_id = system_request_change(
+            data_type="nations",
+            item_id=nation["_id"],
+            change_type="Update",
+            before_data=old_data,
+            after_data=new_data,
+            reason="Bulk modifier addition via admin tool",
+        )
+        system_approve_change(change_id)
+        updated += 1
+
+    return jsonify({"ok": True, "updated": updated})

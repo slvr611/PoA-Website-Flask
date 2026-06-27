@@ -192,11 +192,15 @@ def _normalize_def_for_edit(item):
 def _form_to_def(form, existing_key=None, existing_image=None):
     key = (existing_key or form.get("key", "").strip()).lower().replace(" ", "_")
     image = form.get("image", "").strip() or existing_image or ""
+    tile_req = form.get("tile_requirement", "land").strip()
+    if tile_req not in ("land", "coastal", "water"):
+        tile_req = "land"
     doc = {
         "key": key,
         "display_name": form.get("display_name", "").strip(),
         "category": form.get("category", "").strip(),
         "tier": int(form.get("tier", 1)),
+        "tile_requirement": tile_req,
         "description": form.get("description", "").strip(),
         "cost": _parse_cost(form, "cost_"),
         "upkeep": _parse_cost(form, "upkeep_", keys=_UPKEEP_KEYS),

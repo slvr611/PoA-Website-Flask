@@ -127,12 +127,13 @@ def _modifiers_list_to_dict(modifiers: list) -> dict:
     return totals
 
 
-def _db_dist_mods_to_dict(mods_list, target_type: str = "nation") -> dict:
+def _db_dist_mods_to_dict(mods_list, target_type: str = "nation", target: dict = None) -> dict:
     """Convert district modifier list to {field: value}, filtered by scope target_type.
 
     Modifiers with no scope default to the nation. Scoped modifiers are only
     included when their scope's target_type matches `target_type`.
     Terrain-rule modifiers are skipped here; collect them via _extract_terrain_rules_from_list.
+    Pass `target` so that scaling modifiers (e.g. per_x_district_category) resolve correctly.
     """
     from calculations.field_calculations import sum_modifier_totals
     scope_defs = json_data.get("scope_definitions", {})
@@ -151,7 +152,7 @@ def _db_dist_mods_to_dict(mods_list, target_type: str = "nation") -> dict:
             normalized.append(m)
         elif m.get("modifier"):
             normalized.append({"field": m["modifier"], "value": m.get("value", 0)})
-    return sum_modifier_totals(normalized)
+    return sum_modifier_totals(normalized, target)
 
 
 # ---------------------------------------------------------------------------
@@ -255,7 +256,7 @@ class DistrictAdapter:
 
                 # Base modifiers — nation-scoped only
                 dd_mods_list = dd.get("modifiers", [])
-                mods = _db_dist_mods_to_dict(dd_mods_list, target_type="nation")
+                mods = _db_dist_mods_to_dict(dd_mods_list, target_type="nation", target=target)
                 terrain_rules = _extract_terrain_rules_from_list(dd_mods_list, source_label=label)
 
                 # Synergy modifiers
@@ -264,7 +265,7 @@ class DistrictAdapter:
                     if synergy_matches(district_node, syn.get("requirement", "")):
                         syn_mods = syn.get("modifiers", {})
                         if isinstance(syn_mods, list):
-                            syn_mods = _db_dist_mods_to_dict(syn_mods, target_type="nation")
+                            syn_mods = _db_dist_mods_to_dict(syn_mods, target_type="nation", target=target)
                         mods.update(syn_mods)
                         if syn.get("node_active", True) and district_node and not node_bonus_applied:
                             mods[district_node + "_nodes"] = mods.get(district_node + "_nodes", 0) + 1
@@ -280,7 +281,7 @@ class DistrictAdapter:
                         upg = upgrade_map.get(upg_key)
                         if upg:
                             upg_mods_list = upg.get("modifiers", [])
-                            upg_mods = _db_dist_mods_to_dict(upg_mods_list, target_type="nation")
+                            upg_mods = _db_dist_mods_to_dict(upg_mods_list, target_type="nation", target=target)
                             for k, v in upg_mods.items():
                                 mods[k] = mods.get(k, 0) + v
                             terrain_rules.extend(_extract_terrain_rules_from_list(upg_mods_list, source_label=f"{label} ({upg_key})"))

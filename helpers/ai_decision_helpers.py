@@ -1447,6 +1447,10 @@ def score_buildable_districts(old_nation, state, need_weights, market_buy_prices
                 {"def_key": k} for k in newly_built
             ]
 
+    # Pre-compute legal placement tiles with node info for node/synergy scoring
+    from calculations.field_calculations import _compute_legal_placement
+    legal_placement = _compute_legal_placement(req_check_nation)
+
     # --- DB-driven district defs ---
     try:
         defs = list(mongo.db.district_defs.find({}, {"_id": 0}))
@@ -1474,6 +1478,48 @@ def score_buildable_districts(old_nation, state, need_weights, market_buy_prices
 
         job_value, unlocked_jobs = _unlocked_jobs_value(dk, state, need_weights, market_buy_prices, nation_jobs)
 
+        # Node value: score the best available node on legal tiles for this district
+        node_value = 0.0
+        node_desc = ""
+        tile_req = dd.get("tile_requirement", "land")
+        if tile_req == "water":
+            available_nodes = legal_placement.get("water_nodes", [])
+        elif tile_req == "coastal":
+            available_nodes = legal_placement.get("coastal_nodes", [])
+        else:
+            available_nodes = legal_placement.get("land_nodes", [])
+
+        synergies = dd.get("synergies", [])
+        luxury_set = set(_luxury_keys())
+        best_node_value = 0.0
+        best_node_res = ""
+        for node_res in available_nodes:
+            nv = 0.0
+            is_lux = node_res in luxury_set
+            prod_amount = 1 if is_lux else 2
+            w = need_weights.get(node_res, 1.3)
+            nv += w * prod_amount * _price_scale(node_res, market_buy_prices)
+            # Synergy bonus if this node matches
+            for syn in synergies:
+                req = syn.get("requirement", "")
+                matches = False
+                if isinstance(req, list):
+                    matches = node_res in [r.strip() for r in req]
+                elif isinstance(req, str):
+                    matches = node_res == req.strip()
+                if matches and syn.get("modifiers"):
+                    syn_val, _ = _district_modifier_value(
+                        syn["modifiers"], need_weights, market_buy_prices,
+                        state.get("territory_types"), nation_jobs, state,
+                    )
+                    nv += syn_val
+            if nv > best_node_value:
+                best_node_value = nv
+                best_node_res = node_res
+        node_value = best_node_value
+        if best_node_res:
+            node_desc = f"{best_node_res} node +{node_value:.1f}"
+
         market_bonus = sum(
             need_weights.get(r, 0.5) * v
             for r, v in market_buy_prices.items()
@@ -1490,7 +1536,7 @@ def score_buildable_districts(old_nation, state, need_weights, market_buy_prices
             if r != "money"
         ) * 0.05 + (actual_cost.get("money", 0) / max(state["money"] + 1, 1)) * 5
 
-        score = mod_value + job_value + market_bonus - cost_penalty
+        score = mod_value + job_value + node_value + market_bonus - cost_penalty
         if score <= 0:
             continue
 
@@ -1498,6 +1544,8 @@ def score_buildable_districts(old_nation, state, need_weights, market_buy_prices
         if unlocked_jobs:
             job_names = ", ".join(f"{j['name']} ({j['scaled_score']})" for j in unlocked_jobs)
             parts.append(f"unlocks jobs +{job_value:.1f} [{job_names}]")
+        if node_desc:
+            parts.append(node_desc)
         if market_bonus > 0.5:
             parts.append(f"market +{market_bonus:.1f}")
         parts.append(f"cost penalty -{cost_penalty:.1f}")

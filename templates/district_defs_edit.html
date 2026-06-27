@@ -123,6 +123,16 @@
       </div>
     </div>
 
+    <div class="de-row">
+      <label>Tile Requirement</label>
+      {% set tile_req = item.tile_requirement if item and item.tile_requirement else 'land' %}
+      <select name="tile_requirement" class="form-control" style="max-width:180px;">
+        <option value="land" {% if tile_req == 'land' %}selected{% endif %}>Land</option>
+        <option value="coastal" {% if tile_req == 'coastal' %}selected{% endif %}>Coastal</option>
+        <option value="water" {% if tile_req == 'water' %}selected{% endif %}>Water</option>
+      </select>
+    </div>
+
     <div class="de-row-block">
       <label>Description</label>
       <textarea name="description" class="form-control" rows="3" style="width:100%;">{{ item.description if item else '' }}</textarea>

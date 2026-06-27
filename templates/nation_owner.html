@@ -345,7 +345,7 @@
 						</tr>
 						<tr>
 							<th>{{ schema.properties.administration.label }}:</th>
-							<td>{{ pf(nation.administration, pn.get("administration")) }}</td>
+							<td>{{ pfbd(nation.administration, pn.get("administration"), breakdowns.get("administration", []), pbd.get("administration", []), "Administration") }}</td>
 						</tr>
 						<tr>
 							<th>{{ schema.properties.passive_expansion_chance.label }}:</th>
