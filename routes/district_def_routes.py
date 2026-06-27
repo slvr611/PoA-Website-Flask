@@ -109,6 +109,22 @@ def _parse_indexed_modifiers(form, field_prefix):
                 scope = form.get(f"{field_prefix}-{j}-scope", "").strip()
                 if scope:
                     entry["scope"] = scope
+                cond_sc = form.get(f"{field_prefix}-{j}-condition_scaling", "").strip()
+                if cond_sc:
+                    entry["condition_scaling"] = cond_sc
+                    entry["condition_operator"] = form.get(f"{field_prefix}-{j}-condition_operator", ">=").strip()
+                    cond_val = form.get(f"{field_prefix}-{j}-condition_value", "").strip()
+                    if cond_val:
+                        try:
+                            entry["condition_value"] = float(cond_val)
+                        except ValueError:
+                            pass
+                    cond_sx = form.get(f"{field_prefix}-{j}-condition_scaling_x", "").strip()
+                    if cond_sx:
+                        try:
+                            entry["condition_scaling_x"] = float(cond_sx)
+                        except ValueError:
+                            pass
                 mods.append(entry)
             except (ValueError, TypeError):
                 pass
