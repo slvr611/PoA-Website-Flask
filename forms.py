@@ -327,6 +327,7 @@ class ModifierForm(Form):
     source = StringField("Source", validators=[DataRequired()])
     condition_scaling = StringField("Condition Scaling")
     condition_scaling_x = FloatField("Condition Scaling X", validators=[Optional()])
+    condition_scaling_extra = StringField("Condition Scaling Extra")
     condition_operator = StringField("Condition Operator")
     condition_value = FloatField("Condition Value", validators=[Optional()])
 

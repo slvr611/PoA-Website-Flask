@@ -260,7 +260,28 @@
                   {% endfor %}
                 </select>
                 <input type="number" step="any" class="form-control d-inline" style="width:70px;font-size:0.8rem;" placeholder="0" name="{{ field_name }}-{{ idx }}-condition_value" id="{{ field_name }}-{{ idx }}-condition_value" value="{{ item.get('condition_value', '') }}">
-                <input type="hidden" name="{{ field_name }}-{{ idx }}-condition_scaling_x" id="{{ field_name }}-{{ idx }}-condition_scaling_x" value="{{ item.get('condition_scaling_x', 1) }}">
+                <small style="color:#666;">X:</small>
+                <input type="number" step="any" class="form-control d-inline" style="width:60px;font-size:0.8rem;" name="{{ field_name }}-{{ idx }}-condition_scaling_x" id="{{ field_name }}-{{ idx }}-condition_scaling_x" value="{{ item.get('condition_scaling_x', 1) }}">
+                {% set cur_cond_extra = item.get('condition_scaling_extra', '') %}
+                {% set cond_st_meta = scaling_types.get(cur_cond_sc, {}) %}
+                {% if cond_st_meta.get('has_dropdown') == 'district_def' %}
+                <select class="form-control" style="width:auto;font-size:0.8rem;" name="{{ field_name }}-{{ idx }}-condition_scaling_extra" id="{{ field_name }}-{{ idx }}-condition_scaling_extra">
+                  <option value="">-- District --</option>
+                  {% for dd in all_district_defs|default([]) %}<option value="{{ dd.key }}" {% if dd.key == cur_cond_extra %}selected{% endif %}>{{ dd.display_name }}</option>{% endfor %}
+                </select>
+                {% elif cond_st_meta.get('has_dropdown') == 'resource' %}
+                <select class="form-control" style="width:auto;font-size:0.8rem;" name="{{ field_name }}-{{ idx }}-condition_scaling_extra" id="{{ field_name }}-{{ idx }}-condition_scaling_extra">
+                  <option value="">-- Resource --</option>
+                  {% for r in all_resources %}<option value="{{ r.key }}" {% if r.key == cur_cond_extra %}selected{% endif %}>{{ r.name }}</option>{% endfor %}
+                </select>
+                {% elif cond_st_meta.get('has_dropdown') == 'terrain' %}
+                <select class="form-control" style="width:auto;font-size:0.8rem;" name="{{ field_name }}-{{ idx }}-condition_scaling_extra" id="{{ field_name }}-{{ idx }}-condition_scaling_extra">
+                  <option value="">-- Terrain --</option>
+                  {% for t in all_terrains %}<option value="{{ t.key }}" {% if t.key == cur_cond_extra %}selected{% endif %}>{{ t.name }}</option>{% endfor %}
+                </select>
+                {% else %}
+                <input type="hidden" name="{{ field_name }}-{{ idx }}-condition_scaling_extra" id="{{ field_name }}-{{ idx }}-condition_scaling_extra" value="{{ cur_cond_extra }}">
+                {% endif %}
               </div>
             </details>
           </td>
@@ -458,7 +479,28 @@
                   {% endfor %}
                 </select>
                 <input type="number" step="any" class="form-control d-inline" style="width:70px;font-size:0.8rem;" placeholder="0" name="{{ modifier_field.form.condition_value.name }}" id="{{ modifier_field.form.condition_value.id }}" value="{{ modifier_field.form.condition_value.data if modifier_field.form.condition_value.data is not none else '' }}">
-                <input type="hidden" name="{{ modifier_field.form.condition_scaling_x.name }}" id="{{ modifier_field.form.condition_scaling_x.id }}" value="{{ modifier_field.form.condition_scaling_x.data or 1 }}">
+                <small style="color:#666;">X:</small>
+                <input type="number" step="any" class="form-control d-inline" style="width:60px;font-size:0.8rem;" name="{{ modifier_field.form.condition_scaling_x.name }}" id="{{ modifier_field.form.condition_scaling_x.id }}" value="{{ modifier_field.form.condition_scaling_x.data or 1 }}">
+                {% set cur_cond_extra = modifier_field.form.condition_scaling_extra.data or '' %}
+                {% set cond_st_meta = scaling_types.get(cur_cond_sc, {}) %}
+                {% if cond_st_meta.get('has_dropdown') == 'district_def' %}
+                <select class="form-control" style="width:auto;font-size:0.8rem;" name="{{ modifier_field.form.condition_scaling_extra.name }}" id="{{ modifier_field.form.condition_scaling_extra.id }}">
+                  <option value="">-- District --</option>
+                  {% for dd in all_district_defs|default([]) %}<option value="{{ dd.key }}" {% if dd.key == cur_cond_extra %}selected{% endif %}>{{ dd.display_name }}</option>{% endfor %}
+                </select>
+                {% elif cond_st_meta.get('has_dropdown') == 'resource' %}
+                <select class="form-control" style="width:auto;font-size:0.8rem;" name="{{ modifier_field.form.condition_scaling_extra.name }}" id="{{ modifier_field.form.condition_scaling_extra.id }}">
+                  <option value="">-- Resource --</option>
+                  {% for r in all_resources %}<option value="{{ r.key }}" {% if r.key == cur_cond_extra %}selected{% endif %}>{{ r.name }}</option>{% endfor %}
+                </select>
+                {% elif cond_st_meta.get('has_dropdown') == 'terrain' %}
+                <select class="form-control" style="width:auto;font-size:0.8rem;" name="{{ modifier_field.form.condition_scaling_extra.name }}" id="{{ modifier_field.form.condition_scaling_extra.id }}">
+                  <option value="">-- Terrain --</option>
+                  {% for t in all_terrains %}<option value="{{ t.key }}" {% if t.key == cur_cond_extra %}selected{% endif %}>{{ t.name }}</option>{% endfor %}
+                </select>
+                {% else %}
+                <input type="hidden" name="{{ modifier_field.form.condition_scaling_extra.name }}" id="{{ modifier_field.form.condition_scaling_extra.id }}" value="{{ cur_cond_extra }}">
+                {% endif %}
               </div>
             </details>
           </td>
@@ -746,6 +788,7 @@ function buildConditionHTML(fieldName, idx) {
       <input type="number" step="any" class="form-control" style="width:70px;font-size:0.8rem;" name="${fieldName}-${idx}-condition_value" id="${fieldName}-${idx}-condition_value" placeholder="value">
       <small style="color:#666;">X:</small>
       <input type="number" step="any" class="form-control" style="width:60px;font-size:0.8rem;" name="${fieldName}-${idx}-condition_scaling_x" id="${fieldName}-${idx}-condition_scaling_x" value="1">
+      <input type="hidden" name="${fieldName}-${idx}-condition_scaling_extra" id="${fieldName}-${idx}-condition_scaling_extra" value="">
     </div>
   </details>`;
 }
@@ -769,13 +812,12 @@ function onScalingChange(select) {
       const nameAttr = el ? el.name : '';
       const idAttr = el ? el.id : '';
       let html = '';
-      const _t = typeof;
-      if (dd === 'terrain') html = '<option value="">-- Terrain --</option>' + (_t(ALL_TERRAINS)!=='undefined'?ALL_TERRAINS:[]).map(t => `<option value="${t.key}"${t.key===curVal?' selected':''}>${t.name}</option>`).join('');
-      else if (dd === 'district_category') html = '<option value="">-- Category --</option>' + (_t(ALL_DISTRICT_CATEGORIES)!=='undefined'?ALL_DISTRICT_CATEGORIES:[]).map(c => `<option value="${c.key}"${c.key===curVal?' selected':''}>${c.name}</option>`).join('');
-      else if (dd === 'resource') html = '<option value="">-- Resource --</option>' + (_t(ALL_RESOURCES)!=='undefined'?ALL_RESOURCES:[]).map(r => `<option value="${r.key}"${r.key===curVal?' selected':''}>${r.name}</option>`).join('');
+      if (dd === 'terrain') html = '<option value="">-- Terrain --</option>' + (typeof ALL_TERRAINS!=='undefined'?ALL_TERRAINS:[]).map(t => `<option value="${t.key}"${t.key===curVal?' selected':''}>${t.name}</option>`).join('');
+      else if (dd === 'district_category') html = '<option value="">-- Category --</option>' + (typeof ALL_DISTRICT_CATEGORIES!=='undefined'?ALL_DISTRICT_CATEGORIES:[]).map(c => `<option value="${c.key}"${c.key===curVal?' selected':''}>${c.name}</option>`).join('');
+      else if (dd === 'resource') html = '<option value="">-- Resource --</option>' + (typeof ALL_RESOURCES!=='undefined'?ALL_RESOURCES:[]).map(r => `<option value="${r.key}"${r.key===curVal?' selected':''}>${r.name}</option>`).join('');
       else if (dd === 'unit_subtype') html = ['all','infantry','cavalry','ranged','magical','mundane'].map(o => `<option value="${o}"${o===curVal?' selected':''}>${o.charAt(0).toUpperCase()+o.slice(1)}</option>`).join('');
       else if (dd === 'vassal_type') html = ['all','Enclave','Martial','Mercantile','Protectorate','Provincial','Tributary'].map(o => `<option value="${o}"${o===curVal?' selected':''}>${o}</option>`).join('');
-      else if (dd === 'district_def') html = '<option value="">-- District --</option>' + (_t(ALL_DISTRICT_DEFS)!=='undefined'?ALL_DISTRICT_DEFS:[]).map(d => `<option value="${d.key}"${d.key===curVal?' selected':''}>${d.display_name}</option>`).join('');
+      else if (dd === 'district_def') html = '<option value="">-- District --</option>' + (typeof ALL_DISTRICT_DEFS!=='undefined'?ALL_DISTRICT_DEFS:[]).map(d => `<option value="${d.key}"${d.key===curVal?' selected':''}>${d.display_name}</option>`).join('');
       if (html) extraField.innerHTML = `<select class="form-control" name="${nameAttr}" id="${idAttr}">${html}</select>`;
     }
   }

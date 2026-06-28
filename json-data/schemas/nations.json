@@ -1988,13 +1988,15 @@
         "bsonType": "number",
         "label": "Remaining Export Slots",
         "description": "The number of export slots the nation has available this session, after accounting for ongoing trades",
-        "calculated": true
+        "calculated": true,
+        "show_breakdown": true
       },
       "remaining_import_slots": {
         "bsonType": "number",
         "label": "Remaining Import Slots",
         "description": "The number of import slots the nation has available this session, after accounting for ongoing trades",
-        "calculated": true
+        "calculated": true,
+        "show_breakdown": true
       },
       "trade_speed": {
         "bsonType": "number",

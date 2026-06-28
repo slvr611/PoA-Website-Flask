@@ -1,6 +1,5 @@
 {% extends "layout.html" %}
 {% from "_modifier_macros.html" import modifier_table, modifier_shared_js with context %}
-{{ modifier_shared_js() }}
 
 {% block title %}Edit {{ title }}{% endblock %}
 
@@ -564,5 +563,5 @@
 		}
 	}
 </script>
-
+{{ modifier_shared_js() }}
 {% endblock %}

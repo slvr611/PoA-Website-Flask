@@ -65,11 +65,13 @@ def inject_modifier_data():
 
     all_trade_resources = []
     for r in json_data.get("general_resources", []):
-        all_trade_resources.append({"key": r["key"], "name": r["name"]})
+        if r["key"] != "research":
+            all_trade_resources.append({"key": r["key"], "name": r["name"]})
     for r in json_data.get("unique_resources", []):
         all_trade_resources.append({"key": r["key"], "name": r["name"]})
     for r in json_data.get("luxury_resources", []):
         all_trade_resources.append({"key": r["key"], "name": r["name"]})
+    all_trade_resources.append({"key": "money", "name": "Money"})
     all_trade_resources = sorted(all_trade_resources, key=lambda x: x["name"])
 
     all_attributes = [

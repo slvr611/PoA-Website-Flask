@@ -1916,26 +1916,11 @@ def _build_unit_tagged_sources(target, schema, district_details, district_contri
                 cond_label = f" (income > {int(m.get('condition_value', 0))})" if condition_scaling else ""
                 tagged.append({"label": f"City: {city_name}{cond_label}", "modifiers": {field: value}})
 
-    # Nation modifiers — resolve new modifier_type format and fall back to legacy field/key
-    from calculations.source_adapters import _resolve_modifier_type as _res_mod_type
-    scope_defs_fc = json_data.get("scope_definitions", {})
-    for mod in target.get("modifiers", []):
-        scope = mod.get("scope", "")
-        if scope:
-            target_type = scope_defs_fc.get(scope, {}).get("target_type", "")
-            if target_type and target_type != "nation":
-                continue
-        field = _res_mod_type(mod)
-        value = mod.get("value", 0)
-        if field and value:
-            scaling = mod.get("scaling", "flat")
-            scaling_x = float(mod.get("scaling_x") or 1)
-            scaling_extra = mod.get("scaling_extra") or ""
-            if scaling and scaling != "flat":
-                value = value * get_scaling_multiplier(scaling, target, scaling_x=scaling_x, scaling_extra=scaling_extra)
-            source = mod.get("source", "")
-            label = f"Modifier: {source}" if source else "Modifier"
-            tagged.append({"label": label, "modifiers": {field: value}})
+    # Nation modifiers — delegate to ModifierAdapter.collect for consistent
+    # condition checking, scope filtering, and scaling resolution.
+    from calculations.source_adapters import ModifierAdapter as _MA
+    for _mc in _MA.collect(target, target_data_type="nation"):
+        tagged.append({"label": f"Modifier: {_mc.label}", "modifiers": dict(_mc.modifiers)})
 
     # External: rulers, their modifiers, titles, and artifacts
     nation_id = str(target.get("_id", ""))
@@ -1953,7 +1938,7 @@ def _build_unit_tagged_sources(target, schema, district_details, district_contri
                 scope = mod.get("scope", "")
                 if scope:
                     # New format: use scope to determine target type
-                    tgt = scope_defs_fc.get(scope, {}).get("target_type", "")
+                    tgt = json_data.get("scope_definitions", {}).get(scope, {}).get("target_type", "")
                     if tgt != "nation":
                         continue
                     field = _res_mod_type(mod)
@@ -3672,6 +3657,33 @@ def _build_computed_contributions(
             contribs.append(SourceContribution(label="Stockpile", source_type="computed",
                                                modifiers={"money_income": storage_income}))
 
+    # ── Starvation / underfed penalties ──────────────────────────────────────
+    _food_cons_per_pop = 1 + overall_totals.get("food_consumption_per_pop", 0)
+    _food_cons = int(calculated_values.get("pop_count", 0) * _food_cons_per_pop) + overall_totals.get("food_consumption", 0)
+    _excess_food = calculated_values.get("resource_excess", {}).get("food", 0) + target.get("resource_storage", {}).get("food", 0)
+    if _excess_food < -_food_cons / 2:
+        contribs.append(SourceContribution(
+            label="Starving",
+            source_type="computed",
+            modifiers={
+                "stability_loss_chance": 0.50,
+                "land_attack": -2, "land_defense": -2,
+                "naval_attack": -2, "naval_defense": -2,
+                "job_resource_production": -100,
+            },
+        ))
+    elif _excess_food < 0:
+        contribs.append(SourceContribution(
+            label="Underfed",
+            source_type="computed",
+            modifiers={
+                "stability_loss_chance": 0.25,
+                "land_attack": -1, "land_defense": -1,
+                "naval_attack": -1, "naval_defense": -1,
+                "job_resource_production": -1,
+            },
+        ))
+
     # ── Metropolis adjacency bonus ─────────────────────────────────────────────
     _metro = (target.get("_calc_cache") or {}).get("metropolis_bonus", 0)
     if _metro > 0:
@@ -3680,6 +3692,42 @@ def _build_computed_contributions(
             source_type="computed",
             modifiers={"effective_pop_capacity": _metro},
         ))
+
+    # ── Trade route slot usage ────────────────────────────────────────────────
+    _nation_name = target.get("name", "")
+    if _nation_name:
+        import math as _math
+        from helpers.trade_route_helpers import _nations_share_market, _slot_cost_for_direction
+        _trade_routes = list(mongo.db.trade_routes.find(
+            {"$or": [{"nation_a": _nation_name}, {"nation_b": _nation_name}],
+             "status": {"$in": ["active", "ending", "pending"]}},
+            {"nation_a": 1, "nation_b": 1, "resources_a_to_b": 1, "resources_b_to_a": 1, "_id": 0},
+        ))
+        _market_cache = {}
+        for _tr in _trade_routes:
+            _na, _nb = _tr.get("nation_a", ""), _tr.get("nation_b", "")
+            _partner = _nb if _nation_name == _na else _na
+            _ck = (min(_na, _nb), max(_na, _nb))
+            if _ck not in _market_cache:
+                _market_cache[_ck] = _nations_share_market(_na, _nb)
+            _cap = 4 if _market_cache[_ck] else 2
+            if _nation_name == _na:
+                _exp = _slot_cost_for_direction(_tr.get("resources_a_to_b", []), _cap)
+                _imp = _slot_cost_for_direction(_tr.get("resources_b_to_a", []), _cap)
+            else:
+                _exp = _slot_cost_for_direction(_tr.get("resources_b_to_a", []), _cap)
+                _imp = _slot_cost_for_direction(_tr.get("resources_a_to_b", []), _cap)
+            _mods = {}
+            if _exp:
+                _mods["remaining_export_slots"] = -_exp
+            if _imp:
+                _mods["remaining_import_slots"] = -_imp
+            if _mods:
+                contribs.append(SourceContribution(
+                    label=f"Route: {_partner}",
+                    source_type="computed",
+                    modifiers=_mods,
+                ))
 
     # ── Over-capacity penalties (population, territory, routes) ──────────────
     # Must appear BEFORE consumption conversions so that any excess-resource
@@ -4055,6 +4103,16 @@ def compute_nation_breakdowns(
             pg_bd.append({"label": "Mythical Artifacts", "value": min(_pg_mythical, 1)})
         pg_bd.append({"label": "Total", "value": calculated_values.get("prestige_gain", 0)})
         breakdowns["prestige_gain"] = pg_bd
+
+    # remaining_export/import_slots — show base capacity then per-route usage
+    for _slot_field, _cap_field in [("remaining_export_slots", "export_slots"), ("remaining_import_slots", "import_slots")]:
+        _slot_bd = [{"label": f"Total {_cap_field.replace('_', ' ').title()}", "value": calculated_values.get(_cap_field, target.get(_cap_field, 0))}]
+        for _c in contributions:
+            _sv = _c.modifiers.get(_slot_field, 0)
+            if _sv:
+                _slot_bd.append({"label": _c.label, "value": _sv})
+        _slot_bd.append({"label": "Total", "value": calculated_values.get(_slot_field, 0)})
+        breakdowns[_slot_field] = _slot_bd
 
     # Karma — strip _field_bd's premature Total, inject rolling/temporary before the real one
     karma_bd = _field_bd("karma")

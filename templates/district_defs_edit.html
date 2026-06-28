@@ -1,6 +1,5 @@
 {% extends "layout.html" %}
 {% from '_modifier_macros.html' import modifier_table, modifier_shared_js with context %}
-{{ modifier_shared_js() }}
 {% block title %}{{ title }}{% endblock %}
 {% block content %}
 <style>
@@ -822,4 +821,5 @@ document.getElementById('upg-container').addEventListener('click', e => {
 // Before submit: reindex all card field names to consecutive indices
 document.getElementById('de-form').addEventListener('submit', () => { reindexAllCards(); });
 </script>
+{{ modifier_shared_js() }}
 {% endblock %}

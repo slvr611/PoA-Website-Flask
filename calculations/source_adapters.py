@@ -298,6 +298,11 @@ class DistrictAdapter:
                                 mods[k] = mods.get(k, 0) + v
                             terrain_rules.extend(_extract_terrain_rules_from_list(upg_mods_list, source_label=f"{label} ({upg_key})"))
 
+                # District upkeep → resource consumption
+                for resource, value in dd.get("upkeep", {}).items():
+                    if value:
+                        mods[resource + "_consumption"] = mods.get(resource + "_consumption", 0) + int(value)
+
                 if mods or terrain_rules:
                     contributions.append(SourceContribution(label=label, source_type=cls.source_type, modifiers=mods, terrain_rules=terrain_rules))
                 continue
@@ -425,6 +430,7 @@ class ModifierAdapter:
 
     @classmethod
     def collect(cls, target: dict, target_data_type: str = None) -> list:
+        from calculations.scaling_methods import get_scaling_multiplier
         contributions = []
         scope_defs = json_data.get("scope_definitions", {})
         for m in target.get("modifiers", []):
@@ -433,8 +439,32 @@ class ModifierAdapter:
                 target_type = scope_defs.get(scope, {}).get("target_type", target_data_type)
                 if target_type != target_data_type:
                     continue
+            condition_scaling = m.get("condition_scaling") or ""
+            if condition_scaling:
+                try:
+                    cond_x = float(m.get("condition_scaling_x") or 1)
+                    cond_extra = m.get("condition_scaling_extra") or ""
+                    cond_op = m.get("condition_operator") or ">="
+                    cond_val = float(m.get("condition_value") or 0)
+                    actual = get_scaling_multiplier(condition_scaling, target, scaling_x=cond_x, scaling_extra=cond_extra)
+                    met = (
+                        (cond_op == ">=" and actual >= cond_val) or
+                        (cond_op == ">"  and actual >  cond_val) or
+                        (cond_op == "<=" and actual <= cond_val) or
+                        (cond_op == "<"  and actual <  cond_val) or
+                        (cond_op == "==" and actual == cond_val)
+                    )
+                    if not met:
+                        continue
+                except Exception:
+                    continue
             field = _resolve_modifier_type(m)
             value = m.get("value", 0)
+            scaling = m.get("scaling", "flat")
+            scaling_x = float(m.get("scaling_x") or 1)
+            scaling_extra = m.get("scaling_extra") or ""
+            if scaling and scaling != "flat" and target:
+                value = value * get_scaling_multiplier(scaling, target, scaling_x=scaling_x, scaling_extra=scaling_extra)
             source_label = m.get("source", "Custom Modifier")
             if field:
                 contributions.append(SourceContribution(

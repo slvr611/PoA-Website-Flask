@@ -291,12 +291,12 @@
 							</td>
 						</tr>
 						<tr>
-							<th>{{ schema.properties.remaining_import_slots.label }}:</th>
-							<td>{{ pf(nation.remaining_import_slots, pn.get("remaining_import_slots")) }}</td>
+							<th>Import Slots:</th>
+							<td>{{ pfbd(nation.remaining_import_slots, pn.get("remaining_import_slots"), breakdowns.get("remaining_import_slots", []), pbd.get("remaining_import_slots", []), "Remaining Import Slots") }} / {{ pfbd(nation.import_slots, pn.get("import_slots"), breakdowns.get("import_slots", []), pbd.get("import_slots", []), "Import Slots") }}</td>
 						</tr>
 						<tr>
-							<th>{{ schema.properties.remaining_export_slots.label }}:</th>
-							<td>{{ pf(nation.remaining_export_slots, pn.get("remaining_export_slots")) }}</td>
+							<th>Export Slots:</th>
+							<td>{{ pfbd(nation.remaining_export_slots, pn.get("remaining_export_slots"), breakdowns.get("remaining_export_slots", []), pbd.get("remaining_export_slots", []), "Remaining Export Slots") }} / {{ pfbd(nation.export_slots, pn.get("export_slots"), breakdowns.get("export_slots", []), pbd.get("export_slots", []), "Export Slots") }}</td>
 						</tr>
 						<tr>
 							<th>{{ schema.properties.trade_speed.label }}:</th>

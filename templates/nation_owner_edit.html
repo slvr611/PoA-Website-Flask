@@ -1,7 +1,6 @@
 {% extends "layout.html" %}
 {% from "macros/tech_tree.html" import render_tech_tree %}
 {% from "_modifier_macros.html" import modifier_table, modifier_shared_js with context %}
-{{ modifier_shared_js() }}
 {% from "_district_macros.html" import district_card with context %}
 
 {% block title %}Edit Nation: {{ nation.name }}{% endblock %}
@@ -1921,4 +1920,5 @@
         </div>
     </form>
 </div>
+{{ modifier_shared_js() }}
 {% endblock %}
