@@ -231,9 +231,11 @@ def is_item_owner(data_type: str, item: dict, user) -> bool:
 # Core visibility computation
 # ---------------------------------------------------------------------------
 
-def _is_admin_bypass_requested(user) -> bool:
-    """True when the current request carries ?bypass_visibility=1 and user is admin."""
-    return bool(user and user.get("is_admin") and request.args.get("bypass_visibility") == "1")
+def _is_bypass_requested(user) -> bool:
+    """True when ?bypass_visibility=1 and user is admin or RP mod."""
+    if not user or request.args.get("bypass_visibility") != "1":
+        return False
+    return bool(user.get("is_admin") or user.get("is_rp_mod"))
 
 
 def get_item_visibility(
@@ -251,8 +253,8 @@ def get_item_visibility(
     """
     from calculations.visibility import get_viewer_nation, compute_visibility
 
-    # 1. Non-player admin → always full access, no log
-    if is_non_player_admin:
+    # 1. Non-player admin or non-player RP mod → always full access, no log
+    if is_non_player_admin or getattr(g, "is_non_player_rp_mod", False):
         return (4, True)
 
     # 2. No nation association → publicly visible
@@ -264,8 +266,8 @@ def get_item_visibility(
     if is_item_owner(data_type, item, user):
         return (4, False)
 
-    # 4. Admin with explicit bypass param → tier 4, caller must log
-    if _is_admin_bypass_requested(user):
+    # 4. Admin or RP mod with explicit bypass param → tier 4, caller must log
+    if _is_bypass_requested(user):
         return (4, True)
 
     # 5. Compute via viewer nation
@@ -284,9 +286,9 @@ def get_item_visibility(
 def log_visibility_bypass(*, page_url: str, nation_name: str = "", source: str, user) -> None:
     """
     Write one record to admin_visibility_logs.
-    No-op if user is None or not an admin.
+    No-op if user is None or not an admin/RP mod.
     """
-    if not (user and user.get("is_admin")):
+    if not (user and (user.get("is_admin") or user.get("is_rp_mod"))):
         return
     mongo.db.admin_visibility_logs.insert_one({
         "admin_id": user.get("id"),
@@ -324,7 +326,7 @@ def gate_item_view(
         is_non_player_admin=is_non_player_admin,
     )
     # Log explicit admin bypass (not non-player-admin auto-bypass)
-    if visibility_bypassed and _is_admin_bypass_requested(user):
+    if visibility_bypassed and _is_bypass_requested(user):
         nation_name = ""
         if data_type == "nations":
             nation_name = item.get("name", "")
@@ -388,11 +390,8 @@ def strip_form_data_to_tier(form_data: dict, tier: int) -> dict:
 # ---------------------------------------------------------------------------
 
 def is_change_visibility_bypassed() -> bool:
-    """True when an admin has explicitly requested bypass via ?bypass_visibility=1."""
-    return bool(
-        g.user and g.user.get("is_admin")
-        and request.args.get("bypass_visibility") == "1"
-    )
+    """True when an admin or RP mod has explicitly requested bypass via ?bypass_visibility=1."""
+    return _is_bypass_requested(g.user) if g.user else False
 
 
 def build_nation_visibility_map():

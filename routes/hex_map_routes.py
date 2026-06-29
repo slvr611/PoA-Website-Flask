@@ -88,6 +88,11 @@ def hex_map_config():
             for r in json_data.get(category, [])
         ]
 
+    city_types = [
+        {"key": k, "name": v.get("display_name", k)}
+        for k, v in json_data.get("cities", {}).items()
+    ]
+
     return jsonify(
         {
             "cols":         cfg.get("cols",         20),
@@ -100,6 +105,7 @@ def hex_map_config():
             "general_resources":  _res_list("general_resources"),
             "unique_resources":   _res_list("unique_resources"),
             "luxury_resources":   _res_list("luxury_resources"),
+            "city_types":         city_types,
         }
     )
 
@@ -184,6 +190,32 @@ def nation_buildings(nation_name):
         districts.append(entry)
 
     return jsonify({"cities": cities, "districts": districts})
+
+
+@hex_map_routes.route("/api/hex-map/nation/<path:nation_name>/quick-add-city", methods=["POST"])
+def quick_add_city(nation_name):
+    """Admin-only: create a new city on a nation and return its id."""
+    if getattr(g, "edit_access_level", 0) < 10:
+        return jsonify({"error": "Unauthorized"}), 403
+
+    data = request.get_json() or {}
+    city_name = (data.get("name") or "").strip()
+    city_type = (data.get("type") or "").strip()
+    if not city_name or not city_type:
+        return jsonify({"error": "Name and type are required"}), 400
+
+    import uuid
+    city_id = uuid.uuid4().hex[:8]
+    city = {"_id": city_id, "name": city_name, "type": city_type, "node": "", "wall": ""}
+
+    result = mongo.db.nations.update_one(
+        {"name": nation_name},
+        {"$push": {"cities": city}},
+    )
+    if result.matched_count == 0:
+        return jsonify({"error": "Nation not found"}), 404
+
+    return jsonify({"ok": True, "city": {"id": city_id, "name": city_name, "type": city_type}})
 
 
 @hex_map_routes.route("/api/hex-map/wonder-list")

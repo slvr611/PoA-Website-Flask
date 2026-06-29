@@ -108,9 +108,9 @@
 		{% if user_is_owner or (g.user and g.user.get('is_admin')) %}
 			<a href="/nations/cosmetics/{{ nation.name }}" class="edit-button">Customize</a>
 		{% endif %}
-		{% if is_non_player_admin %}
+		{% if is_non_player_admin or g.is_non_player_rp_mod %}
 			<span class="edit-button" style="background:#2d4a5a;cursor:default;">Visibility: Bypassed (RP)</span>
-		{% elif g.user and g.user.get('is_admin') %}
+		{% elif g.user and (g.user.get('is_admin') or g.user.get('is_rp_mod')) %}
 			{% if visibility_bypassed %}
 				<a href="{{ request.path }}" class="edit-button" style="background:#2d5a2d">Visibility: Bypassed</a>
 			{% else %}
@@ -300,7 +300,7 @@
 						</tr>
 						<tr>
 							<th>{{ schema.properties.trade_speed.label }}:</th>
-							<td>{{ pf(nation.trade_speed, pn.get("trade_speed")) }}</td>
+							<td>{{ pfbd(nation.trade_speed, pn.get("trade_speed"), breakdowns.get("trade_speed", []), pbd.get("trade_speed", []), "Trade Speed") }}</td>
 						</tr>
 					</table>
 				</div>

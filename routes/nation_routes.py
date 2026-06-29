@@ -242,8 +242,9 @@ def nation_item(item_ref):
         )
 
     visibility_bypassed = bool(
-        (g.user and g.user.get("is_admin") and request.args.get("bypass_visibility") == "1")
+        (g.user and (g.user.get("is_admin") or g.user.get("is_rp_mod")) and request.args.get("bypass_visibility") == "1")
         or getattr(g, 'is_non_player_admin', False)
+        or getattr(g, 'is_non_player_rp_mod', False)
     )
     if visibility_bypassed:
         visibility_level = 4
@@ -482,10 +483,11 @@ def _render_nation_edit(item_ref, form=None):
         view_access_level=g.view_access_level,
         is_non_player_admin=g.is_non_player_admin,
     )
-    if g.user and g.user.get("is_admin"):
-        visibility_level = 4
-        visibility_bypassed = True
-    if visibility_bypassed and g.user and g.user.get("is_admin") and request.args.get("bypass_visibility") == "1":
+    if g.user and (g.user.get("is_admin") or g.user.get("is_rp_mod")):
+        if request.args.get("bypass_visibility") == "1" or g.user.get("is_admin"):
+            visibility_level = 4
+            visibility_bypassed = True
+    if visibility_bypassed and g.user and request.args.get("bypass_visibility") == "1":
         log_visibility_bypass(
             page_url=request.url,
             nation_name=nation.get("name", ""),
@@ -916,7 +918,7 @@ def market_prices():
 
 @nation_routes.route("/visibility/toggle_bypass", methods=["POST"])
 def toggle_visibility_bypass():
-    if not (g.user and g.user.get("is_admin")):
+    if not (g.user and (g.user.get("is_admin") or g.user.get("is_rp_mod"))):
         abort(403)
     page_url = request.form.get("page_url", "/")
     nation_name = request.form.get("nation_name", "")

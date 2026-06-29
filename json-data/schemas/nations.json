@@ -2003,6 +2003,7 @@
         "label": "Trade Speed",
         "description": "The distance at which the nation can trade with other nations or merchant companies",
         "calculated": true,
+        "show_breakdown": true,
         "base_value": 8
       },
       "diplomatic_range": {

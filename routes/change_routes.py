@@ -108,10 +108,12 @@ def pending_change_list(page=1):
     # Get preview references for all collections
     preview_overall_lookup_dict = get_preview_references(schema, collections_to_preview)
 
-    # Pending changes: admins and non-player admins always get full visibility.
-    # This is automatic and silent — no log entry is written.
+    # Pending changes: admins, non-player admins/RP mods, and RP mods with
+    # explicit bypass always get full visibility. Automatic and silent.
     visibility_bypassed = bool(
-        (g.user and g.user.get("is_admin")) or getattr(g, "view_access_level", 0) >= 7
+        (g.user and g.user.get("is_admin"))
+        or getattr(g, "view_access_level", 0) >= 7
+        or _is_visibility_bypassed()
     )
     visibility_map = None if visibility_bypassed else _build_nation_visibility_map()
     pending_changes = _apply_nation_visibility(pending_changes, visibility_map)
@@ -184,9 +186,9 @@ def archived_change_list(page=1):
     # Archived changes: non-player admins auto-bypass silently; regular admins must
     # explicitly click "Bypass Visibility" (?bypass_visibility=1) which logs the action.
     explicit_bypass = _is_visibility_bypassed()
-    non_player_admin = getattr(g, "is_non_player_admin", False)
-    visibility_bypassed = explicit_bypass or non_player_admin
-    if explicit_bypass and not non_player_admin:
+    auto_bypass = getattr(g, "is_non_player_admin", False) or getattr(g, "is_non_player_rp_mod", False)
+    visibility_bypassed = explicit_bypass or auto_bypass
+    if explicit_bypass and not auto_bypass:
         _log_change_visibility_bypass()
     visibility_map = None if visibility_bypassed else _build_nation_visibility_map()
     archived_changes = _apply_nation_visibility(archived_changes, visibility_map)
@@ -540,9 +542,9 @@ def item_pending_changes(data_type, item_ref, page=1):
     preview_overall_lookup_dict = get_preview_references(schema, collections_to_preview)
 
     explicit_bypass = _is_visibility_bypassed()
-    non_player_admin = getattr(g, "is_non_player_admin", False)
-    visibility_bypassed = explicit_bypass or non_player_admin
-    if explicit_bypass and not non_player_admin:
+    auto_bypass = getattr(g, "is_non_player_admin", False) or getattr(g, "is_non_player_rp_mod", False)
+    visibility_bypassed = explicit_bypass or auto_bypass
+    if explicit_bypass and not auto_bypass:
         _log_change_visibility_bypass()
     visibility_map = None if visibility_bypassed else _build_nation_visibility_map()
     pending_changes = _apply_nation_visibility(pending_changes, visibility_map)
@@ -633,9 +635,9 @@ def item_archived_changes(data_type, item_ref, page=1):
     preview_overall_lookup_dict = get_preview_references(schema, collections_to_preview)
 
     explicit_bypass = _is_visibility_bypassed()
-    non_player_admin = getattr(g, "is_non_player_admin", False)
-    visibility_bypassed = explicit_bypass or non_player_admin
-    if explicit_bypass and not non_player_admin:
+    auto_bypass = getattr(g, "is_non_player_admin", False) or getattr(g, "is_non_player_rp_mod", False)
+    visibility_bypassed = explicit_bypass or auto_bypass
+    if explicit_bypass and not auto_bypass:
         _log_change_visibility_bypass()
     visibility_map = None if visibility_bypassed else _build_nation_visibility_map()
     archived_changes = _apply_nation_visibility(archived_changes, visibility_map)

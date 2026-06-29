@@ -245,6 +245,7 @@ class HexMapViewer {
         this._nationBuildings = {};    // name -> {cities, districts}
         this._wonderList      = null;  // [{id, name, owner_nation}]
         this._marketList      = null;  // [{id, name}]
+        this._cityTypes       = [];    // [{key, name}] — loaded from config
 
         // Nation/region label caches — rebuilt when tile data changes
         this._nationLabels = null;  // Map<name, {wx, wy, wBboxW, wBboxH}>
@@ -359,6 +360,9 @@ class HexMapViewer {
         }
         if (cfg.resource_colors) {
             Object.assign(RESOURCE_COLORS, cfg.resource_colors);
+        }
+        if (cfg.city_types) {
+            this._cityTypes = cfg.city_types;
         }
         this._centerView();
         this._scheduleOutlineRebuild();
@@ -1972,6 +1976,15 @@ class HexMapViewer {
       <select name="city_id" data-current="${_esc(curCityId)}">
         <option value="">Loading…</option>
       </select>
+      <div class="hex-quick-add-city" style="display:none">
+        <label>Name<input name="new_city_name" type="text" placeholder="City name"></label>
+        <label>Type<select name="new_city_type">
+          ${(this._cityTypes || []).map(ct =>
+            `<option value="${_esc(ct.key)}">${_esc(ct.name)}</option>`
+          ).join('')}
+        </select></label>
+        <button type="button" class="btn hex-create-city-btn">Create</button>
+      </div>
     </fieldset>
     <fieldset><legend>District</legend>
       <select name="district_id" data-current="${_esc(curDistId)}">
@@ -2361,11 +2374,18 @@ class HexMapViewer {
                 buildings.cities.map(c => {
                     const label = `${_esc(c.name)} (${_esc(c.type)})`;
                     return `<option value="${_esc(c.id)}"${c.id===curCityId?' selected':''}>${label}</option>`;
-                }).join('');
+                }).join('') +
+                '<option value="__new__">+ Add New City</option>';
             // Keep current value even if it's from a different nation (e.g. captured territory)
             if (curCityId && !buildings.cities.find(c => c.id === curCityId)) {
                 citySelect.insertAdjacentHTML('beforeend',
                     `<option value="${_esc(curCityId)}" selected>[current — not in owner's list]</option>`);
+            }
+            const quickAddDiv = root.querySelector('.hex-quick-add-city');
+            if (quickAddDiv) {
+                citySelect.addEventListener('change', () => {
+                    quickAddDiv.style.display = citySelect.value === '__new__' ? '' : 'none';
+                });
             }
         }
 
@@ -2425,6 +2445,34 @@ class HexMapViewer {
 
         refreshBuildings(ownerInput?.value?.trim() || '');
 
+        // Quick-add city button
+        const createCityBtn = root.querySelector('.hex-create-city-btn');
+        if (createCityBtn) {
+            createCityBtn.addEventListener('click', async () => {
+                const owner = ownerInput?.value?.trim();
+                if (!owner) { this._showPaintError('Set an owner before adding a city.'); return; }
+                const name = root.querySelector('[name="new_city_name"]')?.value?.trim();
+                const type = root.querySelector('[name="new_city_type"]')?.value;
+                if (!name) { this._showPaintError('City name is required.'); return; }
+                try {
+                    const resp = await fetch(`/api/hex-map/nation/${encodeURIComponent(owner)}/quick-add-city`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name, type }),
+                    });
+                    const result = await resp.json();
+                    if (!resp.ok) { this._showPaintError(result.error || 'Failed to create city'); return; }
+                    const newCity = result.city;
+                    delete this._nationBuildings[owner];
+                    const buildings = await this._loadNationBuildings(owner);
+                    const wonderList = this._wonderList || [];
+                    this._populateBuildingSelects(root, buildings, wonderList, newCity.id, curDistId, curWonderId);
+                    root.querySelector('.hex-quick-add-city').style.display = 'none';
+                    root.querySelector('[name="new_city_name"]').value = '';
+                } catch (e) { this._showPaintError('Error creating city: ' + e.message); }
+            });
+        }
+
         // Populate market select for bandit camp
         const banditMarketSel = root.querySelector('[name="bandit_market"]');
         if (banditMarketSel) {
@@ -2456,7 +2504,7 @@ class HexMapViewer {
             const cityId    = val('city_id');
             const nationBld = this._nationBuildings[val('owner') || ''] || { cities: [], districts: [] };
             const cityObj   = nationBld.cities.find(c => c.id === cityId);
-            const city      = cityId ? (cityObj || { id: cityId }) : null;
+            const city      = (cityId && cityId !== '__new__') ? (cityObj || { id: cityId }) : null;
 
             // Resolve district
             const distId  = val('district_id');

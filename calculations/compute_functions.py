@@ -610,31 +610,35 @@ def compute_market_resource_storage_capacity(field, target, base_value, field_sc
 
 def compute_import_slots(field, target, base_value, field_schema, overall_total_modifiers):
     administration = target.get("administration", 0)
+    cache = target.get("_calc_cache", {})
 
     value = base_value
 
     value += overall_total_modifiers.get(field, 0)
     value += overall_total_modifiers.get("trade_slots", 0)
     value += overall_total_modifiers.get("trade_slots_per_admin", 0) * administration
+    value += cache.get("highest_ruler_charisma", 0)
 
     value *= 1 + overall_total_modifiers.get("trade_slots_mult", 0)
 
     value = math.ceil(value)
-    
+
     return int(value)
 
 def compute_export_slots(field, target, base_value, field_schema, overall_total_modifiers):
     administration = target.get("administration", 0)
+    cache = target.get("_calc_cache", {})
 
     value = base_value
 
     value += overall_total_modifiers.get(field, 0)
     value += overall_total_modifiers.get("trade_slots", 0)
     value += overall_total_modifiers.get("trade_slots_per_admin", 0) * administration
+    value += cache.get("highest_ruler_charisma", 0)
 
     value *= (1 + overall_total_modifiers.get("trade_slots_mult", 0))
     value = math.ceil(value)
-    
+
     return int(value)
 
 def compute_remaining_import_slots(field, target, base_value, field_schema, overall_total_modifiers):

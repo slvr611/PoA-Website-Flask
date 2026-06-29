@@ -146,6 +146,19 @@ def _build_nation_calc_cache(target):
         rt = _nt["rt"]
         preliminary_node_counts[rt] = preliminary_node_counts.get(rt, 0) + 1
 
+    highest_ruler_charisma = 0
+    char_schema = category_data.get("characters", {}).get("schema")
+    if char_schema and target_id:
+        for ruler in category_data["characters"]["database"].find(
+            {"ruling_nation_org": target_id},
+            {"name": 1, "modifiers": 1, "positive_titles": 1, "negative_titles": 1,
+             "strengths": 1, "weaknesses": 1, "age_status": 1, "charisma_cap": 1},
+        ):
+            calc_ruler = calculate_all_fields(ruler, char_schema, "character")
+            cha = calc_ruler.get("charisma", 0)
+            if cha > highest_ruler_charisma:
+                highest_ruler_charisma = cha
+
     return {
         "pops": pops,
         "pop_count": len(pops) - slave_count,
@@ -161,6 +174,7 @@ def _build_nation_calc_cache(target):
         "slave_count": slave_count,
         "_node_tiles": node_tiles,
         "territory_node_counts": preliminary_node_counts,
+        "highest_ruler_charisma": highest_ruler_charisma,
     }
 
 def calculate_all_fields(target, schema, target_data_type, return_breakdowns=False, instrumentation=None):
@@ -1537,7 +1551,7 @@ def _extract_labeled_from_object(obj, required_fields, linked_schema, target_dat
         # ── enum field with laws (stances, traits, types …) ──────────────
         elif field_type == "enum" and req_field_schema.get("laws"):
             field_value = obj.get(req_field, "")
-            if not field_value or field_value == "None":
+            if not field_value:
                 continue
             law_mods = req_field_schema["laws"].get(field_value, {})
             entry_mods = {}
@@ -1923,6 +1937,7 @@ def _build_unit_tagged_sources(target, schema, district_details, district_contri
         tagged.append({"label": f"Modifier: {_mc.label}", "modifiers": dict(_mc.modifiers)})
 
     # External: rulers, their modifiers, titles, and artifacts
+    from calculations.source_adapters import _resolve_modifier_type as _res_mod_type
     nation_id = str(target.get("_id", ""))
     if nation_id:
         char_schema_props = category_data.get("characters", {}).get("schema", {}).get("properties", {})
@@ -1971,8 +1986,9 @@ def _build_unit_tagged_sources(target, schema, district_details, district_contri
             ruler_id = str(ruler["_id"])
             artifacts = list(category_data["artifacts"]["database"].find(
                 {"owner": ruler_id, "equipped": True},
-                {"name": 1, "external_modifiers": 1},
+                {"name": 1, "external_modifiers": 1, "modifiers": 1},
             ))
+            _scope_defs = json_data.get("scope_definitions", {})
             for artifact in artifacts:
                 artifact_name = artifact.get("name", "Unknown Artifact")
                 for ext_mod in artifact.get("external_modifiers", []):
@@ -1984,6 +2000,24 @@ def _build_unit_tagged_sources(target, schema, district_details, district_contri
                                 "label": f"Artifact: {artifact_name}",
                                 "modifiers": {mod_key: mod_val},
                             })
+                for art_mod in artifact.get("modifiers", []):
+                    scope = art_mod.get("scope", "")
+                    if not scope:
+                        continue
+                    if _scope_defs.get(scope, {}).get("target_type", "") != "nation":
+                        continue
+                    field = _res_mod_type(art_mod)
+                    value = art_mod.get("value", 0)
+                    if field and value:
+                        scaling = art_mod.get("scaling", "flat")
+                        scaling_x = float(art_mod.get("scaling_x") or 1)
+                        scaling_extra = art_mod.get("scaling_extra") or ""
+                        if scaling and scaling != "flat":
+                            value = value * get_scaling_multiplier(scaling, target, scaling_x=scaling_x, scaling_extra=scaling_extra)
+                        tagged.append({
+                            "label": f"Artifact: {artifact_name}",
+                            "modifiers": {field: value},
+                        })
 
     # Primary race traits (positive_trait / negative_trait)
     primary_race_id = target.get("primary_race")
@@ -3560,6 +3594,23 @@ def _build_computed_contributions(
     if tg:
         contribs.append(SourceContribution(label="Territory", source_type="computed",
                                            modifiers={"stability_gain_chance": tg}))
+    wg = overall_totals.get("stability_gain_chance_while_at_peace", 0)
+    if wg:
+        contribs.append(SourceContribution(label="At Peace", source_type="computed",
+                                           modifiers={"stability_gain_chance": wg}))
+    if unique_min == 0:
+        hg = overall_totals.get("homogeneous_stability_gain_chance", 0)
+        if hg:
+            contribs.append(SourceContribution(label="Homogeneous", source_type="computed",
+                                               modifiers={"stability_gain_chance": hg}))
+    _cache = target.get("_calc_cache") or {}
+    _frpc = _cache.get("foreign_religion_pop_count", 0)
+    _frpg = overall_totals.get("stability_gain_chance_per_foreign_religious_pop", 0)
+    if _frpg and _frpc:
+        _frpv = max(_frpc * _frpg, overall_totals.get("max_stability_gain_chance_per_foreign_religious_pop", 0))
+        if _frpv:
+            contribs.append(SourceContribution(label="Foreign Religious Pops", source_type="computed",
+                                               modifiers={"stability_gain_chance": _frpv}))
 
     # ── Stability loss extras ─────────────────────────────────────────────────
     stability = target.get("stability", "")
@@ -3601,6 +3652,35 @@ def _build_computed_contributions(
     if tl:
         contribs.append(SourceContribution(label="Territory", source_type="computed",
                                            modifiers={"stability_loss_chance": tl}))
+    wl = overall_totals.get("stability_loss_chance_while_at_peace", 0)
+    if wl:
+        contribs.append(SourceContribution(label="At Peace", source_type="computed",
+                                           modifiers={"stability_loss_chance": wl}))
+    if unique_min == 0:
+        hl = overall_totals.get("homogeneous_stability_loss_chance", 0)
+        if hl:
+            contribs.append(SourceContribution(label="Homogeneous", source_type="computed",
+                                               modifiers={"stability_loss_chance": hl}))
+    _bpc = (_cache or {}).get("bloodthirsty_pop_count", 0)
+    _bpl = overall_totals.get("stability_loss_chance_per_bloodthirsty_pop", 0)
+    if _bpc and _bpl:
+        contribs.append(SourceContribution(label="Bloodthirsty Pops", source_type="computed",
+                                           modifiers={"stability_loss_chance": _bpc * _bpl}))
+    infamy = target.get("infamy", 0)
+    _infamy_mult = overall_totals.get("stability_loss_chance_from_infamy_mult", 0)
+    if infamy >= 10 and _infamy_mult:
+        if infamy < 20:
+            _inf_loss = 0.20
+        elif infamy < 30:
+            _inf_loss = 0.30
+        elif infamy < 50:
+            _inf_loss = 0.40
+        else:
+            _inf_loss = infamy * 0.01
+        _inf_loss *= _infamy_mult
+        if _inf_loss:
+            contribs.append(SourceContribution(label="Infamy", source_type="computed",
+                                               modifiers={"stability_loss_chance": _inf_loss}))
 
     # ── Food / research special consumption ───────────────────────────────────
     fpc = 1 + overall_totals.get("food_consumption_per_pop", 0)
@@ -3691,6 +3771,15 @@ def _build_computed_contributions(
             label="Metropolis Adjacency",
             source_type="computed",
             modifiers={"effective_pop_capacity": _metro},
+        ))
+
+    # ── Ruler charisma → trade slots ─────────────────────────────────────────
+    _ruler_cha = (target.get("_calc_cache") or {}).get("highest_ruler_charisma", 0)
+    if _ruler_cha > 0:
+        contribs.append(SourceContribution(
+            label="Ruler Charisma",
+            source_type="computed",
+            modifiers={"import_slots": _ruler_cha, "export_slots": _ruler_cha},
         ))
 
     # ── Trade route slot usage ────────────────────────────────────────────────
@@ -4049,6 +4138,20 @@ def compute_nation_breakdowns(
             else:
                 breakdowns[_f] = _field_bd(_f, pct=_fschema.get("format") == "percentage")
 
+    # Stability chance breakdowns: insert cap entry when the raw sum exceeds the cap
+    _stab_caps = {
+        "stability_gain_chance": round((1 + overall_total_modifiers.get("max_stability_gain_chance", 0)) * 100, 2),
+        "stability_loss_chance": round((3 + overall_total_modifiers.get("max_stability_loss_chance", 0)) * 100, 2),
+    }
+    for _sf, _cap_pct in _stab_caps.items():
+        _sbd = breakdowns.get(_sf, [])
+        _entries = [e for e in _sbd if e["label"] != "Total"]
+        _raw_sum = round(sum(e["value"] for e in _entries), 2)
+        if _raw_sum > _cap_pct:
+            _total_entry = next((e for e in _sbd if e["label"] == "Total"), None)
+            if _total_entry:
+                _sbd.insert(_sbd.index(_total_entry), {"label": "Capped", "value": round(_cap_pct - _raw_sum, 2)})
+
     # effective_territory — inject Administration contribution before Total
     eff_terr_bd = _field_bd("effective_territory")
     admin_val = target.get("administration", 0)
@@ -4103,6 +4206,22 @@ def compute_nation_breakdowns(
             pg_bd.append({"label": "Mythical Artifacts", "value": min(_pg_mythical, 1)})
         pg_bd.append({"label": "Total", "value": calculated_values.get("prestige_gain", 0)})
         breakdowns["prestige_gain"] = pg_bd
+
+    # import_slots / export_slots — custom breakdown merging trade_slots + field-specific + charisma + per-admin
+    for _cap_field in ("import_slots", "export_slots"):
+        _cap_bd = []
+        _cap_base = schema_properties.get(_cap_field, {}).get("base_value")
+        if _cap_base:
+            _cap_bd.append({"label": "Base", "value": _cap_base})
+        for _c in contributions:
+            _v = _c.modifiers.get(_cap_field, 0) + _c.modifiers.get("trade_slots", 0)
+            if _v:
+                _cap_bd.append({"label": _c.label, "value": int(_v)})
+        _ts_pa = overall_total_modifiers.get("trade_slots_per_admin", 0)
+        if _ts_pa and admin_val:
+            _cap_bd.append({"label": "Administration", "value": int(_ts_pa * admin_val)})
+        _cap_bd.append({"label": "Total", "value": calculated_values.get(_cap_field, 0)})
+        breakdowns[_cap_field] = _cap_bd
 
     # remaining_export/import_slots — show base capacity then per-route usage
     for _slot_field, _cap_field in [("remaining_export_slots", "export_slots"), ("remaining_import_slots", "import_slots")]:

@@ -1417,16 +1417,6 @@ def score_buildable_districts(old_nation, state, need_weights, market_buy_prices
     nation_jobs = job_assignments if job_assignments is not None else old_nation.get("jobs", {})
     results = []
 
-    # Compute baseline weights (pre-upkeep) for unlocked job scoring.
-    # Post-upkeep weights make covered resources look cheap, hiding the efficiency
-    # value of better producers (e.g. farmer replacing hunter). Baseline weights
-    # reflect the true deficit the upkeep jobs are covering.
-    baseline_weights = _weights_from_net(
-        state["net_production"], state["stockpiles"],
-        market_buy_prices if market_buy_prices is not None else _base_prices(),
-        state["money_income"],
-    )
-
     # Pre-compute discretionary pop info once for all district evaluations.
     upkeep_total = sum(nation_jobs.values()) if nation_jobs else 0
     remaining_pops = max(0, state["idle_pops"] - upkeep_total)
@@ -1487,9 +1477,9 @@ def score_buildable_districts(old_nation, state, need_weights, market_buy_prices
             if r != "money"
         ) and state["money"] >= actual_cost.get("money", 0)
 
-        mod_value, mod_breakdown = _district_modifier_value(dd.get("modifiers", []), baseline_weights, market_buy_prices, state.get("territory_types"), nation_jobs, state, discretionary_info)
+        mod_value, mod_breakdown = _district_modifier_value(dd.get("modifiers", []), need_weights, market_buy_prices, state.get("territory_types"), nation_jobs, state, discretionary_info)
 
-        job_value, unlocked_jobs = _unlocked_jobs_value(dk, state, baseline_weights, market_buy_prices, nation_jobs)
+        job_value, unlocked_jobs = _unlocked_jobs_value(dk, state, need_weights, market_buy_prices, nation_jobs)
 
         # Node value: score the best available node on legal tiles for this district
         # For free_placement districts, use city-style tile scoring (any owned tile)
@@ -1503,7 +1493,7 @@ def score_buildable_districts(old_nation, state, need_weights, market_buy_prices
             _bp = market_buy_prices if market_buy_prices else _base_prices()
             if map_count <= 1:
                 tile_coord, tile_score, tile_rationale = _score_best_city_tile(
-                    legal_placement, dk, baseline_weights, _bp
+                    legal_placement, dk, need_weights, _bp
                 )
                 if tile_score > 0:
                     node_value = tile_score
@@ -1511,7 +1501,7 @@ def score_buildable_districts(old_nation, state, need_weights, market_buy_prices
             else:
                 # Score all tiles and take the best N
                 all_tile_scores = _score_all_city_tiles(
-                    legal_placement, dk, baseline_weights, _bp
+                    legal_placement, dk, need_weights, _bp
                 )
                 top_tiles = all_tile_scores[:map_count]
                 if top_tiles:
