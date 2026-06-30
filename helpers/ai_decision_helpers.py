@@ -260,7 +260,7 @@ def evaluate_nation_state(old_nation):
 
     # Strip last session's (now-cleared) job effects to get a structural baseline,
     # so initial weights reflect what the nation produces with zero jobs assigned.
-    persistent_job_keys = {"undead", "partial_vampire", "revolutionary"}
+    persistent_job_keys = {"undead", "partial_vampire", "full_vampire", "revolutionary"}
     base_excess = dict(old_nation.get("resource_excess", {}))
     jobs_map = json_data.get("jobs", {})
     for jk, count in old_nation.get("jobs", {}).items():
@@ -315,16 +315,22 @@ def evaluate_nation_state(old_nation):
             region_name = ""
     def_keys = [d.get("def_key", "") for d in old_nation.get("districts", []) if d.get("def_key")]
 
+    # Persistent jobs (vampirism, undead, revolution) are granted by other game
+    # mechanics, not chosen by the player/AI — exclude them from available_jobs
+    # entirely so the AI never assigns idle pops to them.
+    persistent = {"undead", "partial_vampire", "full_vampire", "revolutionary"}
+
     jobs_data = json_data.get("jobs", {})
     available_jobs = {}
     for jk, jdata in jobs_data.items():
+        if jk in persistent:
+            continue
         if old_nation.get(f"locks_{jk}", 0):
             continue
         if check_job_requirements(old_nation, jdata, {}, region_name=region_name, def_keys=def_keys):
             available_jobs[jk] = jdata
 
     # Persistent jobs that survive cleanup and shouldn't be re-assigned
-    persistent = {"undead", "partial_vampire", "revolutionary"}
     persistent_assigned = sum(
         old_nation.get("jobs", {}).get(j, 0) for j in persistent
     )
@@ -420,13 +426,18 @@ def _weights_from_net(net_production, stockpiles, prices, money_income, resource
             else:
                 sessions = 0.0
 
+            # Use the same floor as the surplus branch so weight transitions
+            # smoothly across the net=0 boundary — a comfortably-buffered deficit
+            # (e.g. 9 sessions) shouldn't score meaningfully higher than a
+            # barely-positive resource of the same kind.
+            floor_w = 0.8 if r in ALWAYS_USEFUL_RESOURCES else 0.3
+
             if sessions < 2:
                 w = 5.0
             elif sessions < 4:
                 w = 3.0
             else:
-                surplus_w = 0.3
-                w = surplus_w + (2.0 - surplus_w) * (4.0 / sessions)
+                w = floor_w + (2.0 - floor_w) * (4.0 / sessions)
 
         # Reduce weight for resources overflowing stockpile cap.
         # This penalty is recalculated dynamically during job assignment loops
@@ -1648,6 +1659,12 @@ def score_buildable_districts(old_nation, state, need_weights, market_buy_prices
         if score <= 0:
             continue
 
+        # Prefer districts buildable right now over equally-valued ones requiring
+        # multiple sessions of saving — avoids stalling on a high-value district
+        # the nation can't actually afford yet.
+        if can_afford_now:
+            score *= 1.5
+
         parts = [f"modifiers {mod_value:.1f}"]
         if unlocked_jobs:
             job_names = ", ".join(f"{j['name']} ({j['scaled_score']})" for j in unlocked_jobs)
@@ -1662,7 +1679,7 @@ def score_buildable_districts(old_nation, state, need_weights, market_buy_prices
         if market_bonus > 0.5:
             parts.append(f"market +{market_bonus:.1f}")
         parts.append(f"cost penalty -{cost_penalty:.1f}")
-        parts.append("[can afford]" if can_afford_now else "[saving]")
+        parts.append("[can afford ×1.5]" if can_afford_now else "[saving]")
         rationale = "; ".join(parts)
 
         results.append((score, dk, dd.get("display_name", dk), actual_cost, rationale, "db", mod_breakdown, unlocked_jobs))
