@@ -282,6 +282,7 @@ def _approve_hex_map_change(change, change_id, changes_collection, approver, now
     """Write all buffered tile changes from a hex_map change request to the database."""
     after_tiles = change.get("after_requested_data", {}).get("tiles", {})
     affected_nations = set()
+    affected_route_owners = set()
     for coord_key, tile_data in after_tiles.items():
         try:
             q, r = map(int, coord_key.split(","))
@@ -305,6 +306,11 @@ def _approve_hex_map_change(change, change_id, changes_collection, approver, now
             if n:
                 affected_nations.add(n)
 
+        if "route" in update:
+            for n in [(existing.get("route") or {}).get("owner"), (tile_data.get("route") or {}).get("owner")]:
+                if n:
+                    affected_route_owners.add(n)
+
     for nation_name in affected_nations:
         pipeline = [
             {"$match": {"owner": nation_name, "terrain": {"$exists": True, "$ne": None}}},
@@ -313,7 +319,11 @@ def _approve_hex_map_change(change, change_id, changes_collection, approver, now
         counts = {doc["_id"]: doc["count"] for doc in mongo.db.hex_map_tiles.aggregate(pipeline)}
         mongo.db.nations.update_one({"name": nation_name}, {"$set": {"territory_types": counts}})
 
-    if affected_nations or tiles:
+    for nation_name in affected_route_owners:
+        from routes.hex_map_routes import _resync_nation_routes
+        _resync_nation_routes(nation_name)
+
+    if affected_nations or after_tiles:
         from helpers.hex_map_helpers import bump_tile_version
         bump_tile_version()
 

@@ -958,6 +958,7 @@ def save_hex_map_edits():
     before_tiles = {}
     after_tiles = {}
     affected_nations = set()
+    affected_route_owners = set()
 
     for coord_key, tile_entry in tiles.items():
         # tile_entry may be {before, after} (new format) or a plain tile dict (legacy).
@@ -1002,6 +1003,11 @@ def save_hex_map_edits():
             if n:
                 affected_nations.add(n)
 
+        if "route" in update:
+            for n in [(existing.get("route") or {}).get("owner"), (tile_data.get("route") or {}).get("owner")]:
+                if n:
+                    affected_route_owners.add(n)
+
     for nation_name in affected_nations:
         pipeline = [
             {"$match": {"owner": nation_name, "terrain": {"$exists": True, "$ne": None}}},
@@ -1009,6 +1015,9 @@ def save_hex_map_edits():
         ]
         counts = {doc["_id"]: doc["count"] for doc in mongo.db.hex_map_tiles.aggregate(pipeline)}
         mongo.db.nations.update_one({"name": nation_name}, {"$set": {"territory_types": counts}})
+
+    for nation_name in affected_route_owners:
+        _resync_nation_routes(nation_name)
 
     # Write an auto-approved change record so the edit appears in the change log.
     from datetime import datetime, timezone

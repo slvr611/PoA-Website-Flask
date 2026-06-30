@@ -1981,6 +1981,74 @@ def _score_best_city_tile(legal_placement, city_type, need_weights, prices):
     return None, 0, ""
 
 
+def _pick_district_tile(legal_placement, dd, key, need_weights, prices):
+    """Pick the best legal tile to place a district on, reusing the same
+    node-value scoring as city placement (_score_tile).
+
+    Regular districts are restricted to tiles adjacent to an existing city/
+    district/wonder (legal_land_tiles / legal_water_tiles, depending on
+    tile_requirement). free_placement districts may go anywhere in owned
+    territory matching their terrain limitation (legal_city_tiles).
+    Returns (coord, rationale) or (None, "") if no legal tile exists.
+    """
+    if not dd:
+        return None, ""
+    free_placement = dd.get("free_placement", False)
+    tile_req = dd.get("tile_requirement", "land")
+    if free_placement:
+        tiles = legal_placement.get("legal_city_tiles", [])
+    elif tile_req == "water":
+        tiles = legal_placement.get("legal_water_tiles", [])
+    else:
+        tiles = legal_placement.get("legal_land_tiles", [])
+    if not tiles:
+        return None, ""
+
+    luxury_set = set(_luxury_keys())
+    best_coord, best_score, best_rationale = None, -1, ""
+    for tile_info in tiles:
+        coord, score, rationale = _score_tile(tile_info, key, need_weights, prices, luxury_set)
+        if coord and (best_coord is None or score > best_score):
+            best_coord, best_score, best_rationale = coord, score, rationale
+    if best_coord is None:
+        # No tile offers a node/range bonus — still need somewhere to build.
+        best_coord = tiles[0]["coord"]
+    return best_coord, best_rationale
+
+
+def _claim_district_tile(nation_name, district_id, def_key, display_name, coord, dry_run=False):
+    """Write the district claim onto the chosen hex tile in the DB so the
+    placement is real (visible on the map, eligible for node/terrain
+    modifiers). Returns the tile's node resource key, or "" if none/no tile.
+
+    dry_run=True reads the tile's node without writing the claim — used by
+    the read-only AI Goals Preview tool so simply viewing a preview never
+    mutates the live hex map.
+    """
+    if not coord or not nation_name:
+        return ""
+    q, r = coord
+    tile = mongo.db.hex_map_tiles.find_one(
+        {"q": {"$in": [q, float(q)]}, "r": {"$in": [r, float(r)]}}
+    )
+    if not tile:
+        return ""
+    if not dry_run:
+        mongo.db.hex_map_tiles.update_one(
+            {"_id": tile["_id"]},
+            {"$set": {"district": {
+                "id": district_id, "def_key": def_key,
+                "display_name": display_name, "type": "",
+            }}},
+        )
+    node = tile.get("node") or {}
+    if isinstance(node, dict):
+        node_key = node.get("resource_type") or node.get("value") or node.get("resource") or ""
+    else:
+        node_key = str(node) if node else ""
+    return node_key if node_key != "none" else ""
+
+
 def _select_best_city(old_nation, state, exclude_types=None):
     """
     For grow_population: pick the best city to build (or replace).
@@ -2352,12 +2420,16 @@ def _goal_adjusted_need_weights(need_weights, goal_type, state=None):
     return w
 
 
-def evaluate_goal_district(old_nation, new_nation, state, goal, need_weights, prices, upkeep_assignments, log):
+def evaluate_goal_district(old_nation, new_nation, state, goal, need_weights, prices, upkeep_assignments, log, dry_run=False):
     """
     Build affordable districts and cities in a loop. After each build:
     - Re-evaluate upkeep assignments (new districts may unlock better jobs)
     - Re-evaluate the strategic goal (building a city may resolve pop cap)
     - Re-score remaining districts with updated weights and goal alignment
+
+    dry_run=True simulates tile placement (for the decision log) without
+    writing the claim to hex_map_tiles — used by the read-only AI Goals
+    Preview tool so a preview render never mutates the live hex map.
     Returns (district_plan, district_scores, district_log, upkeep_assignments, goal).
     """
     from calculations.field_calculations import check_job_requirements
@@ -2465,11 +2537,34 @@ def evaluate_goal_district(old_nation, new_nation, state, goal, need_weights, pr
             )
 
             if money_ok and res_ok:
+                import uuid
+                district_id = uuid.uuid4().hex[:8]
+                coord, node_key = None, ""
+                if c_source == "db":
+                    dd = mongo.db.district_defs.find_one({"key": c_key})
+                    if dd:
+                        from calculations.field_calculations import _compute_legal_placement
+                        legal_for_pick = _compute_legal_placement(old_nation)
+                        coord, tile_rationale = _pick_district_tile(
+                            legal_for_pick, dd, c_key, scoring_weights, prices
+                        )
+                        if coord:
+                            node_key = _claim_district_tile(
+                                old_nation.get("name", ""), district_id, c_key,
+                                dd.get("display_name", c_key), coord, dry_run=dry_run
+                            )
                 new_entry = (
-                    {"def_key": c_key, "node": "", "upgrades": []}
+                    {"_id": district_id, "def_key": c_key, "node": node_key, "upgrades": []}
                     if c_source == "db"
-                    else {"type": c_key, "node": "", "era": 1}
+                    else {"_id": district_id, "type": c_key, "node": "", "era": 1}
                 )
+                if coord:
+                    placed_desc = "Previewed placement" if dry_run else "Placed"
+                    district_log.append(f"  {placed_desc} at ({coord[0]},{coord[1]})" + (f" — node: {node_key}" if node_key else ""))
+                    if not dry_run:
+                        # Invalidate the cached legal-placement scan so the next
+                        # build this session sees this tile as claimed.
+                        old_nation.pop("_legal_placement_cache", None)
                 districts = list(new_nation.get("districts", deepcopy(old_nation.get("districts", []))))
                 districts.append(new_entry)
                 new_nation["districts"] = districts
@@ -3073,7 +3168,7 @@ def ai_decision_tick(old_nation, new_nation, schema):
         # --- Step 3: Goal-aware district/city building (may build multiple, re-evaluates goal after each) ---
         district_plan, district_scores, district_log, upkeep_assignments, goal = evaluate_goal_district(
             old_nation, new_nation, state, goal, need_weights,
-            market_prices, upkeep_assignments, log
+            market_prices, upkeep_assignments, log, dry_run=False
         )
 
         # Re-compute upkeep floor with final state (districts may have changed available jobs)

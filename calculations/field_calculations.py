@@ -2344,6 +2344,7 @@ def _compute_legal_placement(nation, owned_tiles=None):
         "water_nodes": [resource_key, ...],
         "legal_land_tiles": [...],   # adjacency-restricted, for districts
         "legal_city_tiles": [...],  # any owned empty land tile, for cities
+        "legal_water_tiles": [...], # adjacency-restricted water tiles, for water districts
     }.
     Results are cached on the nation dict as _legal_placement_cache.
     """
@@ -2355,6 +2356,7 @@ def _compute_legal_placement(nation, owned_tiles=None):
         "land_nodes": [], "coastal_nodes": [], "water_nodes": [],
         "legal_land_tiles": [],
         "legal_city_tiles": [],
+        "legal_water_tiles": [],
         "metropolis_coords": [],
         "capital_coord": None,
         "oor_tiles": set(),
@@ -2474,6 +2476,12 @@ def _compute_legal_placement(nation, owned_tiles=None):
                 result["has_water"] = True
                 if node_res:
                     result["water_nodes"].append(node_res)
+                result["legal_water_tiles"].append({
+                    "coord": coord,
+                    "node": node_res,
+                    "adj_nodes": adj_nodes,
+                    "adj_water_or_building": adj_water_or_building,
+                })
             if not is_water:  # land tiles and rivers
                 result["has_land"] = True
                 if node_res:

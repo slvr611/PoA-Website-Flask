@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(PYTHONIOENCODING=utf-8 python -c ' *)",
-      "PowerShell(\\(Get-Item \"C:\\\\Users\\\\orion\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Programming-Projects-PoA-Website-Flask\\\\d2927e54-cca2-4bfc-8fc7-f399e9ee391e\\\\tasks\\\\begps11pi.output\"\\).Length)"
+      "PowerShell(\\(Get-Item \"C:\\\\Users\\\\orion\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Programming-Projects-PoA-Website-Flask\\\\d2927e54-cca2-4bfc-8fc7-f399e9ee391e\\\\tasks\\\\begps11pi.output\"\\).Length)",
+      "PowerShell(\\(Get-Item \"C:\\\\Users\\\\orion\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Programming-Projects-PoA-Website-Flask\\\\d2927e54-cca2-4bfc-8fc7-f399e9ee391e\\\\tasks\\\\bk3rqla0m.output\"\\).Length)"
     ]
   }
 }

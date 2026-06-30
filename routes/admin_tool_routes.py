@@ -1417,7 +1417,7 @@ def ai_goals_preview():
         preview_log = []
         district_plan, district_scores, district_log, upkeep_assignments, strategic_goal = evaluate_goal_district(
             nation, dummy, state, strategic_goal, need_weights,
-            market_prices, upkeep_assignments, preview_log
+            market_prices, upkeep_assignments, preview_log, dry_run=True
         )
 
         # Re-compute upkeep floor with final state after district builds
