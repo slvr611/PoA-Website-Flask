@@ -1538,6 +1538,56 @@ def ai_goals_preview():
     )
 
 
+@admin_tool_routes.route("/ai_goals_history")
+@admin_required
+def ai_goals_history():
+    """Read-only viewer for the diagnostic snapshot saved by the most recent
+    real AI decision tick (not a live re-run). Explains what the AI actually
+    decided last session, since calculate_all_fields() may since have changed."""
+    import json
+
+    schema, db = get_data_on_category("nations")
+    player_ids = _get_player_nation_ids()
+    ai_names = [
+        n["name"] for n in db.find(
+            {"_id": {"$nin": list(player_ids)}}, {"name": 1, "_id": 0}
+        ).sort("name", ASCENDING)
+    ]
+    if not ai_names:
+        flash("No AI nations found.", "warning")
+        return redirect(url_for("admin_tool_routes.admin_tools"))
+
+    selected = request.args.get("nation", "")
+    if selected not in ai_names:
+        selected = random.choice(ai_names)
+
+    cur_idx = ai_names.index(selected)
+    prev_name = ai_names[cur_idx - 1]
+    next_name = ai_names[(cur_idx + 1) % len(ai_names)]
+
+    nation = db.find_one({"name": selected})
+    diagnostic = (nation.get("ai_state") or {}).get("diagnostic")
+
+    primary_resource_keys = [r["key"] for r in json_data.get("general_resources", [])] + \
+                             [r["key"] for r in json_data.get("unique_resources", [])]
+    luxury_resource_keys = [r["key"] for r in json_data.get("luxury_resources", [])]
+
+    diagnostic_json = json.dumps(diagnostic, indent=2, default=str) if diagnostic else ""
+
+    return render_template(
+        "ai_goals_history.html",
+        nation=nation,
+        selected=selected,
+        ai_names=ai_names,
+        prev_name=prev_name,
+        next_name=next_name,
+        diagnostic=diagnostic,
+        diagnostic_json=diagnostic_json,
+        primary_resource_keys=primary_resource_keys,
+        luxury_resource_keys=luxury_resource_keys,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Bulk Add Modifiers
 # ---------------------------------------------------------------------------
@@ -1635,3 +1685,123 @@ def bulk_modifiers_apply():
         updated += 1
 
     return jsonify({"ok": True, "updated": updated})
+
+
+# ---------------------------------------------------------------------------
+# Vampiric Race Converter
+# ---------------------------------------------------------------------------
+
+@admin_tool_routes.route("/admin/vampiric_races", methods=["GET"])
+@admin_required
+def vampiric_races():
+    schema, db = get_data_on_category("nations")
+    nations = list(db.find({}, {"name": 1, "_id": 1}).sort("name", ASCENDING))
+    return render_template("admin/vampiric_races.html", nations=nations)
+
+
+@admin_tool_routes.route("/admin/vampiric_races/apply", methods=["POST"])
+@admin_required
+def vampiric_races_apply():
+    """Convert every pop in the selected nation to a 'Vampiric <race>' variant
+    of its current race, creating that race (Undying / Bloodthirsty, same
+    preferred terrain) the first time it's needed."""
+    nation_id = request.form.get("nation_id", "").strip()
+    if not nation_id:
+        flash("No nation selected.", "error")
+        return redirect(url_for("admin_tool_routes.vampiric_races"))
+
+    try:
+        nation = mongo.db.nations.find_one({"_id": ObjectId(nation_id)})
+    except Exception:
+        nation = None
+    if not nation:
+        flash("Nation not found.", "error")
+        return redirect(url_for("admin_tool_routes.vampiric_races"))
+
+    pops = list(mongo.db.pops.find({"nation": nation_id}, {"_id": 1, "race": 1}))
+    if not pops:
+        flash(f"{nation.get('name', nation_id)} has no pops.", "info")
+        return redirect(url_for("admin_tool_routes.vampiric_races"))
+
+    pops_by_race = {}
+    for pop in pops:
+        race_id = pop.get("race", "")
+        if race_id:
+            pops_by_race.setdefault(race_id, []).append(pop["_id"])
+
+    try:
+        race_oids = [ObjectId(rid) for rid in pops_by_race]
+    except Exception:
+        race_oids = []
+    races_by_id = {str(r["_id"]): r for r in mongo.db.races.find({"_id": {"$in": race_oids}})}
+
+    converted_pops = 0
+    created_races = 0
+    skipped_pops = 0
+
+    for race_id, pop_ids in pops_by_race.items():
+        race = races_by_id.get(race_id)
+        race_name = race.get("name", "") if race else ""
+        if not race_name or race_name.startswith("Vampiric "):
+            skipped_pops += len(pop_ids)
+            continue
+
+        target_name = f"Vampiric {race_name}"
+        vampiric_race = mongo.db.races.find_one({"name": target_name})
+        if not vampiric_race:
+            new_id = mongo.db.races.insert_one({
+                "name": target_name,
+                "founding_nation": "",
+                "positive_trait": "Undying",
+                "negative_trait": "Bloodthirsty",
+                "preferred_terrain": race.get("preferred_terrain", "None"),
+            }).inserted_id
+            vampiric_race = {"_id": new_id}
+            created_races += 1
+
+        mongo.db.pops.update_many(
+            {"_id": {"$in": pop_ids}},
+            {"$set": {"race": str(vampiric_race["_id"])}}
+        )
+        converted_pops += len(pop_ids)
+
+    msg = f"Converted {converted_pops} pop(s) to vampiric races for {nation.get('name', nation_id)}."
+    if created_races:
+        msg += f" Created {created_races} new race(s)."
+    if skipped_pops:
+        msg += f" Skipped {skipped_pops} pop(s) already vampiric or with an unrecognized race."
+    flash(msg, "success")
+    return redirect(url_for("admin_tool_routes.vampiric_races"))
+
+
+# ---------------------------------------------------------------------------
+# Clear Job Counts
+# ---------------------------------------------------------------------------
+
+@admin_tool_routes.route("/admin/clear_job_counts", methods=["GET"])
+@admin_required
+def clear_job_counts():
+    jobs = sorted(
+        ({"key": k, "name": v.get("display_name", k)} for k, v in json_data.get("jobs", {}).items()),
+        key=lambda j: j["name"]
+    )
+    return render_template("admin/clear_job_counts.html", jobs=jobs)
+
+
+@admin_tool_routes.route("/admin/clear_job_counts/apply", methods=["POST"])
+@admin_required
+def clear_job_counts_apply():
+    """Reset the count of each selected job to 0 across every nation in the
+    world, mirroring the job-count reset already done each tick by
+    nation_job_cleanup_tick (keys are kept, just zeroed)."""
+    selected_jobs = request.form.getlist("jobs")
+    if not selected_jobs:
+        flash("No jobs selected.", "error")
+        return redirect(url_for("admin_tool_routes.clear_job_counts"))
+
+    set_fields = {f"jobs.{job_key}": 0 for job_key in selected_jobs}
+    query = {"$or": [{f"jobs.{job_key}": {"$exists": True}} for job_key in selected_jobs]}
+    result = mongo.db.nations.update_many(query, {"$set": set_fields})
+
+    flash(f"Cleared {len(selected_jobs)} job type(s) across {result.modified_count} nation(s).", "success")
+    return redirect(url_for("admin_tool_routes.clear_job_counts"))

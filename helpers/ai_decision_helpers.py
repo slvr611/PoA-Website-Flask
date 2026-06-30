@@ -2997,11 +2997,13 @@ def ai_decision_tick(old_nation, new_nation, schema):
         need_weights = _weights_from_net(
             projected_net, state["stockpiles"], market_prices, state["money_income"],
         )
+        job_scores = score_jobs(state, need_weights, market_prices)
 
         # --- Step 2: Strategic goal ---
         goal, goal_candidates = select_strategic_goal(
             old_nation, state, personality, upkeep_ratio, market_prices
         )
+        initial_goal = dict(goal)
         log.append(f"Strategic goal: {goal['display_name']} (score {goal['score']})")
         log.append(f"  Rationale: {goal['rationale']}")
 
@@ -3047,6 +3049,76 @@ def ai_decision_tick(old_nation, new_nation, schema):
             src = f" [{d.get('source', '')}]" if d.get("source") else ""
             log.append(f"{d['trade_type']} {d['resource']} ×{d['quantity']} @ {d['price']}{src}")
 
+        # --- Build resource detail snapshot (baseline / post-upkeep / final) ---
+        resource_detail = {}
+        for r in state.get("net_production", {}):
+            baseline_net = state["net_production"].get(r, 0)
+            upkeep_net = projected_net.get(r, baseline_net)
+            final_net = final_projected_net.get(r, upkeep_net)
+            stock = state["stockpiles"].get(r, 0)
+            sessions = state["sessions_until_empty"].get(r, float("inf"))
+            resource_detail[r] = {
+                "baseline_net": round(baseline_net, 2),
+                "upkeep_net": round(upkeep_net, 2),
+                "final_net": round(final_net, 2),
+                "stock": round(stock, 1),
+                "sessions_left": round(sessions, 1) if sessions != float("inf") else "inf",
+                "weight": round(need_weights.get(r, 0), 2),
+                "market_price": round(market_prices.get(r, 0), 1),
+            }
+
+        try:
+            gm = mongo.db.global_modifiers.find_one({"name": "global_modifiers"}, {"session_counter": 1})
+            session_number = gm.get("session_counter", 0) if gm else 0
+        except Exception:
+            session_number = 0
+
+        # Keep fuller fidelity (modifier breakdown, unlocked jobs) for the top few
+        # districts only, to keep document size reasonable
+        district_scores_detail = []
+        for e in (district_scores or [])[:8]:
+            entry = {
+                "score": round(e[0], 2),
+                "key": e[1],
+                "display_name": e[2],
+                "cost": e[3],
+                "rationale": e[4],
+                "source": e[5] if len(e) > 5 else "",
+            }
+            if len(district_scores_detail) < 5:
+                entry["mod_breakdown"] = e[6] if len(e) > 6 else []
+                entry["unlocked_jobs"] = e[7] if len(e) > 7 else []
+            district_scores_detail.append(entry)
+
+        diagnostic = {
+            "session_number": session_number,
+            "nation": old_nation.get("name", "Unknown"),
+            "temperament": old_nation.get("temperament", "?"),
+            "pops": state.get("total_pops", 0),
+            "idle_pops": state.get("idle_pops", 0),
+            "money": state.get("money", 0),
+            "money_income": state.get("money_income", 0),
+            "open_district_slots": state.get("open_district_slots", 0),
+            "personality": {k: round(v, 2) for k, v in personality.items()},
+            "initial_goal": initial_goal,
+            "strategic_goal": goal,
+            "goal_candidates": goal_candidates,
+            "upkeep_ratio": round(upkeep_ratio, 2),
+            "upkeep_assignments": upkeep_assignments,
+            "goal_assignments": goal_assignments,
+            "upkeep_log": upkeep_log,
+            "goal_job_log": goal_job_log,
+            "need_weights": {k: round(v, 2) for k, v in need_weights.items()},
+            "job_scores": {k: round(v, 2) for k, v in job_scores.items()},
+            "resource_detail": resource_detail,
+            "district_scores": district_scores_detail,
+            "district_plan": district_plan,
+            "district_log": district_log,
+            "tech_target": tech_target,
+            "desires": desires,
+            "decision_log": log,
+        }
+
         # --- Persist AI state ---
         new_nation["ai_state"] = {
             "strategic_goal":     goal,
@@ -3057,6 +3129,7 @@ def ai_decision_tick(old_nation, new_nation, schema):
             "tech_target":        tech_target,
             "planned_district":   district_plan,
             "decision_log":       log,
+            "diagnostic":         diagnostic,
         }
 
     except Exception as e:

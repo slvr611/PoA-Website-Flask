@@ -1,0 +1,27 @@
+{% extends "layout.html" %}
+
+{% block title %}Clear Job Counts{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1>Clear Job Counts</h1>
+    <p class="text-muted">
+        Sets the selected job(s) count to 0 for every nation in the world. Pops previously
+        working these jobs become idle. The job key itself is kept on each nation, only its
+        count is reset.
+    </p>
+
+    <form method="post" action="{{ url_for('admin_tool_routes.clear_job_counts_apply') }}"
+          onsubmit="return confirm('Clear the selected job count(s) for every nation in the world? This cannot be undone.');">
+        <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:0.4rem; margin:1rem 0; max-height:480px; overflow-y:auto; padding:0.75rem; border:1px solid var(--border-color,#333); border-radius:6px;">
+            {% for job in jobs %}
+            <label style="display:flex; align-items:center; gap:0.4rem; font-size:0.85rem; font-weight:normal;">
+                <input type="checkbox" name="jobs" value="{{ job.key }}">
+                {{ job.name }}
+            </label>
+            {% endfor %}
+        </div>
+        <button type="submit" class="btn btn-danger btn-sm">Clear Selected Job Counts</button>
+    </form>
+</div>
+{% endblock %}

@@ -1,0 +1,27 @@
+{% extends "layout.html" %}
+
+{% block title %}Vampiric Race Converter{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1>Vampiric Race Converter</h1>
+    <p class="text-muted">
+        Converts every pop in the selected nation to a "Vampiric" variant of its current race
+        (e.g. an "Elf" pop becomes "Vampiric Elf"). If that race doesn't exist yet, it's created
+        with the Undying positive trait, the Bloodthirsty negative trait, and the original race's
+        preferred terrain. Founding nation is left blank.
+    </p>
+
+    <form method="post" action="{{ url_for('admin_tool_routes.vampiric_races_apply') }}"
+          onsubmit="return confirm('Convert all pops in the selected nation to vampiric races?');"
+          style="display:flex; gap:0.5rem; align-items:center; margin-top:1rem;">
+        <select name="nation_id" class="form-control" style="max-width:300px;" required>
+            <option value="" disabled selected>Select a nation...</option>
+            {% for nation in nations %}
+            <option value="{{ nation._id }}">{{ nation.name }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit" class="btn btn-warning btn-sm">Convert Pops</button>
+    </form>
+</div>
+{% endblock %}

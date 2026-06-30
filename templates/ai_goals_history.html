@@ -1,0 +1,464 @@
+{% extends "layout.html" %}
+{% block title %}AI Goals History — {{ selected }}{% endblock %}
+
+{% block content %}
+<style>
+.ai-nav { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; margin-bottom: 1.25rem; }
+.ai-nav a, .ai-nav button { font-size: 0.85rem; }
+.ai-panel { background: var(--card-bg, #1e1e2e); border: 1px solid var(--border-color, #333); border-radius: 6px; padding: 0.75rem 1rem; margin-bottom: 1rem; }
+.ai-panel h3 { margin: 0 0 0.5rem 0; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; color: #aaa; border-bottom: 1px solid #333; padding-bottom: 0.3rem; }
+.goal-row { display: flex; align-items: baseline; gap: 0.5rem; margin-bottom: 0.25rem; font-size: 0.85rem; }
+.goal-prio { color: #8af; font-family: monospace; min-width: 36px; text-align: right; }
+.goal-type { font-weight: 600; min-width: 170px; }
+.goal-rationale { color: var(--text-muted, #888); }
+.dbg-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+.dbg-table th { text-align: left; color: #888; font-weight: normal; padding: 0.2rem 0.5rem; border-bottom: 1px solid #333; }
+.dbg-table td { padding: 0.2rem 0.5rem; }
+.dbg-table tr:hover { background: rgba(255,255,255,0.03); }
+.res-neg { color: #f88; }
+.res-pos { color: #8f8; }
+.res-neut { color: #aaa; }
+.w-high { color: #f88; font-weight: 600; }
+.w-med { color: #fa6; }
+.w-low { color: #8f8; }
+.dim-bar { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.2rem; font-size: 0.82rem; }
+.dim-label { min-width: 80px; color: #aaa; }
+.dim-track { flex: 1; max-width: 200px; height: 8px; background: #333; border-radius: 4px; position: relative; }
+.dim-fill { height: 100%; border-radius: 4px; position: absolute; top: 0; }
+.dim-val { min-width: 36px; font-family: monospace; color: #ccc; }
+.log-line { font-size: 0.82rem; color: var(--text-muted, #888); margin-bottom: 0.15rem; }
+.score-bar { display: inline-block; height: 10px; background: #4caf50; border-radius: 2px; vertical-align: middle; }
+.upkeep-panel { border-color: #a86; }
+.upkeep-panel h3 { color: #fa6; }
+.goal-panel { border-color: #4caf50; }
+.goal-panel h3 { color: #8f8; }
+.strategic-badge { display: inline-block; padding: 0.15rem 0.6rem; border-radius: 4px; font-size: 0.85rem; font-weight: 600; background: #2a4a2a; color: #8f8; border: 1px solid #4caf50; }
+.source-survival { color: #fa6; }
+.source-goal { color: #8f8; }
+.source-opportunistic { color: #8af; }
+.history-banner { background: #2a2a1e; border: 1px solid #665; border-radius: 6px; padding: 0.6rem 1rem; margin-bottom: 1rem; font-size: 0.85rem; color: #dd8; }
+</style>
+
+<div class="container">
+    <h1 style="margin-bottom:0.25rem;">AI Goals History</h1>
+    <p class="text-muted" style="margin-bottom:0.75rem;">
+        Snapshot saved by the most recent real AI decision tick — not a live recomputation.
+    </p>
+
+    <div class="ai-nav">
+        <a href="/ai_goals_history?nation={{ prev_name|urlencode }}" class="btn btn-secondary btn-sm">&larr; {{ prev_name }}</a>
+        <form method="GET" action="/ai_goals_history" style="display:flex;gap:0.4rem;align-items:center;">
+            <select name="nation" class="form-control" style="font-size:0.85rem;min-width:180px;">
+                {% for name in ai_names %}
+                <option value="{{ name }}"{% if name == selected %} selected{% endif %}>{{ name }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="btn btn-primary btn-sm">Go</button>
+        </form>
+        <a href="/ai_goals_history" class="btn btn-secondary btn-sm">Random</a>
+        <a href="/ai_goals_history?nation={{ next_name|urlencode }}" class="btn btn-secondary btn-sm">{{ next_name }} &rarr;</a>
+        <a href="/ai_goals_preview?nation={{ selected|urlencode }}" class="btn btn-secondary btn-sm">Live Preview</a>
+        <a href="/admin_tools" class="btn btn-secondary btn-sm" style="margin-left:auto;">Back</a>
+    </div>
+
+    <h2 style="margin-bottom:0.25rem;">
+        <a href="/nations/item/{{ selected }}">{{ selected }}</a>
+    </h2>
+
+    {% if not diagnostic %}
+    <div class="ai-panel" style="border-color:#a44;">
+        <h3 style="color:#f88;">No History Available</h3>
+        <p style="font-size:0.85rem;color:#ccc;">
+            This nation has no saved AI diagnostic yet. It will appear here after the next
+            real AI Decision Tick runs (not the live preview tool — an actual session tick).
+        </p>
+    </div>
+    {% else %}
+
+    <div class="history-banner">
+        Snapshot from session <strong>{{ diagnostic.get("session_number", "?") }}</strong>
+        — {{ diagnostic.get("temperament", "?") }}
+        · {{ diagnostic.get("pops", 0) }} pops ({{ diagnostic.get("idle_pops", 0) }} idle)
+        · Money: {{ diagnostic.get("money", 0) }} ({{ "%+d"|format(diagnostic.get("money_income", 0)) }}/session)
+        · {{ diagnostic.get("open_district_slots", 0) }} open district slots
+    </div>
+
+    <!-- Row 1: Personality + Strategic Goal -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+        <div class="ai-panel">
+            <h3>Personality</h3>
+            {% for dim, val in diagnostic.get("personality", {}).items() %}
+            <div class="dim-bar">
+                <span class="dim-label">{{ dim.title() }}</span>
+                <div class="dim-track">
+                    <div class="dim-fill" style="left:50%;width:{{ ((val|abs) * 50)|int }}px;{% if val >= 0 %}background:#4caf50;{% else %}left:auto;right:50%;background:#f44;{% endif %}"></div>
+                </div>
+                <span class="dim-val">{{ "%.2f"|format(val) }}</span>
+            </div>
+            {% endfor %}
+        </div>
+
+        {% set strategic_goal = diagnostic.get("strategic_goal", {}) %}
+        {% set initial_goal = diagnostic.get("initial_goal", {}) %}
+        <div class="ai-panel goal-panel">
+            <h3>Strategic Goal</h3>
+            {% if strategic_goal %}
+            <div style="margin-bottom:0.5rem;">
+                <span class="strategic-badge">{{ strategic_goal.get("display_name", "?") }}</span>
+                <span style="font-family:monospace;font-size:0.9rem;color:#8af;margin-left:0.5rem;">
+                    score: {{ strategic_goal.get("score", 0) }}
+                </span>
+                {% if strategic_goal.get("sessions_held", 0) > 1 %}
+                <span style="font-size:0.78rem;color:#888;margin-left:0.5rem;">
+                    (held {{ strategic_goal.get("sessions_held", 1) }} sessions)
+                </span>
+                {% endif %}
+            </div>
+            {% if initial_goal and initial_goal.get("type") != strategic_goal.get("type") %}
+            <div style="font-size:0.78rem;color:#fa6;margin-bottom:0.4rem;">
+                Started as "{{ initial_goal.get("display_name", "?") }}" — changed after district build(s) this session.
+            </div>
+            {% endif %}
+            <div style="font-size:0.82rem;color:#aaa;margin-bottom:0.5rem;">
+                {{ strategic_goal.get("rationale", "") }}
+            </div>
+            <div style="font-size:0.78rem;color:#888;margin-bottom:0.3rem;">
+                Upkeep ratio: <strong style="{% if diagnostic.get('upkeep_ratio', 0) > 0.6 %}color:#f88;{% elif diagnostic.get('upkeep_ratio', 0) > 0.4 %}color:#fa6;{% else %}color:#8f8;{% endif %}">
+                    {{ "%.0f"|format(diagnostic.get("upkeep_ratio", 0) * 100) }}%
+                </strong> of workforce on upkeep
+            </div>
+            {% endif %}
+            {% if diagnostic.get("goal_candidates") %}
+            <details style="margin-top:0.5rem;">
+                <summary style="font-size:0.8rem;color:#888;cursor:pointer;">All candidates ({{ diagnostic["goal_candidates"]|length }})</summary>
+                {% for gc in diagnostic["goal_candidates"] %}
+                <div class="goal-row" style="{% if gc.type == strategic_goal.get('type') %}background:rgba(76,175,80,0.1);border-radius:3px;padding:0.15rem 0.3rem;{% endif %}">
+                    <span class="goal-prio">{{ gc.score }}</span>
+                    <span class="goal-type">{{ gc.display_name }}</span>
+                    <span class="goal-rationale">{{ gc.rationale }}</span>
+                </div>
+                {% endfor %}
+            </details>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Row 2: Full Resource Breakdown -->
+    <div class="ai-panel">
+        <h3>Resource State &amp; Need Weights</h3>
+        <p class="text-muted" style="font-size:0.78rem;margin-bottom:0.5rem;">
+            Net/session shown at three stages: baseline (no jobs), after upkeep jobs, and after all jobs.
+        </p>
+        <table class="dbg-table">
+            <thead>
+                <tr>
+                    <th>Resource</th>
+                    <th>Baseline</th>
+                    <th>After Upkeep</th>
+                    <th>After All Jobs</th>
+                    <th>Stockpile</th>
+                    <th>Price</th>
+                    <th>Weight</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% macro resource_row(r) %}
+                {% set d = diagnostic.get("resource_detail", {}).get(r, {}) %}
+                {% if d %}
+                <tr>
+                    <td>{{ r }}</td>
+                    <td class="{% if d.baseline_net < 0 %}res-neg{% elif d.baseline_net > 0 %}res-pos{% else %}res-neut{% endif %}">
+                        {{ "%+.1f"|format(d.baseline_net) }}
+                    </td>
+                    <td class="{% if d.upkeep_net < 0 %}res-neg{% elif d.upkeep_net > 0 %}res-pos{% else %}res-neut{% endif %}">
+                        {{ "%+.1f"|format(d.upkeep_net) }}
+                    </td>
+                    <td class="{% if d.final_net < 0 %}res-neg{% elif d.final_net > 0 %}res-pos{% else %}res-neut{% endif %}">
+                        {{ "%+.1f"|format(d.final_net) }}
+                    </td>
+                    <td>{{ d.stock }}</td>
+                    <td>{{ d.market_price }}</td>
+                    <td class="{% if d.weight >= 3 %}w-high{% elif d.weight >= 1.5 %}w-med{% else %}w-low{% endif %}">
+                        {{ d.weight }}
+                    </td>
+                </tr>
+                {% endif %}
+                {% endmacro %}
+                {% for r in primary_resource_keys %}
+                    {{ resource_row(r) }}
+                {% endfor %}
+                {% set nw = diagnostic.get("need_weights", {}) %}
+                {% if nw.get("money") is not none %}
+                <tr style="border-top:1px solid #444;">
+                    <td>money</td>
+                    <td class="{% if diagnostic.get('money_income', 0) < 0 %}res-neg{% elif diagnostic.get('money_income', 0) > 0 %}res-pos{% else %}res-neut{% endif %}" colspan="3">
+                        {{ "%+d"|format(diagnostic.get("money_income", 0)) }}
+                    </td>
+                    <td>{{ diagnostic.get("money", 0) }}</td>
+                    <td>—</td>
+                    <td class="{% if nw.get('money', 0) >= 2 %}w-high{% else %}w-low{% endif %}">
+                        {{ "%.2f"|format(nw.get("money", 0)) }}
+                    </td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+        {% if luxury_resource_keys %}
+        <details style="margin-top:0.5rem;">
+            <summary style="font-size:0.8rem;color:#888;cursor:pointer;">Luxury Resources ({{ luxury_resource_keys|length }})</summary>
+            <table class="dbg-table" style="margin-top:0.25rem;">
+                <thead>
+                    <tr>
+                        <th>Resource</th>
+                        <th>Baseline</th>
+                        <th>After Upkeep</th>
+                        <th>After All Jobs</th>
+                        <th>Stockpile</th>
+                        <th>Price</th>
+                        <th>Weight</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in luxury_resource_keys %}
+                        {{ resource_row(r) }}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </details>
+        {% endif %}
+    </div>
+
+    <!-- Row 3: Job Scores + Split Assignments -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+        <div class="ai-panel">
+            <h3>Job Scores</h3>
+            <table class="dbg-table">
+                <thead><tr><th>Job</th><th>Score</th><th></th></tr></thead>
+                <tbody>
+                    {% set job_scores = diagnostic.get("job_scores", {}) %}
+                    {% set max_score = job_scores.values()|list|sort|last if job_scores else 1 %}
+                    {% for jk, sc in job_scores|dictsort(by='value', reverse=true) %}
+                    {% if sc > 0 %}
+                    <tr>
+                        <td>{{ jk.replace("_", " ").title() }}</td>
+                        <td style="font-family:monospace;">{{ "%.2f"|format(sc) }}</td>
+                        <td><span class="score-bar" style="width:{{ (sc / (max_score if max_score > 0 else 1) * 120)|int }}px;"></span></td>
+                    </tr>
+                    {% endif %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div>
+            <!-- Upkeep Assignments -->
+            <div class="ai-panel upkeep-panel" style="margin-bottom:0.75rem;">
+                <h3>Upkeep Assignments (survival floor)</h3>
+                <p class="text-muted" style="font-size:0.78rem;margin-bottom:0.5rem;">
+                    Upkeep ratio: <strong>{{ "%.0f"|format(diagnostic.get("upkeep_ratio", 0) * 100) }}%</strong>
+                </p>
+                {% set upkeep_assignments = diagnostic.get("upkeep_assignments", {}) %}
+                {% for jk, cnt in upkeep_assignments|dictsort(by='value', reverse=true) %}
+                {% if cnt > 0 %}
+                <div style="font-size:0.85rem;margin-bottom:0.2rem;">
+                    <strong>{{ jk.replace("_", " ").title() }}</strong>: {{ cnt }} pop{{ "s" if cnt != 1 }}
+                </div>
+                {% endif %}
+                {% endfor %}
+                {% if not upkeep_assignments %}
+                <p class="text-muted" style="font-size:0.85rem;">No upkeep jobs needed — economy self-sustaining.</p>
+                {% endif %}
+                {% if diagnostic.get("upkeep_log") %}
+                <details style="margin-top:0.5rem;">
+                    <summary style="font-size:0.8rem;color:#888;cursor:pointer;">Upkeep log ({{ diagnostic["upkeep_log"]|length }})</summary>
+                    {% for line in diagnostic["upkeep_log"] %}
+                    <div class="log-line">{{ line }}</div>
+                    {% endfor %}
+                </details>
+                {% endif %}
+            </div>
+
+            <!-- Goal Assignments -->
+            <div class="ai-panel goal-panel">
+                <h3>Goal Assignments ({{ strategic_goal.get("display_name", "?") }})</h3>
+                {% set goal_assignments = diagnostic.get("goal_assignments", {}) %}
+                {% for jk, cnt in goal_assignments|dictsort(by='value', reverse=true) %}
+                {% if cnt > 0 %}
+                <div style="font-size:0.85rem;margin-bottom:0.2rem;">
+                    <strong>{{ jk.replace("_", " ").title() }}</strong>: {{ cnt }} pop{{ "s" if cnt != 1 }}
+                </div>
+                {% endif %}
+                {% endfor %}
+                {% if not goal_assignments or goal_assignments.values()|select("greaterthan", 0)|list|length == 0 %}
+                <p class="text-muted" style="font-size:0.85rem;">No pops available for goal work.</p>
+                {% endif %}
+                {% if diagnostic.get("goal_job_log") %}
+                <details style="margin-top:0.5rem;" open>
+                    <summary style="font-size:0.8rem;color:#888;cursor:pointer;">Goal job log ({{ diagnostic["goal_job_log"]|length }})</summary>
+                    {% for line in diagnostic["goal_job_log"] %}
+                    <div class="log-line">{{ line }}</div>
+                    {% endfor %}
+                </details>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Row 3b: Tech Target -->
+    {% if diagnostic.get("tech_target") %}
+    {% set tech_target = diagnostic["tech_target"] %}
+    <div class="ai-panel" style="border-color:#8af;">
+        <h3 style="color:#8af;">Tech Target</h3>
+        <div style="font-size:0.85rem;">
+            <strong>{{ tech_target.get("display_name", "?") }}</strong>
+            <span style="color:#888;margin-left:0.5rem;">({{ tech_target.get("type", "?") }})</span>
+            <span style="font-family:monospace;color:#8af;margin-left:0.5rem;">score: {{ tech_target.get("score", 0) }}</span>
+        </div>
+        <div style="font-size:0.78rem;color:#aaa;margin-top:0.2rem;">
+            {{ tech_target.get("rationale", "") }}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Row 4: District Scores + Plan -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+        <div class="ai-panel">
+            <h3>District Scores — Goal: {{ strategic_goal.get("display_name", "?") }}</h3>
+            {% set district_scores = diagnostic.get("district_scores", []) %}
+            {% if district_scores %}
+            {% for d in district_scores %}
+            {% set has_goal_tag = "[GOAL:" in d.get("rationale", "") %}
+            <div style="border:1px solid #333;border-radius:4px;padding:0.5rem 0.75rem;margin-bottom:0.5rem;{% if loop.first %}border-color:#4caf50;{% elif has_goal_tag %}border-color:#2a4a2a;{% endif %}">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.3rem;">
+                    <strong style="font-size:0.9rem;">
+                        {{ d.get("display_name", "?") }}
+                        {% if has_goal_tag %}<span style="font-size:0.72rem;color:#8f8;margin-left:0.3rem;">GOAL-ALIGNED</span>{% endif %}
+                    </strong>
+                    <span style="font-family:monospace;font-size:0.9rem;{% if loop.first %}color:#8f8;{% else %}color:#8af;{% endif %}">{{ "%.2f"|format(d.get("score", 0)) }}</span>
+                </div>
+                <div style="font-size:0.78rem;color:#888;margin-bottom:0.3rem;">
+                    Cost: {% for r, amt in d.get("cost", {}).items() %}{{ r }}:{{ amt }}{% if not loop.last %}, {% endif %}{% endfor %}
+                </div>
+                <div style="font-size:0.78rem;color:#aaa;margin-bottom:0.3rem;">{{ d.get("rationale", "") }}</div>
+                {% if d.get("mod_breakdown") %}
+                <details>
+                    <summary style="font-size:0.75rem;color:#888;cursor:pointer;">Modifier breakdown ({{ d["mod_breakdown"]|length }})</summary>
+                    <table class="dbg-table" style="margin-top:0.25rem;">
+                        <thead><tr><th>Field</th><th>Value</th><th>Weight</th><th>Price Scale</th><th>Contrib</th></tr></thead>
+                        <tbody>
+                            {% for field, val, weight, scale, contrib, matched in d["mod_breakdown"] %}
+                            <tr style="{% if not matched %}opacity:0.4;{% elif contrib > 0 %}color:#8f8;{% elif contrib < 0 %}color:#f88;{% endif %}">
+                                <td>{{ field }}</td>
+                                <td style="font-family:monospace;">{{ val }}</td>
+                                <td style="font-family:monospace;">{{ weight }}</td>
+                                <td style="font-family:monospace;">{{ scale }}×</td>
+                                <td style="font-family:monospace;">{{ "%+.2f"|format(contrib) }}{% if not matched %} <span style="color:#f88;">(no match)</span>{% endif %}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </details>
+                {% endif %}
+                {% if d.get("unlocked_jobs") %}
+                <details>
+                    <summary style="font-size:0.75rem;color:#888;cursor:pointer;">Unlocked jobs ({{ d["unlocked_jobs"]|length }})</summary>
+                    {% for j in d["unlocked_jobs"] %}
+                    <div style="margin-top:0.35rem;padding:0.3rem 0.5rem;background:rgba(255,255,255,0.02);border-radius:3px;">
+                        <div style="display:flex;justify-content:space-between;font-size:0.82rem;margin-bottom:0.2rem;">
+                            <strong>{{ j.name }}</strong>
+                            <span style="font-family:monospace;color:#8af;"><strong>{{ j.scaled_score }}</strong></span>
+                        </div>
+                        <div style="font-size:0.75rem;color:#aaa;margin-bottom:0.2rem;">
+                            Per-pop score: {{ j.raw_score }}
+                            {% if j.comparison_type == "replaces" %}
+                                — {{ j.comparison_type }} {{ j.comparison_name }} ({{ j.comparison_score }})
+                                → marginal: {{ "%+.2f"|format(j.marginal) }}/pop × {{ j.est_pops }} pops on role
+                            {% else %}
+                                — {{ j.comparison_type }} vs {{ j.comparison_name }} ({{ j.comparison_score }})
+                                → marginal: {{ "%+.2f"|format(j.marginal) }}/pop × {{ j.est_pops }} est. pops
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </details>
+                {% endif %}
+            </div>
+            {% endfor %}
+            {% else %}
+            <p class="text-muted" style="font-size:0.85rem;">No districts scored above 0 this session.</p>
+            {% endif %}
+        </div>
+
+        <div class="ai-panel">
+            <h3>District Plan</h3>
+            {% set district_plan = diagnostic.get("district_plan") %}
+            {% if district_plan %}
+            <div style="font-size:0.85rem;">
+                <strong>{{ district_plan.get("display_name", district_plan.get("key", "?")) }}</strong><br>
+                <span class="text-muted">{{ district_plan.get("rationale", "") }}</span><br>
+                Sessions saving: {{ district_plan.get("sessions_saving", 0) }}
+                <br>
+                Cost:
+                {% for r, amt in district_plan.get("cost", {}).items() %}
+                    {{ r }}: {{ amt }}{% if not loop.last %}, {% endif %}
+                {% endfor %}
+            </div>
+            {% else %}<p class="text-muted" style="font-size:0.85rem;">No district plan.</p>{% endif %}
+            {% if diagnostic.get("district_log") %}
+            <details style="margin-top:0.5rem;" open>
+                <summary style="font-size:0.8rem;color:#888;cursor:pointer;">District log ({{ diagnostic["district_log"]|length }})</summary>
+                {% for line in diagnostic["district_log"] %}
+                <div class="log-line">{{ line }}</div>
+                {% endfor %}
+            </details>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Row 5: Trade Desires -->
+    <div class="ai-panel">
+        <h3>Generated Trade Desires</h3>
+        {% if diagnostic.get("desires") %}
+        <table class="dbg-table">
+            <thead><tr><th>Resource</th><th>Type</th><th>Qty</th><th>Price</th><th>Source</th></tr></thead>
+            <tbody>
+                {% for d in diagnostic["desires"] %}
+                <tr>
+                    <td>{{ d.resource }}</td>
+                    <td>{{ d.trade_type }}</td>
+                    <td>{{ d.quantity }}</td>
+                    <td>{{ d.price }}</td>
+                    <td class="source-{{ d.get('source', 'opportunistic') }}">{{ d.get("source", "?") }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}<p class="text-muted" style="font-size:0.85rem;">No trade desires generated.</p>{% endif %}
+    </div>
+
+    <!-- Full Decision Log -->
+    {% if diagnostic.get("decision_log") %}
+    <div class="ai-panel">
+        <h3>Full Decision Log</h3>
+        {% for line in diagnostic["decision_log"] %}
+        <div class="log-line">{{ line }}</div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Diagnostic Dump -->
+    {% if diagnostic_json %}
+    <div class="ai-panel" style="border-color:#555;">
+        <h3 style="color:#888;">Diagnostic Dump</h3>
+        <p class="text-muted" style="font-size:0.78rem;margin-bottom:0.5rem;">
+            Copy and paste this JSON for debugging. Click to select all.
+        </p>
+        <textarea readonly
+            onclick="this.select()"
+            style="width:100%;min-height:200px;max-height:500px;font-family:monospace;font-size:0.75rem;background:#111;color:#ccc;border:1px solid #333;border-radius:4px;padding:0.5rem;resize:vertical;">{{ diagnostic_json }}</textarea>
+    </div>
+    {% endif %}
+
+    {% endif %}
+</div>
+{% endblock %}
