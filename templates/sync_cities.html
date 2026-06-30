@@ -1,0 +1,76 @@
+{% extends "layout.html" %}
+{% block title %}Sync Cities{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1>Sync Cities</h1>
+    <p class="text-muted" style="margin-bottom:1rem;">
+        Reconciles AI nations' city lists against cities placed on the hex map. Cities found on a tile
+        but missing from the nation page get added to the nation. Cities on the nation page that aren't
+        placed on the map get placed using the AI's city placement logic. Existing cities and tiles are
+        never modified or removed — only additions are made. Player-controlled nations are not affected.
+    </p>
+
+    <div style="display:flex;gap:1rem;margin-bottom:1.5rem;align-items:center;">
+        <form action="/admin/sync_cities/apply" method="POST">
+            <button type="submit" class="btn btn-primary"
+                    onclick="return confirm('Apply this sync to {{ reports|length }} nation(s)? This cannot be undone.')"
+                    {% if not reports %}disabled{% endif %}>
+                Apply Sync ({{ reports|length }} nation(s) affected)
+            </button>
+        </form>
+        <a href="/admin_tools" class="btn btn-secondary">Back</a>
+    </div>
+
+    {% if not reports %}
+    <p class="text-muted">No discrepancies found — every AI nation's cities are already in sync with the map.</p>
+    {% else %}
+    <div style="overflow-x:auto;">
+        <table class="info-table" style="font-size:0.85rem;">
+            <thead>
+                <tr>
+                    <th style="min-width:160px;">Nation</th>
+                    <th>Add to Nation Page (from map)</th>
+                    <th>Place on Map (from nation page)</th>
+                    <th>Unplaceable (no legal tile)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in reports %}
+                <tr>
+                    <td><a href="/nations/item/{{ r.name }}" target="_blank">{{ r.name }}</a></td>
+                    <td>
+                        {% if r.added_to_nation %}
+                        {% for c in r.added_to_nation %}
+                        <div>{{ c.name or "(unnamed)" }} <span class="text-muted">({{ c.type }})</span></div>
+                        {% endfor %}
+                        {% else %}
+                        <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if r.placed_on_map %}
+                        {% for c in r.placed_on_map %}
+                        <div>{{ c.name or "(unnamed)" }} <span class="text-muted">({{ c.type }})</span> → ({{ c.coord[0] }}, {{ c.coord[1] }})</div>
+                        {% endfor %}
+                        {% else %}
+                        <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if r.unplaceable %}
+                        {% for c in r.unplaceable %}
+                        <div style="color:#c8a96e;">{{ c.name or "(unnamed)" }} <span class="text-muted">({{ c.type }})</span></div>
+                        {% endfor %}
+                        {% else %}
+                        <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

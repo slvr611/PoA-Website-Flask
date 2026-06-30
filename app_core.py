@@ -23,6 +23,9 @@ load_dotenv(override=True)
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "supersecretkey")
 
+from datetime import timedelta
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=30)
+
 # Allow negative integers in URL routes (needed for flat-top hex axial coordinates)
 from werkzeug.routing import IntegerConverter
 class SignedIntConverter(IntegerConverter):

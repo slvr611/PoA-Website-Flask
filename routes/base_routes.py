@@ -34,6 +34,7 @@ def inject_now():
 
 @base_routes.before_app_request
 def load_user():
+    session.permanent = True
     g.user = session.get("user", None)
 
 @base_routes.before_app_request

@@ -362,7 +362,12 @@ def _weights_from_net(net_production, stockpiles, prices, money_income, resource
     Called by compute_need_weights and by assign_ai_jobs after each pop assignment.
 
     `prices` should be dynamic market prices (from get_stored_market_prices) or
-    static base prices as a fallback.  Surplus floor is 0.3 + price/100.
+    static base prices as a fallback.  Surplus floor is a flat 0.3 — price
+    normalization is NOT baked in here since every caller already multiplies
+    the returned weight by _price_scale(resource, prices) downstream. Baking
+    price into both the weight and the scale would double-count it, unfairly
+    penalizing upkeep/cost in resources priced above the 50 baseline (and
+    unfairly favoring production of the same).
 
     When net production is positive (or zero) the resource is self-sustaining —
     weight drops to the surplus/buffer tier even if the current stockpile is low.
@@ -375,13 +380,12 @@ def _weights_from_net(net_production, stockpiles, prices, money_income, resource
     weights = {}
     for r, net in net_production.items():
         stockpile = stockpiles.get(r, 0)
-        price = prices.get(r, 10)
 
         if net >= 0:
             if stockpile < 5 and net < 1:
                 w = 1.3
             else:
-                w = 0.3 + price / 100.0
+                w = 0.3
         else:
             if stockpile > 0:
                 sessions = stockpile / (-net)
@@ -393,7 +397,7 @@ def _weights_from_net(net_production, stockpiles, prices, money_income, resource
             elif sessions < 4:
                 w = 3.0
             else:
-                surplus_w = 0.3 + price / 100.0
+                surplus_w = 0.3
                 w = surplus_w + (2.0 - surplus_w) * (4.0 / sessions)
 
         # Reduce weight for resources overflowing stockpile cap.
@@ -1275,7 +1279,9 @@ def _unlocked_jobs_value(district_key, state, need_weights, prices, nation_jobs)
     existing producer exists, estimates how many pops could work the new job
     while maintaining positive income compared to the weakest assigned job.
 
-    Returns (total_value, [job_detail_dict, ...]).
+    Returns (total_value, [job_detail_dict, ...], near_miss_dict_or_None).
+    near_miss is the closest-to-profitable comparison that was rejected
+    (marginal <= 0), so callers can explain why nothing unlocked.
     """
     jobs_data = json_data.get("jobs", {})
     available_jobs = state.get("available_jobs", {})
@@ -1303,6 +1309,7 @@ def _unlocked_jobs_value(district_key, state, need_weights, prices, nation_jobs)
 
     total = 0.0
     unlocked = []
+    near_miss = None  # best rejected comparison, for transparency when nothing unlocks
     for jk, jdata in jobs_data.items():
         if jk in available_jobs:
             continue
@@ -1382,6 +1389,14 @@ def _unlocked_jobs_value(district_key, state, need_weights, prices, nation_jobs)
             comparison_type = "new role"
 
         if marginal <= 0:
+            if near_miss is None or marginal > near_miss["marginal"]:
+                near_miss = {
+                    "name": jdata.get("display_name", jk),
+                    "raw_score": round(raw_score, 2),
+                    "comparison_score": round(comparison_score, 2),
+                    "comparison_name": comparison_name,
+                    "marginal": round(marginal, 2),
+                }
             continue
 
         scaled = marginal * est_pops
@@ -1399,7 +1414,7 @@ def _unlocked_jobs_value(district_key, state, need_weights, prices, nation_jobs)
             "upkeep": upkeep_lines,
         })
 
-    return total, unlocked
+    return total, unlocked, near_miss
 
 
 def score_buildable_districts(old_nation, state, need_weights, market_buy_prices, job_assignments=None):
@@ -1479,7 +1494,7 @@ def score_buildable_districts(old_nation, state, need_weights, market_buy_prices
 
         mod_value, mod_breakdown = _district_modifier_value(dd.get("modifiers", []), need_weights, market_buy_prices, state.get("territory_types"), nation_jobs, state, discretionary_info)
 
-        job_value, unlocked_jobs = _unlocked_jobs_value(dk, state, need_weights, market_buy_prices, nation_jobs)
+        job_value, unlocked_jobs, job_near_miss = _unlocked_jobs_value(dk, state, need_weights, market_buy_prices, nation_jobs)
 
         # Node value: score the best available node on legal tiles for this district
         # For free_placement districts, use city-style tile scoring (any owned tile)
@@ -1504,8 +1519,8 @@ def score_buildable_districts(old_nation, state, need_weights, market_buy_prices
                     legal_placement, dk, need_weights, _bp
                 )
                 top_tiles = all_tile_scores[:map_count]
-                if top_tiles:
-                    node_value = sum(ts[1] for ts in top_tiles)
+                node_value = sum(ts[1] for ts in top_tiles) if top_tiles else 0.0
+                if top_tiles and node_value > 0:
                     tile_descs = [f"({ts[0][0]},{ts[0][1]})" for ts in top_tiles if ts[0]]
                     node_desc = f"{map_count} placements: {', '.join(tile_descs)} +{node_value:.1f}"
 
@@ -1609,6 +1624,11 @@ def score_buildable_districts(old_nation, state, need_weights, market_buy_prices
         if unlocked_jobs:
             job_names = ", ".join(f"{j['name']} ({j['scaled_score']})" for j in unlocked_jobs)
             parts.append(f"unlocks jobs +{job_value:.1f} [{job_names}]")
+        elif job_near_miss:
+            parts.append(
+                f"job swap considered: {job_near_miss['name']} ({job_near_miss['raw_score']}) "
+                f"vs {job_near_miss['comparison_name']} ({job_near_miss['comparison_score']}) — not worth it"
+            )
         if node_desc:
             parts.append(node_desc)
         if market_bonus > 0.5:
@@ -1861,12 +1881,16 @@ def _score_tile(tile_info, city_type, need_weights, prices, luxury_set):
 
 
 def _score_all_city_tiles(legal_placement, city_type, need_weights, prices):
-    """Score all legal land tiles, return sorted list of (coord, score, rationale)."""
+    """Score every legal city tile (anywhere in owned territory, not adjacency-
+    restricted like districts) by node-claiming potential. Returns sorted
+    list of (coord, score, rationale). Tiles with no nearby nodes still get
+    included at score 0 so a city always has somewhere to go when one is
+    needed, even if no tile offers a node bonus."""
     luxury_set = set(_luxury_keys())
     results = []
-    for tile_info in legal_placement.get("legal_land_tiles", []):
+    for tile_info in legal_placement.get("legal_city_tiles", []):
         coord, score, rationale = _score_tile(tile_info, city_type, need_weights, prices, luxury_set)
-        if score > 0:
+        if coord:
             results.append((coord, score, rationale))
     results.sort(key=lambda x: x[1], reverse=True)
     return results
@@ -1995,6 +2019,139 @@ def _select_best_city(old_nation, state, exclude_types=None):
             }
 
     return None
+
+
+def sync_nation_cities(nation, dry_run=True):
+    """
+    Reconcile a nation's `cities` array against city objects placed on its
+    owned map tiles. Two one-way operations, never destructive:
+
+    1. Map → Nation: any tile owned by this nation with a `city` object whose
+       id isn't in nation.cities gets appended to nation.cities.
+    2. Nation → Map: any nation.cities entry with a real type set (blank
+       placeholder slots are skipped) whose id isn't placed on any owned
+       tile gets placed using the same tile-scoring logic the AI uses when
+       building a new city (_score_best_city_tile / capital fallback).
+
+    Existing cities/tiles are never modified or removed.
+
+    Returns {
+        "name": str,
+        "added_to_nation": [{"id","name","type"}, ...],
+        "placed_on_map": [{"id","name","type","coord":[q,r],"rationale"}, ...],
+        "unplaceable": [{"id","name","type"}, ...],
+    }
+    When dry_run is False, performs the DB writes for both directions.
+    """
+    nation_name = nation.get("name", "")
+    nation_cities = nation.get("cities", []) or []
+    nation_city_ids = {c.get("_id") for c in nation_cities if c.get("_id")}
+
+    tiles_with_city = list(mongo.db.hex_map_tiles.find(
+        {"owner": nation_name, "city": {"$exists": True, "$ne": None}},
+        {"q": 1, "r": 1, "city": 1},
+    )) if nation_name else []
+    tile_city_ids = {
+        t["city"]["id"]: t for t in tiles_with_city
+        if isinstance(t.get("city"), dict) and t["city"].get("id")
+    }
+
+    report = {
+        "name": nation_name,
+        "added_to_nation": [],
+        "placed_on_map": [],
+        "unplaceable": [],
+    }
+
+    # --- Direction 1: Map → Nation ---
+    new_nation_cities = []
+    for cid, tile in tile_city_ids.items():
+        if cid in nation_city_ids:
+            continue
+        city_data = tile["city"]
+        entry = {
+            "_id": cid,
+            "name": city_data.get("name", ""),
+            "type": city_data.get("type", ""),
+            "node": "",
+            "wall": "",
+        }
+        new_nation_cities.append(entry)
+        report["added_to_nation"].append({
+            "id": cid, "name": entry["name"], "type": entry["type"],
+        })
+
+    if new_nation_cities and not dry_run:
+        mongo.db.nations.update_one(
+            {"_id": nation["_id"]},
+            {"$push": {"cities": {"$each": new_nation_cities}}},
+        )
+
+    # --- Direction 2: Nation → Map ---
+    # Skip blank placeholder entries (no type set) — these are unused city
+    # slots, not real cities, and should never be placed on the map.
+    to_place = [
+        c for c in nation_cities
+        if c.get("_id") and c["_id"] not in tile_city_ids and c.get("type")
+    ]
+    if to_place and nation_name:
+        from calculations.field_calculations import _compute_legal_placement
+        prices = _base_prices()
+        state = evaluate_nation_state(nation)
+        baseline_w = _weights_from_net(
+            state["net_production"], state["stockpiles"], prices, state["money_income"]
+        )
+        has_city_on_map = bool(tile_city_ids)
+        # Tiles already claimed earlier in this loop — never written to the DB
+        # in dry-run mode, so this must be tracked explicitly rather than
+        # relying on re-querying hex_map_tiles to see the previous pick.
+        reserved_coords = set()
+
+        for c in to_place:
+            nation.pop("_legal_placement_cache", None)
+            legal = _compute_legal_placement(nation)
+            if reserved_coords:
+                legal = dict(legal)
+                legal["legal_city_tiles"] = [
+                    t for t in legal.get("legal_city_tiles", [])
+                    if t["coord"] not in reserved_coords
+                ]
+            city_type = c.get("type", "generic")
+
+            if not has_city_on_map:
+                capital_coord = legal.get("capital_coord")
+                if capital_coord:
+                    coord, rationale = capital_coord, "capital (first city)"
+                else:
+                    coord, _, rationale = _score_best_city_tile(legal, city_type, baseline_w, prices)
+                    rationale = f"auto-capital: {rationale}" if rationale else "auto-capital"
+            else:
+                coord, _, rationale = _score_best_city_tile(legal, city_type, baseline_w, prices)
+
+            if not coord:
+                report["unplaceable"].append({
+                    "id": c["_id"], "name": c.get("name", ""), "type": city_type,
+                })
+                continue
+
+            reserved_coords.add(tuple(coord))
+            report["placed_on_map"].append({
+                "id": c["_id"], "name": c.get("name", ""), "type": city_type,
+                "coord": [coord[0], coord[1]], "rationale": rationale,
+            })
+
+            if not dry_run:
+                tile_update = {"city": {"id": c["_id"], "name": c.get("name", ""), "type": city_type}}
+                if not has_city_on_map and not legal.get("capital_coord"):
+                    tile_update["capital"] = True
+                mongo.db.hex_map_tiles.update_one(
+                    {"q": coord[0], "r": coord[1]},
+                    {"$set": tile_update},
+                )
+
+            has_city_on_map = True
+
+    return report
 
 
 def _apply_goal_alignment(scored, goal_type):

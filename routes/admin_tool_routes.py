@@ -760,6 +760,51 @@ def wipe_ai_desires():
     return redirect(url_for("admin_tool_routes.admin_tools"))
 
 
+@admin_tool_routes.route("/admin/sync_cities", methods=["GET"])
+@admin_required
+def sync_cities_preview():
+    """Read-only preview of city sync between the map and AI nation pages."""
+    from helpers.ai_decision_helpers import sync_nation_cities
+
+    player_ids = _get_player_nation_ids()
+    ai_nations = list(mongo.db.nations.find({"_id": {"$nin": list(player_ids)}}).sort("name", ASCENDING))
+
+    reports = []
+    for n in ai_nations:
+        report = sync_nation_cities(n, dry_run=True)
+        if report["added_to_nation"] or report["placed_on_map"] or report["unplaceable"]:
+            reports.append(report)
+
+    return render_template("sync_cities.html", reports=reports)
+
+
+@admin_tool_routes.route("/admin/sync_cities/apply", methods=["POST"])
+@admin_required
+def sync_cities_apply():
+    """Apply the city sync between the map and AI nation pages for all non-player nations."""
+    from helpers.ai_decision_helpers import sync_nation_cities
+    from helpers.hex_map_helpers import bump_tile_version
+
+    player_ids = _get_player_nation_ids()
+    ai_nations = list(mongo.db.nations.find({"_id": {"$nin": list(player_ids)}}))
+
+    total_add = total_place = total_unplaceable = 0
+    for n in ai_nations:
+        report = sync_nation_cities(n, dry_run=False)
+        total_add += len(report["added_to_nation"])
+        total_place += len(report["placed_on_map"])
+        total_unplaceable += len(report["unplaceable"])
+
+    if total_add or total_place:
+        bump_tile_version()
+
+    msg = f"Synced cities: {total_add} added to nation pages, {total_place} placed on the map."
+    if total_unplaceable:
+        msg += f" {total_unplaceable} could not be placed (no legal tile)."
+    flash(msg, "success")
+    return redirect(url_for("admin_tool_routes.admin_tools"))
+
+
 # ---------------------------------------------------------------------------
 # Wipe concessions
 # ---------------------------------------------------------------------------

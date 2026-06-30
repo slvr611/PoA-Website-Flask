@@ -2323,14 +2323,22 @@ def _hex_neighbors(q, r):
 def _compute_legal_placement(nation):
     """Compute which tile types have legal placement spots and what nodes are available.
 
-    A legal tile is: owned by the nation, has no existing building (district/city/wonder),
-    and is adjacent to at least one tile that DOES have a building.
+    A legal tile (for districts) is: owned by the nation, has no existing building
+    (district/city/wonder), and is adjacent to at least one tile that DOES have a
+    building — districts expand contiguously outward from existing buildings.
+
+    Cities are not bound by that adjacency rule — they can be founded anywhere in
+    owned territory, so "legal_city_tiles" includes every owned, building-free,
+    non-water tile regardless of distance from existing buildings. City placement
+    scoring (_score_tile) then picks the best one by node-claiming potential.
 
     Returns {
         "has_land": bool, "has_coastal": bool, "has_water": bool,
         "land_nodes": [resource_key, ...],
         "coastal_nodes": [resource_key, ...],
         "water_nodes": [resource_key, ...],
+        "legal_land_tiles": [...],   # adjacency-restricted, for districts
+        "legal_city_tiles": [...],  # any owned empty land tile, for cities
     }.
     Results are cached on the nation dict as _legal_placement_cache.
     """
@@ -2341,6 +2349,7 @@ def _compute_legal_placement(nation):
         "has_land": False, "has_coastal": False, "has_water": False,
         "land_nodes": [], "coastal_nodes": [], "water_nodes": [],
         "legal_land_tiles": [],
+        "legal_city_tiles": [],
         "metropolis_coords": [],
         "capital_coord": None,
         "oor_tiles": set(),
@@ -2415,14 +2424,11 @@ def _compute_legal_placement(nation):
                 nation["_legal_placement_cache"] = result
                 return result
 
-        # Legal = empty tile adjacent to a building (or capital if no buildings)
+        # Legal = empty tile. Districts additionally require adjacency to a
+        # building; cities don't, so legal_city_tiles is collected for every
+        # owned empty non-water tile regardless of adjacency.
         for coord, terrain in tile_map.items():
             if coord in building_coords:
-                continue
-            adjacent_to_building = any(
-                n in building_coords for n in _hex_neighbors(*coord)
-            )
-            if not adjacent_to_building:
                 continue
 
             node_res = node_map.get(coord)
@@ -2431,6 +2437,31 @@ def _compute_legal_placement(nation):
             is_adjacent_water = any(
                 n in water_coords for n in _hex_neighbors(*coord)
             )
+
+            adj_nodes = []
+            adj_water_or_building = 0
+            for nq, nr in _hex_neighbors(*coord):
+                adj_node = node_map.get((nq, nr))
+                if adj_node:
+                    adj_nodes.append(adj_node)
+                nb_terrain = tile_map.get((nq, nr), "")
+                if (nb_terrain in WATER_TERRAINS or nb_terrain == "river"
+                        or (nq, nr) in building_coords):
+                    adj_water_or_building += 1
+
+            if not is_water:
+                result["legal_city_tiles"].append({
+                    "coord": coord,
+                    "node": node_res,
+                    "adj_nodes": adj_nodes,
+                    "adj_water_or_building": adj_water_or_building,
+                })
+
+            adjacent_to_building = any(
+                n in building_coords for n in _hex_neighbors(*coord)
+            )
+            if not adjacent_to_building:
+                continue
 
             # Rivers count as both land and water
             if is_water or is_river:
@@ -2445,18 +2476,6 @@ def _compute_legal_placement(nation):
                     result["has_coastal"] = True
                     if node_res:
                         result["coastal_nodes"].append(node_res)
-
-                # Store legal land tiles with node info for city placement scoring
-                adj_nodes = []
-                adj_water_or_building = 0
-                for nq, nr in _hex_neighbors(*coord):
-                    adj_node = node_map.get((nq, nr))
-                    if adj_node:
-                        adj_nodes.append(adj_node)
-                    nb_terrain = tile_map.get((nq, nr), "")
-                    if (nb_terrain in WATER_TERRAINS or nb_terrain == "river"
-                            or (nq, nr) in building_coords):
-                        adj_water_or_building += 1
 
                 result["legal_land_tiles"].append({
                     "coord": coord,
