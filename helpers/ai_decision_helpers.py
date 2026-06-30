@@ -1385,9 +1385,18 @@ def _unlocked_jobs_value(district_key, state, need_weights, prices, nation_jobs)
                 res = field[:-len("_production")]
             all_produced_resources.add(res)
 
+        # Track the best LOSING comparison too — if any resource already has an
+        # incumbent producer, this job is competing for an existing role, even
+        # if it loses. It must never silently fall through to "new role" just
+        # because it doesn't beat that incumbent (that was comparing fisherman
+        # against the weakest job in the nation instead of against farmer,
+        # the resource's actual direct competitor).
+        has_incumbent = False
+        best_losing_comparison = None
         for res in all_produced_resources:
             same_role = existing_by_resource.get(res, [])
             if same_role:
+                has_incumbent = True
                 best_ex_name, best_ex_score, _ = max(same_role, key=lambda x: x[1])
                 m = raw_score - best_ex_score
                 ep = sum(p for _, _, p in same_role)
@@ -1399,9 +1408,19 @@ def _unlocked_jobs_value(district_key, state, need_weights, prices, nation_jobs)
                             available_jobs[best_ex_name].get("display_name", best_ex_name),
                             "replaces",
                         )
+                elif best_losing_comparison is None or m > best_losing_comparison[1]:
+                    best_losing_comparison = (
+                        0, m, ep, best_ex_score,
+                        available_jobs[best_ex_name].get("display_name", best_ex_name),
+                        "replaces",
+                    )
 
         if best_comparison:
             _, marginal, est_pops, comparison_score, comparison_name, comparison_type = best_comparison
+        elif has_incumbent:
+            # Loses to its direct competitor for every resource it produces —
+            # record as a near-miss against the actual incumbent, not a fake new role.
+            _, marginal, est_pops, comparison_score, comparison_name, comparison_type = best_losing_comparison
         else:
             # New role — no existing producer for any of this job's resources
             marginal = raw_score - weakest_score
@@ -1655,7 +1674,16 @@ def score_buildable_districts(old_nation, state, need_weights, market_buy_prices
             if r != "money"
         ) * 0.05 + (actual_cost.get("money", 0) / max(state["money"] + 1, 1)) * 5
 
-        score = mod_value + job_value + node_value + market_bonus - cost_penalty
+        # Recurring upkeep penalty — unlike the one-time build cost, this is paid
+        # every session forever, so it's weighted much more heavily per unit.
+        recurring_upkeep = dd.get("upkeep", {})
+        upkeep_penalty = sum(
+            need_weights.get(r, 1.0) * amt * _price_scale(r, market_buy_prices)
+            for r, amt in recurring_upkeep.items()
+            if r != "money"
+        ) * 2.0 + (recurring_upkeep.get("money", 0) / max(state["money"] + 1, 1)) * 10
+
+        score = mod_value + job_value + node_value + market_bonus - cost_penalty - upkeep_penalty
         if score <= 0:
             continue
 
@@ -1679,6 +1707,8 @@ def score_buildable_districts(old_nation, state, need_weights, market_buy_prices
         if market_bonus > 0.5:
             parts.append(f"market +{market_bonus:.1f}")
         parts.append(f"cost penalty -{cost_penalty:.1f}")
+        if upkeep_penalty > 0.05:
+            parts.append(f"upkeep penalty -{upkeep_penalty:.1f}")
         parts.append("[can afford ×1.5]" if can_afford_now else "[saving]")
         rationale = "; ".join(parts)
 
