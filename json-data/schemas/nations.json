@@ -861,12 +861,14 @@
           "Chaotic Throng": {
             "nomadic": 1,
             "hunter_food_production": 1,
-            "max_passive_expansion_chance": 0
+            "max_passive_expansion_chance": 0,
+            "nomad_pop_capacity_per_vassal": 1
           },
           "Misfit Band": {
             "nomadic": 1,
             "hunter_food_production": 1,
-            "max_passive_expansion_chance": 0
+            "max_passive_expansion_chance": 0,
+            "nomad_pop_capacity_per_vassal": 1
           },
           "Iron-Fisted Dictatorship": {
             "resource_production": 1,
@@ -894,8 +896,9 @@
             "nomadic": 1,
             "hunter_food_production": 1,
             "max_passive_expansion_chance": 0,
+            "nomad_pop_capacity_per_vassal": 1,
             "_modifiers": [
-              { "modifier_type": "effective_territory", "value": 8, "scope": "nation_self", "scaling": "per_x_tributaries", "scaling_x": 1}
+              { "modifier_type": "effective_territory", "value": 8, "scope": "nation_self", "scaling": "per_x_vassals", "scaling_x": 1, "scaling_extra": "Tributary" }
             ]
           },
           "World Warden": {
@@ -903,7 +906,8 @@
             "effective_territory": 4,
             "nomadic": 1,
             "hunter_food_production": 1,
-            "max_passive_expansion_chance": 0
+            "max_passive_expansion_chance": 0,
+            "nomad_pop_capacity_per_vassal": 1
           }
         }
       },

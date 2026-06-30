@@ -3798,6 +3798,18 @@ def _build_computed_contributions(
             modifiers={"effective_pop_capacity": _metro},
         ))
 
+    # ── Nomadic pop capacity per vassal ───────────────────────────────────────
+    _npcpv = overall_totals.get("nomad_pop_capacity_per_vassal", 0)
+    if _npcpv > 0 and overall_totals.get("nomadic", 0) > 0:
+        _vassal_counts = (target.get("_calc_cache") or {}).get("vassal_counts", {})
+        _vassal_total = sum(_vassal_counts.values())
+        if _vassal_total > 0:
+            contribs.append(SourceContribution(
+                label="Vassals",
+                source_type="computed",
+                modifiers={"effective_pop_capacity": _vassal_total * _npcpv},
+            ))
+
     # ── Ruler charisma → trade slots ─────────────────────────────────────────
     _ruler_cha = (target.get("_calc_cache") or {}).get("highest_ruler_charisma", 0)
     if _ruler_cha > 0:

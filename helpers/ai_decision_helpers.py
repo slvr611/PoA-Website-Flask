@@ -19,6 +19,11 @@ from bson import ObjectId
 
 from app_core import mongo, json_data, category_data
 
+# Resources broadly useful for almost any goal or district — the AI keeps a
+# higher baseline urgency for these even when self-sustaining, since they're
+# rarely truly "surplus" the way a specialty resource like magic might be.
+ALWAYS_USEFUL_RESOURCES = {"food", "wood", "stone"}
+
 # ---------------------------------------------------------------------------
 # Personality — how racial traits and temperament bias the AI
 # ---------------------------------------------------------------------------
@@ -401,6 +406,12 @@ def _weights_from_net(net_production, stockpiles, prices, money_income, resource
         if net >= 0:
             if stockpile < 5 and net < 1:
                 w = 1.3
+            elif r in ALWAYS_USEFUL_RESOURCES:
+                # Food, wood, and stone are broadly useful for almost any goal
+                # or district — keep a meaningfully higher floor than other
+                # surplus resources so the AI keeps stockpiling them by default,
+                # unless a specific district need overrides via the cost boost.
+                w = 0.8
             else:
                 w = 0.3
         else:
