@@ -194,7 +194,14 @@ def nation_buildings(nation_name):
 
 @hex_map_routes.route("/api/hex-map/nation/<path:nation_name>/quick-add-city", methods=["POST"])
 def quick_add_city(nation_name):
-    """Admin-only: create a new city on a nation and return its id."""
+    """Admin-only: create a new city on a nation and return its id.
+
+    Fills the first blank placeholder slot in the nation's cities array if
+    one exists, rather than always appending. Nations often carry unused
+    blank entries (city_slots padding) ahead of real cities in the array;
+    appending past them pushes the new city beyond the visible/effective
+    slot range, where it can get cut off on later edits.
+    """
     if getattr(g, "edit_access_level", 0) < 10:
         return jsonify({"error": "Unauthorized"}), 403
 
@@ -204,16 +211,31 @@ def quick_add_city(nation_name):
     if not city_name or not city_type:
         return jsonify({"error": "Name and type are required"}), 400
 
-    import uuid
-    city_id = uuid.uuid4().hex[:8]
-    city = {"_id": city_id, "name": city_name, "type": city_type, "node": "", "wall": ""}
-
-    result = mongo.db.nations.update_one(
-        {"name": nation_name},
-        {"$push": {"cities": city}},
-    )
-    if result.matched_count == 0:
+    nation = mongo.db.nations.find_one({"name": nation_name}, {"cities": 1})
+    if not nation:
         return jsonify({"error": "Nation not found"}), 404
+
+    import uuid
+    cities = nation.get("cities", [])
+    empty_idx = next((i for i, c in enumerate(cities) if isinstance(c, dict) and not c.get("type")), None)
+
+    if empty_idx is not None:
+        city_id = cities[empty_idx].get("_id") or uuid.uuid4().hex[:8]
+        mongo.db.nations.update_one(
+            {"_id": nation["_id"]},
+            {"$set": {
+                f"cities.{empty_idx}._id": city_id,
+                f"cities.{empty_idx}.name": city_name,
+                f"cities.{empty_idx}.type": city_type,
+            }},
+        )
+    else:
+        city_id = uuid.uuid4().hex[:8]
+        city = {"_id": city_id, "name": city_name, "type": city_type, "node": "", "wall": ""}
+        mongo.db.nations.update_one(
+            {"_id": nation["_id"]},
+            {"$push": {"cities": city}},
+        )
 
     return jsonify({"ok": True, "city": {"id": city_id, "name": city_name, "type": city_type}})
 

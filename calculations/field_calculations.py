@@ -2320,8 +2320,13 @@ def _hex_neighbors(q, r):
     return [(q+1, r), (q-1, r), (q, r+1), (q, r-1), (q+1, r-1), (q-1, r+1)]
 
 
-def _compute_legal_placement(nation):
+def _compute_legal_placement(nation, owned_tiles=None):
     """Compute which tile types have legal placement spots and what nodes are available.
+
+    owned_tiles: optional pre-fetched list of this nation's tiles (same
+    projection as the internal query below). Callers processing many nations
+    in one pass should batch-fetch all hex_map_tiles once and pass the
+    per-nation slice here instead of letting every call query the DB.
 
     A legal tile (for districts) is: owned by the nation, has no existing building
     (district/city/wonder), and is adjacent to at least one tile that DOES have a
@@ -2365,11 +2370,12 @@ def _compute_legal_placement(nation):
             nation["_legal_placement_cache"] = result
             return result
 
-        owned_tiles = list(mongo.db.hex_map_tiles.find(
-            {"owner": nation_name},
-            {"q": 1, "r": 1, "terrain": 1, "district": 1, "city": 1, "wonder": 1,
-             "capital": 1, "node": 1, "_id": 0}
-        ))
+        if owned_tiles is None:
+            owned_tiles = list(mongo.db.hex_map_tiles.find(
+                {"owner": nation_name},
+                {"q": 1, "r": 1, "terrain": 1, "district": 1, "city": 1, "wonder": 1,
+                 "capital": 1, "node": 1, "_id": 0}
+            ))
 
         tile_map = {}
         node_map = {}

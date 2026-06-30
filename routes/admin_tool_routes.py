@@ -760,6 +760,22 @@ def wipe_ai_desires():
     return redirect(url_for("admin_tool_routes.admin_tools"))
 
 
+def _all_tiles_by_owner():
+    """Batch-fetch every tile in a single query, grouped by owner, with the
+    full projection _compute_legal_placement needs. Avoids two separate
+    hex_map_tiles queries per nation (one for city matching, one for legal
+    placement) when syncing all nations at once — that N+1 pattern was slow
+    enough to time out in production with a larger nation count."""
+    by_owner = {}
+    for t in mongo.db.hex_map_tiles.find(
+        {"owner": {"$nin": [None, ""]}},
+        {"q": 1, "r": 1, "terrain": 1, "district": 1, "city": 1, "wonder": 1,
+         "capital": 1, "node": 1, "owner": 1},
+    ):
+        by_owner.setdefault(t.get("owner", ""), []).append(t)
+    return by_owner
+
+
 @admin_tool_routes.route("/admin/sync_cities", methods=["GET"])
 @admin_required
 def sync_cities_preview():
@@ -768,10 +784,12 @@ def sync_cities_preview():
 
     player_ids = _get_player_nation_ids()
     ai_nations = list(mongo.db.nations.find({"_id": {"$nin": list(player_ids)}}).sort("name", ASCENDING))
+    tiles_by_owner = _all_tiles_by_owner()
 
     reports = []
     for n in ai_nations:
-        report = sync_nation_cities(n, dry_run=True)
+        owned = tiles_by_owner.get(n.get("name", ""), [])
+        report = sync_nation_cities(n, dry_run=True, tiles_with_city=owned, owned_tiles=owned)
         if report["added_to_nation"] or report["placed_on_map"] or report["unplaceable"]:
             reports.append(report)
 
@@ -787,15 +805,17 @@ def sync_cities_apply():
 
     player_ids = _get_player_nation_ids()
     ai_nations = list(mongo.db.nations.find({"_id": {"$nin": list(player_ids)}}))
+    tiles_by_owner = _all_tiles_by_owner()
 
     total_add = total_place = total_unplaceable = 0
     for n in ai_nations:
-        report = sync_nation_cities(n, dry_run=False)
+        owned = tiles_by_owner.get(n.get("name", ""), [])
+        report = sync_nation_cities(n, dry_run=False, tiles_with_city=owned, owned_tiles=owned)
         total_add += len(report["added_to_nation"])
         total_place += len(report["placed_on_map"])
         total_unplaceable += len(report["unplaceable"])
 
-    if total_add or total_place:
+    if total_place:
         bump_tile_version()
 
     msg = f"Synced cities: {total_add} added to nation pages, {total_place} placed on the map."

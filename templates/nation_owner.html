@@ -1363,9 +1363,14 @@
 					<h2>Cities</h2>
 					<p>{{ schema.properties.city_slots.label }}: {{ pf(nation.city_slots, pn.get("city_slots")) }}</p>
 					<div class="districts-grid">
-						{% for i in range(0, nation.city_slots) %}
+						{# nation.cities can hold more entries than city_slots (e.g. legacy padding
+						   ahead of real cities) — extend the loop to cover the full array so real
+						   cities are never hidden, but skip blank entries past the nominal slot count. #}
+						{% set total_city_rows = [nation.city_slots, nation.cities | length] | max %}
+						{% for i in range(0, total_city_rows) %}
 							{% set cur_city = nation.cities[i] if (nation.cities | length > i and nation.cities[i]) else {} %}
 							{% set cur_city_type = cur_city.get("type", "") %}
+							{% if i < nation.city_slots or cur_city_type %}
 							{% set cur_city_node = tile_node_map.get("city", {}).get(cur_city.get("_id", ""), "") %}
 							{% set cur_city_name = cur_city.get("name", "") %}
 							{% set pd_city = pending_cities[i] if (has_pending and pending_cities | length > i) else none %}
@@ -1427,6 +1432,7 @@
 									{% endif %}
 								{% endif %}
 							</div>
+							{% endif %}
 						{% endfor %}
 					</div>
 				{% endif %}

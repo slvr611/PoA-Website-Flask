@@ -291,14 +291,31 @@ def evaluate_nation_state(old_nation):
     money        = old_nation.get("money", 0)
     money_income = old_nation.get("money_income", 0)
 
-    # Available jobs — reuse existing requirement checker
+    # Available jobs — reuse existing requirement checker.
+    # Resolve region_name/def_keys once instead of letting check_job_requirements
+    # re-query the region for every single job (was a real N+1 query hotspot —
+    # ~1 second per nation just from this loop with the region DB round-trip
+    # repeated per job).
     from calculations.field_calculations import check_job_requirements
+    from bson import ObjectId as _ObjectId
+    region_name = ""
+    region_id = old_nation.get("region", "")
+    if region_id:
+        try:
+            region_doc = category_data["regions"]["database"].find_one(
+                {"_id": _ObjectId(region_id)}, {"name": 1}
+            )
+            region_name = region_doc["name"] if region_doc else ""
+        except Exception:
+            region_name = ""
+    def_keys = [d.get("def_key", "") for d in old_nation.get("districts", []) if d.get("def_key")]
+
     jobs_data = json_data.get("jobs", {})
     available_jobs = {}
     for jk, jdata in jobs_data.items():
         if old_nation.get(f"locks_{jk}", 0):
             continue
-        if check_job_requirements(old_nation, jdata, {}):
+        if check_job_requirements(old_nation, jdata, {}, region_name=region_name, def_keys=def_keys):
             available_jobs[jk] = jdata
 
     # Persistent jobs that survive cleanup and shouldn't be re-assigned
@@ -2021,7 +2038,7 @@ def _select_best_city(old_nation, state, exclude_types=None):
     return None
 
 
-def sync_nation_cities(nation, dry_run=True):
+def sync_nation_cities(nation, dry_run=True, tiles_with_city=None, owned_tiles=None):
     """
     Reconcile a nation's `cities` array against city objects placed on its
     owned map tiles. Two one-way operations, never destructive:
@@ -2035,6 +2052,16 @@ def sync_nation_cities(nation, dry_run=True):
 
     Existing cities/tiles are never modified or removed.
 
+    tiles_with_city: optional pre-fetched list of this nation's own tiles that
+    have a `city` set ({"q","r","city"} projection). Callers syncing many
+    nations in one pass should batch-fetch all such tiles in a single query
+    and pass the per-nation slice here instead of letting every call hit the
+    DB — that N+1 query pattern is what was timing out on production.
+
+    owned_tiles: optional pre-fetched list of ALL of this nation's tiles
+    (passed straight through to _compute_legal_placement), same reasoning —
+    avoids a second per-nation query for the placement scan.
+
     Returns {
         "name": str,
         "added_to_nation": [{"id","name","type"}, ...],
@@ -2047,10 +2074,11 @@ def sync_nation_cities(nation, dry_run=True):
     nation_cities = nation.get("cities", []) or []
     nation_city_ids = {c.get("_id") for c in nation_cities if c.get("_id")}
 
-    tiles_with_city = list(mongo.db.hex_map_tiles.find(
-        {"owner": nation_name, "city": {"$exists": True, "$ne": None}},
-        {"q": 1, "r": 1, "city": 1},
-    )) if nation_name else []
+    if tiles_with_city is None:
+        tiles_with_city = list(mongo.db.hex_map_tiles.find(
+            {"owner": nation_name, "city": {"$exists": True, "$ne": None}},
+            {"q": 1, "r": 1, "city": 1},
+        )) if nation_name else []
     tile_city_ids = {
         t["city"]["id"]: t for t in tiles_with_city
         if isinstance(t.get("city"), dict) and t["city"].get("id")
@@ -2064,7 +2092,17 @@ def sync_nation_cities(nation, dry_run=True):
     }
 
     # --- Direction 1: Map → Nation ---
-    new_nation_cities = []
+    # Fill existing blank placeholder slots first (preserving each new city's
+    # tile-linked _id), only appending past the end of the array once those
+    # are used up — otherwise new cities land past city_slots and get cut
+    # off the next time the page is edited.
+    blank_indices = [
+        i for i, c in enumerate(nation_cities)
+        if isinstance(c, dict) and not c.get("type")
+    ]
+    set_ops = {}
+    push_entries = []
+    blank_cursor = 0
     for cid, tile in tile_city_ids.items():
         if cid in nation_city_ids:
             continue
@@ -2076,16 +2114,24 @@ def sync_nation_cities(nation, dry_run=True):
             "node": "",
             "wall": "",
         }
-        new_nation_cities.append(entry)
+        if blank_cursor < len(blank_indices):
+            idx = blank_indices[blank_cursor]
+            blank_cursor += 1
+            for field, value in entry.items():
+                set_ops[f"cities.{idx}.{field}"] = value
+        else:
+            push_entries.append(entry)
         report["added_to_nation"].append({
             "id": cid, "name": entry["name"], "type": entry["type"],
         })
 
-    if new_nation_cities and not dry_run:
-        mongo.db.nations.update_one(
-            {"_id": nation["_id"]},
-            {"$push": {"cities": {"$each": new_nation_cities}}},
-        )
+    if not dry_run and (set_ops or push_entries):
+        update_doc = {}
+        if set_ops:
+            update_doc["$set"] = set_ops
+        if push_entries:
+            update_doc["$push"] = {"cities": {"$each": push_entries}}
+        mongo.db.nations.update_one({"_id": nation["_id"]}, update_doc)
 
     # --- Direction 2: Nation → Map ---
     # Skip blank placeholder entries (no type set) — these are unused city
@@ -2102,18 +2148,22 @@ def sync_nation_cities(nation, dry_run=True):
             state["net_production"], state["stockpiles"], prices, state["money_income"]
         )
         has_city_on_map = bool(tile_city_ids)
-        # Tiles already claimed earlier in this loop — never written to the DB
-        # in dry-run mode, so this must be tracked explicitly rather than
-        # relying on re-querying hex_map_tiles to see the previous pick.
+
+        # Computed once per nation, not once per city — this is the single
+        # DB query (+ admin-range scan) for the whole placement pass. Tiles
+        # claimed earlier in this loop are filtered out via reserved_coords
+        # below rather than by re-querying, since nothing in the DB needs to
+        # change for that exclusion to be correct (dry-run or not).
+        nation.pop("_legal_placement_cache", None)
+        legal_base = _compute_legal_placement(nation, owned_tiles=owned_tiles)
         reserved_coords = set()
 
         for c in to_place:
-            nation.pop("_legal_placement_cache", None)
-            legal = _compute_legal_placement(nation)
+            legal = legal_base
             if reserved_coords:
-                legal = dict(legal)
+                legal = dict(legal_base)
                 legal["legal_city_tiles"] = [
-                    t for t in legal.get("legal_city_tiles", [])
+                    t for t in legal_base.get("legal_city_tiles", [])
                     if t["coord"] not in reserved_coords
                 ]
             city_type = c.get("type", "generic")
