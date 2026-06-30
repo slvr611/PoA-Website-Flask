@@ -2262,15 +2262,22 @@ def sync_nation_cities(nation, dry_run=True, tiles_with_city=None, owned_tiles=N
     return report
 
 
-def _apply_goal_alignment(scored, goal_type):
-    """Apply goal-alignment bonus multiplier to scored districts."""
+def _apply_goal_alignment(scored, goal_type, state=None):
+    """Apply goal-alignment bonus multiplier to scored districts.
+    For "dynamic" goals (e.g. stabilize_economy), goal_job_resources is computed
+    from the nation's current baseline deficits rather than a fixed list."""
     affinity = GOAL_DISTRICT_AFFINITY.get(goal_type, {})
     bonus_mult = affinity.get("bonus", 1.0)
     goal_categories = set(affinity.get("categories", []))
     goal_job_resources = set(affinity.get("job_resources", []))
     goal_modifier_fields = set(affinity.get("modifier_fields", []))
     if affinity.get("dynamic"):
-        return scored, goal_categories, goal_job_resources, goal_modifier_fields
+        if state is not None:
+            goal_job_resources = {
+                r for r, net in state.get("net_production", {}).items() if net < 0
+            }
+        else:
+            return scored, goal_categories, goal_job_resources, goal_modifier_fields
 
     adjusted = []
     for entry in scored:
@@ -2319,7 +2326,7 @@ def _apply_goal_alignment(scored, goal_type):
     return adjusted, goal_categories, goal_job_resources, goal_modifier_fields
 
 
-def _goal_adjusted_need_weights(need_weights, goal_type):
+def _goal_adjusted_need_weights(need_weights, goal_type, state=None):
     """Apply goal-specific weight adjustments so district scoring values what the goal needs.
     Stability fields need very high weights because their production amounts are small
     (0.10-0.35) and they have price_scale 1.0 (vs 2.0-4.0 for real resources),
@@ -2333,6 +2340,15 @@ def _goal_adjusted_need_weights(need_weights, goal_type):
             w[r] = w.get(r, 1.3) + 2.0
     elif goal_type == "develop_technology":
         w["research"] = w.get("research", 0.4) + 3.0
+    elif goal_type == "stabilize_economy" and state is not None:
+        # The whole point of this goal is reducing upkeep burden — resources
+        # currently in deficit (baseline, before any jobs) need a dramatic
+        # weight multiplier so districts that fix them decisively beat
+        # districts producing resources the nation has no actual need for
+        # (e.g. a Ranch's mounts when food/wood/stone are short).
+        for r, net in state.get("net_production", {}).items():
+            if net < 0:
+                w[r] = w.get(r, 1.3) * 4.0 + 2.0
     return w
 
 
@@ -2353,11 +2369,11 @@ def evaluate_goal_district(old_nation, new_nation, state, goal, need_weights, pr
 
     # Apply goal-specific weight adjustments so district scoring
     # properly values goal-relevant modifiers (e.g. stability for stabilize_nation)
-    scoring_weights = _goal_adjusted_need_weights(need_weights, goal.get("type", ""))
+    scoring_weights = _goal_adjusted_need_weights(need_weights, goal.get("type", ""), state)
 
     # Score initial districts with goal alignment
     scored = score_buildable_districts(old_nation, state, scoring_weights, prices, upkeep_assignments)
-    adjusted, _, _, _ = _apply_goal_alignment(scored, goal.get("type", "")) if scored else ([], set(), set(), set())
+    adjusted, _, _, _ = _apply_goal_alignment(scored, goal.get("type", ""), state) if scored else ([], set(), set(), set())
 
     # Log initial scores for debugging
     district_log.append(f"[initial goal: {goal.get('type', '?')}]")
@@ -2421,9 +2437,9 @@ def evaluate_goal_district(old_nation, new_nation, state, goal, need_weights, pr
                     upkeep_projected, state["stockpiles"], prices, state["money_income"],
                     state.get("resource_capacity"),
                 )
-                nw_updated = _goal_adjusted_need_weights(nw_updated, goal.get("type", ""))
+                nw_updated = _goal_adjusted_need_weights(nw_updated, goal.get("type", ""), state)
                 scored = score_buildable_districts(old_nation, state, nw_updated, prices, upkeep_assignments)
-                adjusted, _, _, _ = _apply_goal_alignment(scored, goal.get("type", "")) if scored else ([], set(), set(), set())
+                adjusted, _, _, _ = _apply_goal_alignment(scored, goal.get("type", ""), state) if scored else ([], set(), set(), set())
 
             if not adjusted:
                 break
