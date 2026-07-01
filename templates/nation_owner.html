@@ -110,7 +110,7 @@
 		{% endif %}
 		{% if is_non_player_admin or g.is_non_player_rp_mod %}
 			<span class="edit-button" style="background:#2d4a5a;cursor:default;">Visibility: Bypassed (RP)</span>
-		{% elif g.user and (g.user.get('is_admin') or g.user.get('is_rp_mod')) %}
+		{% elif g.user and (g.user.get('is_admin') or g.is_rp_mod) %}
 			{% if visibility_bypassed %}
 				<a href="{{ request.path }}" class="edit-button" style="background:#2d5a2d">Visibility: Bypassed</a>
 			{% else %}

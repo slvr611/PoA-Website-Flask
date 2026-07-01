@@ -617,7 +617,7 @@
 
 
 {% macro render_visibility_bypass_bar(visibility_bypassed, current_url) %}
-{% if g.user and (g.user.is_admin or g.user.is_rp_mod) %}
+{% if g.user and (g.user.is_admin or g.is_rp_mod) %}
 <div style="display:flex;align-items:center;gap:0.75rem;padding:0.5rem 0.75rem;margin-bottom:0.75rem;
             background:{% if visibility_bypassed %}#2a1a00{% else %}#1a1a2a{% endif %};
             border:1px solid {% if visibility_bypassed %}#c8a96e{% else %}#444{% endif %};

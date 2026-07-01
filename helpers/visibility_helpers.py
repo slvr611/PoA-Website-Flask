@@ -235,7 +235,7 @@ def _is_bypass_requested(user) -> bool:
     """True when ?bypass_visibility=1 and user is admin or RP mod."""
     if not user or request.args.get("bypass_visibility") != "1":
         return False
-    return bool(user.get("is_admin") or user.get("is_rp_mod"))
+    return bool(user.get("is_admin") or getattr(g, 'is_rp_mod', False))
 
 
 def get_item_visibility(
@@ -288,7 +288,7 @@ def log_visibility_bypass(*, page_url: str, nation_name: str = "", source: str, 
     Write one record to admin_visibility_logs.
     No-op if user is None or not an admin/RP mod.
     """
-    if not (user and (user.get("is_admin") or user.get("is_rp_mod"))):
+    if not (user and (user.get("is_admin") or getattr(g, 'is_rp_mod', False))):
         return
     mongo.db.admin_visibility_logs.insert_one({
         "admin_id": user.get("id"),
