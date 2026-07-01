@@ -592,7 +592,7 @@ def create_war_form():
     ).sort("name", ASCENDING))
     war_types = _war_types()
 
-    # For each nation build its list of potential allies (military alliance + defensive pact partners)
+    # Allies: military alliance + defensive pact partners, keyed by nation_id
     nation_allies = {}
     for n in nations:
         nid = str(n["_id"])
@@ -600,11 +600,20 @@ def create_war_form():
         if allies:
             nation_allies[nid] = allies
 
+    # Direct vassals only — JS handles recursive expansion
+    nation_direct_vassals = {}
+    for n in nations:
+        nid = str(n["_id"])
+        vassals = _get_direct_vassals(nid)
+        if vassals:
+            nation_direct_vassals[nid] = vassals
+
     return render_template(
         "war_create.html",
         nations=nations,
         war_types=war_types,
         nation_allies=nation_allies,
+        nation_direct_vassals=nation_direct_vassals,
         war_goals_data=json_data.get("war_goals", {}),
         current_session=_current_session(),
     )

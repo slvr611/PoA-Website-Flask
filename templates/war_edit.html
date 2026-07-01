@@ -160,7 +160,7 @@ function rebuildSlotSummary() {
     SLOT_ORDER.filter(t => SLOT_LIMITS[t]).forEach(t => {
         const span = document.createElement('span');
         span.id = `slot-${t.toLowerCase()}`;
-        span.style = 'padding:3px 12px;border-radius:4px;font-size:0.82rem;background:#333;color:#aaa;border:1px solid #555;';
+        span.style.cssText = 'padding:3px 12px;border-radius:4px;font-size:0.82rem;background:#333;color:#aaa;border:1px solid #555;';
         el.appendChild(span);
     });
     updateSlotSummary();
@@ -186,7 +186,7 @@ function rebuildGoalPickers() {
         const tierGoals = WAR_GOALS_DATA[t.toLowerCase()] || {};
         const opts = Object.entries(tierGoals).map(([k,d]) => `<option value="${k}">${d.display_name}</option>`).join('');
         const wrap = document.createElement('div');
-        wrap.style = 'display:flex;gap:0.4rem;align-items:center;';
+        wrap.style.cssText = 'display:flex;gap:0.4rem;align-items:center;';
         wrap.innerHTML =
             `<span style="font-size:0.82rem;color:#aaa;white-space:nowrap;">+ ${t}:</span>` +
             `<select id="add-goal-${t.toLowerCase()}" class="form-control" style="min-width:180px;">` +
