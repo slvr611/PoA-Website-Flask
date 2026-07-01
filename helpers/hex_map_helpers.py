@@ -2,9 +2,42 @@ from app_core import mongo, category_data, json_data
 from bson import ObjectId
 import datetime
 import heapq
+import threading
 from collections import deque
 
 AXIAL_DIRECTIONS = [(1, 0), (-1, 0), (0, 1), (0, -1), (1, -1), (-1, 1)]
+
+# Fallback cache for compute_admin_range_out_of_range's full-tile-table fetch
+# when running outside a Flask request context (e.g. the session tick, which
+# runs in a plain background Thread — flask.g raises RuntimeError there, so
+# the request-scoped cache below silently never engages and re-queries the
+# entire map on every nation). Each tick spawns a fresh Thread, so this is
+# naturally scoped to one tick run with no stale-data risk across ticks.
+_admin_tile_cache_local = threading.local()
+
+
+def _get_cached_all_tiles():
+    """Full hex_map_tiles snapshot, cached per Flask request when available
+    and per background thread otherwise. See compute_admin_range_out_of_range."""
+    _projection = {"q": 1, "r": 1, "terrain": 1, "city": 1, "district": 1,
+                    "wonder": 1, "capital": 1, "owner": 1, "portal": 1, "route": 1, "_id": 0}
+    try:
+        from flask import g as _g
+        cached = getattr(_g, '_hex_admin_tile_cache', None)
+        if cached is not None:
+            return cached
+        tiles = list(mongo.db.hex_map_tiles.find({}, _projection))
+        _g._hex_admin_tile_cache = tiles
+        return tiles
+    except RuntimeError:
+        pass  # no Flask app/request context — fall through to thread-local cache
+
+    cached = getattr(_admin_tile_cache_local, 'tiles', None)
+    if cached is not None:
+        return cached
+    tiles = list(mongo.db.hex_map_tiles.find({}, _projection))
+    _admin_tile_cache_local.tiles = tiles
+    return tiles
 
 
 def hex_distance(q1, r1, q2, r2):
@@ -201,24 +234,10 @@ def compute_admin_range_out_of_range(nation_name, admin, nomadic=False, all_tile
     }
 
     if all_tiles is None:
-        # Re-use a request-scoped cache so the full tile fetch only happens once
-        # per Flask request (saves ~7s on every subsequent nation in the same tick).
-        try:
-            from flask import g as _g
-            all_tiles = getattr(_g, '_hex_admin_tile_cache', None)
-        except RuntimeError:
-            all_tiles = None  # outside request context (e.g. tests)
-
-        if all_tiles is None:
-            all_tiles = list(mongo.db.hex_map_tiles.find(
-                {},
-                {"q": 1, "r": 1, "terrain": 1, "city": 1, "district": 1, "wonder": 1, "capital": 1, "owner": 1, "portal": 1, "route": 1, "_id": 0},
-            ))
-            try:
-                from flask import g as _g
-                _g._hex_admin_tile_cache = all_tiles
-            except RuntimeError:
-                pass
+        # Cached so the full tile fetch only happens once per Flask request,
+        # or once per background thread (e.g. the session tick) — saves ~7s
+        # on every subsequent nation in the same tick.
+        all_tiles = _get_cached_all_tiles()
 
     tile_map = {(t["q"], t["r"]): t for t in all_tiles}
 

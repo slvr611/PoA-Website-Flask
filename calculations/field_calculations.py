@@ -1,11 +1,19 @@
 import math
 import copy
+import threading
 from copy import deepcopy
 from time import perf_counter
 from app_core import mongo, json_data, category_data
 from calculations.compute_functions import compute_pop_count, compute_field
 from calculations.scaling_methods import get_scaling_multiplier
 from bson.objectid import ObjectId
+
+# Fallback for load_db_units' per-request unit cache when running outside a
+# Flask request context (e.g. the session tick, which runs in a plain
+# background Thread — flask.g raises RuntimeError there, silently bypassing
+# the cache and re-querying the units collection on every nation).
+_unit_cache_local = threading.local()
+
 
 def _build_nation_calc_cache(target):
     target_id = str(target.get("_id", ""))
@@ -2138,15 +2146,21 @@ def load_db_units(unit_type=None):
     Ruler units are always excluded (they are not field units).
     Units whose name appears in multiple eras are keyed/displayed as "Era Name".
     """
-    # Cache per unit_type on Flask g to avoid re-querying on every nation during a tick.
+    # Cache per unit_type — Flask g when in a request, thread-local fallback
+    # otherwise (e.g. the session tick's background thread) — to avoid
+    # re-querying on every nation during a tick.
     _cache_key = f"_unit_cache_{unit_type}"
     try:
         from flask import g as _g
         _cached = getattr(_g, _cache_key, None)
         if _cached is not None:
             return _cached
+        _use_g = True
     except RuntimeError:
-        pass  # outside request context
+        _use_g = False
+        _cached = getattr(_unit_cache_local, _cache_key, None)
+        if _cached is not None:
+            return _cached
 
     query = {"unit_class": {"$ne": "Ruler Unit"}}
     if unit_type == "support":
@@ -2239,11 +2253,14 @@ def load_db_units(unit_type=None):
             },
         }
 
-    try:
-        from flask import g as _g
-        setattr(_g, _cache_key, db_units)
-    except RuntimeError:
-        pass
+    if _use_g:
+        try:
+            from flask import g as _g
+            setattr(_g, _cache_key, db_units)
+        except RuntimeError:
+            pass
+    else:
+        setattr(_unit_cache_local, _cache_key, db_units)
     return db_units
 
 
@@ -2617,20 +2634,35 @@ def check_upgrade_requirements(nation, upgrade_def):
     return _check_requirements_dict(nation, reqs)
 
 
-def check_unit_requirements(target, unit_details):
+def check_unit_requirements(target, unit_details,
+                             _district_def_keys=None, _district_categories=None):
+    """Return True if target meets all requirements to use this unit.
+
+    _district_def_keys / _district_categories: optional pre-computed sets
+    passed by callers that check many units against the same nation (e.g.
+    calculate_unit_details). Without them this function queries the DB once
+    per district per call — 300+ queries across 41 units × 8 districts is
+    the dominant hotspot in both change approval and nation page load.
+    """
     # Imperial units require the nation to be an empire
     if "Imperial" in (unit_details.get("unit_class") or "") and not target.get("empire", False):
         return False
 
     requirements = unit_details.get("requirements", {})
     meets_requirements = True
-    nation_district_def_keys = {d.get("def_key", "") for d in target.get("districts", []) if isinstance(d, dict) and d.get("def_key")}
-    nation_district_categories = set()
-    for dk in nation_district_def_keys:
-        dd = _resolve_def({"def_key": dk})
-        cat = dd.get("category", "")
-        if cat:
-            nation_district_categories.add(cat)
+    if _district_def_keys is None:
+        nation_district_def_keys = {d.get("def_key", "") for d in target.get("districts", []) if isinstance(d, dict) and d.get("def_key")}
+    else:
+        nation_district_def_keys = _district_def_keys
+    if _district_categories is None:
+        nation_district_categories = set()
+        for dk in nation_district_def_keys:
+            dd = _resolve_def({"def_key": dk})
+            cat = dd.get("category", "")
+            if cat:
+                nation_district_categories.add(cat)
+    else:
+        nation_district_categories = _district_categories
 
     check_name = False
     check_defensive_pact = False
@@ -2775,10 +2807,25 @@ def calculate_unit_details(target, unit_type, modifier_totals, district_totals, 
     general_resources = [resource["key"] for resource in general_resources]
     unique_resources = json_data["unique_resources"]
     unique_resources = [resource["key"] for resource in unique_resources]
-    
+
+    # Pre-compute district sets once for the whole unit loop instead of
+    # re-querying district_defs once per district per unit (was ~300 DB
+    # queries per calculate_unit_details call for nations with many districts).
+    _district_def_keys = {
+        d.get("def_key", "")
+        for d in target.get("districts", [])
+        if isinstance(d, dict) and d.get("def_key")
+    }
+    _district_categories = set()
+    for dk in _district_def_keys:
+        dd = _resolve_def({"def_key": dk})
+        cat = dd.get("category", "")
+        if cat:
+            _district_categories.add(cat)
+
     new_unit_details = {}
     for unit, details in unit_details.items():
-        if check_unit_requirements(target, details):
+        if check_unit_requirements(target, details, _district_def_keys, _district_categories):
             new_details = copy.deepcopy(details)
             has_name_req = bool(details.get("requirements", {}).get("name"))
             all_resource_upkeep = 0

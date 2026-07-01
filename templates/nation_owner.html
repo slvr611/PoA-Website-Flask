@@ -1257,10 +1257,15 @@
 				<h2>Districts</h2>
 				<p>{{ schema.properties.district_slots.label }}: {{ pf(nation.district_slots, pn.get("district_slots")) }}</p>
 				<div style="display:flex; flex-wrap:wrap; gap:1.25rem; margin-top:0.75rem;">
-					{% for i in range(0, nation.district_slots) %}
+					{# nation.districts can hold more entries than district_slots (e.g. AI append bug).
+					   Extend the loop so real districts beyond the nominal slot count stay visible
+					   rather than silently disappearing, but skip blank entries past the limit. #}
+					{% set total_district_rows = [nation.district_slots, nation.districts | length] | max %}
+					{% for i in range(0, total_district_rows) %}
 						{% set cur = nation.districts[i] if (nation.districts | length > i and nation.districts[i]) else {} %}
 						{% set cur_def_key = cur.get("def_key", "") %}
 						{% set cur_type = cur.get("type", "") %}
+						{% if i < nation.district_slots or cur_def_key or cur_type %}
 						{% set cur_node = tile_node_map.get("district", {}).get(cur.get("_id", ""), cur.get("node", "")) %}
 						{% set cur_upgrades = cur.get("upgrades", []) %}
 						{% set pd = pending_districts[i] if (has_pending and pending_districts | length > i) else none %}
@@ -1293,6 +1298,7 @@
 								<p>Empty Slot {{ i + 1 }}</p>
 							</div>
 							{% endif %}
+						{% endif %}
 						{% endif %}
 					{% endfor %}
 				</div>

@@ -419,5 +419,27 @@
 			</table>
 		</div>
 	</div>
+
+	{% if primary_nations %}
+	<div class="content" style="margin-top:1.5rem;">
+		<h2>Nations with this as Primary</h2>
+		<table class="info-table">
+			<thead>
+				<tr>
+					<th>Nation</th>
+					<th>Pop Count</th>
+				</tr>
+			</thead>
+			<tbody>
+				{% for n in primary_nations %}
+				<tr>
+					<td><a href="/nations/item/{{ n.name | urlencode }}">{{ n.name }}</a></td>
+					<td>{{ n.pop_count }}</td>
+				</tr>
+				{% endfor %}
+			</tbody>
+		</table>
+	</div>
+	{% endif %}
 </div>
 {% endblock %}

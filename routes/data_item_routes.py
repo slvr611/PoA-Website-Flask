@@ -459,6 +459,22 @@ def data_item(data_type, item_ref):
                 if p.get("nation") in visible_nations
             ]
 
+    primary_nations = []
+    if data_type in _DEMOGRAPHIC_TYPES:
+        item_id = str(item.get("_id", ""))
+        field_map = {"races": "primary_race", "cultures": "primary_culture", "religions": "primary_religion"}
+        primary_field = field_map.get(data_type)
+        if primary_field and item_id:
+            nations_db = category_data["nations"]["database"]
+            for n in nations_db.find(
+                {primary_field: item_id},
+                {"name": 1, "pop_count": 1},
+            ).sort("name", ASCENDING):
+                primary_nations.append({
+                    "name": n.get("name", ""),
+                    "pop_count": n.get("pop_count", 0),
+                })
+
     unit_traits = []
     if data_type == "units":
         trait_names = item.get("traits", [])
@@ -508,6 +524,7 @@ def data_item(data_type, item_ref):
         visibility_level=visibility_level,
         visibility_bypassed=visibility_bypassed,
         field_tiers=field_tiers,
+        primary_nations=primary_nations,
     )
 
 @data_item_routes.route("/<data_type>/edit")

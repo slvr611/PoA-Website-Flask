@@ -1727,6 +1727,25 @@ def _try_resolve_field(m):
         return ""
 
 
+def _insert_filling_empty_slot(items, new_entry, is_empty_fn):
+    """Insert new_entry into the first empty slot in items (in place), or
+    append if none is empty. Mutates and returns items.
+
+    Nation pages only render up to the nation's slot-count limit
+    (district_slots / city_slots) at the matching array index, so a newly
+    built district/city that gets appended past an existing empty slot can
+    end up beyond that limit and never be shown — even though a real slot
+    was sitting empty earlier in the list. Filling the first empty slot
+    keeps new builds within the visible range whenever room already exists.
+    """
+    for i, entry in enumerate(items):
+        if is_empty_fn(entry):
+            items[i] = new_entry
+            return items
+    items.append(new_entry)
+    return items
+
+
 def update_district_plan(old_nation, new_nation, state, goals, personality, market_buy_prices, need_weights, log, job_assignments=None):
     """
     If the nation has an existing plan, check if it's still best and affordable.
@@ -1769,7 +1788,10 @@ def update_district_plan(old_nation, new_nation, state, goals, personality, mark
         new_entry = {"def_key": key, "node": "", "upgrades": []} if plan["source"] == "db" \
                else {"type": key, "node": "", "era": 1}
         districts = list(new_nation.get("districts", deepcopy(old_nation.get("districts", []))))
-        districts.append(new_entry)
+        _insert_filling_empty_slot(
+            districts, new_entry,
+            lambda d: not d.get("def_key") and not d.get("type"),
+        )
         new_nation["districts"] = districts
 
         # Deduct cost
@@ -2041,6 +2063,34 @@ def _claim_district_tile(nation_name, district_id, def_key, display_name, coord,
                 "display_name": display_name, "type": "",
             }}},
         )
+    node = tile.get("node") or {}
+    if isinstance(node, dict):
+        node_key = node.get("resource_type") or node.get("value") or node.get("resource") or ""
+    else:
+        node_key = str(node) if node else ""
+    return node_key if node_key != "none" else ""
+
+
+def _claim_city_tile(nation_name, city_id, city_type, coord, set_capital=False, dry_run=False):
+    """Write the city onto the chosen hex tile so it appears on the map.
+
+    Mirrors _claim_district_tile. dry_run=True reads without writing —
+    used by the read-only AI Goals Preview tool.
+    Returns the tile's node resource key, or "" if none.
+    """
+    if not coord or not nation_name:
+        return ""
+    q, r = coord
+    tile = mongo.db.hex_map_tiles.find_one(
+        {"q": {"$in": [q, float(q)]}, "r": {"$in": [r, float(r)]}}
+    )
+    if not tile:
+        return ""
+    if not dry_run:
+        update = {"city": {"id": city_id, "name": "", "type": city_type}}
+        if set_capital:
+            update["capital"] = True
+        mongo.db.hex_map_tiles.update_one({"_id": tile["_id"]}, {"$set": update})
     node = tile.get("node") or {}
     if isinstance(node, dict):
         node_key = node.get("resource_type") or node.get("value") or node.get("resource") or ""
@@ -2469,7 +2519,7 @@ def evaluate_goal_district(old_nation, new_nation, state, goal, need_weights, pr
                     for r, amt in cost.items() if r != "money"
                 )
                 if money_ok and res_ok:
-                    # Deduct resources (city isn't auto-built by tick, but we reserve resources)
+                    # Deduct resources
                     for r, amt in cost.items():
                         if r == "money":
                             new_nation["money"] = new_nation.get("money", old_nation.get("money", 0)) - amt
@@ -2479,6 +2529,34 @@ def evaluate_goal_district(old_nation, new_nation, state, goal, need_weights, pr
                             storage[r] = storage.get(r, 0) - amt
                             state["stockpiles"][r] = state["stockpiles"].get(r, 0) - amt
                             new_nation["resource_storage"] = storage
+
+                    # Create the city entry and place it on the map tile.
+                    import uuid
+                    city_id = uuid.uuid4().hex[:8]
+                    city_type = city_plan.get("key", "generic")
+                    placement = city_plan.get("placement")
+                    coord = (placement["q"], placement["r"]) if placement else None
+                    node_key = _claim_city_tile(
+                        old_nation.get("name", ""), city_id, city_type,
+                        coord, set_capital=city_plan.get("set_capital", False),
+                        dry_run=dry_run,
+                    )
+                    city_entry = {
+                        "_id": city_id,
+                        "name": "",
+                        "type": city_type,
+                        "node": node_key,
+                        "wall": "",
+                    }
+                    cities = list(new_nation.get("cities", deepcopy(old_nation.get("cities", []))))
+                    _insert_filling_empty_slot(
+                        cities, city_entry,
+                        lambda c: not c.get("type"),
+                    )
+                    new_nation["cities"] = cities
+                    if coord:
+                        placed_desc = "Previewed placement" if dry_run else "Placed"
+                        district_log.append(f"  {placed_desc} at ({coord[0]},{coord[1]})" + (f" — node: {node_key}" if node_key else ""))
 
                     built_city_types.add(city_plan.get("key", ""))
                     district_log.append(f"Built city: {city_plan['display_name']}")
@@ -2566,7 +2644,10 @@ def evaluate_goal_district(old_nation, new_nation, state, goal, need_weights, pr
                         # build this session sees this tile as claimed.
                         old_nation.pop("_legal_placement_cache", None)
                 districts = list(new_nation.get("districts", deepcopy(old_nation.get("districts", []))))
-                districts.append(new_entry)
+                _insert_filling_empty_slot(
+                    districts, new_entry,
+                    lambda d: not d.get("def_key") and not d.get("type"),
+                )
                 new_nation["districts"] = districts
 
                 storage = dict(new_nation.get("resource_storage", deepcopy(old_nation.get("resource_storage", {}))))
