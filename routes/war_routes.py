@@ -832,11 +832,16 @@ def edit_war_form(item_ref):
     all_nations = list(mongo.db.nations.find({}, {"_id": 1, "name": 1}).sort("name", ASCENDING))
     current_session = _current_session()
 
+    attacker_participants = [p for p in participants if p["stance"] == "Attacker"]
+    defender_participants = [p for p in participants if p["stance"] == "Defender"]
+
     return render_template(
         "war_edit.html",
         war=war,
         war_id=war_id_str,
         participants=participants,
+        attacker_participants=attacker_participants,
+        defender_participants=defender_participants,
         all_nations=all_nations,
         current_session=current_session,
         war_types=_war_types(),
@@ -863,6 +868,16 @@ def save_war(item_ref):
             updates["session_ended"] = int(raw_ended)
         except ValueError:
             pass
+
+    new_war_type = request.form.get("war_type", "").strip()
+    if new_war_type:
+        updates["war_type"] = new_war_type
+    new_primary_aggressor = request.form.get("primary_aggressor", "").strip()
+    if new_primary_aggressor:
+        updates["primary_aggressor"] = new_primary_aggressor
+    new_primary_defender = request.form.get("primary_defender", "").strip()
+    if new_primary_defender:
+        updates["primary_defender"] = new_primary_defender
 
     if updates:
         mongo.db.wars.update_one({"_id": war["_id"]}, {"$set": updates})

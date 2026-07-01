@@ -40,6 +40,39 @@
                     </select>
                 </td>
             </tr>
+            <tr>
+                <th><label for="war_type">War Type</label></th>
+                <td>
+                    <select id="war_type" name="war_type" class="form-control" onchange="onWarTypeChange()">
+                        <option value="">— None —</option>
+                        {% for key, wt in war_types.items() %}
+                        <option value="{{ key }}" {% if war.war_type == key %}selected{% endif %}>{{ wt.display_name }}</option>
+                        {% endfor %}
+                    </select>
+                </td>
+            </tr>
+            <tr>
+                <th><label for="primary_aggressor">Primary Aggressor</label></th>
+                <td>
+                    <select id="primary_aggressor" name="primary_aggressor" class="form-control">
+                        <option value="">— Select from Attacker participants —</option>
+                        {% for p in attacker_participants %}
+                        <option value="{{ p.nation_id_str }}" {% if war.primary_aggressor == p.nation_id_str %}selected{% endif %}>{{ p.nation.name }}</option>
+                        {% endfor %}
+                    </select>
+                </td>
+            </tr>
+            <tr>
+                <th><label for="primary_defender">Primary Defender</label></th>
+                <td>
+                    <select id="primary_defender" name="primary_defender" class="form-control">
+                        <option value="">— Select from Defender participants —</option>
+                        {% for p in defender_participants %}
+                        <option value="{{ p.nation_id_str }}" {% if war.primary_defender == p.nation_id_str %}selected{% endif %}>{{ p.nation.name }}</option>
+                        {% endfor %}
+                    </select>
+                </td>
+            </tr>
         </table>
 
         {# ── Participants table (modifier-style rows) ── #}
@@ -81,13 +114,14 @@
         {% set TIER_ORDER = ["Trivial", "Minor", "Standard", "Extreme"] %}
         {% set TIER_COLORS = {"Trivial": "#223", "Minor": "#132", "Standard": "#132", "Extreme": "#321"} %}
 
+        <div id="goals-section" {% if not slots %}style="display:none"{% endif %}>
         <h2 style="margin-top:1.5rem;margin-bottom:0.25rem;">War Goals</h2>
 
         {% if not war.war_type %}
-        <p style="color:#888;font-size:0.9rem;">Set a war type to enable war goal slots.</p>
-        {% elif not slots %}
-        <p style="color:#888;font-size:0.9rem;">This war type has no war goal slots defined.</p>
+        <p style="color:#888;font-size:0.9rem;">Select a war type above to enable war goal slots.</p>
         {% else %}
+        {% if not slots %}<p style="color:#888;font-size:0.9rem;">This war type has no war goal slots defined.</p>{% endif %}
+        {% if slots %}
 
         {# Slot usage counters shown live via JS #}
         <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-bottom:0.75rem;" id="slot-summary">
@@ -123,8 +157,22 @@
                         {% set goal_def = war_goals_data.get(wg.slot_tier | lower, {}).get(wg.goal_key, {}) %}
                         {{ goal_def.display_name or wg.goal_key }}
                     </td>
-                    <td><input type="text" name="goals-{{ i }}-attacker" value="{{ wg.attacker or '' }}" class="form-control" style="min-width:130px;" placeholder="Nation name"></td>
-                    <td><input type="text" name="goals-{{ i }}-target"   value="{{ wg.target or '' }}"   class="form-control" style="min-width:130px;" placeholder="Nation name"></td>
+                    <td>
+                        <select name="goals-{{ i }}-attacker" class="form-control we-goal-nation">
+                            <option value="">— Any attacker —</option>
+                            {% for p in attacker_participants %}
+                            <option value="{{ p.nation.name }}" {% if wg.attacker == p.nation.name %}selected{% endif %}>{{ p.nation.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </td>
+                    <td>
+                        <select name="goals-{{ i }}-target" class="form-control we-goal-nation">
+                            <option value="">— Any defender —</option>
+                            {% for p in defender_participants %}
+                            <option value="{{ p.nation.name }}" {% if wg.target == p.nation.name %}selected{% endif %}>{{ p.nation.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </td>
                     <td><input type="text" name="goals-{{ i }}-notes"    value="{{ wg.notes or '' }}"    class="form-control" style="min-width:160px;" placeholder="Optional notes"></td>
                     <td><button type="button" class="btn-remove" onclick="removeGoalRow(this)">Remove</button></td>
                 </tr>
@@ -150,6 +198,8 @@
             {% endfor %}
         </div>
         {% endif %}
+        {% endif %}
+        </div>{# /goals-section #}
 
         <div style="margin-top: 1.5rem;">
             <button type="submit" class="btn-save">Save Changes</button>
@@ -159,9 +209,39 @@
 </div>
 
 <script>
-// War goals data for JS use
 const WAR_GOALS_DATA = {{ war_goals_data | tojson }};
-const SLOT_LIMITS = {{ slots | tojson }};
+const ALL_WAR_TYPES  = {{ war_types | tojson }};
+let SLOT_LIMITS      = {{ slots | tojson }};
+
+// Participant name lists for goal dropdowns
+const ATTACKER_NAMES = [
+    {% for p in attacker_participants %}{{ p.nation.name | tojson }}{% if not loop.last %},{% endif %}{% endfor %}
+];
+const DEFENDER_NAMES = [
+    {% for p in defender_participants %}{{ p.nation.name | tojson }}{% if not loop.last %},{% endif %}{% endfor %}
+];
+
+function _nationOptions(names, selectedVal) {
+    const blank = `<option value="">—</option>`;
+    return blank + names.map(n =>
+        `<option value="${n}"${n === selectedVal ? ' selected' : ''}>${n}</option>`
+    ).join('');
+}
+
+function onWarTypeChange() {
+    const key = document.getElementById('war_type').value;
+    const wt  = ALL_WAR_TYPES[key] || {};
+    SLOT_LIMITS = wt.slots || {};
+
+    // Show/hide the goals section based on whether slots exist
+    const goalsSection = document.getElementById('goals-section');
+    if (goalsSection) {
+        const hasSlots = Object.keys(SLOT_LIMITS).length > 0;
+        goalsSection.style.display = hasSlots ? '' : 'none';
+    }
+    updateSlotSummary();
+}
+
 
 function _goalReindex() {
     const rows = document.getElementById('goals-tbody').children;
@@ -232,9 +312,19 @@ function addGoalRow(tier, btn) {
         <input type="hidden" name="goals-${idx}-goal_key"  value="${goalKey}">
         <td><span class="tier-badge-sm">${tier}</span></td>
         <td>${goalName}</td>
-        <td><input type="text" name="goals-${idx}-attacker" class="form-control" style="min-width:130px;" placeholder="Nation name"></td>
-        <td><input type="text" name="goals-${idx}-target"   class="form-control" style="min-width:130px;" placeholder="Nation name"></td>
-        <td><input type="text" name="goals-${idx}-notes"    class="form-control" style="min-width:160px;" placeholder="Optional notes"></td>
+        <td>
+            <select name="goals-${idx}-attacker" class="form-control we-goal-nation">
+                <option value="">— Any attacker —</option>
+                ${_nationOptions(ATTACKER_NAMES, '')}
+            </select>
+        </td>
+        <td>
+            <select name="goals-${idx}-target" class="form-control we-goal-nation">
+                <option value="">— Any defender —</option>
+                ${_nationOptions(DEFENDER_NAMES, '')}
+            </select>
+        </td>
+        <td><input type="text" name="goals-${idx}-notes" class="form-control" style="min-width:160px;" placeholder="Optional notes"></td>
         <td><button type="button" class="btn-remove" onclick="removeGoalRow(this)">Remove</button></td>
     `;
     document.getElementById('goals-tbody').appendChild(tr);
@@ -351,6 +441,7 @@ function removeParticipantRow(btn) {
     font-size: 0.95rem;
 }
 .btn-save:hover { background: #334d72; }
+.we-goal-nation { min-width: 150px; }
 
 /* ── war goals ── */
 .tier-badge-sm {
