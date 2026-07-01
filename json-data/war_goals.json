@@ -1,0 +1,218 @@
+{
+    "trivial": {
+        "civil_war": {
+            "display_name": "Civil War",
+            "description": "Civil War ends, annexing the other nation(s) in the civil war.",
+            "prerequisites": ["Must be an independent nation in a civil war."],
+            "war_type_only": ["civil_war"],
+            "max_per_war": null
+        },
+        "conversion": {
+            "display_name": "Conversion",
+            "description": "May convert a pop of the nation's primary religion, or two pops of a non-primary religion.",
+            "prerequisites": [],
+            "war_type_only": ["holy_war"],
+            "max_per_war": null
+        },
+        "destroy_bandits": {
+            "display_name": "Destroy Bandits",
+            "description": "Target bandit camp is destroyed, and a portion of their stolen goods are captured; this can be split or fought over as per the bandit rules.",
+            "prerequisites": ["Only war goal allowed against Bandit Camps."],
+            "max_per_war": null
+        },
+        "force_market": {
+            "display_name": "Force Market",
+            "description": "Target is forced to join a market on a Safety Stance of your choice, and must build a route to a valid member of the market. Target cannot leave, or willingly trade outside of the market for three sessions, doubled for AI nations. If target is already in a market, must be paired with the Expel Market war goal.",
+            "prerequisites": ["Target must be within trade range of at least one member of the market."],
+            "max_per_war": null
+        },
+        "humiliate": {
+            "display_name": "Humiliate",
+            "description": "Target loses one level of stability, you gain one level of stability.",
+            "prerequisites": ["Target must have a higher level of stability than you."],
+            "max_per_war": null
+        },
+        "inquisition": {
+            "display_name": "Inquisition",
+            "description": "Target nation suffers +5 DC when converting your pops for the remainder of the age.",
+            "prerequisites": [],
+            "war_type_only": ["holy_war"],
+            "max_per_war": 1
+        },
+        "raid_treasury": {
+            "display_name": "Raid Treasury",
+            "description": "Seize up to 50% of the target's money, based on how much they had at war start. If the nation cannot pay the required money, they instantly go into debt equal to the remaining amount with the nation with the war goal, with a five session hard deadline.",
+            "prerequisites": [],
+            "max_per_war": 1
+        },
+        "rebellion": {
+            "display_name": "Rebellion",
+            "description": "If the overlord was victorious, they may elect to either re-vassalize the rebelling nation, or annex them. The new vassal starts with the loyal level of compliance. If the rebelling nation was successful, they are made independent, gain a level of stability, and a non-aggression pact with their old overlord.",
+            "prerequisites": [],
+            "war_type_only": ["rebellion"],
+            "max_per_war": null
+        },
+        "steal_resource": {
+            "display_name": "Steal Resource",
+            "description": "Seize up to 50% of two of the target's non-money resources, chosen at war start, rounding up. Alternatively, you may seize 100% of one of the target's non-money resources. If the nation cannot pay the required resources, they must deconstruct any districts that could assist in paying the full total.",
+            "prerequisites": [],
+            "max_per_war": null
+        },
+        "steal_technology": {
+            "display_name": "Steal Technology",
+            "description": "Target cannot research next session, you gain one technology of your choice that target has researched.",
+            "prerequisites": [],
+            "max_per_war": 1
+        },
+        "weaken": {
+            "display_name": "Weaken",
+            "description": "Target suffers a -1 to all mech-rp rolls the next session.",
+            "prerequisites": [],
+            "max_per_war": 1
+        }
+    },
+    "minor": {
+        "blockade": {
+            "display_name": "Blockade",
+            "description": "Target reduces their Import and Export slots by 1 (Per Era) for three sessions.",
+            "prerequisites": [],
+            "max_per_war": 1
+        },
+        "expel_market": {
+            "display_name": "Expel Market",
+            "description": "Target is forced out of a market, and may not rejoin it for five sessions; doubled for AI nations.",
+            "prerequisites": ["Target must be a part of a market."],
+            "max_per_war": null
+        },
+        "hostages": {
+            "display_name": "Hostages",
+            "description": "For three sessions, target loses a level of stability if they declare war on your nation, or join a war in which you are the primary war target.",
+            "prerequisites": ["Prejudice"],
+            "max_per_war": 1
+        },
+        "seize_artifact": {
+            "display_name": "Seize Artifact",
+            "description": "Seize a non-mythical artifact from a target, they suffer -10 DC on all attempts to steal it back for the next three sessions.",
+            "prerequisites": ["Target has a non-mythical artifact."],
+            "max_per_war": null
+        },
+        "minor_liberate": {
+            "display_name": "Minor Liberate",
+            "description": "Target must release one non-loyal tributary, or protectorate vassal of the Attacker's choice. Released vassal gains two levels of relations with liberator (AI).",
+            "prerequisites": ["Target has at least one tributary or protectorate vassal."],
+            "max_per_war": null
+        },
+        "minor_vassalization": {
+            "display_name": "Minor Vassalization",
+            "description": "Target becomes either your Protectorate or Tributary vassal, at Neutral Compliance. If the target is a player, they may instead choose to break off as a three pop nomadic nation, with the remainder of their pops becoming the vassal. Until they gain an additional pop, all wars against them suffer 20 additional infamy. Target gains 15 WS when the war is declared.",
+            "prerequisites": ["Target currently has less than half of your current territory or less than half of your current pops.", "Target must be left with at least 3 pops, and three hexes of land territory.", "Target is independent."],
+            "max_per_war": null
+        },
+        "pay_reparations": {
+            "display_name": "Pay Reparations",
+            "description": "Target instantly enters into debt equal to $200 (Per Era) with the nation with the war goal, with a five session hard deadline.",
+            "prerequisites": ["Manorialism"],
+            "max_per_war": null
+        },
+        "policy_change": {
+            "display_name": "Policy Change",
+            "description": "Target must dedicate one mech-rp for two sessions to whatever you dictate; they are not obligated to put forth any bonuses to the rolls, but suffer a level of stability if they are deemed to have sabotaged them.",
+            "prerequisites": [],
+            "max_per_war": 1
+        },
+        "seize_district": {
+            "display_name": "Seize District",
+            "description": "Target district is seized from nation and moved to any hex within your nation. If at capacity, the district is kept for one session.",
+            "prerequisites": ["Must be able to place and own target district."],
+            "max_per_war": null
+        },
+        "seize_slaves": {
+            "display_name": "Seize Slaves",
+            "description": "Seize 1 Slave from target; if target does not have 1 Slave, they lose 1 pop for two sessions instead. Suffer 5 infamy at war end. Target gains 20 WS when the war is declared.",
+            "prerequisites": ["Target must have more than 3 pops."],
+            "max_per_war": 2
+        }
+    },
+    "standard": {
+        "conquest": {
+            "display_name": "Conquest",
+            "description": "Can spend up to ten points on: Empty territory (1 pt/hex), Territory with route (2 pt/hex), Territory with node (3 pt/hex), Territory with district (4 pt/hex), Territory with city (8 pt/hex), 1 pop (4 pt/pop). This land must be connected; at least one hex must be on the exterior of the target's borders. Target gains 30 WS when the war is declared.",
+            "prerequisites": ["Target will be left with at least 3 hexes of territory and 3 pops (AI) / 5 pops (Players).", "Target cannot be left with less than half of their starting territory without the Annexation war goal."],
+            "max_per_war": null
+        },
+        "disarm": {
+            "display_name": "Disarm",
+            "description": "For three sessions, target doubles the recruitment cost of all units. This restriction ends if anyone declares war on the target.",
+            "prerequisites": [],
+            "max_per_war": 1
+        },
+        "isolate": {
+            "display_name": "Isolate",
+            "description": "Target has all defensive and military pacts broken, and may not reform any for three sessions. This penalty ends if a non-raid war is declared on them.",
+            "prerequisites": [],
+            "max_per_war": null
+        },
+        "liberate": {
+            "display_name": "Liberate",
+            "description": "Target must release one non-loyal vassal of the Attacker's choice. Released vassal gains two levels of relations with liberator (AI).",
+            "prerequisites": ["Target has at least one vassal."],
+            "max_per_war": null
+        },
+        "ransack": {
+            "display_name": "Ransack",
+            "description": "Target has a random district and city sacked, with the resources going to you, and suffers -2 Rolling Karma.",
+            "prerequisites": ["Target must have a district and city to sack."],
+            "max_per_war": null
+        },
+        "regime_change": {
+            "display_name": "Regime Change*",
+            "description": "Target character is deposed, and target nation must either make a new one, or abandon the nation to play the character. If below Allied, the nation goes to that level of relations with you (AI). *If target is immortal, increase the slot cost of this war goal to Extreme.",
+            "prerequisites": [],
+            "max_per_war": 1
+        },
+        "seize_market": {
+            "display_name": "Seize Market",
+            "description": "Target loses control of the market, and you become the market leader. At an additional infamy cost of 15, you can change the market type. Target may not declare this same war goal on you for five sessions.",
+            "prerequisites": ["Market Control", "Target must be a market leader in a market you are in."],
+            "max_per_war": null
+        },
+        "vassalization": {
+            "display_name": "Vassalization",
+            "description": "Target becomes a non-Provincial vassal of your choice. Target must be left with at least 5 pops and three hexes of land territory. If the target is a player, they may instead choose to break off as a five pop nomadic nation. Target gains 25 WS when the war is declared.",
+            "prerequisites": ["Target will have less than five hexes of territory (settled only) and less than half of your current pops after war end.", "Target is independent."],
+            "max_per_war": null
+        }
+    },
+    "extreme": {
+        "annexation": {
+            "display_name": "Annexation",
+            "description": "Target is annexed. AI: all artifacts roll a flat 25% loss chance, entire nation is absorbed. If the target is a player, you seize all artifacts, all but five pops, and they are forced into nomadic with major restrictions for three sessions. Target gains 50 WS when the war is declared. Suffer 25 infamy if the target is already at war.",
+            "prerequisites": ["Target will have less than eight hexes of territory (settled only) and less than half of your current pops after war end."],
+            "max_per_war": null
+        },
+        "cull_bloodline": {
+            "display_name": "Cull Bloodline",
+            "description": "Target non-immortal ruler is killed. The next three characters created by the target have their Strengths, Weaknesses and type chosen by you (ends at end of era). If below Allied, the nation goes to that level of relations (AI). Suffer 15 infamy if the target has already had this war goal enforced on them this era.",
+            "prerequisites": [],
+            "max_per_war": null
+        },
+        "demilitarize": {
+            "display_name": "Demilitarize",
+            "description": "For five sessions, target triples the recruitment cost of all units. Seize any artifact from target. Suffer 15 infamy if the target has already had this war goal enforced on them this era.",
+            "prerequisites": [],
+            "max_per_war": 1
+        },
+        "devastate": {
+            "display_name": "Devastate",
+            "description": "Target has three random districts and cities destroyed, one random pop killed, and suffers -4 Rolling Karma. Suffer 15 infamy if the target has already had this war goal enforced on them this era.",
+            "prerequisites": [],
+            "max_per_war": 1
+        },
+        "puppet_state": {
+            "display_name": "Puppet State",
+            "description": "Target must dedicate ten mech-rps (fifteen for AI), at least twice a session, to whatever you dictate; they are obligated to put forth at least a +5 bonus to the mech-rp before RP. Target suffers a level of stability if they are deemed to have sabotaged the roll or not met the +5. Suffer 15 infamy if the target has already had this war goal enforced on them this era.",
+            "prerequisites": [],
+            "max_per_war": 1
+        }
+    }
+}

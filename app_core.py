@@ -120,7 +120,7 @@ rarity_rankings = {"Mythical": 0, "Legendary": 1, "Great": 2, "Good": 3, "Mundan
 json_files = ["jobs", "tech", "nation_imperial_districts", "mercenary_districts",
                 "merchant_production_districts", "merchant_specialty_districts", "merchant_luxury_districts",
                 "cities", "terrains", "walls", "positive_titles", "negative_titles", "meta_mods", "modifier_types",
-                "scaling_types", "scope_definitions"]
+                "scaling_types", "scope_definitions", "war_types", "war_goals"]
 json_data = {"general_resources": [
             # color: optional hex string for map node rendering; omit to auto-generate
             {"key": "food",     "name": "Food",     "base_storage": 25, "base_price": 50,  "color": "#00ff00"},

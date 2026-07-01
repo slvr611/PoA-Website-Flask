@@ -1,0 +1,75 @@
+{
+    "civil_war": {
+        "display_name": "Civil War",
+        "non_aggression_pact_duration": null,
+        "infamy": 0,
+        "slots": {"Trivial": 1},
+        "no_allies": false,
+        "no_vassals": false,
+        "notes": "Must be an independent nation in a civil war."
+    },
+    "rebellion": {
+        "display_name": "Rebellion",
+        "non_aggression_pact_duration": null,
+        "infamy": 0,
+        "slots": {"Trivial": 1},
+        "no_allies": false,
+        "no_vassals": false,
+        "notes": "Must have or be a rebelling vassal."
+    },
+    "raid_war": {
+        "display_name": "Raid War",
+        "non_aggression_pact_duration": null,
+        "infamy": 0,
+        "slots": {"Trivial": 1},
+        "no_allies": true,
+        "no_vassals": true,
+        "notes": "Gain 5 infamy after every war session in which the war does not end. Both sides are limited to a quarter (rounded up) of their unit capacity. Allies and vassals cannot be brought in by either side."
+    },
+    "holy_war": {
+        "display_name": "Holy War",
+        "non_aggression_pact_duration": null,
+        "infamy": 10,
+        "slots": {"Trivial": 2},
+        "no_allies": false,
+        "no_vassals": false,
+        "notes": "If the primary religion of the target is Alien to yours, add an additional Trivial slot and decrease infamy by 5. For a religion that is Kindred, reverse these effects. Only the Conversion and Inquisition war goals may be used.",
+        "religion_modifier": true
+    },
+    "minor_war": {
+        "display_name": "Minor War",
+        "non_aggression_pact_duration": "1 Session",
+        "infamy": 10,
+        "slots": {"Trivial": 1, "Minor": 1},
+        "no_allies": false,
+        "no_vassals": false,
+        "notes": "Both sides are limited to half (rounded up) of their unit capacity."
+    },
+    "moderate_war": {
+        "display_name": "Moderate War",
+        "non_aggression_pact_duration": "2 Sessions",
+        "infamy": 20,
+        "slots": {"Trivial": 2, "Minor": 1, "Standard": 1},
+        "no_allies": false,
+        "no_vassals": false,
+        "notes": null
+    },
+    "major_war": {
+        "display_name": "Major War",
+        "non_aggression_pact_duration": "3 Sessions",
+        "infamy": 35,
+        "slots": {"Minor": 2, "Standard": 1, "Extreme": 1},
+        "no_allies": false,
+        "no_vassals": false,
+        "notes": "Requires Casus Belli."
+    },
+    "total_war": {
+        "display_name": "Total War",
+        "non_aggression_pact_duration": "5 Sessions",
+        "infamy": 45,
+        "slots": {"Minor": 3, "Standard": 2, "Extreme": 2},
+        "no_allies": false,
+        "no_vassals": false,
+        "notes": "Not available in the Medieval Era."
+    }
+}

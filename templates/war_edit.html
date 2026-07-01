@@ -75,12 +75,181 @@
 
         <button type="button" class="btn-add" onclick="addParticipantRow()">+ Add Participant</button>
 
+        {# ── War Goals ── #}
+        {% set war_type_data = war_types.get(war.war_type, {}) %}
+        {% set slots = war_type_data.slots or {} %}
+        {% set TIER_ORDER = ["Trivial", "Minor", "Standard", "Extreme"] %}
+        {% set TIER_COLORS = {"Trivial": "#223", "Minor": "#132", "Standard": "#132", "Extreme": "#321"} %}
+
+        <h2 style="margin-top:1.5rem;margin-bottom:0.25rem;">War Goals</h2>
+
+        {% if not war.war_type %}
+        <p style="color:#888;font-size:0.9rem;">Set a war type to enable war goal slots.</p>
+        {% elif not slots %}
+        <p style="color:#888;font-size:0.9rem;">This war type has no war goal slots defined.</p>
+        {% else %}
+
+        {# Slot usage counters shown live via JS #}
+        <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-bottom:0.75rem;" id="slot-summary">
+            {% for tier in TIER_ORDER %}
+            {% if slots[tier] %}
+            <span id="slot-{{ tier | lower }}" style="padding:3px 12px;border-radius:4px;font-size:0.82rem;background:#333;color:#aaa;border:1px solid #555;">
+                {{ tier }}: 0/{{ slots[tier] }}
+            </span>
+            {% endif %}
+            {% endfor %}
+        </div>
+
+        <table class="info-table war-edit-table" id="goals-tbody-wrapper">
+            <thead>
+                <tr>
+                    <th>Tier</th>
+                    <th>Goal</th>
+                    <th>Attacker</th>
+                    <th>Target</th>
+                    <th>Notes</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody id="goals-tbody">
+                {% for wg in (war.war_goals or []) %}{% set i = loop.index0 %}
+                <tr>
+                    <input type="hidden" name="goals-{{ i }}-slot_tier"  value="{{ wg.slot_tier }}">
+                    <input type="hidden" name="goals-{{ i }}-goal_key"   value="{{ wg.goal_key }}">
+                    <td>
+                        <span class="tier-badge-sm">{{ wg.slot_tier }}</span>
+                    </td>
+                    <td>
+                        {% set goal_def = war_goals_data.get(wg.slot_tier | lower, {}).get(wg.goal_key, {}) %}
+                        {{ goal_def.display_name or wg.goal_key }}
+                    </td>
+                    <td><input type="text" name="goals-{{ i }}-attacker" value="{{ wg.attacker or '' }}" class="form-control" style="min-width:130px;" placeholder="Nation name"></td>
+                    <td><input type="text" name="goals-{{ i }}-target"   value="{{ wg.target or '' }}"   class="form-control" style="min-width:130px;" placeholder="Nation name"></td>
+                    <td><input type="text" name="goals-{{ i }}-notes"    value="{{ wg.notes or '' }}"    class="form-control" style="min-width:160px;" placeholder="Optional notes"></td>
+                    <td><button type="button" class="btn-remove" onclick="removeGoalRow(this)">Remove</button></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        {# Add goal picker #}
+        <div style="margin-top:0.5rem;display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+            {% for tier in TIER_ORDER %}
+            {% if slots[tier] %}
+            <div style="display:flex;gap:0.4rem;align-items:center;">
+                <span style="font-size:0.82rem;color:#aaa;white-space:nowrap;">+ {{ tier }}:</span>
+                <select id="add-goal-{{ tier | lower }}" class="form-control" style="min-width:180px;">
+                    <option value="">— select goal —</option>
+                    {% for goal_key, goal_def in war_goals_data.get(tier | lower, {}).items() %}
+                    <option value="{{ goal_key }}">{{ goal_def.display_name }}</option>
+                    {% endfor %}
+                </select>
+                <button type="button" class="btn-add" onclick="addGoalRow('{{ tier }}', this)">Add</button>
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+        {% endif %}
+
         <div style="margin-top: 1.5rem;">
             <button type="submit" class="btn-save">Save Changes</button>
             <a href="/wars/item/{{ war.name }}" style="margin-left: 1rem; color: #aaa;">Cancel</a>
         </div>
     </form>
 </div>
+
+<script>
+// War goals data for JS use
+const WAR_GOALS_DATA = {{ war_goals_data | tojson }};
+const SLOT_LIMITS = {{ slots | tojson }};
+
+function _goalReindex() {
+    const rows = document.getElementById('goals-tbody').children;
+    Array.from(rows).forEach((tr, i) => {
+        tr.querySelectorAll('input[name], select[name]').forEach(el => {
+            el.name = el.name.replace(/goals-\d+-/, `goals-${i}-`);
+        });
+    });
+    updateSlotSummary();
+}
+
+function updateSlotSummary() {
+    const rows = document.getElementById('goals-tbody').children;
+    const used = {};
+    Array.from(rows).forEach(tr => {
+        const tierInput = tr.querySelector('input[name$="-slot_tier"]');
+        if (tierInput) {
+            const t = tierInput.value;
+            used[t] = (used[t] || 0) + 1;
+        }
+    });
+    Object.entries(SLOT_LIMITS).forEach(([tier, max]) => {
+        const el = document.getElementById('slot-' + tier.toLowerCase());
+        if (!el) return;
+        const cnt = used[tier] || 0;
+        const over = cnt > max;
+        el.textContent = `${tier}: ${cnt}/${max}`;
+        el.style.color = over ? '#e08080' : '#aaa';
+        el.style.borderColor = over ? '#e08080' : '#555';
+    });
+}
+
+function addGoalRow(tier, btn) {
+    const selectEl = document.getElementById('add-goal-' + tier.toLowerCase());
+    const goalKey = selectEl.value;
+    if (!goalKey) return;
+
+    // Check slot capacity
+    const max = SLOT_LIMITS[tier] || 0;
+    const rows = document.getElementById('goals-tbody').children;
+    const used = Array.from(rows).filter(tr => {
+        const ti = tr.querySelector('input[name$="-slot_tier"]');
+        return ti && ti.value === tier;
+    }).length;
+    if (used >= max) {
+        alert(`No remaining ${tier} slots (${used}/${max} used).`);
+        return;
+    }
+
+    // Check max_per_war
+    const goalDef = (WAR_GOALS_DATA[tier.toLowerCase()] || {})[goalKey] || {};
+    if (goalDef.max_per_war !== null && goalDef.max_per_war !== undefined) {
+        const alreadyUsed = Array.from(rows).filter(tr => {
+            const ki = tr.querySelector('input[name$="-goal_key"]');
+            return ki && ki.value === goalKey;
+        }).length;
+        if (alreadyUsed >= goalDef.max_per_war) {
+            alert(`"${goalDef.display_name}" may only be used ${goalDef.max_per_war} time(s) per war.`);
+            return;
+        }
+    }
+
+    const idx = rows.length;
+    const goalName = goalDef.display_name || goalKey;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+        <input type="hidden" name="goals-${idx}-slot_tier" value="${tier}">
+        <input type="hidden" name="goals-${idx}-goal_key"  value="${goalKey}">
+        <td><span class="tier-badge-sm">${tier}</span></td>
+        <td>${goalName}</td>
+        <td><input type="text" name="goals-${idx}-attacker" class="form-control" style="min-width:130px;" placeholder="Nation name"></td>
+        <td><input type="text" name="goals-${idx}-target"   class="form-control" style="min-width:130px;" placeholder="Nation name"></td>
+        <td><input type="text" name="goals-${idx}-notes"    class="form-control" style="min-width:160px;" placeholder="Optional notes"></td>
+        <td><button type="button" class="btn-remove" onclick="removeGoalRow(this)">Remove</button></td>
+    `;
+    document.getElementById('goals-tbody').appendChild(tr);
+    selectEl.value = '';
+    updateSlotSummary();
+}
+
+function removeGoalRow(btn) {
+    btn.closest('tr').remove();
+    _goalReindex();
+}
+
+// Initialize slot summary on load
+updateSlotSummary();
+</script>
 
 {# Embed all nations as JSON for the JS dropdown #}
 <script>
@@ -182,5 +351,17 @@ function removeParticipantRow(btn) {
     font-size: 0.95rem;
 }
 .btn-save:hover { background: #334d72; }
+
+/* ── war goals ── */
+.tier-badge-sm {
+    display: inline-block;
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    border-radius: 3px;
+    background: #333;
+    color: #aaa;
+    border: 1px solid #555;
+    white-space: nowrap;
+}
 </style>
 {% endblock %}

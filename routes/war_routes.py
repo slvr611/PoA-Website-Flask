@@ -1,11 +1,167 @@
 from flask import Blueprint, render_template, request, redirect, flash, jsonify, abort
-from app_core import mongo, category_data
+from app_core import mongo, category_data, json_data
 from helpers.auth_helpers import admin_required
 from helpers.hex_map_helpers import get_all_tiles
 from bson import ObjectId
 from pymongo import ASCENDING
 
 war_routes = Blueprint("war_routes", __name__)
+
+# ---------------------------------------------------------------------------
+# War type helpers
+# ---------------------------------------------------------------------------
+
+def _war_types():
+    return json_data.get("war_types", {})
+
+
+def _get_infamy_for_war(war_type_key, aggressor_religion_name=None, defender_religion_name=None):
+    """Return infamy cost for a war type, applying Holy War religion modifiers."""
+    wt = _war_types().get(war_type_key, {})
+    infamy = wt.get("infamy", 0)
+    if war_type_key == "holy_war" and aggressor_religion_name and defender_religion_name:
+        rel_type = _religion_relationship(aggressor_religion_name, defender_religion_name)
+        if rel_type == "alien":
+            infamy = max(0, infamy - 5)
+        elif rel_type == "kindred":
+            infamy += 5
+    return infamy
+
+
+def _religion_relationship(rel_a, rel_b):
+    """Return 'alien', 'kindred', or 'neutral' based on religion types."""
+    if not rel_a or not rel_b or rel_a == rel_b:
+        return "neutral"
+    rels = list(mongo.db.religions.find({"name": {"$in": [rel_a, rel_b]}}, {"name": 1, "religion_type": 1}))
+    types = {r["name"]: r.get("religion_type", "") for r in rels}
+    type_a, type_b = types.get(rel_a, ""), types.get(rel_b, "")
+
+    ALIEN_PAIRS = {frozenset(["Monotheistic", "Pantheistic"]), frozenset(["Monotheistic", "Animistic"])}
+    KINDRED_PAIRS = {frozenset(["Pantheistic", "Animistic"])}
+    pair = frozenset([type_a, type_b])
+    if pair in ALIEN_PAIRS:
+        return "alien"
+    if pair in KINDRED_PAIRS:
+        return "kindred"
+    return "neutral"
+
+
+# ---------------------------------------------------------------------------
+# Ally / vassal resolution
+# ---------------------------------------------------------------------------
+
+def _get_nation_by_id(nation_id_str):
+    try:
+        return mongo.db.nations.find_one({"_id": ObjectId(nation_id_str)}, {"_id": 1, "name": 1, "overlord": 1, "primary_religion": 1, "vassal_type": 1})
+    except Exception:
+        return None
+
+
+def _get_allies(nation_id_str, defensive_only=False):
+    """Return list of nation_id_str for nations allied to nation_id_str.
+
+    defensive_only=True: only Defensive Pact partners.
+    defensive_only=False: Military Alliance + Defensive Pact partners.
+    """
+    pact_types = ["Defensive Pact"] if defensive_only else ["Military Alliance", "Defensive Pact"]
+    query = {
+        "$or": [
+            {"nation_1": nation_id_str},
+            {"nation_2": nation_id_str},
+        ],
+        "pact_type": {"$in": pact_types},
+    }
+    rels = list(mongo.db.diplo_relations.find(query, {"nation_1": 1, "nation_2": 1}))
+    allies = []
+    for rel in rels:
+        partner = rel["nation_2"] if rel["nation_1"] == nation_id_str else rel["nation_1"]
+        allies.append(partner)
+    return allies
+
+
+def _get_direct_vassals(nation_id_str):
+    """Return list of nation_id_str for direct vassals of a nation."""
+    vassals = list(mongo.db.nations.find(
+        {"overlord": nation_id_str},
+        {"_id": 1}
+    ))
+    return [str(v["_id"]) for v in vassals]
+
+
+def _get_all_vassals_recursive(nation_id_str, visited=None):
+    """Recursively gather all vassal nation IDs (vassals of vassals, etc.)."""
+    if visited is None:
+        visited = set()
+    if nation_id_str in visited:
+        return []
+    visited.add(nation_id_str)
+    result = []
+    for vassal_id in _get_direct_vassals(nation_id_str):
+        if vassal_id not in visited:
+            result.append(vassal_id)
+            result.extend(_get_all_vassals_recursive(vassal_id, visited))
+    return result
+
+
+def _resolve_war_participants(
+    primary_aggressor_id,
+    primary_defender_id,
+    war_type_key,
+    called_ally_ids=None,
+):
+    """Resolve all war participants with their roles.
+
+    Returns list of dicts:
+        {"nation_id": str, "stance": "Attacker"|"Defender", "role": "primary"|"ally"|"vassal"}
+    """
+    wt = _war_types().get(war_type_key, {})
+    no_allies = wt.get("no_allies", False)
+    no_vassals = wt.get("no_vassals", False)
+
+    if called_ally_ids is None:
+        called_ally_ids = []
+
+    participants = []
+    seen = set()
+
+    def _add(nation_id, stance, role):
+        if nation_id and nation_id not in seen:
+            seen.add(nation_id)
+            participants.append({"nation_id": nation_id, "stance": stance, "role": role})
+
+    # Primary participants
+    _add(primary_aggressor_id, "Attacker", "primary")
+    _add(primary_defender_id, "Defender", "primary")
+
+    if not no_allies:
+        # Attacker: explicitly called allies (Military Alliance / Defensive Pact — attacker chooses)
+        for ally_id in called_ally_ids:
+            if ally_id not in seen:
+                _add(ally_id, "Attacker", "ally")
+                # Allies bring their vassals
+                if not no_vassals:
+                    for vassal_id in _get_all_vassals_recursive(ally_id):
+                        _add(vassal_id, "Attacker", "vassal")
+
+        # Defender: all their allies join automatically
+        # Military Alliance partners always join; Defensive Pact partners join all non-raid wars
+        defender_ally_types = ["Military Alliance", "Defensive Pact"]
+        for ally_id in _get_allies(primary_defender_id, defensive_only=False):
+            if ally_id not in seen:
+                _add(ally_id, "Defender", "ally")
+                # Allies bring their vassals
+                if not no_vassals:
+                    for vassal_id in _get_all_vassals_recursive(ally_id):
+                        _add(vassal_id, "Defender", "vassal")
+
+    # Vassal chains for the primary participants themselves
+    if not no_vassals:
+        for vassal_id in _get_all_vassals_recursive(primary_aggressor_id):
+            _add(vassal_id, "Attacker", "vassal")
+        for vassal_id in _get_all_vassals_recursive(primary_defender_id):
+            _add(vassal_id, "Defender", "vassal")
+
+    return participants
 
 _S3_MAPS_BASE = "https://poa-website-static-assets.s3.us-east-1.amazonaws.com/maps/"
 
@@ -431,41 +587,91 @@ def _build_war_payload(war_id_strings):
 @war_routes.route("/wars/create", methods=["GET"])
 @admin_required
 def create_war_form():
-    nations = list(mongo.db.nations.find({}, {"_id": 1, "name": 1}).sort("name", ASCENDING))
-    return render_template("war_create.html", nations=nations, current_session=_current_session())
+    nations = list(mongo.db.nations.find(
+        {}, {"_id": 1, "name": 1, "primary_religion": 1}
+    ).sort("name", ASCENDING))
+    war_types = _war_types()
+
+    # For each nation build its list of potential allies (military alliance + defensive pact partners)
+    nation_allies = {}
+    for n in nations:
+        nid = str(n["_id"])
+        allies = _get_allies(nid, defensive_only=False)
+        if allies:
+            nation_allies[nid] = allies
+
+    return render_template(
+        "war_create.html",
+        nations=nations,
+        war_types=war_types,
+        nation_allies=nation_allies,
+        current_session=_current_session(),
+    )
 
 
 @war_routes.route("/wars/create", methods=["POST"])
 @admin_required
 def create_war():
     name = request.form.get("name", "").strip()
-    attacker_ids = request.form.getlist("attackers")
-    defender_ids = request.form.getlist("defenders")
+    war_type_key = request.form.get("war_type", "").strip()
+    primary_aggressor_id = request.form.get("primary_aggressor", "").strip()
+    primary_defender_id = request.form.get("primary_defender", "").strip()
+    called_ally_ids = request.form.getlist("called_allies")
 
     if not name:
         flash("War name is required.")
         return redirect("/wars/create")
-    if not attacker_ids and not defender_ids:
-        flash("At least one participant is required.")
+    if not primary_aggressor_id or not primary_defender_id:
+        flash("Both a primary aggressor and primary defender are required.")
+        return redirect("/wars/create")
+    if primary_aggressor_id == primary_defender_id:
+        flash("Primary aggressor and primary defender cannot be the same nation.")
+        return redirect("/wars/create")
+    if war_type_key not in _war_types():
+        flash("A valid war type is required.")
         return redirect("/wars/create")
 
-    war_doc = {"name": name, "session_declared": _current_session()}
+    # Resolve all participants using ally/vassal logic
+    participants = _resolve_war_participants(
+        primary_aggressor_id,
+        primary_defender_id,
+        war_type_key,
+        called_ally_ids,
+    )
+
+    # Calculate and apply infamy to primary aggressor
+    aggressor = _get_nation_by_id(primary_aggressor_id)
+    defender = _get_nation_by_id(primary_defender_id)
+    aggressor_religion = aggressor.get("primary_religion", "") if aggressor else ""
+    defender_religion = defender.get("primary_religion", "") if defender else ""
+    infamy_cost = _get_infamy_for_war(war_type_key, aggressor_religion, defender_religion)
+
+    war_doc = {
+        "name": name,
+        "war_type": war_type_key,
+        "primary_aggressor": primary_aggressor_id,
+        "primary_defender": primary_defender_id,
+        "session_declared": _current_session(),
+    }
     war_id = mongo.db.wars.insert_one(war_doc).inserted_id
+    war_id_str = str(war_id)
 
-    for nation_id in attacker_ids:
+    for p in participants:
         mongo.db.war_links.insert_one({
-            "war": str(war_id),
-            "participant": nation_id,
-            "stance": "Attacker",
-        })
-    for nation_id in defender_ids:
-        mongo.db.war_links.insert_one({
-            "war": str(war_id),
-            "participant": nation_id,
-            "stance": "Defender",
+            "war": war_id_str,
+            "participant": p["nation_id"],
+            "stance": p["stance"],
+            "role": p["role"],
         })
 
-    flash(f"War '{name}' created.")
+    # Apply infamy to the primary aggressor
+    if infamy_cost > 0 and aggressor:
+        mongo.db.nations.update_one(
+            {"_id": ObjectId(primary_aggressor_id)},
+            {"$inc": {"infamy": infamy_cost}},
+        )
+
+    flash(f"War '{name}' created ({infamy_cost} infamy applied to {aggressor.get('name', 'aggressor') if aggressor else 'aggressor'}).")
     return redirect(f"/wars/item/{name}")
 
 
@@ -514,11 +720,31 @@ def _current_participants(war_id_str):
 # Custom war item view (overrides the generic dataItem view for wars)
 # ---------------------------------------------------------------------------
 
+def _nation_discord_info(nation_id_str):
+    """Return (discord_id, is_player) for a nation. Checks character -> player chain."""
+    char = mongo.db.characters.find_one(
+        {"ruling_nation_org": nation_id_str, "player": {"$exists": True, "$ne": None, "$ne": ""}},
+        {"player": 1},
+    )
+    if not char or not char.get("player"):
+        return None, False
+    try:
+        player = mongo.db.players.find_one({"_id": ObjectId(char["player"])}, {"id": 1})
+        if player and player.get("id"):
+            return player["id"], True
+    except Exception:
+        pass
+    return None, False
+
+
 @war_routes.route("/wars/item/<item_ref>")
 def war_item(item_ref):
     war, war_id_str = _fetch_war(item_ref)
 
-    # Participants from war_links
+    war_type_key = war.get("war_type", "")
+    war_type_data = _war_types().get(war_type_key, {})
+
+    # Participants from war_links, enriched with role
     links = list(mongo.db.war_links.find({"war": war_id_str}))
 
     attackers = []
@@ -528,6 +754,7 @@ def war_item(item_ref):
     for link in links:
         participant_id = link.get("participant", "")
         stance = link.get("stance", "")
+        role = link.get("role", "")
 
         try:
             nation = mongo.db.nations.find_one({"_id": ObjectId(participant_id)})
@@ -537,6 +764,11 @@ def war_item(item_ref):
             continue
 
         nation_id_str = str(nation["_id"])
+        is_primary = (
+            nation_id_str == war.get("primary_aggressor")
+            or nation_id_str == war.get("primary_defender")
+            or role == "primary"
+        )
 
         rulers = list(
             mongo.db.characters.find(
@@ -547,12 +779,18 @@ def war_item(item_ref):
 
         unit_types = _unit_types_for_nation(nation, nation_id_str)
 
+        discord_id, is_player = _nation_discord_info(nation_id_str)
+
         entry = {
             "nation": nation,
             "nation_id": nation_id_str,
             "rulers": rulers,
             "unit_types": unit_types,
             "link": f"/nations/item/{nation.get('name', nation_id_str)}",
+            "role": role or ("primary" if is_primary else ""),
+            "is_primary": is_primary,
+            "discord_id": discord_id,
+            "is_player": is_player,
         }
 
         if stance == "Attacker":
@@ -562,6 +800,13 @@ def war_item(item_ref):
         else:
             unassigned.append(entry)
 
+    # Sort: primaries first within each side, then allies, then vassals
+    def _sort_key(e):
+        role_order = {"primary": 0, "ally": 1, "vassal": 2, "": 3}
+        return (role_order.get(e.get("role", ""), 3), e["nation"].get("name", ""))
+    attackers.sort(key=_sort_key)
+    defenders.sort(key=_sort_key)
+
     return render_template(
         "war_item.html",
         war=war,
@@ -569,6 +814,9 @@ def war_item(item_ref):
         attackers=attackers,
         defenders=defenders,
         unassigned=unassigned,
+        war_type_data=war_type_data,
+        war_type_key=war_type_key,
+        war_goals_data=json_data.get("war_goals", {}),
     )
 
 
@@ -591,6 +839,8 @@ def edit_war_form(item_ref):
         participants=participants,
         all_nations=all_nations,
         current_session=current_session,
+        war_types=_war_types(),
+        war_goals_data=json_data.get("war_goals", {}),
     )
 
 
@@ -667,6 +917,26 @@ def save_war(item_ref):
     for link_id, lnk in current_links.items():
         if link_id not in submitted_link_ids:
             mongo.db.war_links.delete_one({"_id": lnk["_id"]})
+
+    # --- Parse submitted war goals (goals-N-* indexed fields) ---
+    war_goals_list = []
+    i = 0
+    while request.form.get(f"goals-{i}-goal_key") is not None:
+        goal_key   = request.form.get(f"goals-{i}-goal_key",  "").strip()
+        slot_tier  = request.form.get(f"goals-{i}-slot_tier", "").strip()
+        attacker   = request.form.get(f"goals-{i}-attacker",  "").strip()
+        target     = request.form.get(f"goals-{i}-target",    "").strip()
+        notes      = request.form.get(f"goals-{i}-notes",     "").strip()
+        if goal_key and slot_tier:
+            war_goals_list.append({
+                "goal_key":  goal_key,
+                "slot_tier": slot_tier,
+                "attacker":  attacker,
+                "target":    target,
+                "notes":     notes,
+            })
+        i += 1
+    mongo.db.wars.update_one({"_id": war["_id"]}, {"$set": {"war_goals": war_goals_list}})
 
     display_name = new_name or war.get("name", war_id_str)
     flash(f"War '{display_name}' updated.")

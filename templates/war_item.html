@@ -11,6 +11,7 @@
             &nbsp;|&nbsp; <a href="/wars/create">Create New War</a>
         {% endif %}
         &nbsp;|&nbsp; <a href="/api/war-session-data/{{ war_id }}" target="_blank">API JSON</a>
+        &nbsp;|&nbsp; <button id="copy-declaration-btn" class="war-copy-btn" onclick="copyDeclaration()">📋 Copy Declaration</button>
     </div>
 
     <h1>{{ war.name }}</h1>
@@ -26,6 +27,107 @@
         {% endif %}
     </p>
 
+    {% if war_type_data %}
+    <div class="war-type-panel">
+        <span class="war-type-badge">{{ war_type_data.display_name }}</span>
+        <div class="war-type-details">
+            {% set slot_order = ["Trivial", "Minor", "Standard", "Extreme"] %}
+            {% set slots = war_type_data.slots or {} %}
+            {% set slot_parts = [] %}
+            {% for tier in slot_order %}{% if slots[tier] %}{% set _ = slot_parts.append(tier ~ " ×" ~ slots[tier]) %}{% endif %}{% endfor %}
+            <span class="war-slots">War Goal Slots: {{ slot_parts | join(", ") if slot_parts else "None" }}</span>
+            {% if war_type_data.infamy %}
+            <span class="war-infamy">Infamy: {{ war_type_data.infamy }}</span>
+            {% endif %}
+            {% if war_type_data.non_aggression_pact_duration %}
+            <span class="war-pact-dur">Non-Aggression Pact Duration: {{ war_type_data.non_aggression_pact_duration }}</span>
+            {% endif %}
+            {% if war_type_data.notes %}
+            <em class="war-type-notes">{{ war_type_data.notes }}</em>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    {# ── War Goals ── #}
+    {% set all_goals = [] %}
+    {% for tier_key, tier_goals in war_goals_data.items() %}
+        {% for goal_key, goal_def in tier_goals.items() %}
+            {% set _ = all_goals.append({"tier": tier_key, "key": goal_key, "def": goal_def}) %}
+        {% endfor %}
+    {% endfor %}
+    {% set goal_lookup = {} %}
+    {% for g in all_goals %}{% set _ = goal_lookup.update({g.tier ~ "." ~ g.key: g.def}) %}{% endfor %}
+
+    {% set TIER_ORDER = ["Trivial", "Minor", "Standard", "Extreme"] %}
+    {% set TIER_COLORS = {"Trivial": "#556", "Minor": "#355", "Standard": "#353", "Extreme": "#533"} %}
+    {% set TIER_LABEL_COLORS = {"Trivial": "#aab", "Minor": "#7cc", "Standard": "#7c7", "Extreme": "#c77"} %}
+
+    {% if war.war_goals or (war_type_data and war_type_data.slots) %}
+    <div style="margin-bottom:1.5rem;">
+        <h2 style="margin-bottom:0.5rem;">War Goals</h2>
+
+        {# Slot usage summary #}
+        {% if war_type_data and war_type_data.slots %}
+        {% set slots = war_type_data.slots or {} %}
+        <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-bottom:0.75rem;">
+            {% for tier in TIER_ORDER %}
+            {% if slots[tier] %}
+            {% set used = war.war_goals | selectattr("slot_tier", "equalto", tier) | list | length if war.war_goals else 0 %}
+            <span style="padding:3px 12px;border-radius:4px;font-size:0.82rem;background:{{ TIER_COLORS[tier] }};color:{{ TIER_LABEL_COLORS[tier] }};border:1px solid {{ TIER_LABEL_COLORS[tier] }}33;">
+                {{ tier }}: {{ used }}/{{ slots[tier] }}
+            </span>
+            {% endif %}
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if war.war_goals %}
+        <table class="info-table war-goals-table">
+            <thead>
+                <tr>
+                    <th>Tier</th>
+                    <th>Goal</th>
+                    <th>Attacker</th>
+                    <th>Target</th>
+                    <th>Notes</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for wg in war.war_goals %}
+                {% set gdef = goal_lookup.get(wg.slot_tier | lower ~ "." ~ wg.goal_key, {}) %}
+                <tr>
+                    <td>
+                        {% set tier = wg.slot_tier %}
+                        <span class="tier-badge" style="background:{{ TIER_COLORS.get(tier, '#444') }};color:{{ TIER_LABEL_COLORS.get(tier, '#aaa') }};">{{ tier }}</span>
+                    </td>
+                    <td>
+                        <strong>{{ gdef.display_name or wg.goal_key }}</strong>
+                        {% if gdef.description %}
+                        <details style="margin-top:3px;">
+                            <summary style="font-size:0.78rem;color:#888;cursor:pointer;">Details</summary>
+                            <p style="font-size:0.8rem;color:#aaa;margin:4px 0 0 0;">{{ gdef.description }}</p>
+                            {% if gdef.prerequisites %}
+                            <ul style="font-size:0.78rem;color:#888;margin:4px 0 0 1em;padding:0;">
+                                {% for prereq in gdef.prerequisites %}<li>{{ prereq }}</li>{% endfor %}
+                            </ul>
+                            {% endif %}
+                        </details>
+                        {% endif %}
+                    </td>
+                    <td>{{ wg.attacker or "—" }}</td>
+                    <td>{{ wg.target or "—" }}</td>
+                    <td style="color:#aaa;font-size:0.85rem;">{{ wg.notes or "" }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="muted">No war goals declared yet.</p>
+        {% endif %}
+    </div>
+    {% endif %}
+
     {% macro render_side(side_entries, side_label, side_class) %}
     <section class="war-side {{ side_class }}">
         <h2 class="war-side-heading">{{ side_label }}</h2>
@@ -33,9 +135,12 @@
             <p class="muted">None assigned.</p>
         {% endif %}
         {% for entry in side_entries %}
-        <div class="war-nation-card">
+        <div class="war-nation-card {% if entry.is_primary %}war-nation-primary{% endif %}">
             <h3 class="war-nation-name">
                 <a href="{{ entry.link }}">{{ entry.nation.name }}</a>
+                {% if entry.role == "primary" %}<span class="role-badge role-primary">Primary</span>{% endif %}
+                {% if entry.role == "ally" %}<span class="role-badge role-ally">Ally</span>{% endif %}
+                {% if entry.role == "vassal" %}<span class="role-badge role-vassal">Vassal</span>{% endif %}
             </h3>
 
             {% if entry.rulers %}
@@ -183,5 +288,212 @@
 .muted { color: #888; font-style: italic; }
 .attackers .war-side-heading { color: #e08888; }
 .defenders .war-side-heading { color: #88b4e0; }
+
+/* ── war type panel ── */
+.war-type-panel {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    background: #181828;
+    border: 1px solid #3a3a5a;
+    border-radius: 6px;
+    margin-bottom: 1.25rem;
+    flex-wrap: wrap;
+}
+.war-type-badge {
+    background: #2a3058;
+    color: #90b8e0;
+    border: 1px solid #405080;
+    border-radius: 4px;
+    padding: 3px 10px;
+    font-size: 0.9rem;
+    font-weight: bold;
+    white-space: nowrap;
+}
+.war-type-details {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.25rem;
+    align-items: center;
+    font-size: 0.88rem;
+}
+.war-slots { color: #c8d8f0; }
+.war-infamy { color: #c8a96e; }
+.war-pact-dur { color: #aaa; }
+.war-type-notes { color: #888; font-style: italic; }
+
+/* ── participant role badges ── */
+.role-badge {
+    display: inline-block;
+    font-size: 0.7em;
+    font-weight: normal;
+    padding: 1px 7px;
+    border-radius: 3px;
+    vertical-align: middle;
+    margin-left: 6px;
+}
+.role-primary { background: #3a4a2a; color: #a0d080; border: 1px solid #4a6a3a; }
+.role-ally    { background: #2a3a5a; color: #90b8e0; border: 1px solid #3a5a80; }
+.role-vassal  { background: #3a2a3a; color: #c090d0; border: 1px solid #5a3a5a; }
+.war-nation-primary { border-color: #4a6a3a; }
+
+/* ── war goals ── */
+.war-goals-table { width: 100%; margin-bottom: 0.5rem; }
+.war-goals-table th { text-align: left; padding: 6px 10px; font-size: 0.85rem; color: #aaa; }
+.war-goals-table td { padding: 5px 10px; vertical-align: top; }
+.tier-badge {
+    display: inline-block;
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-weight: bold;
+    white-space: nowrap;
+}
+.war-copy-btn {
+    background: none;
+    border: 1px solid #555;
+    color: #aaa;
+    border-radius: 4px;
+    padding: 2px 9px;
+    cursor: pointer;
+    font-size: 0.85rem;
+}
+.war-copy-btn:hover { background: #333; color: #ddd; }
+.war-copy-btn.copied { border-color: #4a8a4a; color: #7ccc7c; }
 </style>
+
+{# ── Embedded data for the copy-declaration JS ── #}
+<script>
+const WAR_DECL = {
+    name:       {{ war.name | tojson }},
+    warType:    {{ war_type_data.display_name | default("") | tojson }},
+    slots:      {{ (war_type_data.slots or {}) | tojson }},
+    infamy:     {{ war_type_data.infamy | default(0) | tojson }},
+    warGoals:   {{ (war.war_goals or []) | tojson }},
+    attackers: [
+        {% for entry in attackers %}
+        {
+            name:      {{ entry.nation.name | tojson }},
+            role:      {{ entry.role | tojson }},
+            isPlayer:  {{ entry.is_player | tojson }},
+            discordId: {{ (entry.discord_id or "") | tojson }}
+        }{% if not loop.last %},{% endif %}
+        {% endfor %}
+    ],
+    defenders: [
+        {% for entry in defenders %}
+        {
+            name:      {{ entry.nation.name | tojson }},
+            role:      {{ entry.role | tojson }},
+            isPlayer:  {{ entry.is_player | tojson }},
+            discordId: {{ (entry.discord_id or "") | tojson }}
+        }{% if not loop.last %},{% endif %}
+        {% endfor %}
+    ]
+};
+
+const WAR_GOAL_DEFS = {{ war_goals_data | tojson }};
+const SLOT_ORDER = ["Trivial", "Minor", "Standard", "Extreme"];
+
+function _nationLabel(p) {
+    if (p.isPlayer && p.discordId) return `<@${p.discordId}>`;
+    if (p.isPlayer) return `${p.name} (Player)`;
+    return `${p.name} (AI)`;
+}
+
+function _roleSuffix(role) {
+    if (role === "ally")   return " (Ally)";
+    if (role === "vassal") return " (Vassal)";
+    return "";
+}
+
+function _goalDisplayName(wg) {
+    const tier = (wg.slot_tier || "").toLowerCase();
+    const def = ((WAR_GOAL_DEFS[tier] || {})[wg.goal_key] || {});
+    return def.display_name || wg.goal_key;
+}
+
+function copyDeclaration() {
+    const d = WAR_DECL;
+
+    // Primary participants
+    const primaryAggressor = d.attackers.find(p => p.role === "primary");
+    const primaryDefender  = d.defenders.find(p => p.role === "primary");
+    const aggressorAllies  = d.attackers.filter(p => p.role !== "primary");
+    const defenderAllies   = d.defenders.filter(p => p.role !== "primary");
+
+    const formatSide = (primary, others) => {
+        const primaryLabel = primary ? _nationLabel(primary) : "—";
+        return {
+            primary: primaryLabel,
+            allies:  others.length
+                ? others.map(p => _nationLabel(p) + _roleSuffix(p.role)).join(", ")
+                : "-"
+        };
+    };
+
+    const atk = formatSide(primaryAggressor, aggressorAllies);
+    const def = formatSide(primaryDefender,  defenderAllies);
+
+    // Slots
+    const slotLines = SLOT_ORDER
+        .filter(t => d.slots[t])
+        .map(t => `${t} ×${d.slots[t]}`);
+    const slotStr = slotLines.join(", ") || "None";
+
+    // War goals
+    let goalLines = "";
+    (d.warGoals || []).forEach((wg, i) => {
+        const name   = _goalDisplayName(wg);
+        const tier   = wg.slot_tier ? `[${wg.slot_tier}] ` : "";
+        const atker  = wg.attacker  ? ` — Attacker: ${wg.attacker}` : "";
+        const tgt    = wg.target    ? ` — Target: ${wg.target}` : "";
+        const notes  = wg.notes     ? ` (${wg.notes})` : "";
+        goalLines += `\nWar Goal ${i + 1}: ${tier}${name}${atker}${tgt}${notes}`;
+    });
+    if (!d.warGoals || !d.warGoals.length) {
+        goalLines = "\n*(No war goals declared yet)*";
+    }
+
+    const text =
+`**Name of War:** ${d.name}
+
+Aggressor Nation: ${atk.primary}
+Aggressor Allies: ${atk.allies}
+
+Defender Nation: ${def.primary}
+Defender Allies: ${def.allies}
+
+War Type: ${d.warType || "—"}
+War Goal Slots: ${slotStr}
+Infamy: ${d.infamy || 0}
+${goalLines}
+
+*[Flavor text here]*`;
+
+    navigator.clipboard.writeText(text).then(() => {
+        const btn = document.getElementById("copy-declaration-btn");
+        btn.textContent = "✓ Copied!";
+        btn.classList.add("copied");
+        setTimeout(() => {
+            btn.textContent = "📋 Copy Declaration";
+            btn.classList.remove("copied");
+        }, 2500);
+    }).catch(() => {
+        // Fallback for browsers that block clipboard
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+        const btn = document.getElementById("copy-declaration-btn");
+        btn.textContent = "✓ Copied!";
+        setTimeout(() => { btn.textContent = "📋 Copy Declaration"; }, 2500);
+    });
+}
+</script>
 {% endblock %}

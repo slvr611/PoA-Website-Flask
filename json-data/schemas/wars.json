@@ -8,6 +8,26 @@
         "label": "Name",
         "description": "The name of the war"
       },
+      "war_type": {
+        "bsonType": "string",
+        "label": "War Type",
+        "description": "The type/size of the war, which determines war goal slots and infamy"
+      },
+      "primary_aggressor": {
+        "bsonType": "string",
+        "label": "Primary Aggressor",
+        "description": "The nation ID of the primary attacking nation"
+      },
+      "primary_defender": {
+        "bsonType": "string",
+        "label": "Primary Defender",
+        "description": "The nation ID of the primary defending nation"
+      },
+      "war_goals": {
+        "bsonType": "array",
+        "label": "War Goals",
+        "description": "The declared war goals for this conflict"
+      },
       "participants": {
         "bsonType": "array",
 		    "label": "Participants",
