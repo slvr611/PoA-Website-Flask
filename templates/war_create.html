@@ -12,6 +12,8 @@
     {% endwith %}
 
     <form method="POST" action="/wars/create" id="war-create-form">
+
+        {# ── Basic fields ── #}
         <table class="info-table" style="margin-bottom:1.5rem;">
             <tr>
                 <th><label for="name">War Name</label></th>
@@ -24,57 +26,47 @@
             <tr>
                 <th><label for="war_type">War Type</label></th>
                 <td>
-                    <select id="war_type" name="war_type" class="form-control" required onchange="updateWarTypeInfo()">
+                    <select id="war_type" name="war_type" class="form-control" required onchange="onWarTypeChange()">
                         <option value="">— Select —</option>
                         {% for key, wt in war_types.items() %}
                         <option value="{{ key }}">{{ wt.display_name }}</option>
                         {% endfor %}
                     </select>
-                    <div id="war-type-info" style="margin-top:0.6rem;padding:0.6rem;background:#1a1a2a;border:1px solid #333;border-radius:4px;display:none;">
-                        <strong id="wt-name"></strong>
-                        <div id="wt-slots" style="margin-top:0.3rem;font-size:0.88rem;color:#aaa;"></div>
-                        <div id="wt-infamy" style="margin-top:0.2rem;font-size:0.88rem;color:#c8a96e;"></div>
-                        <div id="wt-notes" style="margin-top:0.3rem;font-size:0.82rem;color:#888;font-style:italic;"></div>
-                        <div id="wt-pact-duration" style="margin-top:0.2rem;font-size:0.82rem;color:#aaa;"></div>
-                    </div>
+                    <div id="war-type-info" style="margin-top:0.6rem;padding:0.6rem;background:#1a1a2a;border:1px solid #333;border-radius:4px;font-size:0.88rem;display:none;"></div>
                 </td>
             </tr>
         </table>
 
+        {# ── Participants ── #}
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-bottom:1.5rem;">
-            <!-- Attackers side -->
             <div>
                 <h2 style="color:#d04040;margin-bottom:0.5rem;">⚔ Attackers</h2>
                 <label style="display:block;margin-bottom:0.75rem;">
                     <strong>Primary Aggressor</strong>
-                    <select name="primary_aggressor" id="primary_aggressor" class="form-control" required onchange="updateAllyLists()">
+                    <select name="primary_aggressor" id="primary_aggressor" class="form-control" required onchange="onParticipantsChange()">
                         <option value="">— Select Nation —</option>
                         {% for nation in nations %}
                         <option value="{{ nation._id }}">{{ nation.name }}</option>
                         {% endfor %}
                     </select>
                 </label>
-
                 <div id="aggressor-allies-section" style="display:none;">
                     <strong style="font-size:0.9rem;">Call in Allies (optional)</strong>
-                    <p style="font-size:0.8rem;color:#888;margin:0.25rem 0 0.5rem;">The primary aggressor may choose which allies to bring in. Their vassals will automatically join.</p>
+                    <p style="font-size:0.8rem;color:#888;margin:0.25rem 0 0.5rem;">Vassals of the primary aggressor join automatically.</p>
                     <div id="aggressor-ally-list" class="nation-checklist"></div>
                 </div>
             </div>
-
-            <!-- Defenders side -->
             <div>
                 <h2 style="color:#4080d0;margin-bottom:0.5rem;">🛡 Defenders</h2>
                 <label style="display:block;margin-bottom:0.75rem;">
                     <strong>Primary Defender</strong>
-                    <select name="primary_defender" id="primary_defender" class="form-control" required onchange="updateAllyLists()">
+                    <select name="primary_defender" id="primary_defender" class="form-control" required onchange="onParticipantsChange()">
                         <option value="">— Select Nation —</option>
                         {% for nation in nations %}
                         <option value="{{ nation._id }}">{{ nation.name }}</option>
                         {% endfor %}
                     </select>
                 </label>
-
                 <div id="defender-preview" style="display:none;">
                     <strong style="font-size:0.9rem;">Allies (auto-called)</strong>
                     <p style="font-size:0.8rem;color:#888;margin:0.25rem 0 0.5rem;">All allies and vassals of the primary defender join automatically.</p>
@@ -83,113 +75,246 @@
             </div>
         </div>
 
+        {# ── War Goals (shown once war type is selected) ── #}
+        <div id="goals-section" style="display:none;margin-bottom:1.5rem;">
+            <h2 style="margin-bottom:0.25rem;">War Goals</h2>
+            <div id="slot-summary" style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-bottom:0.75rem;"></div>
+            <table class="info-table war-edit-table">
+                <thead>
+                    <tr><th>Tier</th><th>Goal</th><th>Attacker</th><th>Target</th><th>Notes</th><th></th></tr>
+                </thead>
+                <tbody id="goals-tbody"></tbody>
+            </table>
+            <div id="goal-pickers" style="margin-top:0.5rem;display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;"></div>
+        </div>
+
         <button type="submit" class="btn-save">Create War</button>
     </form>
 </div>
 
 <script>
-const WAR_TYPES = {{ war_types | tojson }};
-const SLOT_ORDER = ["Trivial", "Minor", "Standard", "Extreme"];
+const WAR_TYPES     = {{ war_types | tojson }};
+const WAR_GOALS_DATA = {{ war_goals_data | tojson }};
 const NATION_ALLIES = {{ nation_allies | tojson }};
+const SLOT_ORDER    = ["Trivial", "Minor", "Standard", "Extreme"];
 
-// Map nation_id → name for display
-const NATION_NAMES = {};
+const NATION_NAMES = {}, NATION_IDS = {};
 {% for nation in nations %}
-NATION_NAMES["{{ nation._id }}"] = {{ nation.name | tojson }};
+NATION_NAMES[{{ nation._id | string | tojson }}] = {{ nation.name | tojson }};
+NATION_IDS[{{ nation.name | tojson }}] = {{ nation._id | string | tojson }};
 {% endfor %}
 
-function updateWarTypeInfo() {
+let SLOT_LIMITS = {};
+let ATTACKER_NAMES = [];
+let DEFENDER_NAMES = [];
+let goalCount = 0;
+
+// ── War type change ─────────────────────────────────────────────────────────
+function onWarTypeChange() {
     const key = document.getElementById("war_type").value;
+    const wt  = WAR_TYPES[key] || {};
+    SLOT_LIMITS = wt.slots || {};
+
+    // Info panel
     const info = document.getElementById("war-type-info");
-    if (!key || !WAR_TYPES[key]) { info.style.display = "none"; return; }
-    const wt = WAR_TYPES[key];
-    document.getElementById("wt-name").textContent = wt.display_name;
-    const slots = wt.slots || {};
-    const slotParts = SLOT_ORDER.filter(t => slots[t]).map(t => `${t} ×${slots[t]}`);
-    document.getElementById("wt-slots").textContent = "War Goal Slots: " + (slotParts.length ? slotParts.join(", ") : "None");
-    document.getElementById("wt-infamy").textContent = wt.infamy ? `Infamy Cost: ${wt.infamy}` : "Infamy Cost: 0";
-    document.getElementById("wt-notes").textContent = wt.notes || "";
-    document.getElementById("wt-pact-duration").textContent =
-        wt.non_aggression_pact_duration ? `Non-Aggression Pact Duration: ${wt.non_aggression_pact_duration}` : "";
-    info.style.display = "block";
-    updateAllyLists();
+    if (key && wt.display_name) {
+        const slotParts = SLOT_ORDER.filter(t => SLOT_LIMITS[t]).map(t => `${t} ×${SLOT_LIMITS[t]}`);
+        info.innerHTML =
+            `<strong>${wt.display_name}</strong>` +
+            `<div style="margin-top:3px;color:#aaa;">Slots: ${slotParts.join(", ") || "None"}</div>` +
+            (wt.infamy ? `<div style="color:#c8a96e;">Infamy: ${wt.infamy}</div>` : "") +
+            (wt.non_aggression_pact_duration ? `<div style="color:#888;">Non-Aggression Pact: ${wt.non_aggression_pact_duration}</div>` : "") +
+            (wt.notes ? `<div style="color:#777;font-style:italic;margin-top:3px;">${wt.notes}</div>` : "");
+        info.style.display = "block";
+    } else {
+        info.style.display = "none";
+    }
+
+    const hasSlots = Object.keys(SLOT_LIMITS).length > 0;
+    document.getElementById("goals-section").style.display = hasSlots ? "" : "none";
+    rebuildSlotSummary();
+    rebuildGoalPickers();
+    onParticipantsChange();  // ally lists may depend on war type (raid wars)
 }
 
-function updateAllyLists() {
+// ── Participant change ───────────────────────────────────────────────────────
+function onParticipantsChange() {
     const aggressorId = document.getElementById("primary_aggressor").value;
     const defenderId  = document.getElementById("primary_defender").value;
-    const warTypeKey  = document.getElementById("war_type").value;
-    const wt          = WAR_TYPES[warTypeKey] || {};
+    const wt          = WAR_TYPES[document.getElementById("war_type").value] || {};
     const noAllies    = wt.no_allies;
 
-    // --- Aggressor ally section ---
+    ATTACKER_NAMES = aggressorId ? [NATION_NAMES[aggressorId]].filter(Boolean) : [];
+    DEFENDER_NAMES = defenderId  ? [NATION_NAMES[defenderId ]].filter(Boolean) : [];
+
+    // Attacker allies section
     const aggrSection = document.getElementById("aggressor-allies-section");
     const aggrList    = document.getElementById("aggressor-ally-list");
     aggrList.innerHTML = "";
-
     if (aggressorId && !noAllies) {
         const allies = (NATION_ALLIES[aggressorId] || []).filter(id => id !== defenderId && id !== aggressorId);
-        if (allies.length > 0) {
+        if (allies.length) {
             aggrSection.style.display = "block";
             allies.forEach(id => {
-                const label = document.createElement("label");
-                label.className = "checklist-item";
-                label.innerHTML = `<input type="checkbox" name="called_allies" value="${id}"> ${NATION_NAMES[id] || id}`;
-                aggrList.appendChild(label);
+                const lbl = document.createElement("label");
+                lbl.className = "checklist-item";
+                lbl.innerHTML = `<input type="checkbox" name="called_allies" value="${id}" onchange="onAllyToggle('${id}', 'attacker', this.checked)"> ${NATION_NAMES[id] || id}`;
+                aggrList.appendChild(lbl);
             });
-        } else {
-            aggrSection.style.display = "none";
-        }
-    } else {
-        aggrSection.style.display = "none";
-    }
+        } else { aggrSection.style.display = "none"; }
+    } else { aggrSection.style.display = "none"; }
 
-    // --- Defender ally preview ---
+    // Defender ally preview
     const defPreview = document.getElementById("defender-preview");
     const defList    = document.getElementById("defender-ally-preview");
-
     if (defenderId && !noAllies) {
         const allies = (NATION_ALLIES[defenderId] || []).filter(id => id !== aggressorId && id !== defenderId);
-        if (allies.length > 0) {
+        if (allies.length) {
             defPreview.style.display = "block";
-            defList.innerHTML = allies.map(id => NATION_NAMES[id] || id).join(", ") + " (+ their vassals)";
-        } else {
-            defPreview.style.display = "none";
-        }
-    } else {
-        defPreview.style.display = "none";
+            defList.textContent = allies.map(id => NATION_NAMES[id] || id).join(", ") + " (+ their vassals)";
+            allies.forEach(id => {
+                if (NATION_NAMES[id] && !DEFENDER_NAMES.includes(NATION_NAMES[id]))
+                    DEFENDER_NAMES.push(NATION_NAMES[id]);
+            });
+        } else { defPreview.style.display = "none"; }
+    } else { defPreview.style.display = "none"; }
+
+    // Rebuild goal dropdowns so they reflect updated participant lists
+    rebuildGoalParticipantSelects();
+}
+
+function onAllyToggle(nationId, side, checked) {
+    const name = NATION_NAMES[nationId];
+    if (!name) return;
+    if (side === 'attacker') {
+        if (checked) { if (!ATTACKER_NAMES.includes(name)) ATTACKER_NAMES.push(name); }
+        else ATTACKER_NAMES = ATTACKER_NAMES.filter(n => n !== name);
     }
+    rebuildGoalParticipantSelects();
+}
+
+// ── Slot summary ─────────────────────────────────────────────────────────────
+function rebuildSlotSummary() {
+    const el = document.getElementById("slot-summary");
+    el.innerHTML = "";
+    SLOT_ORDER.filter(t => SLOT_LIMITS[t]).forEach(t => {
+        const used = document.querySelectorAll(`input[name$="-slot_tier"][value="${t}"]`).length;
+        const span = document.createElement("span");
+        span.id = `slot-${t.toLowerCase()}`;
+        span.style = "padding:3px 12px;border-radius:4px;font-size:0.82rem;background:#333;color:#aaa;border:1px solid #555;";
+        span.textContent = `${t}: ${used}/${SLOT_LIMITS[t]}`;
+        el.appendChild(span);
+    });
+}
+
+function updateSlotSummary() {
+    SLOT_ORDER.filter(t => SLOT_LIMITS[t]).forEach(t => {
+        const el = document.getElementById(`slot-${t.toLowerCase()}`);
+        if (!el) return;
+        const used = Array.from(document.querySelectorAll('input[name$="-slot_tier"]')).filter(i => i.value === t).length;
+        const over = used > SLOT_LIMITS[t];
+        el.textContent = `${t}: ${used}/${SLOT_LIMITS[t]}`;
+        el.style.color = over ? '#e08080' : '#aaa';
+        el.style.borderColor = over ? '#e08080' : '#555';
+    });
+}
+
+// ── Goal pickers ─────────────────────────────────────────────────────────────
+function rebuildGoalPickers() {
+    const el = document.getElementById("goal-pickers");
+    el.innerHTML = "";
+    SLOT_ORDER.filter(t => SLOT_LIMITS[t]).forEach(t => {
+        const wrap = document.createElement("div");
+        wrap.style = "display:flex;gap:0.4rem;align-items:center;";
+        const tierGoals = WAR_GOALS_DATA[t.toLowerCase()] || {};
+        const opts = Object.entries(tierGoals).map(([k, d]) => `<option value="${k}">${d.display_name}</option>`).join("");
+        wrap.innerHTML =
+            `<span style="font-size:0.82rem;color:#aaa;white-space:nowrap;">+ ${t}:</span>` +
+            `<select id="add-goal-${t.toLowerCase()}" class="form-control" style="min-width:180px;">` +
+                `<option value="">— select goal —</option>${opts}` +
+            `</select>` +
+            `<button type="button" class="btn-add" onclick="addGoalRow('${t}')">Add</button>`;
+        el.appendChild(wrap);
+    });
+}
+
+// ── Goal participant selects ──────────────────────────────────────────────────
+function _participantOptions(names) {
+    return `<option value="">—</option>` +
+        names.map(n => `<option value="${n}">${n}</option>`).join("");
+}
+
+function rebuildGoalParticipantSelects() {
+    document.querySelectorAll("select[name$='-attacker']").forEach(s => {
+        const cur = s.value;
+        s.innerHTML = `<option value="">— Any attacker —</option>` + ATTACKER_NAMES.map(n => `<option value="${n}"${n===cur?' selected':''}>${n}</option>`).join("");
+    });
+    document.querySelectorAll("select[name$='-target']").forEach(s => {
+        const cur = s.value;
+        s.innerHTML = `<option value="">— Any defender —</option>` + DEFENDER_NAMES.map(n => `<option value="${n}"${n===cur?' selected':''}>${n}</option>`).join("");
+    });
+}
+
+// ── Add / remove goal rows ────────────────────────────────────────────────────
+function addGoalRow(tier) {
+    const sel = document.getElementById("add-goal-" + tier.toLowerCase());
+    const goalKey = sel.value;
+    if (!goalKey) return;
+
+    const max = SLOT_LIMITS[tier] || 0;
+    const used = Array.from(document.querySelectorAll('input[name$="-slot_tier"]')).filter(i => i.value === tier).length;
+    if (used >= max) { alert(`No remaining ${tier} slots (${used}/${max} used).`); return; }
+
+    const goalDef = (WAR_GOALS_DATA[tier.toLowerCase()] || {})[goalKey] || {};
+    if (goalDef.max_per_war !== null && goalDef.max_per_war !== undefined) {
+        const already = Array.from(document.querySelectorAll('input[name$="-goal_key"]')).filter(i => i.value === goalKey).length;
+        if (already >= goalDef.max_per_war) {
+            alert(`"${goalDef.display_name}" may only be used ${goalDef.max_per_war} time(s) per war.`);
+            return;
+        }
+    }
+
+    const idx = goalCount++;
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+        <input type="hidden" name="goals-${idx}-slot_tier" value="${tier}">
+        <input type="hidden" name="goals-${idx}-goal_key"  value="${goalKey}">
+        <td><span class="tier-badge-sm">${tier}</span></td>
+        <td>${goalDef.display_name || goalKey}</td>
+        <td><select name="goals-${idx}-attacker" class="form-control" style="min-width:140px;">
+            <option value="">— Any attacker —</option>
+            ${ATTACKER_NAMES.map(n=>`<option value="${n}">${n}</option>`).join("")}
+        </select></td>
+        <td><select name="goals-${idx}-target" class="form-control" style="min-width:140px;">
+            <option value="">— Any defender —</option>
+            ${DEFENDER_NAMES.map(n=>`<option value="${n}">${n}</option>`).join("")}
+        </select></td>
+        <td><input type="text" name="goals-${idx}-notes" class="form-control" style="min-width:150px;" placeholder="Notes"></td>
+        <td><button type="button" class="btn-remove" onclick="removeGoalRow(this)">Remove</button></td>
+    `;
+    document.getElementById("goals-tbody").appendChild(tr);
+    sel.value = "";
+    updateSlotSummary();
+}
+
+function removeGoalRow(btn) {
+    btn.closest("tr").remove();
+    updateSlotSummary();
 }
 </script>
 
 <style>
-.nation-checklist {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px 16px;
-    padding: 8px;
-    border: 1px solid #444;
-    border-radius: 4px;
-    background: #1a1a1a;
-}
-.checklist-item {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    min-width: 160px;
-    cursor: pointer;
-    color: #e0e0e0;
-}
-.btn-save {
-    background: #2a3f5a;
-    color: #90b8e0;
-    border: 1px solid #3a5a8a;
-    border-radius: 4px;
-    padding: 7px 18px;
-    cursor: pointer;
-    font-size: 0.95rem;
-    margin-top: 1rem;
-}
-.btn-save:hover { background: #334d72; }
+.nation-checklist { display:flex;flex-wrap:wrap;gap:6px 16px;padding:8px;border:1px solid #444;border-radius:4px;background:#1a1a1a; }
+.checklist-item { display:flex;align-items:center;gap:6px;min-width:160px;cursor:pointer;color:#e0e0e0; }
+.tier-badge-sm { display:inline-block;font-size:0.75rem;padding:2px 8px;border-radius:3px;background:#333;color:#aaa;border:1px solid #555;white-space:nowrap; }
+.war-edit-table { width:100%;margin-bottom:0.5rem; }
+.war-edit-table th { text-align:left;padding:6px 10px;font-size:0.85rem;color:#aaa; }
+.war-edit-table td { padding:5px 10px;vertical-align:middle; }
+.btn-add { background:#2a3f2a;color:#90d090;border:1px solid #4a7a4a;border-radius:4px;padding:6px 14px;cursor:pointer;font-size:0.9rem; }
+.btn-add:hover { background:#33502a; }
+.btn-remove { background:#3f2a2a;color:#d09090;border:1px solid #7a4a4a;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:0.85rem; }
+.btn-remove:hover { background:#502a2a; }
+.btn-save { background:#2a3f5a;color:#90b8e0;border:1px solid #3a5a8a;border-radius:4px;padding:7px 18px;cursor:pointer;font-size:0.95rem;margin-top:1rem; }
+.btn-save:hover { background:#334d72; }
 </style>
 {% endblock %}

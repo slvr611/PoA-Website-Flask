@@ -605,6 +605,7 @@ def create_war_form():
         nations=nations,
         war_types=war_types,
         nation_allies=nation_allies,
+        war_goals_data=json_data.get("war_goals", {}),
         current_session=_current_session(),
     )
 
@@ -646,12 +647,32 @@ def create_war():
     defender_religion = defender.get("primary_religion", "") if defender else ""
     infamy_cost = _get_infamy_for_war(war_type_key, aggressor_religion, defender_religion)
 
+    # Parse any war goals submitted on the create form
+    war_goals_list = []
+    i = 0
+    while request.form.get(f"goals-{i}-goal_key") is not None:
+        goal_key  = request.form.get(f"goals-{i}-goal_key",  "").strip()
+        slot_tier = request.form.get(f"goals-{i}-slot_tier", "").strip()
+        attacker  = request.form.get(f"goals-{i}-attacker",  "").strip()
+        target    = request.form.get(f"goals-{i}-target",    "").strip()
+        notes     = request.form.get(f"goals-{i}-notes",     "").strip()
+        if goal_key and slot_tier:
+            war_goals_list.append({
+                "goal_key":  goal_key,
+                "slot_tier": slot_tier,
+                "attacker":  attacker,
+                "target":    target,
+                "notes":     notes,
+            })
+        i += 1
+
     war_doc = {
         "name": name,
         "war_type": war_type_key,
         "primary_aggressor": primary_aggressor_id,
         "primary_defender": primary_defender_id,
         "session_declared": _current_session(),
+        "war_goals": war_goals_list,
     }
     war_id = mongo.db.wars.insert_one(war_doc).inserted_id
     war_id_str = str(war_id)
@@ -671,8 +692,9 @@ def create_war():
             {"$inc": {"infamy": infamy_cost}},
         )
 
+    from urllib.parse import quote as _url_quote
     flash(f"War '{name}' created ({infamy_cost} infamy applied to {aggressor.get('name', 'aggressor') if aggressor else 'aggressor'}).")
-    return redirect(f"/wars/item/{name}")
+    return redirect(f"/wars/item/{_url_quote(name)}")
 
 
 # ---------------------------------------------------------------------------
@@ -953,9 +975,10 @@ def save_war(item_ref):
         i += 1
     mongo.db.wars.update_one({"_id": war["_id"]}, {"$set": {"war_goals": war_goals_list}})
 
+    from urllib.parse import quote as _url_quote
     display_name = new_name or war.get("name", war_id_str)
     flash(f"War '{display_name}' updated.")
-    return redirect(f"/wars/item/{display_name}")
+    return redirect(f"/wars/item/{_url_quote(display_name)}")
 
 
 # ---------------------------------------------------------------------------
