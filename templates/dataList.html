@@ -14,6 +14,9 @@
 	<div class="action-links">
 		<a href="{{ request.path }}/changes/pending">View Pending Changes</a>
 		<a href="{{ request.path }}/changes/archived">View Archived Changes</a>
+		{% if request.path == '/wars' and g.user and g.user.get('is_admin') %}
+		<a href="/wars/create" class="edit-button" style="background:#2a3f5a;color:#90b8e0;border:1px solid #3a5a8a;">+ Create New War</a>
+		{% endif %}
 	</div>
 	{% endblock %}
 	{% if visibility_bypassed is not none %}

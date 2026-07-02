@@ -581,8 +581,16 @@ def _build_war_payload(war_id_strings):
 
 
 # ---------------------------------------------------------------------------
-# War creation
+# War creation — /wars/new redirects to the custom /wars/create page so the
+# generic schema form (dataItemNew.html) is never shown for wars.
 # ---------------------------------------------------------------------------
+
+@war_routes.route("/wars/new", methods=["GET"])
+@war_routes.route("/wars/new/request", methods=["GET", "POST"])
+@admin_required
+def wars_new_redirect():
+    return redirect("/wars/create")
+
 
 @war_routes.route("/wars/create", methods=["GET"])
 @admin_required
@@ -1092,3 +1100,4 @@ def api_all_units():
         })
 
     return jsonify(result)
+

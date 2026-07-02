@@ -210,15 +210,22 @@ class HexMapViewer {
 
         // Layers
         this.layers = {
-            terrain:      false,
-            political:    true,
-            regions:      false,
-            nodes:        true,
-            luxury_nodes: true,
-            buildings:    true,
-            roads:        false,
-            out_of_range: true,
+            terrain:          false,
+            political:        true,
+            regions:          false,
+            nodes:            true,
+            luxury_nodes:     true,
+            buildings:        true,
+            roads:            false,
+            out_of_range:     true,
+            trade_distance:   false,
+            diplomatic_range: false,
         };
+
+        // Overlay data: nation → colour string (or null = unreachable)
+        this._overlayData = {};        // {nation_name: cssColor}
+        this._overlayNation = null;    // currently-loaded source nation
+        this._overlayLoading = false;
 
         // Paint modes — at most one active at a time
         this.paintMode       = null;  // terrain key, or null
@@ -363,6 +370,9 @@ class HexMapViewer {
         }
         if (cfg.city_types) {
             this._cityTypes = cfg.city_types;
+        }
+        if (cfg.viewer_nation) {
+            this._overlayNation = cfg.viewer_nation;
         }
         this._centerView();
         this._scheduleOutlineRebuild();
@@ -846,7 +856,10 @@ class HexMapViewer {
             }
 
             if (hasPolitical && tile && tile.owner) {
-                const fill = this._nationRgba(tile.owner, 0.38);
+                // If an overlay is active and has a colour for this nation,
+                // use the overlay colour directly instead of the political tint.
+                const overlayColor = this._overlayActive() && this._overlayData[tile.owner];
+                const fill = overlayColor || this._nationRgba(tile.owner, 0.38);
                 if (!nationBuckets[fill]) nationBuckets[fill] = [];
                 nationBuckets[fill].push(x, y);
             }
@@ -1371,6 +1384,77 @@ class HexMapViewer {
     setLayer(name, enabled) {
         if (name in this.layers) {
             this.layers[name] = enabled;
+            if ((name === 'trade_distance' || name === 'diplomatic_range') && enabled) {
+                // Load overlay for current overlay nation (user's nation or selected tile owner)
+                if (this._overlayNation) {
+                    this._loadOverlay(this._overlayNation);
+                } else {
+                    this._loadDefaultOverlayNation();
+                }
+            }
+            this.render();
+        }
+    }
+
+    // ── Overlay helpers ──────────────────────────────────────────────────────
+    _overlayActive() {
+        return this.layers.trade_distance || this.layers.diplomatic_range;
+    }
+
+    async _loadDefaultOverlayNation() {
+        // Try to find the user's ruling nation via the nation list
+        if (!this._nationList) await this._ensureNationList();
+        // Use the first nation we can, or skip
+        if (this._nationList && this._nationList.length > 0) {
+            // Prefer a nation the user might own — we don't know here so just
+            // wait until a tile is clicked. Show nothing until then.
+        }
+    }
+
+    async _loadOverlay(nationName) {
+        if (!nationName || this._overlayLoading) return;
+        this._overlayLoading = true;
+        const mode = this.layers.diplomatic_range ? 'diplomatic_range' : 'trade_distance';
+        try {
+            const label = document.getElementById('overlay-nation-label');
+            if (label) { label.textContent = '(loading…)'; label.style.display = ''; }
+
+            let data = {};
+            if (mode === 'diplomatic_range') {
+                const r = await fetch(`/api/hex-map/diplomatic-range?nation=${encodeURIComponent(nationName)}`);
+                if (r.ok) {
+                    const j = await r.json();
+                    const dipRange = j.dip_range || 0;
+                    for (const [name, info] of Object.entries(j.nations || {})) {
+                        data[name] = info.in_range ? '#3cb86e' : '#c03838';
+                    }
+                }
+            } else {
+                const r = await fetch(`/api/hex-map/trade-distances?nation=${encodeURIComponent(nationName)}`);
+                if (r.ok) {
+                    const j = await r.json();
+                    const DELAY_COLORS = [
+                        '#2dc050',  // 0 — instant / same market
+                        '#90c830',  // 1
+                        '#d4a820',  // 2
+                        '#d46418',  // 3
+                        '#b82828',  // 4+
+                    ];
+                    for (const [name, info] of Object.entries(j.distances || {})) {
+                        data[name] = info.connectable
+                            ? DELAY_COLORS[Math.min(info.delay ?? 4, 4)]
+                            : '#505050';
+                    }
+                }
+            }
+            data[nationName] = '#3a78d0';  // source nation = blue
+            this._overlayData   = data;
+            this._overlayNation = nationName;
+            if (label) { label.textContent = nationName; label.style.display = ''; }
+        } catch (e) {
+            console.warn('Overlay load failed:', e);
+        } finally {
+            this._overlayLoading = false;
             this.render();
         }
     }
@@ -1813,6 +1897,14 @@ class HexMapViewer {
         if (col >= 0 && col < this.cols && row >= 0 && row < this.rows) {
             this.selectedTile = { q, r };
             this._showDetails(q, r);
+            // Update overlay if active and clicked tile has an owner
+            if (this._overlayActive()) {
+                const tile = this.tiles.get(`${q},${r}`);
+                const owner = tile && tile.owner;
+                if (owner && owner !== this._overlayNation) {
+                    this._loadOverlay(owner);
+                }
+            }
         } else {
             this.selectedTile = null;
             this._clearDetails();

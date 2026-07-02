@@ -47,6 +47,10 @@
             <button id="layer-buildings"     class="map-btn layer-btn active"   data-layer="buildings">Buildings</button>
             <button id="layer-roads"         class="map-btn layer-btn"          data-layer="roads">Roads</button>
             <button id="layer-out-of-range"  class="map-btn layer-btn active"   data-layer="out_of_range">Out of Range</button>
+            <span class="map-btn-separator"></span>
+            <button id="layer-trade-distance"   class="map-btn layer-btn" data-layer="trade_distance"   title="Trade distance from selected nation's cities">Trade Dist</button>
+            <button id="layer-diplomatic-range" class="map-btn layer-btn" data-layer="diplomatic_range" title="Diplomatic range from selected nation">Diplo Range</button>
+            <span id="overlay-nation-label" style="font-size:0.78rem;color:#aaa;margin-left:4px;display:none;"></span>
 
             {# ── Edit Mode — available to any logged-in user ── #}
             {% if g.user %}
@@ -396,8 +400,22 @@ document.addEventListener('DOMContentLoaded', function () {
         btn.addEventListener('click', () => {
             const layer = btn.dataset.layer;
             const on    = !btn.classList.contains('active');
+            // Overlay layers are mutually exclusive
+            if (on && (layer === 'trade_distance' || layer === 'diplomatic_range')) {
+                ['trade_distance', 'diplomatic_range'].forEach(ol => {
+                    if (ol !== layer) {
+                        document.querySelector(`[data-layer="${ol}"]`)?.classList.remove('active');
+                        if (hexViewer) hexViewer.setLayer(ol, false);
+                    }
+                });
+            }
             btn.classList.toggle('active', on);
             if (hexViewer) hexViewer.setLayer(layer, on);
+            // Hide label when both overlays are off
+            if (!on && (layer === 'trade_distance' || layer === 'diplomatic_range')) {
+                const lbl = document.getElementById('overlay-nation-label');
+                if (lbl && !hexViewer?._overlayActive()) lbl.style.display = 'none';
+            }
         });
     });
 

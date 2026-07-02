@@ -1,70 +1,206 @@
 import math
+import heapq
 from collections import deque
-from app_core import mongo, category_data
+from app_core import mongo, category_data, json_data
 from helpers.hex_map_helpers import AXIAL_DIRECTIONS
 
+_TERRAIN_IMPASSABLE = 9999
+
+
+def _terrain_move_costs():
+    """Return {terrain_key: land_cost} from terrains.json, impassable for water."""
+    out = {}
+    for key, data in json_data.get("terrains", {}).items():
+        sc = data.get("speed_cost")
+        out[key] = int(sc) if sc else _TERRAIN_IMPASSABLE
+    return out
+
 
 # ---------------------------------------------------------------------------
-# Road-path BFS
+# Road-path Dijkstra (city-to-city, terrain-weighted)
 # ---------------------------------------------------------------------------
+
+def _build_portal_map():
+    """Return a dict mapping each portal tile (q,r) to its paired portal tile.
+
+    Portal tiles of the same color are paired: entering one lets you exit at the
+    other. Only portals with exactly 2 tiles of the same color form a valid pair.
+    """
+    portal_tiles = list(mongo.db.hex_map_tiles.find(
+        {"portal": {"$exists": True, "$ne": None}},
+        {"q": 1, "r": 1, "portal": 1, "_id": 0},
+    ))
+    by_color = {}
+    for t in portal_tiles:
+        color = (t.get("portal") or {}).get("color", "")
+        if color:
+            by_color.setdefault(color, []).append((t["q"], t["r"]))
+
+    portal_map = {}
+    for color, positions in by_color.items():
+        if len(positions) == 2:
+            a, b = positions[0], positions[1]
+            portal_map[a] = b
+            portal_map[b] = a
+    return portal_map
+
+
+def _load_trade_tiles(nation_names_list):
+    """Fetch all tiles relevant to trade-distance computation: owned + roads + portals."""
+    return list(mongo.db.hex_map_tiles.find(
+        {"$or": [
+            {"owner": {"$in": nation_names_list}},
+            {"route": {"$exists": True, "$ne": None}},
+            {"portal": {"$exists": True, "$ne": None}},
+        ]},
+        {"q": 1, "r": 1, "owner": 1, "route": 1, "portal": 1, "terrain": 1, "city": 1, "_id": 0},
+    ))
+
+
+def _tile_step_cost(tile_data, move_costs):
+    """Cost to enter a tile. Road tiles always cost 1 (roads make traversal easy)."""
+    if tile_data.get("route"):
+        return 1
+    terrain = tile_data.get("terrain", "plains")
+    cost = move_costs.get(terrain, 1)
+    return cost if cost < _TERRAIN_IMPASSABLE else None  # None = impassable
+
+
+def _dijkstra_from_cities(source_nation, target_nations, tiles_raw, portal_map, move_costs):
+    """Multi-source Dijkstra from source_nation's cities toward target cities.
+
+    Sources: city tiles of source_nation (fallback: all owned tiles).
+    Targets: city tiles of each target nation (fallback: all owned tiles).
+    Traversable: road tiles, tiles owned by source/targets, portal tiles.
+
+    Returns {nation_name: cost} for each reachable target.
+    """
+    target_set = set(target_nations) | {source_nation}
+
+    tile_map = {(t["q"], t["r"]): t for t in tiles_raw}
+
+    src_cities  = {pos for pos, t in tile_map.items() if t.get("owner") == source_nation and t.get("city")}
+    src_pos     = src_cities or {pos for pos, t in tile_map.items() if t.get("owner") == source_nation}
+
+    tgt_cities, tgt_all = {}, {}
+    for nation in target_nations:
+        tgt_cities[nation] = {pos for pos, t in tile_map.items() if t.get("owner") == nation and t.get("city")}
+        tgt_all[nation]    = {pos for pos, t in tile_map.items() if t.get("owner") == nation}
+
+    def targets_for(n):
+        return tgt_cities[n] or tgt_all[n]
+
+    if not src_pos:
+        return {}
+
+    traversable = {
+        pos for pos, t in tile_map.items()
+        if t.get("owner", "") in target_set or t.get("route") or t.get("portal")
+    }
+
+    dist = {}
+    heap = []
+    for pos in src_pos:
+        if pos in traversable:
+            dist[pos] = 0
+            heapq.heappush(heap, (0, pos[0], pos[1]))
+
+    reached = {}
+    remaining = set(target_nations)
+
+    while heap and remaining:
+        cur_cost, q, r = heapq.heappop(heap)
+        pos = (q, r)
+        if cur_cost > dist.get(pos, float("inf")):
+            continue
+
+        for nation in list(remaining):
+            if pos in targets_for(nation):
+                reached[nation] = cur_cost
+                remaining.discard(nation)
+
+        paired = portal_map.get(pos)
+        if paired and paired not in dist:
+            dist[paired] = cur_cost
+            heapq.heappush(heap, (cur_cost, paired[0], paired[1]))
+
+        for dq, dr in AXIAL_DIRECTIONS:
+            nb = (q + dq, r + dr)
+            if nb not in traversable:
+                continue
+            nb_data = tile_map.get(nb)
+            if nb_data is None:
+                continue
+            step = _tile_step_cost(nb_data, move_costs)
+            if step is None:
+                continue
+            new_cost = cur_cost + step
+            if new_cost < dist.get(nb, float("inf")):
+                dist[nb] = new_cost
+                heapq.heappush(heap, (new_cost, nb[0], nb[1]))
+
+    return reached
+
 
 def get_road_path_distance(nation_a_name, nation_b_name):
-    """BFS through road tiles to find the shortest path between two nations.
+    """Terrain-weighted Dijkstra from nation_a's cities to nation_b's cities.
 
-    Traversable: any tile with a route{} object, plus all tiles owned by either
-    nation.  Source: tiles owned by nation_a.  Target: tiles owned by nation_b.
+    Road tiles always cost 1; other tiles use terrain speed_cost.
+    Portal tiles provide free jumps to their paired portal.
 
-    Returns (distance_in_tiles, connected: bool).
+    Returns (cost, connected: bool).
     """
     if nation_a_name == nation_b_name:
         return 0, True
 
-    tiles_raw = list(mongo.db.hex_map_tiles.find(
-        {"$or": [
-            {"owner": nation_a_name},
-            {"owner": nation_b_name},
-            {"route": {"$exists": True, "$ne": None}},
-        ]},
-        {"q": 1, "r": 1, "owner": 1, "route": 1, "_id": 0},
+    tiles_raw  = _load_trade_tiles([nation_a_name, nation_b_name])
+    portal_map = _build_portal_map()
+    move_costs = _terrain_move_costs()
+
+    reached = _dijkstra_from_cities(
+        nation_a_name, [nation_b_name], tiles_raw, portal_map, move_costs
+    )
+    cost = reached.get(nation_b_name)
+    return (cost, True) if cost is not None else (None, False)
+
+
+def get_all_trade_distances(nation_name):
+    """Return trade distances from nation_name to all other nations.
+
+    Returns {other_nation_name: {cost, delay, connectable}} using the
+    nation's trade_speed for delay computation.
+    """
+    source = mongo.db.nations.find_one({"name": nation_name}, {"trade_speed": 1})
+    if not source:
+        return {}
+    src_speed = source.get("trade_speed") or 7
+
+    all_nations = list(mongo.db.nations.find(
+        {"name": {"$ne": nation_name}},
+        {"name": 1, "trade_speed": 1, "_id": 0},
     ))
+    if not all_nations:
+        return {}
 
-    a_tiles = set()
-    b_tiles = set()
-    traversable = set()
+    target_names = [n["name"] for n in all_nations]
+    tiles_raw    = _load_trade_tiles([nation_name] + target_names)
+    portal_map   = _build_portal_map()
+    move_costs   = _terrain_move_costs()
 
-    for t in tiles_raw:
-        pos = (t["q"], t["r"])
-        owner = t.get("owner", "")
-        if owner == nation_a_name:
-            a_tiles.add(pos)
-            traversable.add(pos)
-        if owner == nation_b_name:
-            b_tiles.add(pos)
-            traversable.add(pos)
-        if t.get("route"):
-            traversable.add(pos)
+    reached = _dijkstra_from_cities(
+        nation_name, target_names, tiles_raw, portal_map, move_costs
+    )
 
-    if not a_tiles or not b_tiles:
-        return None, False
-
-    visited = {}
-    queue = deque()
-    for pos in a_tiles:
-        if pos not in visited:
-            visited[pos] = 0
-            queue.append((pos, 0))
-
-    while queue:
-        (q, r), dist = queue.popleft()
-        if (q, r) in b_tiles:
-            return dist, True
-        for dq, dr in AXIAL_DIRECTIONS:
-            nb = (q + dq, r + dr)
-            if nb in traversable and nb not in visited:
-                visited[nb] = dist + 1
-                queue.append((nb, dist + 1))
-
-    return None, False
+    result = {}
+    for n in all_nations:
+        name  = n["name"]
+        cost  = reached.get(name)
+        if cost is not None:
+            delay = compute_delay(cost, src_speed, n.get("trade_speed") or 7)
+            result[name] = {"cost": cost, "delay": delay, "connectable": True}
+        else:
+            result[name] = {"cost": None, "delay": None, "connectable": False}
+    return result
 
 
 def compute_delay(road_distance, trade_speed_a, trade_speed_b):
@@ -227,12 +363,31 @@ def get_trade_route_source_contributions(nation_name, routes, session=None):
 # ---------------------------------------------------------------------------
 
 def _nations_share_market(nation_a, nation_b):
-    """True if both nations are members of at least one common market."""
+    """True if both nations are members of at least one common market.
+
+    Trade routes store nation_a/nation_b as nation names, but market_links
+    stores member as the nation's _id string. Resolve names → IDs first.
+    """
     ml = category_data.get("market_links", {}).get("database")
     if ml is None:
         return False
-    a_markets = {lnk["market"] for lnk in ml.find({"member": nation_a}, {"market": 1})}
-    b_markets = {lnk["market"] for lnk in ml.find({"member": nation_b}, {"market": 1})}
+    nations_db = category_data.get("nations", {}).get("database")
+    if nations_db is None:
+        return False
+
+    def _nation_id(name):
+        n = nations_db.find_one({"name": name}, {"_id": 1})
+        return str(n["_id"]) if n else None
+
+    a_id = _nation_id(nation_a)
+    b_id = _nation_id(nation_b)
+    if not a_id or not b_id:
+        return False
+
+    a_markets = {lnk["market"] for lnk in ml.find({"member": a_id}, {"market": 1})}
+    if not a_markets:
+        return False
+    b_markets = {lnk["market"] for lnk in ml.find({"member": b_id}, {"market": 1})}
     return bool(a_markets & b_markets)
 
 
@@ -298,23 +453,9 @@ def count_route_slots(nation_name, statuses=("active", "ending", "pending")):
 # ---------------------------------------------------------------------------
 
 def get_connectable_nations(nation_name, nation_trade_speed):
-    """Return list of nation dicts that have a road path to this nation.
-
-    Uses a single aggregation for candidate centroids, one combined tile fetch,
-    and a single multi-target BFS — avoiding N+1 queries.
+    """Return list of nation dicts reachable by terrain-weighted Dijkstra from
+    nation_name's cities, respecting road tile costs and portal jumps.
     """
-    from helpers.hex_map_helpers import hex_distance
-
-    my_tiles = list(mongo.db.hex_map_tiles.find(
-        {"owner": nation_name}, {"q": 1, "r": 1, "_id": 0}
-    ))
-    if not my_tiles:
-        return []
-
-    avg_q = sum(t["q"] for t in my_tiles) // max(len(my_tiles), 1)
-    avg_r = sum(t["r"] for t in my_tiles) // max(len(my_tiles), 1)
-    max_hex_radius = max(3 * (nation_trade_speed or 7), 30)
-
     candidate_nations = list(mongo.db.nations.find(
         {"name": {"$ne": nation_name}},
         {"name": 1, "trade_speed": 1, "_id": 0},
@@ -322,83 +463,23 @@ def get_connectable_nations(nation_name, nation_trade_speed):
     if not candidate_nations:
         return []
 
-    # Single aggregation to get centroid per candidate nation (replaces N tile queries)
-    all_candidate_names = [c["name"] for c in candidate_nations]
-    pipeline = [
-        {"$match": {"owner": {"$in": all_candidate_names}}},
-        {"$group": {
-            "_id": "$owner",
-            "avg_q": {"$avg": "$q"},
-            "avg_r": {"$avg": "$r"},
-        }},
-    ]
-    centroids = {
-        doc["_id"]: (doc["avg_q"], doc["avg_r"])
-        for doc in mongo.db.hex_map_tiles.aggregate(pipeline)
-    }
+    target_names = [n["name"] for n in candidate_nations]
+    tiles_raw    = _load_trade_tiles([nation_name] + target_names)
+    portal_map   = _build_portal_map()
+    move_costs   = _terrain_move_costs()
 
-    nearby_candidates = {
-        c["name"]: c
-        for c in candidate_nations
-        if c["name"] in centroids
-        and hex_distance(avg_q, avg_r, centroids[c["name"]][0], centroids[c["name"]][1]) <= max_hex_radius
-    }
-    if not nearby_candidates:
-        return []
-
-    # One combined tile fetch for own tiles + all nearby candidates + all road tiles
-    nearby_names = list(nearby_candidates.keys())
-    tiles_raw = list(mongo.db.hex_map_tiles.find(
-        {"$or": [
-            {"owner": {"$in": [nation_name] + nearby_names}},
-            {"route": {"$exists": True, "$ne": None}},
-        ]},
-        {"q": 1, "r": 1, "owner": 1, "route": 1, "_id": 0},
-    ))
-
-    my_tile_set = set()
-    tile_to_candidate = {}
-    traversable = set()
-    for t in tiles_raw:
-        pos = (t["q"], t["r"])
-        owner = t.get("owner", "")
-        if owner == nation_name:
-            my_tile_set.add(pos)
-            traversable.add(pos)
-        elif owner in nearby_candidates:
-            tile_to_candidate[pos] = owner
-            traversable.add(pos)
-        if t.get("route"):
-            traversable.add(pos)
-
-    if not my_tile_set:
-        return []
-
-    # Single multi-target BFS from own territory
-    visited = {}
-    queue = deque()
-    for pos in my_tile_set:
-        visited[pos] = 0
-        queue.append((pos, 0))
-
-    reached = {}
-    while queue and len(reached) < len(nearby_candidates):
-        (q, r), dist = queue.popleft()
-        cname = tile_to_candidate.get((q, r))
-        if cname and cname not in reached:
-            reached[cname] = dist
-        for dq, dr in AXIAL_DIRECTIONS:
-            nb = (q + dq, r + dr)
-            if nb in traversable and nb not in visited:
-                visited[nb] = dist + 1
-                queue.append((nb, dist + 1))
+    reached = _dijkstra_from_cities(
+        nation_name, target_names, tiles_raw, portal_map, move_costs
+    )
 
     results = []
-    for cname, dist in reached.items():
-        candidate = nearby_candidates[cname]
-        cspeed = candidate.get("trade_speed") or 7
-        delay = compute_delay(dist, nation_trade_speed, cspeed)
-        results.append({"name": cname, "road_distance": dist, "delay": delay})
+    for n in candidate_nations:
+        name  = n["name"]
+        cost  = reached.get(name)
+        if cost is not None:
+            cspeed = n.get("trade_speed") or 7
+            delay  = compute_delay(cost, nation_trade_speed, cspeed)
+            results.append({"name": name, "road_distance": cost, "delay": delay})
 
     results.sort(key=lambda x: x["road_distance"])
     return results

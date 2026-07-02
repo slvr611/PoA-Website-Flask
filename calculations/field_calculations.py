@@ -141,6 +141,22 @@ def _build_nation_calc_cache(target):
             elif adj_count >= 2:
                 metropolis_bonus += 1
 
+    # Build a mapping of district._id → node resource_type from actual tile data.
+    # The 'node' field stored on district entries in nations.districts is often
+    # empty (not updated when tiles change), so synergy checks must use the
+    # tile as the authoritative source.
+    district_node_map = {}
+    for tile in _all_nation_tiles.values():
+        _node = tile.get("node") or {}
+        rt = _node.get("resource_type") or _node.get("value") or _node.get("type")
+        if not rt or rt == "resource":
+            continue
+        dist_ref = tile.get("district")
+        if dist_ref and isinstance(dist_ref, dict):
+            did = dist_ref.get("id") or dist_ref.get("def_key") or ""
+            if did:
+                district_node_map[did] = rt
+
     culture_count  = len({p.get("culture")  for p in pops if p.get("culture")})
     religion_count = len({p.get("religion") for p in pops if p.get("religion")})
     slave_count    = sum(1 for p in pops if p.get("slave"))
@@ -183,6 +199,7 @@ def _build_nation_calc_cache(target):
         "_node_tiles": node_tiles,
         "territory_node_counts": preliminary_node_counts,
         "highest_ruler_charisma": highest_ruler_charisma,
+        "district_node_map": district_node_map,
     }
 
 def calculate_all_fields(target, schema, target_data_type, return_breakdowns=False, instrumentation=None):
@@ -3596,16 +3613,26 @@ def _build_computed_contributions(
     # ── Job production / upkeep ───────────────────────────────────────────────
     job_details = calculated_values.get("job_details", {})
     jobs = target.get("jobs") or {}
+    _resource_keys = {r["key"] for r in all_res}
     for job_key, count in (jobs.items() if isinstance(jobs, dict) else []):
         if not count or job_key not in job_details:
             continue
         mods = {}
-        for res, v in job_details[job_key].get("production", {}).items():
-            if v:
-                mods[res + "_production"] = int(v * count)
-        for res, v in job_details[job_key].get("upkeep", {}).items():
-            if v:
-                mods[res + "_consumption"] = int(v * count)
+        for field, v in job_details[job_key].get("production", {}).items():
+            if not v:
+                continue
+            if field == "money":
+                pass  # money_income handled separately below
+            elif field in _resource_keys:
+                mods[field + "_production"] = int(v * count)
+            else:
+                # Non-resource direct field (e.g. stability_gain_chance,
+                # stability_loss_chance). Mirror sum_job_totals: pass through
+                # as-is so the breakdown matches the actual computation.
+                mods[field] = round(v * count, 4)
+        for field, v in job_details[job_key].get("upkeep", {}).items():
+            if v and field in _resource_keys:
+                mods[field + "_consumption"] = int(v * count)
         if mods:
             label = job_details[job_key].get("display_name", job_key.replace("_", " ").title())
             contribs.append(SourceContribution(label=label, source_type="job", modifiers=mods))

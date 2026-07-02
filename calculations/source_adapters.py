@@ -226,6 +226,11 @@ class DistrictAdapter:
         contributions = []
         district_details = calculate_district_details(target, schema.get("properties", {}), modifier_totals, law_totals, external_totals)
 
+        # Authoritative district→node lookup built from tile data in _build_nation_calc_cache.
+        # The 'node' field on district entries is often empty/stale; tile data is correct.
+        _cache = target.get("_calc_cache") or {}
+        _district_node_map = _cache.get("district_node_map", {})
+
         def synergy_matches(node, requirement):
             if not node:
                 return False
@@ -252,7 +257,11 @@ class DistrictAdapter:
                 if not dd:
                     continue
                 label = dd.get("display_name", district["def_key"])
-                district_node = district.get("node", "")
+                district_id = district.get("_id", "")
+                district_node = (
+                    _district_node_map.get(district_id)
+                    or district.get("node", "")
+                )
 
                 # Base modifiers — nation-scoped only
                 # Auto-fill scaling_extra for per_x_district_sessions scaling

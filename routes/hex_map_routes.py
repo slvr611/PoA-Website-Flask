@@ -93,6 +93,14 @@ def hex_map_config():
         for k, v in json_data.get("cities", {}).items()
     ]
 
+    # Resolve the current user's ruling nation for overlay default
+    viewer_nation_name = ""
+    if g.user:
+        from calculations.visibility import get_viewer_nation
+        vn = get_viewer_nation(g.user)
+        if vn:
+            viewer_nation_name = vn.get("name", "")
+
     return jsonify(
         {
             "cols":         cfg.get("cols",         20),
@@ -106,6 +114,7 @@ def hex_map_config():
             "unique_resources":   _res_list("unique_resources"),
             "luxury_resources":   _res_list("luxury_resources"),
             "city_types":         city_types,
+            "viewer_nation":      viewer_nation_name,
         }
     )
 
@@ -705,6 +714,55 @@ def sync_all_routes():
 @hex_map_routes.route("/api/hex-map/tile/<signed_int:q>/<signed_int:r>/adjacency")
 def hex_tile_adjacency(q, r):
     return jsonify({"neighbors": get_neighbor_tiles(q, r)})
+
+
+@hex_map_routes.route("/api/hex-map/trade-distances")
+def trade_distances_api():
+    """Return terrain-weighted city→city trade distances from a given nation.
+
+    ?nation=<name> — the source nation.
+    Returns {nation_name: {cost, delay, connectable}} for all other nations.
+    """
+    nation_name = request.args.get("nation", "").strip()
+    if not nation_name:
+        return jsonify({"error": "nation parameter required"}), 400
+    from helpers.trade_route_helpers import get_all_trade_distances
+    result = get_all_trade_distances(nation_name)
+    return jsonify({"nation": nation_name, "distances": result})
+
+
+@hex_map_routes.route("/api/hex-map/diplomatic-range")
+def diplomatic_range_api():
+    """Return which nations are within diplomatic range of a given nation.
+
+    ?nation=<name> — the source nation.
+    Returns {nation_name: {in_range, cost}} for all other nations.
+    """
+    nation_name = request.args.get("nation", "").strip()
+    if not nation_name:
+        return jsonify({"error": "nation parameter required"}), 400
+
+    source = mongo.db.nations.find_one(
+        {"name": nation_name},
+        {"diplomatic_range": 1, "_id": 0},
+    )
+    if not source:
+        return jsonify({"error": "Nation not found"}), 404
+
+    dip_range = int(source.get("diplomatic_range") or 0)
+
+    from helpers.trade_route_helpers import get_all_trade_distances
+    distances = get_all_trade_distances(nation_name)
+
+    result = {}
+    for other_name, data in distances.items():
+        cost = data.get("cost")
+        result[other_name] = {
+            "in_range":  cost is not None and cost <= dip_range,
+            "cost":      cost,
+            "dip_range": dip_range,
+        }
+    return jsonify({"nation": nation_name, "dip_range": dip_range, "nations": result})
 
 
 # ---------------------------------------------------------------------------
