@@ -134,24 +134,24 @@
         ],
         "laws": {
           "Small": {
-            "budget": 450,
+            "budget": 600,
             "max_units": 2,
-            "mech_rp_hiring_cost": 450
-          },
-          "Medium": {
-            "budget": 750,
-            "max_units": 3,
-            "mech_rp_hiring_cost": 525
-          },
-          "Large": {
-            "budget": 1050,
-            "max_units": 4,
             "mech_rp_hiring_cost": 600
           },
+          "Medium": {
+            "budget": 1000,
+            "max_units": 3,
+            "mech_rp_hiring_cost": 700
+          },
+          "Large": {
+            "budget": 1350,
+            "max_units": 4,
+            "mech_rp_hiring_cost": 800
+          },
           "Massive": {
-            "budget": 1500,
+            "budget": 2000,
             "max_units": 5,
-            "mech_rp_hiring_cost": 675
+            "mech_rp_hiring_cost": 900
           }
         }
       },

@@ -23,8 +23,9 @@
             "member_stability_gain_chance_per_market_tier": 0.05
           },
           "Illicit": {
-            "trade_risk": 0.1,
-            "minimum_trade_risk": -0.05
+            "trade_risk": 0.15,
+            "member_money_income_per_bandit_camp": 50
+            
           },
           "Hub": {
             "resource_storage_capacity": 5,
@@ -32,10 +33,19 @@
             "owner_resource_discount_per_tier": 0.05
           },
           "Luxury": {
-            "generate_luxury_resources_per_market_tier": 1
+            "generate_luxury_resources_per_market_tier": 1,
+            "trade_risk_per_owner_luxury": -0.02
           },
-          "Maritime": {},
-          "Militant": {}
+          "Maritime": {
+            "trade_risk_per_owner_naval_unit": -0.01,
+            "member_naval_unit_discount": -0.1,
+            "sea_route_cost": -1
+          },
+          "Militant": {
+            "trade_risk_per_owner_land_unit": -0.01,
+            "member_land_unit_discount": -0.1,
+            "land_route_cost": -1
+          }
         }
       },
       "tariff_stance": {
@@ -45,26 +55,25 @@
         "enum": ["None", "Low", "Moderate", "High", "Extreme"],
         "laws": {
           "None": {
-            "member_nation_trade_speed": 3,
+            "member_nation_trade_speed": 1,
             "member_nation_stability_gain_chance": 0.1
           },
           "Low": {
-            "owner_nation_money_income_per_market_tier_per_member": 3
+            "owner_nation_money_income_per_market_tier_per_member": 4
           },
           "Moderate": {
-            "owner_nation_money_income_per_market_tier_per_member": 6,
-            "member_nation_trade_speed": -3
+            "owner_nation_money_income_per_market_tier_per_member": 8,
+            "member_nation_trade_speed": -4
           },
           "High": {
-            "owner_nation_money_income_per_market_tier_per_member": 15,
-            "member_nation_trade_speed": -6,
-            "member_nation_trade_slots": -3
+            "owner_nation_money_income_per_market_tier_per_member": 20,
+            "member_nation_trade_speed": -4,
+            "member_nation_trade_slots": -1
           },
           "Extreme": {
-            "owner_nation_money_income_per_market_tier_per_member": 30,
-            "member_nation_trade_speed": -9,
-            "member_nation_trade_slots": -3,
-            "member_nation_stability_loss_chance": 0.1
+            "owner_nation_money_income_per_market_tier_per_member": 40,
+            "member_nation_trade_speed": -4,
+            "member_nation_trade_slots": -4
           }
         }
       },
@@ -76,32 +85,32 @@
         "default": "I",
         "laws": {
           "I": {
-            "primary_resource_production": 1,
-            "resource_storage_capacity": 5,
+            "primary_resource_production": 2,
+            "resource_storage_capacity": 10,
             "market_tier_multiplier": 1
           },
           "II": {
-            "primary_resource_production": 2,
+            "primary_resource_production": 3,
             "secondary_resource_production": 1,
-            "resource_storage_capacity": 5,
+            "resource_storage_capacity": 15,
             "market_tier_multiplier": 2
           },
           "III": {
-            "primary_resource_production": 3,
+            "primary_resource_production": 5,
             "secondary_resource_production": 2,
-            "resource_storage_capacity": 10,
+            "resource_storage_capacity": 20,
             "market_tier_multiplier": 3
           },
           "IV": {
-            "primary_resource_production": 4,
-            "secondary_resource_production": 2,
-            "resource_storage_capacity": 15,
+            "primary_resource_production": 8,
+            "secondary_resource_production": 3,
+            "resource_storage_capacity": 25,
             "market_tier_multiplier": 4
           },
           "V": {
-            "primary_resource_production": 5,
-            "secondary_resource_production": 3,
-            "resource_storage_capacity": 15,
+            "primary_resource_production": 10,
+            "secondary_resource_production": 5,
+            "resource_storage_capacity": 30,
             "market_tier_multiplier": 5
           }
         }

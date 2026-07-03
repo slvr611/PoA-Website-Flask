@@ -502,6 +502,37 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
             target[field] = calculated_values[field]
     record_timing("calculate_remaining_fields_ms", phase_start)
 
+    if target_data_type == "market":
+        # compute_resource_production and compute_market_resource_storage_capacity
+        # only iterate json_data general/unique resources. Market primary/secondary
+        # resources that fall outside those lists (e.g. bronze) are never included.
+        # Inject them here — but only for resources NOT already covered by the
+        # standard compute, to avoid double-counting.
+        _std_resources = {
+            r["key"]
+            for r in json_data.get("general_resources", []) + json_data.get("unique_resources", [])
+        }
+        _market_resources = [
+            r for r in [
+                target.get("primary_resource", ""),
+                target.get("secondary_resource_one", ""),
+                target.get("secondary_resource_two", ""),
+            ] if r and r not in _std_resources
+        ]
+        if _market_resources:
+            _rp  = dict(calculated_values.get("resource_production", {}) or {})
+            _cap = dict(calculated_values.get("market_resource_capacity", {}) or {})
+            _storage = overall_total_modifiers.get("resource_storage_capacity", 0)
+            for _mr in _market_resources:
+                _prod = overall_total_modifiers.get(_mr + "_production", 0)
+                _rp[_mr]  = _rp.get(_mr, 0) + _prod
+                if _storage and _mr not in _cap:
+                    _cap[_mr] = _storage
+            calculated_values["resource_production"]      = _rp
+            calculated_values["market_resource_capacity"] = _cap
+            target["resource_production"]      = _rp
+            target["market_resource_capacity"] = _cap
+
     if target_data_type == "nation":
         _pfc = calculated_values.get("pop_flee_chance", 0)
         _pfc_clamped = max(0.0, min(1.0, _pfc))
@@ -1952,7 +1983,25 @@ def _build_unit_tagged_sources(target, schema, district_details, district_contri
                 scaling_extra = m.get("scaling_extra") or ""
                 if scaling and scaling != "flat":
                     value = value * get_scaling_multiplier(scaling, target, scaling_x=scaling_x, scaling_extra=scaling_extra)
-                cond_label = f" (income > {int(m.get('condition_value', 0))})" if condition_scaling else ""
+                if condition_scaling:
+                    cond_op  = m.get("condition_operator") or ">="
+                    cond_val = m.get("condition_value") or 0
+                    _COND_LABEL_MAP = {
+                        "per_x_money_income":         "income",
+                        "per_x_minority_cultures":    "culturally homogeneous" if cond_op in ("<=","<") and float(cond_val) == 0 else "minority cultures",
+                        "per_x_minority_religions":   "religiously homogeneous" if cond_op in ("<=","<") and float(cond_val) == 0 else "minority religions",
+                        "per_x_primary_culture_pops_world": "culture pops",
+                        "per_x_units":                "units",
+                        "per_x_pops":                 "pops",
+                        "per_x_resource_produced":    (m.get("condition_scaling_extra") or "resource") + " produced",
+                    }
+                    cond_name = _COND_LABEL_MAP.get(condition_scaling, condition_scaling.replace("per_x_", "").replace("_", " "))
+                    if cond_op in ("<=","<") and float(cond_val) == 0:
+                        cond_label = f" ({cond_name})"
+                    else:
+                        cond_label = f" ({cond_name} {cond_op} {int(float(cond_val))})"
+                else:
+                    cond_label = ""
                 tagged.append({"label": f"City: {city_name}{cond_label}", "modifiers": {field: value}})
 
     # Nation modifiers — delegate to ModifierAdapter.collect for consistent
@@ -3908,7 +3957,7 @@ def _build_computed_contributions(
         from helpers.trade_route_helpers import _nations_share_market, _slot_cost_for_direction
         _trade_routes = list(mongo.db.trade_routes.find(
             {"$or": [{"nation_a": _nation_name}, {"nation_b": _nation_name}],
-             "status": {"$in": ["active", "ending", "pending"]}},
+             "status": {"$in": ["active", "ending"]}},
             {"nation_a": 1, "nation_b": 1, "resources_a_to_b": 1, "resources_b_to_a": 1, "_id": 0},
         ))
         _market_cache = {}

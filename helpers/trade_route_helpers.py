@@ -414,7 +414,7 @@ def _slot_cost_for_direction(resources, slot_capacity):
     return resource_slots
 
 
-def count_route_slots(nation_name, statuses=("active", "ending", "pending")):
+def count_route_slots(nation_name, statuses=("active", "ending")):
     """Return (export_slots_used, import_slots_used) for this nation across all
     trade routes with the given statuses.
 

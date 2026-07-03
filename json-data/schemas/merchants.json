@@ -55,19 +55,19 @@
         "laws": {
           "Poor": {
             "hostile_encounter_chance": 0.5,
-            "income": 75
+            "income": 100
           },
           "Acceptable": {
             "hostile_encounter_chance": 0.35,
-            "income": 150
+            "income": 200
           },
           "Great": {
             "hostile_encounter_chance": 0.3,
-            "income": 225
+            "income": 300
           },
           "Flawless": {
             "hostile_encounter_chance": 0.2,
-            "income": 300
+            "income": 400
           }
         }
       },
@@ -102,21 +102,21 @@
         "label": "Trade Speed",
         "description": "The distance at which the merchant company can trade with other nations or merchant companies",
         "calculated": true,
-        "base_value": 15
+        "base_value": 20
       },
       "import_slots": {
         "bsonType": "number",
         "label": "Import Slots",
         "description": "The amount of resources the merchant company can import each session",
         "calculated": true,
-        "base_value": 9
+        "base_value": 12
       },
       "export_slots": {
         "bsonType": "number",
         "label": "Export Slots",
         "description": "The amount of resources the merchant company can export each session",
         "calculated": true,
-        "base_value": 9
+        "base_value": 12
       },
       "resource_storage": {
         "bsonType": "object",

@@ -11,16 +11,35 @@
 			"effective_pop_capacity": 1
 		}
 	},
+	"agropolis": {
+		"display_name": "Agropolis",
+		"cost": {
+			"wood": 15,
+			"food": 10,
+			"stone": 5,
+			"iron": 3
+			
+		},
+		"modifiers": {
+			"wood_consumption": 2,
+			"effective_pop_capacity": 1
+		},
+		"_modifiers": [
+			{ "modifier_type": "effective_pop_capacity", "value": 1, "scope": "nation_self", "condition_scaling": "per_x_resource_produced", "condition_scaling_extra": "food", "condition_operator": ">=", "condition_value": 20 },
+			{ "modifier_type": "effective_pop_capacity", "value": 1, "scope": "nation_self", "condition_scaling": "per_x_resource_produced", "condition_scaling_extra": "food", "condition_operator": ">=", "condition_value": 40 },
+			{ "modifier_type": "effective_pop_capacity", "value": 1, "scope": "nation_self", "condition_scaling": "per_x_resource_produced", "condition_scaling_extra": "food", "condition_operator": ">=", "condition_value": 70 }
+		]
+	},
 	"citadel": {
 		"display_name": "Citadel",
 		"cost": {
-			"stone": 100,
-			"wood": 100,
-			"food": 100,
-			"iron": 100
+			"stone": 15,
+			"wood": 5,
+			"food": 5,
+			"iron": 5
 		},
 		"modifiers": {
-			"food_consumption": 100,
+			"stone_consumption": 2,
 			"effective_pop_capacity": 1
 		},
 		"_modifiers": [
@@ -61,9 +80,9 @@
 			"effective_pop_capacity": 1
 		},
 		"_modifiers": [
+			{ "modifier_type": "effective_pop_capacity", "value": 1, "scope": "nation_self", "condition_scaling": "per_x_minority_cultures", "condition_operator": "<=", "condition_value": 0 },
 			{ "modifier_type": "effective_pop_capacity", "value": 1, "scope": "nation_self", "condition_scaling": "per_x_primary_culture_pops_world", "condition_operator": ">=", "condition_value": 60 },
-			{ "modifier_type": "effective_pop_capacity", "value": 1, "scope": "nation_self", "condition_scaling": "per_x_primary_culture_pops_world", "condition_operator": ">=", "condition_value": 120 },
-			{ "modifier_type": "effective_pop_capacity", "value": 1, "scope": "nation_self", "condition_scaling": "per_x_primary_culture_pops_world", "condition_operator": ">=", "condition_value": 200 }
+			{ "modifier_type": "effective_pop_capacity", "value": 1, "scope": "nation_self", "condition_scaling": "per_x_primary_culture_pops_world", "condition_operator": ">=", "condition_value": 160 }
 		]
 	},
 	"metropolis": {
@@ -79,6 +98,25 @@
 			"stone_consumption": 1,
 			"effective_pop_capacity": 1
 		}
+	},
+	"sanctuary": {
+		"display_name": "Sanctuary",
+		"cost": {
+			"food": 14,
+			"wood": 12,
+			"stone": 8,
+			"mounts": 3
+		},
+		"modifiers": {
+			"wood_consumption": 1,
+			"stone_consumption": 1,
+			"effective_pop_capacity": 1
+		},
+		"_modifiers": [
+			{ "modifier_type": "effective_pop_capacity", "value": 1, "scope": "nation_self", "condition_scaling": "per_x_minority_religions", "condition_operator": "<=", "condition_value": 0 },
+			{ "modifier_type": "effective_pop_capacity", "value": 1, "scope": "nation_self", "condition_scaling": "per_x_primary_religion_pops_world", "condition_operator": ">=", "condition_value": 60 },
+			{ "modifier_type": "effective_pop_capacity", "value": 1, "scope": "nation_self", "condition_scaling": "per_x_primary_religion_pops_world", "condition_operator": ">=", "condition_value": 160 }
+		]
 	},
 	"sanctum": {
 		"display_name": "Sanctum",

@@ -888,7 +888,7 @@
           "Sacred Vicar": {
             "city_slots": 6,
             "_modifiers": [
-              { "modifier_type": "stability_gain_chance", "value": 0.01, "scope": "nation_self", "scaling": "per_x_foreign_religious_pops", "scaling_x": 1, "max": 0.5 }
+              { "modifier_type": "stability_gain_chance", "value": 0.01, "scope": "nation_self", "scaling": "per_x_foreign_religion_pops", "scaling_x": 1, "max_value": 0.5 }
             ]
           },
           "Great Khanate": {
