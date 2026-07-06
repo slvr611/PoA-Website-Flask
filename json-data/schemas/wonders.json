@@ -34,6 +34,11 @@
         "label": "Legacy Status",
         "description": "Whether the wonder has a legacy bonus"
       },
+      "acts_as_trade_source": {
+        "bsonType": "boolean",
+        "label": "Acts as Trade Source",
+        "description": "When true, this wonder's tile counts as a city for trade-distance calculations — it serves as an origin and destination point for trade routes, just like a regular city."
+      },
       "node": {
         "bsonType": "json_resource_enum",
         "label": "Node",

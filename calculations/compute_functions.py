@@ -445,7 +445,15 @@ def compute_money_income(field, target, base_value, field_schema, overall_total_
     max_money_income_per_stockpile = overall_total_modifiers.get("max_money_income_per_money_storage", 0)
     if money_income_per_money_storage > 0:
         value += min((money_stockpile // money_income_per_money_storage) * 100, max_money_income_per_stockpile)  #money_income_per_stockpile gives $100 per x amount in stockpile
-    
+
+    nation_name = target.get("name", "")
+    if nation_name:
+        from helpers.trade_route_helpers import _get_cached_routes, get_trade_route_resource_net
+        routes = _get_cached_routes(target)
+        if routes:
+            net = get_trade_route_resource_net(nation_name, routes)
+            value += net.get("money", 0)
+
     return int(value)
     
 def compute_resource_production(field, target, base_value, field_schema, overall_total_modifiers):

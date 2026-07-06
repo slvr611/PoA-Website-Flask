@@ -4483,7 +4483,17 @@ def compute_nation_breakdowns(
     karma_bd.append({"label": "Total", "value": calculated_values.get("karma", target.get("karma", 0))})
     breakdowns["karma"] = karma_bd
 
-    # Money income — base + contributions + total
+    # Trade route contributions — fetched early so money_income breakdown can include them
+    nation_name_bd = target.get("name", "")
+    tr_contribs = []
+    if nation_name_bd:
+        from helpers.trade_route_helpers import _get_cached_routes, get_trade_route_source_contributions
+        tr_routes = _get_cached_routes(target)
+        if tr_routes:
+            tr_contribs = get_trade_route_source_contributions(nation_name_bd, tr_routes)
+            contributions.extend(tr_contribs)
+
+    # Money income — base + modifier contributions + trade route money lines + total
     base_money = schema_properties.get("money_income", {}).get("base_value", 0)
     money_bd   = []
     if base_money:
@@ -4491,17 +4501,16 @@ def compute_nation_breakdowns(
     for entry in build_field_breakdown("money_income", contributions):
         if entry["value"]:
             money_bd.append({"label": entry["label"], "value": entry["value"]})
+    for tc in tr_contribs:
+        money_in  = tc.modifiers.get("money_production", 0)
+        money_out = tc.modifiers.get("money_consumption", 0)
+        if money_in:
+            money_bd.append({"label": tc.label, "value": money_in})
+        if money_out:
+            money_bd.append({"label": tc.label, "value": -money_out})
     money_bd.append({"label": "Total",
                      "value": calculated_values.get("money_income", target.get("money_income", 0))})
     breakdowns["money_income"] = money_bd
-
-    # Trade route contributions — add before resource breakdown loop so totals include them
-    nation_name_bd = target.get("name", "")
-    if nation_name_bd:
-        from helpers.trade_route_helpers import _get_cached_routes, get_trade_route_source_contributions
-        tr_routes = _get_cached_routes(target)
-        if tr_routes:
-            contributions.extend(get_trade_route_source_contributions(nation_name_bd, tr_routes))
 
     # Resources
     for resource in json_data["general_resources"] + json_data["unique_resources"] + json_data["luxury_resources"]:

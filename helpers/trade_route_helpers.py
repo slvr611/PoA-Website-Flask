@@ -45,6 +45,16 @@ def _build_portal_map():
     return portal_map
 
 
+def _get_trade_source_wonder_ids():
+    """Return the set of wonder IDs (as strings) that have acts_as_trade_source=True."""
+    return {
+        str(w["_id"])
+        for w in mongo.db.wonders.find(
+            {"acts_as_trade_source": True}, {"_id": 1}
+        )
+    }
+
+
 def _load_trade_tiles(nation_names_list):
     """Fetch all tiles relevant to trade-distance computation: owned + roads + portals."""
     return list(mongo.db.hex_map_tiles.find(
@@ -53,7 +63,7 @@ def _load_trade_tiles(nation_names_list):
             {"route": {"$exists": True, "$ne": None}},
             {"portal": {"$exists": True, "$ne": None}},
         ]},
-        {"q": 1, "r": 1, "owner": 1, "route": 1, "portal": 1, "terrain": 1, "city": 1, "_id": 0},
+        {"q": 1, "r": 1, "owner": 1, "route": 1, "portal": 1, "terrain": 1, "city": 1, "wonder": 1, "_id": 0},
     ))
 
 
@@ -66,25 +76,44 @@ def _tile_step_cost(tile_data, move_costs):
     return cost if cost < _TERRAIN_IMPASSABLE else None  # None = impassable
 
 
-def _dijkstra_from_cities(source_nation, target_nations, tiles_raw, portal_map, move_costs):
+def _is_trade_city(tile, trade_wonder_ids):
+    """Return True if the tile counts as a city for trade-distance purposes.
+
+    A tile qualifies if it has a city building, or if it has a wonder whose
+    ID is in trade_wonder_ids (i.e. the wonder has acts_as_trade_source=True).
+    """
+    if tile.get("city"):
+        return True
+    wonder = tile.get("wonder")
+    if wonder and trade_wonder_ids:
+        wid = str(wonder.get("id", ""))
+        return bool(wid and wid in trade_wonder_ids)
+    return False
+
+
+def _dijkstra_from_cities(source_nation, target_nations, tiles_raw, portal_map, move_costs, trade_wonder_ids=None):
     """Multi-source Dijkstra from source_nation's cities toward target cities.
 
     Sources: city tiles of source_nation (fallback: all owned tiles).
     Targets: city tiles of each target nation (fallback: all owned tiles).
     Traversable: road tiles, tiles owned by source/targets, portal tiles.
 
+    trade_wonder_ids: set of wonder ID strings whose tiles count as city positions.
+
     Returns {nation_name: cost} for each reachable target.
     """
+    if trade_wonder_ids is None:
+        trade_wonder_ids = set()
     target_set = set(target_nations) | {source_nation}
 
     tile_map = {(t["q"], t["r"]): t for t in tiles_raw}
 
-    src_cities  = {pos for pos, t in tile_map.items() if t.get("owner") == source_nation and t.get("city")}
+    src_cities  = {pos for pos, t in tile_map.items() if t.get("owner") == source_nation and _is_trade_city(t, trade_wonder_ids)}
     src_pos     = src_cities or {pos for pos, t in tile_map.items() if t.get("owner") == source_nation}
 
     tgt_cities, tgt_all = {}, {}
     for nation in target_nations:
-        tgt_cities[nation] = {pos for pos, t in tile_map.items() if t.get("owner") == nation and t.get("city")}
+        tgt_cities[nation] = {pos for pos, t in tile_map.items() if t.get("owner") == nation and _is_trade_city(t, trade_wonder_ids)}
         tgt_all[nation]    = {pos for pos, t in tile_map.items() if t.get("owner") == nation}
 
     def targets_for(n):
@@ -153,12 +182,14 @@ def get_road_path_distance(nation_a_name, nation_b_name):
     if nation_a_name == nation_b_name:
         return 0, True
 
-    tiles_raw  = _load_trade_tiles([nation_a_name, nation_b_name])
-    portal_map = _build_portal_map()
-    move_costs = _terrain_move_costs()
+    tiles_raw        = _load_trade_tiles([nation_a_name, nation_b_name])
+    portal_map       = _build_portal_map()
+    move_costs       = _terrain_move_costs()
+    trade_wonder_ids = _get_trade_source_wonder_ids()
 
     reached = _dijkstra_from_cities(
-        nation_a_name, [nation_b_name], tiles_raw, portal_map, move_costs
+        nation_a_name, [nation_b_name], tiles_raw, portal_map, move_costs,
+        trade_wonder_ids=trade_wonder_ids,
     )
     cost = reached.get(nation_b_name)
     return (cost, True) if cost is not None else (None, False)
@@ -182,13 +213,15 @@ def get_all_trade_distances(nation_name):
     if not all_nations:
         return {}
 
-    target_names = [n["name"] for n in all_nations]
-    tiles_raw    = _load_trade_tiles([nation_name] + target_names)
-    portal_map   = _build_portal_map()
-    move_costs   = _terrain_move_costs()
+    target_names     = [n["name"] for n in all_nations]
+    tiles_raw        = _load_trade_tiles([nation_name] + target_names)
+    portal_map       = _build_portal_map()
+    move_costs       = _terrain_move_costs()
+    trade_wonder_ids = _get_trade_source_wonder_ids()
 
     reached = _dijkstra_from_cities(
-        nation_name, target_names, tiles_raw, portal_map, move_costs
+        nation_name, target_names, tiles_raw, portal_map, move_costs,
+        trade_wonder_ids=trade_wonder_ids,
     )
 
     result = {}
@@ -225,7 +258,10 @@ def first_delivery_session(route):
     if acc is None:
         return None
     delay = route.get("delay", 0)
-    return acc + max(1, delay)
+    # delay 0 and delay 1 both deliver on the very next tick (field calcs run at
+    # session=acc before the session counter commits to acc+1); higher delays add
+    # one session per tier above 1.
+    return acc + max(0, delay - 1)
 
 
 def last_delivery_session(route):
@@ -463,13 +499,15 @@ def get_connectable_nations(nation_name, nation_trade_speed):
     if not candidate_nations:
         return []
 
-    target_names = [n["name"] for n in candidate_nations]
-    tiles_raw    = _load_trade_tiles([nation_name] + target_names)
-    portal_map   = _build_portal_map()
-    move_costs   = _terrain_move_costs()
+    target_names     = [n["name"] for n in candidate_nations]
+    tiles_raw        = _load_trade_tiles([nation_name] + target_names)
+    portal_map       = _build_portal_map()
+    move_costs       = _terrain_move_costs()
+    trade_wonder_ids = _get_trade_source_wonder_ids()
 
     reached = _dijkstra_from_cities(
-        nation_name, target_names, tiles_raw, portal_map, move_costs
+        nation_name, target_names, tiles_raw, portal_map, move_costs,
+        trade_wonder_ids=trade_wonder_ids,
     )
 
     results = []

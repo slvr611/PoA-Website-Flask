@@ -3545,19 +3545,21 @@ def _post_trade_build_and_rejob(old_nation, new_nation, log_lines):
 AI_MATCH_MAX_DELAY = 1  # "single turn of trade distance": delay ≤ 1
 
 
-def _build_ai_distance_cache(buyer_names, all_ai_names, trade_speeds, tiles_raw, portal_map, move_costs):
+def _build_ai_distance_cache(buyer_names, all_ai_names, trade_speeds, tiles_raw, portal_map, move_costs, trade_wonder_ids=None):
     """Run one Dijkstra per buyer nation (reusing pre-loaded tiles) and return
     {buyer_name: {seller_name: delay}} for all reachable seller names.
     Unreachable pairs are omitted (treat as infinite delay → skip match).
     """
     from helpers.trade_route_helpers import _dijkstra_from_cities, compute_delay
+    if trade_wonder_ids is None:
+        trade_wonder_ids = set()
     cache = {}
     for buyer_name in buyer_names:
         seller_names = [n for n in all_ai_names if n != buyer_name]
         if not seller_names:
             cache[buyer_name] = {}
             continue
-        reached = _dijkstra_from_cities(buyer_name, seller_names, tiles_raw, portal_map, move_costs)
+        reached = _dijkstra_from_cities(buyer_name, seller_names, tiles_raw, portal_map, move_costs, trade_wonder_ids=trade_wonder_ids)
         src_speed = trade_speeds.get(buyer_name, 7)
         delays = {}
         for tgt_name, cost in reached.items():
@@ -3589,7 +3591,7 @@ def ai_market_matching_tick(old_nations, new_nations, schema):
     Prioritises: critical buys first, then desire-buys; price must overlap.
     Trades execute at the seller's ask price.
     """
-    from helpers.trade_route_helpers import _load_trade_tiles, _build_portal_map, _terrain_move_costs
+    from helpers.trade_route_helpers import _load_trade_tiles, _build_portal_map, _terrain_move_costs, _get_trade_source_wonder_ids
     log_lines = []
     buyers_who_received = set()
     old_nation_by_idx = {i: n for i, n in enumerate(old_nations)}
@@ -3636,12 +3638,14 @@ def ai_market_matching_tick(old_nations, new_nations, schema):
         }
 
         # Load tiles for all involved nations in a single DB query.
-        tiles_raw  = _load_trade_tiles(all_ai_names)
-        portal_map = _build_portal_map()
-        move_costs = _terrain_move_costs()
+        tiles_raw        = _load_trade_tiles(all_ai_names)
+        portal_map       = _build_portal_map()
+        move_costs       = _terrain_move_costs()
+        trade_wonder_ids = _get_trade_source_wonder_ids()
 
         distance_cache = _build_ai_distance_cache(
-            buyer_names, all_ai_names, trade_speeds, tiles_raw, portal_map, move_costs
+            buyer_names, all_ai_names, trade_speeds, tiles_raw, portal_map, move_costs,
+            trade_wonder_ids=trade_wonder_ids,
         )
 
         # --- Step 3: Sort and match ---
