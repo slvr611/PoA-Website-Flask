@@ -321,6 +321,8 @@ class ModifierForm(Form):
     terrain = StringField("Terrain")
     node_resource = StringField("Node Resource")
     terrain_as = StringField("Terrain As")
+    target_type = StringField("Target Type")
+    target_value = StringField("Target Value")
     value = FloatField("Value", default=1)
     max_value = FloatField("Max Value", validators=[Optional()])
     duration = IntegerField("Duration", validators=[NumberRange()], default=-1)

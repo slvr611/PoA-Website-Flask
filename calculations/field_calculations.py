@@ -121,19 +121,41 @@ def _build_nation_calc_cache(target):
 
         from helpers.hex_map_helpers import axial_neighbors as _axial_neighbors
         _WATER_TERRAINS = {"shallow_water", "deep_water", "river"}
-        for coord, tile in _all_nation_tiles.items():
-            city_ref = tile.get("city")
-            if not city_ref or city_ref.get("type") != "metropolis":
-                continue
+
+        # Collect neighbor coords for every metropolis that aren't already in _all_nation_tiles,
+        # then fetch their terrain in one query so unowned water tiles count correctly.
+        _metro_coords = [
+            coord for coord, tile in _all_nation_tiles.items()
+            if (tile.get("city") or {}).get("type") == "metropolis"
+        ]
+        _external_neighbor_coords = set()
+        for coord in _metro_coords:
+            for nq, nr in _axial_neighbors(coord[0], coord[1]):
+                if (nq, nr) not in _all_nation_tiles:
+                    _external_neighbor_coords.add((nq, nr))
+        _external_tiles = {}
+        if _external_neighbor_coords:
+            _or_clauses = [{"q": q, "r": r} for q, r in _external_neighbor_coords]
+            for et in mongo.db.hex_map_tiles.find(
+                {"$or": _or_clauses},
+                {"q": 1, "r": 1, "terrain": 1, "_id": 0}
+            ):
+                _external_tiles[(et["q"], et["r"])] = et
+
+        for coord in _metro_coords:
             adj_count = 0
             for nq, nr in _axial_neighbors(coord[0], coord[1]):
                 nb = _all_nation_tiles.get((nq, nr))
-                if not nb:
-                    continue
-                if nb.get("city") or nb.get("district") or nb.get("wonder"):
-                    adj_count += 1
-                elif nb.get("terrain", "") in _WATER_TERRAINS:
-                    adj_count += 1
+                if nb is not None:
+                    if nb.get("city") or nb.get("district") or nb.get("wonder"):
+                        adj_count += 1
+                    elif nb.get("terrain", "") in _WATER_TERRAINS:
+                        adj_count += 1
+                else:
+                    # Unowned neighbor — only water terrain counts
+                    ext = _external_tiles.get((nq, nr))
+                    if ext and ext.get("terrain", "") in _WATER_TERRAINS:
+                        adj_count += 1
             if adj_count >= 6:
                 metropolis_bonus += 3
             elif adj_count >= 4:
@@ -1401,6 +1423,46 @@ def check_job_requirements(target, job_details, overall_total_modifiers, region_
                 meets_requirements = False
     
     return meets_requirements
+
+
+def purge_invalid_district_jobs(nation, jobs_json=None):
+    """Zero out any job assignments whose required district is no longer present.
+
+    When a district is removed from a nation, pops assigned to a job that
+    required that district become stuck: the job is inaccessible (fails
+    check_job_requirements) so it can't be edited or cleared via the UI.
+    This function corrects that by resetting those counts to 0.
+
+    Returns the list of job names that were zeroed out.
+    """
+    if jobs_json is None:
+        jobs_json = json_data.get("jobs", {})
+
+    jobs_dict = nation.get("jobs", {})
+    if not isinstance(jobs_dict, dict):
+        return []
+
+    district_def_keys = {
+        d.get("def_key")
+        for d in nation.get("districts", [])
+        if d.get("def_key")
+    }
+
+    zeroed = []
+    for job_name, count in list(jobs_dict.items()):
+        if not count or count <= 0:
+            continue
+        required_districts = (
+            jobs_json.get(job_name, {})
+            .get("requirements", {})
+            .get("district", [])
+        )
+        if required_districts and not any(d in district_def_keys for d in required_districts):
+            jobs_dict[job_name] = 0
+            zeroed.append(job_name)
+
+    return zeroed
+
 
 def collect_land_units_assigned(target):
     return target.get("land_units", {})
@@ -4306,19 +4368,26 @@ def compute_nation_breakdowns(
             else:
                 breakdowns[_f] = _field_bd(_f, pct=_fschema.get("format") == "percentage")
 
-    # Stability chance breakdowns: insert cap entry when the raw sum exceeds the cap
+    # Stability chance: compute caps, store as calculated fields, and revamp breakdowns.
+    # Breakdown shows an "Uncapped Total" line when the raw sum exceeds the cap, so
+    # readers can see both the true sum and the effective capped value.  The "Capped"
+    # penalty entry is removed — the X/Y display in the template conveys the same info.
+    _sgc_cap = round(1 + overall_total_modifiers.get("max_stability_gain_chance", 0), 4)
+    _slc_cap = round(3 + overall_total_modifiers.get("max_stability_loss_chance", 0), 4)
+    calculated_values["stability_gain_chance_cap"] = _sgc_cap
+    calculated_values["stability_loss_chance_cap"] = _slc_cap
     _stab_caps = {
-        "stability_gain_chance": round((1 + overall_total_modifiers.get("max_stability_gain_chance", 0)) * 100, 2),
-        "stability_loss_chance": round((3 + overall_total_modifiers.get("max_stability_loss_chance", 0)) * 100, 2),
+        "stability_gain_chance": round(_sgc_cap * 100, 2),
+        "stability_loss_chance": round(_slc_cap * 100, 2),
     }
     for _sf, _cap_pct in _stab_caps.items():
         _sbd = breakdowns.get(_sf, [])
-        _entries = [e for e in _sbd if e["label"] != "Total"]
+        _entries = [e for e in _sbd if e["label"] not in ("Total", "Capped")]
         _raw_sum = round(sum(e["value"] for e in _entries), 2)
         if _raw_sum > _cap_pct:
             _total_entry = next((e for e in _sbd if e["label"] == "Total"), None)
             if _total_entry:
-                _sbd.insert(_sbd.index(_total_entry), {"label": "Capped", "value": round(_cap_pct - _raw_sum, 2)})
+                _sbd.insert(_sbd.index(_total_entry), {"label": "Uncapped Total", "value": _raw_sum})
 
     # effective_territory — inject Administration contribution before Total
     eff_terr_bd = _field_bd("effective_territory")

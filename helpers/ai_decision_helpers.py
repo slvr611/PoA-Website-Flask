@@ -339,10 +339,13 @@ def evaluate_nation_state(old_nation):
 
     # District inventory
     existing_def_keys = set()
+    existing_def_key_counts = {}  # {def_key: count} for map_count-aware checks
     existing_types    = set()
     for d in old_nation.get("districts", []):
         if d.get("def_key"):
-            existing_def_keys.add(d["def_key"])
+            dk = d["def_key"]
+            existing_def_keys.add(dk)
+            existing_def_key_counts[dk] = existing_def_key_counts.get(dk, 0) + 1
         if d.get("type"):
             existing_types.add(d["type"])
 
@@ -371,6 +374,7 @@ def evaluate_nation_state(old_nation):
         "remaining_import_slots": old_nation.get("remaining_import_slots", 0),
         "remaining_export_slots": old_nation.get("remaining_export_slots", 0),
         "existing_def_keys":     existing_def_keys,
+        "existing_def_key_counts": existing_def_key_counts,
         "existing_types":        existing_types,
         "open_district_slots":   open_district_slots,
         "district_cost_mod":     district_cost_mod,
@@ -1524,6 +1528,19 @@ def score_buildable_districts(old_nation, state, need_weights, market_buy_prices
     from calculations.field_calculations import _compute_legal_placement
     legal_placement = _compute_legal_placement(req_check_nation)
 
+    # Wealth factor: measures how liquid the nation is vs. a "comfortable" benchmark.
+    # Used to scale the save_penalty for non-affordable districts — when the nation
+    # is sitting on large stockpiles it should prefer spending NOW (strong penalty
+    # for saving); when stockpiles are thin it's OK to wait (weak/no penalty).
+    total_liquid = sum(
+        amount * _price_scale(r, market_buy_prices)
+        for r, amount in state.get("stockpiles", {}).items()
+        if amount > 0
+    )
+    wealth_factor = min(1.0, total_liquid / 150.0)
+    # save_penalty: 1.0 (no penalty) when wealth_factor=0, 0.5 when fully saturated.
+    save_penalty = round(1.0 - 0.5 * wealth_factor, 3)
+
     # --- DB-driven district defs ---
     try:
         defs = list(mongo.db.district_defs.find({}, {"_id": 0}))
@@ -1534,8 +1551,10 @@ def score_buildable_districts(old_nation, state, need_weights, market_buy_prices
         dk = dd.get("key", "")
         if not dk:
             continue
-        # Skip already-built districts unless allow_multiple is set
-        if dk in state["existing_def_keys"] and not dd.get("allow_multiple", False):
+        # Skip already-built districts unless map_count allows more instances
+        existing_count = state.get("existing_def_key_counts", {}).get(dk, 0)
+        max_count = dd.get("map_count", 1)
+        if existing_count >= max_count:
             continue
 
         if not check_district_requirements(req_check_nation, dd):
@@ -1687,11 +1706,12 @@ def score_buildable_districts(old_nation, state, need_weights, market_buy_prices
         if score <= 0:
             continue
 
-        # Prefer districts buildable right now over equally-valued ones requiring
-        # multiple sessions of saving — avoids stalling on a high-value district
-        # the nation can't actually afford yet.
-        if can_afford_now:
-            score *= 1.5
+        # Non-affordable districts get a save_penalty scaled by how liquid the
+        # nation is: large stockpiles → strong preference to spend now → steep
+        # penalty on districts that can't be built immediately; small stockpiles
+        # → it's fine to save a few sessions for the better option.
+        if not can_afford_now:
+            score *= save_penalty
 
         parts = [f"modifiers {mod_value:.1f}"]
         if unlocked_jobs:
@@ -1709,7 +1729,10 @@ def score_buildable_districts(old_nation, state, need_weights, market_buy_prices
         parts.append(f"cost penalty -{cost_penalty:.1f}")
         if upkeep_penalty > 0.05:
             parts.append(f"upkeep penalty -{upkeep_penalty:.1f}")
-        parts.append("[can afford ×1.5]" if can_afford_now else "[saving]")
+        if can_afford_now:
+            parts.append("[can afford]")
+        else:
+            parts.append(f"[saving ×{save_penalty:.2f}]")
         rationale = "; ".join(parts)
 
         results.append((score, dk, dd.get("display_name", dk), actual_cost, rationale, "db", mod_breakdown, unlocked_jobs))
@@ -2505,6 +2528,22 @@ def evaluate_goal_district(old_nation, new_nation, state, goal, need_weights, pr
     personality = get_ai_personality(old_nation)
     built_city_types = set()
 
+    # Count def_keys already claimed on map tiles (safety net against out-of-sync
+    # nation docs that miss a previous tile claim — prevents exceeding map_count).
+    map_claimed_counts = {}  # {def_key: count_on_map}
+    if not dry_run:
+        nation_name = old_nation.get("name", "")
+        for t in mongo.db.hex_map_tiles.find(
+            {"owner": nation_name, "district": {"$exists": True, "$ne": None}},
+            {"district.def_key": 1, "_id": 0}
+        ):
+            dk = (t.get("district") or {}).get("def_key", "")
+            if dk:
+                map_claimed_counts[dk] = map_claimed_counts.get(dk, 0) + 1
+
+    # Cache map_count limits from district_defs for multi-instance checks
+    _map_count_cache = {}  # {def_key: map_count}
+
     while built_count < max_builds:
         built_this_round = False
 
@@ -2600,7 +2639,15 @@ def evaluate_goal_district(old_nation, new_nation, state, goal, need_weights, pr
             for candidate in adjusted:
                 if candidate[0] <= 0:
                     break
-                if candidate[1] not in state["existing_def_keys"]:
+                cdk = candidate[1]
+                if cdk not in _map_count_cache:
+                    dd_tmp = mongo.db.district_defs.find_one({"key": cdk}, {"map_count": 1, "_id": 0})
+                    _map_count_cache[cdk] = (dd_tmp or {}).get("map_count", 1)
+                allowed = _map_count_cache[cdk]
+                on_map = map_claimed_counts.get(cdk, 0)
+                in_nation = state.get("existing_def_key_counts", {}).get(cdk, 0)
+                # Use the higher of the two counts (map vs nation) as the guard
+                if max(on_map, in_nation) < allowed:
                     best = candidate
                     break
 
@@ -2643,6 +2690,7 @@ def evaluate_goal_district(old_nation, new_nation, state, goal, need_weights, pr
                         # Invalidate the cached legal-placement scan so the next
                         # build this session sees this tile as claimed.
                         old_nation.pop("_legal_placement_cache", None)
+                        map_claimed_counts[c_key] = map_claimed_counts.get(c_key, 0) + 1
                 districts = list(new_nation.get("districts", deepcopy(old_nation.get("districts", []))))
                 _insert_filling_empty_slot(
                     districts, new_entry,
@@ -2661,6 +2709,8 @@ def evaluate_goal_district(old_nation, new_nation, state, goal, need_weights, pr
                 new_nation["resource_storage"] = storage
 
                 state["existing_def_keys"].add(c_key)
+                counts = state.setdefault("existing_def_key_counts", {})
+                counts[c_key] = counts.get(c_key, 0) + 1
                 state["open_district_slots"] -= 1
 
                 # Update available jobs
@@ -3383,105 +3433,287 @@ def ai_decision_tick(old_nation, new_nation, schema):
 # Mid-session AI market matching (NATION_CROSS_TICK_FUNCTION)
 # ---------------------------------------------------------------------------
 
+
+def _post_trade_build_and_rejob(old_nation, new_nation, log_lines):
+    """After trade matching: if the nation's planned district is now affordable
+    with newly received resources, build it and assign newly idle pops.
+
+    Returns True if a district was built this call.
+    """
+    ai_st = new_nation.get("ai_state") or {}
+    plan = ai_st.get("planned_district")
+    if not plan or not plan.get("key"):
+        return False
+
+    cost = plan.get("cost", {})
+    storage = new_nation.get("resource_storage", {})
+    money = new_nation.get("money", old_nation.get("money", 0))
+
+    if not (money >= cost.get("money", 0) and
+            all(storage.get(r, 0) >= amt for r, amt in cost.items() if r != "money")):
+        return False
+
+    def_key = plan["key"]
+    nation_name = old_nation.get("name", "")
+
+    import uuid
+    district_id = uuid.uuid4().hex[:8]
+    coord, node_key = None, ""
+    dd = None
+    if plan.get("source", "db") == "db":
+        dd = mongo.db.district_defs.find_one({"key": def_key})
+        if dd:
+            from calculations.field_calculations import _compute_legal_placement
+            old_nation.pop("_legal_placement_cache", None)
+            legal = _compute_legal_placement(old_nation)
+            stored_weights = ai_st.get("diagnostic", {}).get("need_weights", {})
+            coord, _ = _pick_district_tile(legal, dd, def_key, stored_weights, {})
+            if coord:
+                node_key = _claim_district_tile(
+                    nation_name, district_id, def_key,
+                    dd.get("display_name", def_key), coord
+                )
+
+    new_entry = {"_id": district_id, "def_key": def_key, "node": node_key, "upgrades": []}
+    districts = list(new_nation.get("districts", old_nation.get("districts", [])))
+    _insert_filling_empty_slot(districts, new_entry, lambda d: not d.get("def_key") and not d.get("type"))
+    new_nation["districts"] = districts
+
+    for r, amt in cost.items():
+        if r == "money":
+            new_nation["money"] = new_nation.get("money", old_nation.get("money", 0)) - amt
+        else:
+            storage[r] = storage.get(r, 0) - amt
+    new_nation["resource_storage"] = storage
+
+    ai_st["planned_district"] = None
+
+    coord_str = f" at ({coord[0]},{coord[1]})" if coord else ""
+    node_str = f" — node: {node_key}" if node_key else ""
+    log_lines.append(f"{nation_name}: post-trade built {plan.get('display_name', def_key)}{coord_str}{node_str}")
+
+    # Re-evaluate idle pops: assign any pops freed up after the new district
+    # may have unlocked better jobs.
+    try:
+        total_pops = new_nation.get("pops", old_nation.get("pops", 0))
+        assigned_pops = sum(v for v in new_nation.get("jobs", {}).values() if isinstance(v, (int, float)))
+        idle_pops = max(0, total_pops - assigned_pops)
+        if idle_pops <= 0:
+            return True
+
+        # Build a merged state using old computed fields + new resources/districts
+        merged = dict(old_nation)
+        merged["districts"] = new_nation.get("districts", [])
+        merged["resource_storage"] = storage
+        merged["money"] = new_nation.get("money", 0)
+
+        state = evaluate_nation_state(merged)
+
+        goal_data = ai_st.get("strategic_goal") or {}
+        if not goal_data:
+            return True
+
+        prices = get_stored_market_prices(old_nation)
+
+        # projected_net: base net_production + contributions from already-assigned jobs
+        projected_net = dict(state["net_production"])
+        all_jobs_data = json_data.get("jobs", {})
+        for jk, cnt in new_nation.get("jobs", {}).items():
+            jd = state["available_jobs"].get(jk) or all_jobs_data.get(jk, {})
+            for r, amt in jd.get("production", {}).items():
+                if isinstance(amt, (int, float)):
+                    projected_net[r] = projected_net.get(r, 0) + amt * cnt
+            for r, amt in jd.get("upkeep", {}).items():
+                if isinstance(amt, (int, float)):
+                    projected_net[r] = projected_net.get(r, 0) - amt * cnt
+
+        new_assignments, job_log, _ = assign_goal_jobs(
+            state, goal_data, idle_pops, projected_net, None, prices
+        )
+        if new_assignments:
+            existing_jobs = dict(new_nation.get("jobs", {}))
+            for jk, cnt in new_assignments.items():
+                existing_jobs[jk] = existing_jobs.get(jk, 0) + cnt
+            new_nation["jobs"] = existing_jobs
+            for entry in job_log:
+                log_lines.append(f"{nation_name}: post-trade {entry}")
+    except Exception as e:
+        log_lines.append(f"{nation_name}: post-trade job re-eval error: {e}")
+
+    return True
+
+AI_MATCH_MAX_DELAY = 1  # "single turn of trade distance": delay ≤ 1
+
+
+def _build_ai_distance_cache(buyer_names, all_ai_names, trade_speeds, tiles_raw, portal_map, move_costs):
+    """Run one Dijkstra per buyer nation (reusing pre-loaded tiles) and return
+    {buyer_name: {seller_name: delay}} for all reachable seller names.
+    Unreachable pairs are omitted (treat as infinite delay → skip match).
+    """
+    from helpers.trade_route_helpers import _dijkstra_from_cities, compute_delay
+    cache = {}
+    for buyer_name in buyer_names:
+        seller_names = [n for n in all_ai_names if n != buyer_name]
+        if not seller_names:
+            cache[buyer_name] = {}
+            continue
+        reached = _dijkstra_from_cities(buyer_name, seller_names, tiles_raw, portal_map, move_costs)
+        src_speed = trade_speeds.get(buyer_name, 7)
+        delays = {}
+        for tgt_name, cost in reached.items():
+            tgt_speed = trade_speeds.get(tgt_name, 7)
+            delays[tgt_name] = compute_delay(cost, src_speed, tgt_speed)
+        cache[buyer_name] = delays
+    return cache
+
+
 def ai_market_matching_tick(old_nations, new_nations, schema):
     """
-    Auto-match unfilled AI buy/sell orders within each market.
-    Runs as a separate admin action partway through the session,
-    after players have had a window to fill AI orders first.
+    Auto-match unfilled AI buy/sell orders across all NPC nations, regardless
+    of market membership, then attempt to build each buyer's planned district
+    if newly received resources make it affordable. If a district is built,
+    idle pops are re-assigned.
+
+    Runs as a separate admin action partway through the session, after
+    players have had a window to fill AI orders first.
+
+    Match criteria:
+      - Same resource, different nations, price overlaps (buy_price >= sell_price)
+      - Trade distance delay <= AI_MATCH_MAX_DELAY ("single turn of trade distance")
+        — uses the same road-path Dijkstra as the player trade-route system, so
+        isolated or very distant nations cannot trade with each other.
+
+    Markets are no longer a constraint: nations in different markets, or in no
+    market at all, can still trade if they are geographically close.
 
     Prioritises: critical buys first, then desire-buys; price must overlap.
     Trades execute at the seller's ask price.
     """
+    from helpers.trade_route_helpers import _load_trade_tiles, _build_portal_map, _terrain_move_costs
     log_lines = []
+    buyers_who_received = set()
+    old_nation_by_idx = {i: n for i, n in enumerate(old_nations)}
 
     try:
-        market_links_db = category_data["market_links"]["database"]
-        markets         = list(mongo.db.markets.find({}, {"_id": 1, "name": 1}))
-
-        # Index new_nations by string id for fast lookup
-        nation_idx = {str(n.get("_id", "")): i for i, n in enumerate(new_nations)}
-
-        for market in markets:
-            market_id  = str(market["_id"])
-            mkt_name   = market.get("name", market_id)
-            member_links = list(market_links_db.find({"market": market_id}, {"member": 1}))
-            member_ids   = {lnk["member"] for lnk in member_links}
-
-            # Gather buy/sell orders from NPC nations in this market
-            buy_orders  = []
-            sell_orders = []
-
-            for mid in member_ids:
-                idx = nation_idx.get(mid)
-                if idx is None:
+        # --- Step 1: Collect all AI buy and sell orders ---
+        buy_orders  = []
+        sell_orders = []
+        for idx, nation in enumerate(new_nations):
+            if nation.get("temperament", "Player") == "Player":
+                continue
+            for didx, desire in enumerate(nation.get("resource_desires", [])):
+                qty = desire.get("quantity", 0)
+                if qty <= 0:
                     continue
-                nation = new_nations[idx]
-                if nation.get("temperament", "Player") == "Player":
+                entry = {
+                    "resource":    desire["resource"],
+                    "trade_type":  desire["trade_type"],
+                    "price":       desire.get("price", 0),
+                    "quantity":    qty,
+                    "nation_idx":  idx,
+                    "desire_idx":  didx,
+                    "nation_name": nation.get("name", ""),
+                }
+                if "Buy" in desire["trade_type"]:
+                    buy_orders.append(entry)
+                elif "Sell" in desire["trade_type"]:
+                    sell_orders.append(entry)
+
+        if not buy_orders or not sell_orders:
+            return ""
+
+        # --- Step 2: Precompute trade distances (one Dijkstra per buyer nation) ---
+        # Collect all unique AI nation names involved in orders.
+        buyer_names = list({b["nation_name"] for b in buy_orders})
+        seller_names_set = {s["nation_name"] for s in sell_orders}
+        all_ai_names = list(set(buyer_names) | seller_names_set)
+
+        # Build {name: trade_speed} from old_nations (computed fields are there).
+        name_to_old = {n.get("name", ""): n for n in old_nations}
+        trade_speeds = {
+            name: (name_to_old.get(name) or {}).get("trade_speed") or 7
+            for name in all_ai_names
+        }
+
+        # Load tiles for all involved nations in a single DB query.
+        tiles_raw  = _load_trade_tiles(all_ai_names)
+        portal_map = _build_portal_map()
+        move_costs = _terrain_move_costs()
+
+        distance_cache = _build_ai_distance_cache(
+            buyer_names, all_ai_names, trade_speeds, tiles_raw, portal_map, move_costs
+        )
+
+        # --- Step 3: Sort and match ---
+        buy_orders.sort(key=lambda x: (
+            0 if x["trade_type"] == "Need to Buy" else 1, -x["price"]
+        ))
+        sell_orders.sort(key=lambda x: (
+            0 if x["trade_type"] == "Need to Sell" else 1, x["price"]
+        ))
+
+        for buy in buy_orders:
+            buyer_name = buy["nation_name"]
+            buyer_delays = distance_cache.get(buyer_name, {})
+            for sell in sell_orders:
+                if buy["resource"] != sell["resource"]:
                     continue
-                for didx, desire in enumerate(nation.get("resource_desires", [])):
-                    qty = desire.get("quantity", 0)
-                    if qty <= 0:
-                        continue
-                    entry = {
-                        "resource":   desire["resource"],
-                        "trade_type": desire["trade_type"],
-                        "price":      desire.get("price", 0),
-                        "quantity":   qty,
-                        "nation_idx": idx,
-                        "desire_idx": didx,
-                    }
-                    if "Buy" in desire["trade_type"]:
-                        buy_orders.append(entry)
-                    elif "Sell" in desire["trade_type"]:
-                        sell_orders.append(entry)
+                if buy["nation_idx"] == sell["nation_idx"]:
+                    continue
+                if buy["price"] < sell["price"]:
+                    continue
+                if sell["quantity"] <= 0 or buy["quantity"] <= 0:
+                    continue
 
-            # Sort: buyers by price desc (highest bidder first), sellers by price asc
-            buy_orders.sort(key=lambda x: (
-                0 if x["trade_type"] == "Need to Buy" else 1, -x["price"]
-            ))
-            sell_orders.sort(key=lambda x: (
-                0 if x["trade_type"] == "Need to Sell" else 1, x["price"]
-            ))
+                # Distance gate: skip if too far apart
+                seller_name = sell["nation_name"]
+                delay = buyer_delays.get(seller_name)
+                if delay is None or delay > AI_MATCH_MAX_DELAY:
+                    continue
 
-            for buy in buy_orders:
-                for sell in sell_orders:
-                    if buy["resource"] != sell["resource"]:
-                        continue
-                    if buy["nation_idx"] == sell["nation_idx"]:
-                        continue
-                    if buy["price"] < sell["price"]:
-                        continue
-                    if sell["quantity"] <= 0 or buy["quantity"] <= 0:
-                        continue
+                qty      = min(buy["quantity"], sell["quantity"])
+                price    = sell["price"]
+                total    = qty * price
+                resource = buy["resource"]
 
-                    qty      = min(buy["quantity"], sell["quantity"])
-                    price    = sell["price"]
-                    total    = qty * price
-                    resource = buy["resource"]
+                buyer  = new_nations[buy["nation_idx"]]
+                seller = new_nations[sell["nation_idx"]]
 
-                    buyer  = new_nations[buy["nation_idx"]]
-                    seller = new_nations[sell["nation_idx"]]
+                # Execute transfer
+                b_storage = buyer.setdefault("resource_storage", {})
+                s_storage = seller.setdefault("resource_storage", {})
+                b_storage[resource] = b_storage.get(resource, 0) + qty
+                s_storage[resource] = s_storage.get(resource, 0) - qty
+                buyer["money"]  = buyer.get("money", 0) - total
+                seller["money"] = seller.get("money", 0) + total
 
-                    # Execute transfer
-                    b_storage = buyer.setdefault("resource_storage", {})
-                    s_storage = seller.setdefault("resource_storage", {})
-                    b_storage[resource] = b_storage.get(resource, 0) + qty
-                    s_storage[resource] = s_storage.get(resource, 0) - qty
-                    buyer["money"]  = buyer.get("money", 0) - total
-                    seller["money"] = seller.get("money", 0) + total
+                buy["quantity"]  -= qty
+                sell["quantity"] -= qty
+                buyer["resource_desires"][buy["desire_idx"]]["quantity"]   = buy["quantity"]
+                seller["resource_desires"][sell["desire_idx"]]["quantity"] = sell["quantity"]
 
-                    # Update desire quantities
-                    buy["quantity"]  -= qty
-                    sell["quantity"] -= qty
-                    buyer["resource_desires"][buy["desire_idx"]]["quantity"]   = buy["quantity"]
-                    seller["resource_desires"][sell["desire_idx"]]["quantity"] = sell["quantity"]
-
-                    log_lines.append(
-                        f"[{mkt_name}] {buyer.get('name','?')} bought {qty}× {resource} "
-                        f"from {seller.get('name','?')} @ {price} (total {total})"
-                    )
+                buyers_who_received.add(buy["nation_idx"])
+                log_lines.append(
+                    f"{buyer_name} bought {qty}× {resource} from {seller_name} "
+                    f"@ {price} (delay {delay})"
+                )
 
     except Exception as e:
         log_lines.append(f"AI market matching error: {e}")
+
+    # --- Post-trade district purchase ---
+    # For each nation that received resources via buy-order matching, check
+    # whether its planned district is now affordable. If so, build it and
+    # re-assign idle pops to exploit any newly unlocked jobs.
+    for bidx in buyers_who_received:
+        try:
+            old_n = old_nation_by_idx.get(bidx)
+            new_n = new_nations[bidx] if bidx < len(new_nations) else None
+            if old_n is None or new_n is None:
+                continue
+            _post_trade_build_and_rejob(old_n, new_n, log_lines)
+        except Exception as e:
+            name = new_nations[bidx].get("name", "?") if bidx < len(new_nations) else "?"
+            log_lines.append(f"{name}: post-trade district error: {e}")
 
     return "\n".join(log_lines) + "\n" if log_lines else ""

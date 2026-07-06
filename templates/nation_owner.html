@@ -92,6 +92,18 @@
 {%- if pending is not none and (pending * 100)|int != c %} <span class="pending-value context-tooltip" data-tooltip-title="Pending: {{ title }}" data-breakdown='{{ pending_bd|tojson }}'>→ {{ (pending * 100)|int }}%</span>{%- endif %}
 {%- endmacro %}
 
+{# pfbd_stab_pct: stab gain/loss chance — shows "actual% / cap%" with uncapped total in tooltip #}
+{% macro pfbd_stab_pct(current, cap, pending, pending_cap, breakdown, pending_bd, title) -%}
+{%- set c = (current * 100)|int -%}
+{%- set cap_pct = (cap * 100)|int -%}
+<span class="context-tooltip" data-tooltip-title="{{ title }}" data-breakdown='{{ breakdown|tojson }}'>{{ c }}% / {{ cap_pct }}%</span>
+{%- if pending is not none and ((pending * 100)|int != c or (pending_cap * 100)|int != cap_pct) %}
+  {%- set pc = (pending * 100)|int -%}
+  {%- set pcap = (pending_cap * 100)|int -%}
+  <span class="pending-value context-tooltip" data-tooltip-title="Pending: {{ title }}" data-breakdown='{{ pending_bd|tojson }}'>→ {{ pc }}% / {{ pcap }}%</span>
+{%- endif %}
+{%- endmacro %}
+
 {% set pn  = pending_nation or {} %}
 {% set pbd = pending_breakdowns or {} %}
 
@@ -188,9 +200,11 @@
 						<tr>
 							<th>{{ schema.properties.stability_gain_chance.label }}:</th>
 							<td>
-								{{ pfbd_pct(
+								{{ pfbd_stab_pct(
 									nation.stability_gain_chance,
+									nation.get("stability_gain_chance_cap", 1),
 									pn.get("stability_gain_chance"),
+									pn.get("stability_gain_chance_cap", 1),
 									breakdowns["stability_gain_chance"],
 									pbd.get("stability_gain_chance", []),
 									"Stability Gain Chance"
@@ -200,9 +214,11 @@
 						<tr>
 							<th>{{ schema.properties.stability_loss_chance.label }}:</th>
 							<td>
-								{{ pfbd_pct(
+								{{ pfbd_stab_pct(
 									nation.stability_loss_chance,
+									nation.get("stability_loss_chance_cap", 3),
 									pn.get("stability_loss_chance"),
+									pn.get("stability_loss_chance_cap", 3),
 									breakdowns["stability_loss_chance"],
 									pbd.get("stability_loss_chance", []),
 									"Stability Loss Chance"

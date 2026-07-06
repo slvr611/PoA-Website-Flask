@@ -43,9 +43,9 @@
 			"effective_pop_capacity": 1
 		},
 		"_modifiers": [
-			{ "modifier_type": "effective_pop_capacity", "value": 1, "scope": "nation_self", "condition_scaling": "per_x_units", "condition_operator": ">=", "condition_value": 8 },
-			{ "modifier_type": "effective_pop_capacity", "value": 1, "scope": "nation_self", "condition_scaling": "per_x_units", "condition_operator": ">=", "condition_value": 12 },
-			{ "modifier_type": "effective_pop_capacity", "value": 1, "scope": "nation_self", "condition_scaling": "per_x_units", "condition_operator": ">=", "condition_value": 16 }
+			{ "modifier_type": "effective_pop_capacity", "value": 1, "scope": "nation_self", "condition_scaling": "per_x_unit_upkeep", "condition_operator": ">=", "condition_value": 8 },
+			{ "modifier_type": "effective_pop_capacity", "value": 1, "scope": "nation_self", "condition_scaling": "per_x_unit_upkeep", "condition_operator": ">=", "condition_value": 12 },
+			{ "modifier_type": "effective_pop_capacity", "value": 1, "scope": "nation_self", "condition_scaling": "per_x_unit_upkeep", "condition_operator": ">=", "condition_value": 16 }
 		]
 	},
 	"commerce": {

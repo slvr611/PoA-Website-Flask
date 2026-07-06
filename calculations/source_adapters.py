@@ -282,7 +282,8 @@ class DistrictAdapter:
                         syn_mods = syn.get("modifiers", {})
                         if isinstance(syn_mods, list):
                             syn_mods = _db_dist_mods_to_dict(syn_mods, target_type="nation", target=target)
-                        mods.update(syn_mods)
+                        for _sk, _sv in syn_mods.items():
+                            mods[_sk] = mods.get(_sk, 0) + _sv
                         if syn.get("node_active", True) and district_node and not node_bonus_applied:
                             mods[district_node + "_nodes"] = mods.get(district_node + "_nodes", 0) + 1
                             node_bonus_applied = True
@@ -327,7 +328,8 @@ class DistrictAdapter:
             node_bonus_applied = False
             for syn in get_synergies(dd):
                 if synergy_matches(district_node, syn.get("requirement", "")):
-                    mods.update(syn.get("modifiers", {}))
+                    for _sk, _sv in syn.get("modifiers", {}).items():
+                        mods[_sk] = mods.get(_sk, 0) + _sv
                     if syn.get("node_active", True) and district_node and not node_bonus_applied:
                         mods[district_node + "_nodes"] = mods.get(district_node + "_nodes", 0) + 1
                         node_bonus_applied = True

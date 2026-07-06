@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from time import perf_counter
 from app_core import mongo, category_data, json_data
 from flask import g, flash, current_app
-from calculations.field_calculations import calculate_all_fields
+from calculations.field_calculations import calculate_all_fields, purge_invalid_district_jobs
 from copy import deepcopy
 from bson import ObjectId
 
@@ -187,6 +187,7 @@ def _calculate_and_attach_fields(data_type, target):
 
     if data_type == "nations":
         _ensure_starting_techs(target)
+        purge_invalid_district_jobs(target, json_data.get("jobs", {}))
         calculated_fields, breakdowns = calculate_all_fields(
             target,
             schema,

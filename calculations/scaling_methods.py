@@ -297,6 +297,77 @@ def per_x_excess_resource(target, scaling_x=1, scaling_extra="", context=None):
     return int(amount / divisor)
 
 
+def _get_unit_upkeep_cache():
+    """Lazy-load and cache unit upkeep.
+
+    land/naval/support_units dicts can store unit keys as the display name
+    ("Orchal Cavalry"), as lowercase-underscore ("orchal_cavalry"), or as
+    era-prefixed lowercase ("medieval_orchal_cavalry"). All three variants
+    are stored so whichever format a particular nation uses will hit.
+    """
+    if not hasattr(_get_unit_upkeep_cache, "_cache"):
+        db = category_data["units"]["database"]
+        cache = {}
+        for u in db.find({}, {"name": 1, "era": 1, "upkeep": 1, "_id": 0}):
+            raw_name = u.get("name") or ""
+            if not raw_name:
+                continue
+            era = (u.get("era") or "").lower().replace(" ", "_")
+            name_lower = raw_name.lower().replace(" ", "_")
+            upkeep_raw = u.get("upkeep") or []
+            upkeep = {}
+            if isinstance(upkeep_raw, list):
+                for row in upkeep_raw:
+                    res = row.get("resource", "")
+                    cost = row.get("cost", 0)
+                    if res:
+                        upkeep[res] = float(cost or 0)
+            elif isinstance(upkeep_raw, dict):
+                for res, cost in upkeep_raw.items():
+                    upkeep[res] = float(cost or 0)
+            # Register under all key variants that land_units might use
+            for key in {raw_name, name_lower, f"{era}_{name_lower}" if era else name_lower}:
+                if key and key not in cache:
+                    cache[key] = upkeep
+        _get_unit_upkeep_cache._cache = cache
+    return _get_unit_upkeep_cache._cache
+
+
+def _sum_upkeep(units_dict, upkeep_cache, filter_resource=""):
+    """Sum resource upkeep across a {unit_key: count} dict.
+
+    filter_resource: resource name to isolate (e.g. 'food'), or '' / 'all' for all resources.
+    """
+    if not isinstance(units_dict, dict):
+        return 0.0
+    total = 0.0
+    use_all = not filter_resource or filter_resource == "all"
+    for unit_key, count in units_dict.items():
+        if not isinstance(count, (int, float)) or count <= 0:
+            continue
+        upkeep = upkeep_cache.get(unit_key, {})
+        if use_all:
+            total += count * sum(upkeep.values())
+        else:
+            total += count * upkeep.get(filter_resource, 0)
+    return total
+
+
+def per_x_unit_upkeep(target, scaling_x=1, scaling_extra="", context=None):
+    """Total resource upkeep cost across all units (land + naval + support).
+
+    scaling_extra: resource key to filter by (e.g. 'food', 'wood'), or empty / 'all'
+                  to sum upkeep across all resource types.
+    scaling_x:    divide the result by this amount, floored to int.
+    """
+    divisor = float(scaling_x) if scaling_x else 1
+    cache = _get_unit_upkeep_cache()
+    total = 0.0
+    for units_key in ("land_units", "naval_units", "support_units"):
+        total += _sum_upkeep(target.get(units_key, {}) or {}, cache, scaling_extra)
+    return int(total / divisor)
+
+
 def per_x_nations_in_shared_market(target, scaling_x=1, scaling_extra="", context=None):
     from app_core import mongo as _mongo
     nation_id = str(target.get("_id", ""))
@@ -353,6 +424,7 @@ SCALING_METHODS = {
     "per_x_vassals": per_x_vassals,
     "per_x_excess_resource": per_x_excess_resource,
     "per_x_nations_in_shared_market": per_x_nations_in_shared_market,
+    "per_x_unit_upkeep": per_x_unit_upkeep,
 }
 
 

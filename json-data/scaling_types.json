@@ -199,5 +199,12 @@
         "description": "Multiplied by the number of other nations that share at least one market with this nation divided by X, floored. Nations in multiple shared markets are only counted once.",
         "has_x": true,
         "default_x": 1
+    },
+    "per_x_unit_upkeep": {
+        "name": "Per X Unit Upkeep",
+        "description": "Multiplied by the total resource upkeep cost of all units (land + naval + support) divided by X, floored. Filter by a specific resource to count only that resource's upkeep; leave blank or set to 'all' to sum across all resources.",
+        "has_x": true,
+        "default_x": 1,
+        "has_dropdown": "resource"
     }
 }

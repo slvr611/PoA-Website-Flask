@@ -294,6 +294,18 @@
 				}
 				html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
 					<select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+			} else if (extra.source === 'visibility_target_types') {
+				const vtOpts = [
+					{key: 'all_nations', name: 'All Nations'},
+					{key: 'region', name: 'Region'},
+					{key: 'specific_nation', name: 'Specific Nation'},
+				];
+				let opts = '';
+				for (const t of vtOpts) {
+					opts += `<option value="${t.key}" ${t.key === cur ? 'selected' : ''}>${t.name}</option>`;
+				}
+				html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
+					<select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
 			}
 		}
 

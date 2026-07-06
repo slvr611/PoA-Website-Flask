@@ -1276,6 +1276,12 @@
             const ALL_DISTRICT_CATEGORIES = {{ all_district_categories | tojson | safe }};
             const ALL_DISTRICT_DEFS = {{ all_district_defs | tojson | safe }};
             const DISTRICT_DEFS_MAP = {{ district_defs_map | tojson | safe }};
+            const ALL_NATIONS_LIST = {{ bulk_edit_options.nations | tojson | safe }};
+            const VISIBILITY_TARGET_TYPES = [
+                {key: 'all_nations', name: 'All Nations'},
+                {key: 'region', name: 'Region'},
+                {key: 'specific_nation', name: 'Specific Nation'},
+            ];
 
             // ── District card preview helpers ─────────────────────────────────────
 
@@ -1527,10 +1533,32 @@
                 }
             }
 
+            function updateVisTargetValue(fieldName, index) {
+                const typeEl = document.getElementById(`${fieldName}-${index}-target_type`);
+                const container = document.getElementById(`${fieldName}-${index}-target_value-container`);
+                if (!container) return;
+                const typeVal = typeEl ? typeEl.value : '';
+                const cur = container.dataset.cur || '';
+                if (typeVal === 'specific_nation') {
+                    let opts = '<option value="">-- Select Nation --</option>';
+                    for (const n of ALL_NATIONS_LIST) {
+                        opts += `<option value="${escHtml(n.name)}" ${n.name === cur ? 'selected' : ''}>${escHtml(n.name)}</option>`;
+                    }
+                    container.innerHTML = `<select class="form-control" name="${fieldName}-${index}-target_value" id="${fieldName}-${index}-target_value">${opts}</select>`;
+                    container.style.display = '';
+                } else if (typeVal === 'region') {
+                    container.innerHTML = `<input type="text" class="form-control" name="${fieldName}-${index}-target_value" id="${fieldName}-${index}-target_value" value="${escHtml(cur)}" placeholder="Region name">`;
+                    container.style.display = '';
+                } else {
+                    container.innerHTML = `<input type="hidden" name="${fieldName}-${index}-target_value" id="${fieldName}-${index}-target_value" value="">`;
+                    container.style.display = 'none';
+                }
+            }
+
             function buildExtraFieldsHTML(fieldName, index, modifierType, currentData) {
                 const typeDef = MODIFIER_TYPES[modifierType] || {};
                 const extraFields = typeDef.extra_fields || [];
-                const ALL_EXTRA_KEYS = ['resource', 'resource_from', 'resource_to', 'job', 'attribute', 'unit_category', 'unit_stat', 'tier', 'tech_category', 'terrain', 'node_resource', 'terrain_as'];
+                const ALL_EXTRA_KEYS = ['resource', 'resource_from', 'resource_to', 'job', 'attribute', 'unit_category', 'unit_stat', 'tier', 'tech_category', 'terrain', 'node_resource', 'terrain_as', 'target_type', 'target_value'];
                 const renderedKeys = new Set();
                 let html = '';
                 for (const extra of extraFields) {
@@ -1592,6 +1620,18 @@
                                                 }
                                                 html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
                                                                 <select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+                                } else if (extra.source === 'visibility_target_types') {
+                                                let opts = '';
+                                                for (const t of VISIBILITY_TARGET_TYPES) {
+                                                                opts += `<option value="${t.key}" ${t.key === cur ? 'selected' : ''}>${t.name}</option>`;
+                                                }
+                                                html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
+                                                                <select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}" onchange="updateVisTargetValue('${fieldName}', ${index})">${opts}</select></div>`;
+                                } else if (modifierType === 'offensive_visibility' && extra.key === 'target_value') {
+                                                const tvCur = (currentData && currentData.target_value) || '';
+                                                const tvType = (currentData && currentData.target_type) || 'all_nations';
+                                                html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
+                                                                <span id="${fieldName}-${index}-target_value-container" data-cur="${escHtml(tvCur)}" style="${tvType === 'all_nations' ? 'display:none;' : ''}"></span></div>`;
                                 }
                 }
                 for (const key of ALL_EXTRA_KEYS) {
@@ -1616,6 +1656,9 @@
                         if (key) currentData[key] = el.value;
                     });
                     extraDiv.innerHTML = buildExtraFieldsHTML(fieldName, index, modType, currentData);
+                    if (modType === 'offensive_visibility') {
+                        updateVisTargetValue(fieldName, index);
+                    }
                 }
                 const row  = select.closest('tr');
                 const hint = row ? row.querySelector('.modifier-value-hint') : null;

@@ -71,11 +71,18 @@ const SCOPE_DEFS = {{ scope_definitions|tojson }};
 const ALL_RESOURCES = {{ all_resources|tojson }};
 const ALL_JOBS = {{ all_jobs|tojson }};
 const ALL_TERRAINS = {{ all_terrains|tojson }};
+const ALL_NATIONS = {{ nations | map(attribute='name') | list | tojson }};
 
 const _ATTRIBUTES = [
     {key: 'rulership', name: 'Rulership'}, {key: 'cunning', name: 'Cunning'},
     {key: 'charisma', name: 'Charisma'}, {key: 'prowess', name: 'Prowess'},
     {key: 'magic', name: 'Magic'}, {key: 'strategy', name: 'Strategy'},
+];
+
+const VISIBILITY_TARGET_TYPES = [
+    {key: 'all_nations', name: 'All Nations'},
+    {key: 'region', name: 'Region'},
+    {key: 'specific_nation', name: 'Specific Nation'},
 ];
 
 let modRowCount = 0;
@@ -116,6 +123,25 @@ function buildSelectFrom(list, keyField, nameField, selected) {
     return html;
 }
 
+function updateVisTargetValue(idx) {
+    const typeEl = document.getElementById(`mod-${idx}-target_type`);
+    const container = document.getElementById(`mod-${idx}-target_value-container`);
+    if (!container) return;
+    const typeVal = typeEl ? typeEl.value : '';
+    if (typeVal === 'specific_nation') {
+        let opts = '<option value="">-- Select Nation --</option>';
+        for (const n of ALL_NATIONS) opts += `<option value="${_esc(n)}">${_esc(n)}</option>`;
+        container.innerHTML = `<select name="target_value" id="mod-${idx}-target_value" style="min-width:140px;">${opts}</select>`;
+        container.style.display = '';
+    } else if (typeVal === 'region') {
+        container.innerHTML = `<input type="text" name="target_value" id="mod-${idx}-target_value" placeholder="Region name" style="width:120px;">`;
+        container.style.display = '';
+    } else {
+        container.innerHTML = '';
+        container.style.display = 'none';
+    }
+}
+
 function updateExtraFields(idx) {
     const container = document.getElementById(`mod-extra-${idx}`);
     const typeKey = document.getElementById(`mod-type-${idx}`).value;
@@ -132,6 +158,14 @@ function updateExtraFields(idx) {
             fieldHtml = `<select name="${extra.key}" id="mod-${idx}-${extra.key}">${buildSelectFrom(ALL_TERRAINS, 'key', 'name', '')}</select>`;
         } else if (extra.source === 'attributes') {
             fieldHtml = `<select name="${extra.key}" id="mod-${idx}-${extra.key}">${buildSelectFrom(_ATTRIBUTES, 'key', 'name', '')}</select>`;
+        } else if (extra.source === 'visibility_target_types') {
+            let opts = '';
+            for (const t of VISIBILITY_TARGET_TYPES) {
+                opts += `<option value="${_esc(t.key)}">${_esc(t.name)}</option>`;
+            }
+            fieldHtml = `<select name="${extra.key}" id="mod-${idx}-${extra.key}" onchange="updateVisTargetValue(${idx})">${opts}</select>`;
+        } else if (typeKey === 'offensive_visibility' && extra.key === 'target_value') {
+            fieldHtml = `<span id="mod-${idx}-target_value-container" style="display:none;"></span>`;
         } else {
             fieldHtml = `<input type="text" name="${extra.key}" id="mod-${idx}-${extra.key}" placeholder="${_esc(extra.label)}" style="width:100px;">`;
         }

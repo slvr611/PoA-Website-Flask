@@ -163,10 +163,30 @@
                         <option value="{{ tc.key }}" {% if tc.key == ef_val %}selected{% endif %}>{{ tc.name }}</option>
                       {% endfor %}
                     </select>
+                  {% elif extra.source == 'visibility_target_types' %}
+                    <select class="form-control" name="{{ field_name }}-{{ idx }}-{{ extra.key }}" id="{{ field_name }}-{{ idx }}-{{ extra.key }}" onchange="updateVisTargetValue('{{ field_name }}', {{ idx }})">
+                      <option value="all_nations" {% if ef_val == 'all_nations' or ef_val == '' %}selected{% endif %}>All Nations</option>
+                      <option value="region" {% if ef_val == 'region' %}selected{% endif %}>Region</option>
+                      <option value="specific_nation" {% if ef_val == 'specific_nation' %}selected{% endif %}>Specific Nation</option>
+                    </select>
+                  {% elif mod_type == 'offensive_visibility' and extra.key == 'target_value' %}
+                    {% set cur_tt = item.get('target_type', 'all_nations') %}
+                    <span id="{{ field_name }}-{{ idx }}-target_value-container" data-cur="{{ ef_val | e }}"{% if cur_tt == 'all_nations' or cur_tt == '' %} style="display:none;"{% endif %}>
+                      {% if cur_tt == 'specific_nation' and bulk_edit_options is defined %}
+                        <select class="form-control" name="{{ field_name }}-{{ idx }}-{{ extra.key }}" id="{{ field_name }}-{{ idx }}-{{ extra.key }}">
+                          <option value="">-- Select Nation --</option>
+                          {% for n in bulk_edit_options.nations %}
+                          <option value="{{ n.name }}" {% if n.name == ef_val %}selected{% endif %}>{{ n.name }}</option>
+                          {% endfor %}
+                        </select>
+                      {% else %}
+                        <input type="text" class="form-control" name="{{ field_name }}-{{ idx }}-{{ extra.key }}" id="{{ field_name }}-{{ idx }}-{{ extra.key }}" value="{{ ef_val }}" placeholder="Region or nation name">
+                      {% endif %}
+                    </span>
                   {% endif %}
                 </div>
               {% endfor %}
-              {% for fkey in ['resource', 'resource_from', 'resource_to', 'job', 'attribute', 'unit_category', 'unit_stat', 'tier', 'tech_category', 'terrain'] %}
+              {% for fkey in ['resource', 'resource_from', 'resource_to', 'job', 'attribute', 'unit_category', 'unit_stat', 'tier', 'tech_category', 'terrain', 'target_type', 'target_value'] %}
                 {% if fkey not in used_keys %}
                   <input type="hidden" name="{{ field_name }}-{{ idx }}-{{ fkey }}" id="{{ field_name }}-{{ idx }}-{{ fkey }}" value="">
                 {% endif %}
@@ -388,10 +408,34 @@
                         <option value="{{ tc.key }}" {% if tc.key == cur %}selected{% endif %}>{{ tc.name }}</option>
                       {% endfor %}
                     </select>
+                  {% elif extra.source == 'visibility_target_types' %}
+                    {% set cur = ef.data or 'all_nations' %}
+                    <select class="form-control" name="{{ ef.name }}" id="{{ ef.id }}" onchange="updateVisTargetValue('{{ field_name }}', {{ idx }})">
+                      <option value="all_nations" {% if cur == 'all_nations' %}selected{% endif %}>All Nations</option>
+                      <option value="region" {% if cur == 'region' %}selected{% endif %}>Region</option>
+                      <option value="specific_nation" {% if cur == 'specific_nation' %}selected{% endif %}>Specific Nation</option>
+                    </select>
+                  {% elif mod_type == 'offensive_visibility' and extra.key == 'target_value' %}
+                    {% set cur = ef.data or '' %}
+                    {% set cur_tt = modifier_field.form.target_type.data or 'all_nations' %}
+                    <span id="{{ field_name }}-{{ idx }}-target_value-container" data-cur="{{ cur | e }}"{% if cur_tt == 'all_nations' %} style="display:none;"{% endif %}>
+                      {% if cur_tt == 'specific_nation' %}
+                        <select class="form-control" name="{{ ef.name }}" id="{{ ef.id }}">
+                          <option value="">-- Select Nation --</option>
+                          {% if bulk_edit_options is defined %}
+                            {% for n in bulk_edit_options.nations %}
+                            <option value="{{ n.name }}" {% if n.name == cur %}selected{% endif %}>{{ n.name }}</option>
+                            {% endfor %}
+                          {% endif %}
+                        </select>
+                      {% else %}
+                        <input type="text" class="form-control" name="{{ ef.name }}" id="{{ ef.id }}" value="{{ cur }}" placeholder="Region name">
+                      {% endif %}
+                    </span>
                   {% endif %}
                 </div>
               {% endfor %}
-              {% for fkey in ['resource', 'resource_from', 'resource_to', 'job', 'attribute', 'unit_category', 'unit_stat', 'tier', 'tech_category', 'terrain'] %}
+              {% for fkey in ['resource', 'resource_from', 'resource_to', 'job', 'attribute', 'unit_category', 'unit_stat', 'tier', 'tech_category', 'terrain', 'target_type', 'target_value'] %}
                 {% if fkey not in used_keys %}
                 <input type="hidden" name="{{ modifier_field.form[fkey].name }}" value="">
                 {% endif %}
