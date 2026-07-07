@@ -3577,146 +3577,245 @@ def _build_ai_distance_cache(buyer_names, all_ai_names, trade_speeds, tiles_raw,
     return cache
 
 
-def ai_market_matching_tick(old_nations, new_nations, schema):
+def _run_ai_market_matching(old_nations, new_nations, log_lines):
     """
-    Auto-match unfilled AI buy/sell orders across all NPC nations, regardless
-    of market membership, then attempt to build each buyer's planned district
-    if newly received resources make it affordable. If a district is built,
-    idle pops are re-assigned.
+    Core matching logic for AI market matching.
 
-    Runs as a separate admin action partway through the session, after
-    players have had a window to fill AI orders first.
+    Mutates new_nations in place.  Returns a set of nation indices (into
+    new_nations) that received buy-order resources so the caller can run
+    post-trade district purchase for them.
 
-    Match criteria:
-      - Same resource, different nations, price overlaps (buy_price >= sell_price)
-      - Trade distance delay <= AI_MATCH_MAX_DELAY ("single turn of trade distance")
-        — uses the same road-path Dijkstra as the player trade-route system, so
-        isolated or very distant nations cannot trade with each other.
-
-    Markets are no longer a constraint: nations in different markets, or in no
-    market at all, can still trade if they are geographically close.
-
-    Prioritises: critical buys first, then desire-buys; price must overlap.
-    Trades execute at the seller's ask price.
+    Both old_nations and new_nations must be parallel lists of the same
+    length and in the same order.
     """
-    from helpers.trade_route_helpers import _load_trade_tiles, _build_portal_map, _terrain_move_costs, _get_trade_source_wonder_ids
-    log_lines = []
+    from helpers.trade_route_helpers import (
+        _load_trade_tiles, _build_portal_map,
+        _terrain_move_costs, _get_trade_source_wonder_ids,
+    )
+
     buyers_who_received = set()
-    old_nation_by_idx = {i: n for i, n in enumerate(old_nations)}
+    old_nation_by_idx   = {i: n for i, n in enumerate(old_nations)}
+
+    # --- Step 1: Collect all AI buy and sell orders ---
+    buy_orders  = []
+    sell_orders = []
+    for idx, nation in enumerate(new_nations):
+        if nation.get("temperament", "Player") == "Player":
+            continue
+        for didx, desire in enumerate(nation.get("resource_desires", [])):
+            qty = desire.get("quantity", 0)
+            if qty <= 0:
+                continue
+            entry = {
+                "resource":    desire["resource"],
+                "trade_type":  desire["trade_type"],
+                "price":       desire.get("price", 0),
+                "quantity":    qty,
+                "nation_idx":  idx,
+                "desire_idx":  didx,
+                "nation_name": nation.get("name", ""),
+            }
+            if "Buy" in desire["trade_type"]:
+                buy_orders.append(entry)
+            elif "Sell" in desire["trade_type"]:
+                sell_orders.append(entry)
+
+    if not buy_orders or not sell_orders:
+        return buyers_who_received
+
+    # --- Step 2: Precompute trade distances (one Dijkstra per buyer nation) ---
+    buyer_names      = list({b["nation_name"] for b in buy_orders})
+    seller_names_set = {s["nation_name"] for s in sell_orders}
+    all_ai_names     = list(set(buyer_names) | seller_names_set)
+
+    name_to_old = {n.get("name", ""): n for n in old_nations}
+    trade_speeds = {
+        name: (name_to_old.get(name) or {}).get("trade_speed") or 7
+        for name in all_ai_names
+    }
+
+    tiles_raw        = _load_trade_tiles(all_ai_names)
+    portal_map       = _build_portal_map()
+    move_costs       = _terrain_move_costs()
+    trade_wonder_ids = _get_trade_source_wonder_ids()
+
+    distance_cache = _build_ai_distance_cache(
+        buyer_names, all_ai_names, trade_speeds, tiles_raw, portal_map, move_costs,
+        trade_wonder_ids=trade_wonder_ids,
+    )
+
+    # --- Step 3: Sort and match ---
+    buy_orders.sort(key=lambda x: (
+        0 if x["trade_type"] == "Need to Buy" else 1, -x["price"]
+    ))
+    sell_orders.sort(key=lambda x: (
+        0 if x["trade_type"] == "Need to Sell" else 1, x["price"]
+    ))
+
+    for buy in buy_orders:
+        buyer_name   = buy["nation_name"]
+        buyer_delays = distance_cache.get(buyer_name, {})
+        for sell in sell_orders:
+            if buy["resource"] != sell["resource"]:
+                continue
+            if buy["nation_idx"] == sell["nation_idx"]:
+                continue
+            if buy["price"] < sell["price"]:
+                continue
+            if sell["quantity"] <= 0 or buy["quantity"] <= 0:
+                continue
+
+            seller_name = sell["nation_name"]
+            delay = buyer_delays.get(seller_name)
+            if delay is None or delay > AI_MATCH_MAX_DELAY:
+                continue
+
+            qty      = min(buy["quantity"], sell["quantity"])
+            price    = sell["price"]
+            total    = qty * price
+            resource = buy["resource"]
+
+            buyer  = new_nations[buy["nation_idx"]]
+            seller = new_nations[sell["nation_idx"]]
+
+            b_storage = buyer.setdefault("resource_storage", {})
+            s_storage = seller.setdefault("resource_storage", {})
+            b_storage[resource] = b_storage.get(resource, 0) + qty
+            s_storage[resource] = s_storage.get(resource, 0) - qty
+            buyer["money"]  = buyer.get("money", 0) - total
+            seller["money"] = seller.get("money", 0) + total
+
+            buy["quantity"]  -= qty
+            sell["quantity"] -= qty
+            buyer["resource_desires"][buy["desire_idx"]]["quantity"]   = buy["quantity"]
+            seller["resource_desires"][sell["desire_idx"]]["quantity"] = sell["quantity"]
+
+            buyers_who_received.add(buy["nation_idx"])
+            log_lines.append(
+                f"{buyer_name} bought {qty}× {resource} from {seller_name} "
+                f"@ {price} (delay {delay})"
+            )
+
+    return buyers_who_received
+
+
+def run_ai_market_matching_standalone(app_ctx=None):
+    """
+    Self-contained AI market matching: loads nation data fresh from the DB,
+    runs all matching, calls post-trade district purchase, then commits every
+    changed nation directly via system_request_change / system_approve_change.
+
+    Designed to be called from a background thread so it never blocks an HTTP
+    request.  Pass the Flask app object (or an app-context push) when calling
+    from outside a request context so DB access works correctly.
+
+    Returns a human-readable summary string.
+    """
+    from helpers.change_helpers import system_request_change, system_approve_change
+    from helpers.data_helpers import get_data_on_category
+    from calculations.field_calculations import calculate_all_fields
+    from copy import deepcopy
+    from pymongo import ASCENDING
+
+    ctx = None
+    if app_ctx is not None:
+        ctx = app_ctx.app_context()
+        ctx.push()
 
     try:
-        # --- Step 1: Collect all AI buy and sell orders ---
-        buy_orders  = []
-        sell_orders = []
-        for idx, nation in enumerate(new_nations):
-            if nation.get("temperament", "Player") == "Player":
+        nation_schema, nation_db = get_data_on_category("nations")
+
+        old_nations = list(nation_db.find().sort("name", ASCENDING))
+        new_nations = []
+        for n in old_nations:
+            if n:
+                n.update(calculate_all_fields(n, nation_schema, "nation"))
+                new_nations.append(deepcopy(n))
+
+        log_lines = []
+
+        try:
+            buyers_who_received = _run_ai_market_matching(old_nations, new_nations, log_lines)
+        except Exception as e:
+            log_lines.append(f"AI market matching error: {e}")
+            buyers_who_received = set()
+
+        # Post-trade district purchase for each buyer that received resources.
+        for bidx in buyers_who_received:
+            try:
+                old_n = old_nations[bidx] if bidx < len(old_nations) else None
+                new_n = new_nations[bidx] if bidx < len(new_nations) else None
+                if old_n is None or new_n is None:
+                    continue
+                _post_trade_build_and_rejob(old_n, new_n, log_lines)
+            except Exception as e:
+                name = (new_nations[bidx].get("name", "?")
+                        if bidx < len(new_nations) else "?")
+                log_lines.append(f"{name}: post-trade district error: {e}")
+
+        # Determine which nations actually changed and save them directly to DB.
+        # Only save nations that were buyers, sellers, or had a post-trade build
+        # so we don't touch untouched nation documents.
+        changed_indices = set(buyers_who_received)
+        # Also include sellers (their storage and money changed).
+        for idx, (old_n, new_n) in enumerate(zip(old_nations, new_nations)):
+            if idx in changed_indices:
                 continue
-            for didx, desire in enumerate(nation.get("resource_desires", [])):
-                qty = desire.get("quantity", 0)
-                if qty <= 0:
-                    continue
-                entry = {
-                    "resource":    desire["resource"],
-                    "trade_type":  desire["trade_type"],
-                    "price":       desire.get("price", 0),
-                    "quantity":    qty,
-                    "nation_idx":  idx,
-                    "desire_idx":  didx,
-                    "nation_name": nation.get("name", ""),
-                }
-                if "Buy" in desire["trade_type"]:
-                    buy_orders.append(entry)
-                elif "Sell" in desire["trade_type"]:
-                    sell_orders.append(entry)
+            # Quick check: money or resource_storage changed.
+            if (new_n.get("money") != old_n.get("money") or
+                    new_n.get("resource_storage") != old_n.get("resource_storage") or
+                    new_n.get("resource_desires") != old_n.get("resource_desires")):
+                changed_indices.add(idx)
 
-        if not buy_orders or not sell_orders:
-            return ""
-
-        # --- Step 2: Precompute trade distances (one Dijkstra per buyer nation) ---
-        # Collect all unique AI nation names involved in orders.
-        buyer_names = list({b["nation_name"] for b in buy_orders})
-        seller_names_set = {s["nation_name"] for s in sell_orders}
-        all_ai_names = list(set(buyer_names) | seller_names_set)
-
-        # Build {name: trade_speed} from old_nations (computed fields are there).
-        name_to_old = {n.get("name", ""): n for n in old_nations}
-        trade_speeds = {
-            name: (name_to_old.get(name) or {}).get("trade_speed") or 7
-            for name in all_ai_names
-        }
-
-        # Load tiles for all involved nations in a single DB query.
-        tiles_raw        = _load_trade_tiles(all_ai_names)
-        portal_map       = _build_portal_map()
-        move_costs       = _terrain_move_costs()
-        trade_wonder_ids = _get_trade_source_wonder_ids()
-
-        distance_cache = _build_ai_distance_cache(
-            buyer_names, all_ai_names, trade_speeds, tiles_raw, portal_map, move_costs,
-            trade_wonder_ids=trade_wonder_ids,
-        )
-
-        # --- Step 3: Sort and match ---
-        buy_orders.sort(key=lambda x: (
-            0 if x["trade_type"] == "Need to Buy" else 1, -x["price"]
-        ))
-        sell_orders.sort(key=lambda x: (
-            0 if x["trade_type"] == "Need to Sell" else 1, x["price"]
-        ))
-
-        for buy in buy_orders:
-            buyer_name = buy["nation_name"]
-            buyer_delays = distance_cache.get(buyer_name, {})
-            for sell in sell_orders:
-                if buy["resource"] != sell["resource"]:
-                    continue
-                if buy["nation_idx"] == sell["nation_idx"]:
-                    continue
-                if buy["price"] < sell["price"]:
-                    continue
-                if sell["quantity"] <= 0 or buy["quantity"] <= 0:
-                    continue
-
-                # Distance gate: skip if too far apart
-                seller_name = sell["nation_name"]
-                delay = buyer_delays.get(seller_name)
-                if delay is None or delay > AI_MATCH_MAX_DELAY:
-                    continue
-
-                qty      = min(buy["quantity"], sell["quantity"])
-                price    = sell["price"]
-                total    = qty * price
-                resource = buy["resource"]
-
-                buyer  = new_nations[buy["nation_idx"]]
-                seller = new_nations[sell["nation_idx"]]
-
-                # Execute transfer
-                b_storage = buyer.setdefault("resource_storage", {})
-                s_storage = seller.setdefault("resource_storage", {})
-                b_storage[resource] = b_storage.get(resource, 0) + qty
-                s_storage[resource] = s_storage.get(resource, 0) - qty
-                buyer["money"]  = buyer.get("money", 0) - total
-                seller["money"] = seller.get("money", 0) + total
-
-                buy["quantity"]  -= qty
-                sell["quantity"] -= qty
-                buyer["resource_desires"][buy["desire_idx"]]["quantity"]   = buy["quantity"]
-                seller["resource_desires"][sell["desire_idx"]]["quantity"] = sell["quantity"]
-
-                buyers_who_received.add(buy["nation_idx"])
-                log_lines.append(
-                    f"{buyer_name} bought {qty}× {resource} from {seller_name} "
-                    f"@ {price} (delay {delay})"
+        saved = 0
+        for idx in changed_indices:
+            try:
+                old_n = old_nations[idx]
+                new_n = new_nations[idx]
+                change_id = system_request_change(
+                    data_type="nations",
+                    item_id=old_n["_id"],
+                    change_type="Update",
+                    before_data=deepcopy(old_n),
+                    after_data=deepcopy(new_n),
+                    reason="AI Market Matching Tick",
                 )
+                if change_id:
+                    system_approve_change(change_id)
+                    saved += 1
+            except Exception as e:
+                name = old_nations[idx].get("name", "?")
+                log_lines.append(f"{name}: save error: {e}")
 
+        log_lines.append(f"Saved {saved} nation(s).")
+        summary = "\n".join(log_lines) + "\n" if log_lines else ""
+        print(summary)
+        return summary
+
+    finally:
+        if ctx is not None:
+            ctx.pop()
+
+
+def ai_market_matching_tick(old_nations, new_nations, schema):
+    """
+    Tick-system entry point for AI market matching.  Operates on the
+    already-loaded old_nations / new_nations lists provided by the tick
+    infrastructure (changes are persisted by the tick's batch save loop).
+
+    For standalone / async use outside the tick system call
+    run_ai_market_matching_standalone() instead — it loads its own data and
+    commits changes directly to the DB so it completes reliably without
+    depending on the tick's save pass.
+    """
+    log_lines = []
+    try:
+        buyers_who_received = _run_ai_market_matching(old_nations, new_nations, log_lines)
     except Exception as e:
         log_lines.append(f"AI market matching error: {e}")
+        buyers_who_received = set()
 
-    # --- Post-trade district purchase ---
-    # For each nation that received resources via buy-order matching, check
-    # whether its planned district is now affordable. If so, build it and
-    # re-assign idle pops to exploit any newly unlocked jobs.
+    old_nation_by_idx = {i: n for i, n in enumerate(old_nations)}
     for bidx in buyers_who_received:
         try:
             old_n = old_nation_by_idx.get(bidx)
@@ -3725,7 +3824,8 @@ def ai_market_matching_tick(old_nations, new_nations, schema):
                 continue
             _post_trade_build_and_rejob(old_n, new_n, log_lines)
         except Exception as e:
-            name = new_nations[bidx].get("name", "?") if bidx < len(new_nations) else "?"
+            name = (new_nations[bidx].get("name", "?")
+                    if bidx < len(new_nations) else "?")
             log_lines.append(f"{name}: post-trade district error: {e}")
 
     return "\n".join(log_lines) + "\n" if log_lines else ""

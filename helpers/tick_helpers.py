@@ -2,7 +2,7 @@ import uuid
 import math
 from bson import ObjectId
 from helpers.data_helpers import get_data_on_category
-from helpers.ai_decision_helpers import ai_decision_tick, ai_market_matching_tick, market_price_tick
+from helpers.ai_decision_helpers import ai_decision_tick, ai_market_matching_tick, market_price_tick, run_ai_market_matching_standalone
 from helpers.trade_route_helpers import run_trade_route_lifecycle, _current_session as _tr_current_session
 from calculations.field_calculations import calculate_all_fields, collect_laws, sum_law_totals
 from pymongo import ASCENDING
@@ -385,6 +385,24 @@ def run_tick_async(form_data):
     thread.daemon = True
     thread.start()
     return "Tick process started in background. Check logs for results."
+
+
+def run_ai_market_matching_async():
+    """
+    Start AI market matching in a background thread.
+
+    Unlike the tick-based version, this is completely self-contained: it
+    loads fresh nation data from the DB, runs all matching, and commits
+    every changed nation directly via the change pipeline.  The HTTP
+    response returns immediately; matching runs to completion in the
+    background even if it takes several minutes.
+    """
+    from threading import Thread
+    from app_core import app
+    thread = Thread(target=run_ai_market_matching_standalone, args=(app,))
+    thread.daemon = True
+    thread.start()
+    return "AI market matching started in background. Check server logs for results."
 
 ###########################################################
 # General Tick Functions

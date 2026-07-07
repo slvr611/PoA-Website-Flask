@@ -916,34 +916,15 @@ def visibility_log():
 @admin_tool_routes.route("/run_ai_market_matching", methods=["POST"])
 @admin_required
 def run_ai_market_matching():
-    """Run the AI-to-AI market order matching tick immediately against the live DB."""
-    from helpers.ai_decision_helpers import ai_market_matching_tick
-    from helpers.change_helpers import system_request_change, system_approve_change
-    from calculations.field_calculations import calculate_all_fields
-    from copy import deepcopy
+    """Start AI market matching in a background thread.
 
-    nation_schema, nation_db = get_data_on_category("nations")
-    old_nations = list(nation_db.find().sort("name", ASCENDING))
-    new_nations = []
-    for nation in old_nations:
-        if nation:
-            nation.update(calculate_all_fields(nation, nation_schema, "nation"))
-            new_nations.append(deepcopy(nation))
-
-    result = ai_market_matching_tick(old_nations, new_nations, nation_schema)
-
-    for i in range(len(old_nations)):
-        change_id = system_request_change(
-            data_type="nations",
-            item_id=old_nations[i]["_id"],
-            change_type="Update",
-            before_data=old_nations[i],
-            after_data=new_nations[i],
-            reason="AI Market Matching (manual trigger)"
-        )
-        system_approve_change(change_id)
-
-    flash(f"AI market matching complete. {result}", "success")
+    Returns immediately — the matching loads its own nation data, runs all
+    Dijkstra distance checks, executes trades, and commits only the changed
+    nations to the DB.  Progress is printed to the server log.
+    """
+    from helpers.tick_helpers import run_ai_market_matching_async
+    message = run_ai_market_matching_async()
+    flash(message, "info")
     return redirect(url_for("admin_tool_routes.admin_tools"))
 
 

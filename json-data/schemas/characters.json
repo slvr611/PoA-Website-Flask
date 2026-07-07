@@ -37,7 +37,7 @@
           "elderly_age"
         ],
         "fields": [
-          {"wonders": ["external_modifiers"]}
+          {"wonders": ["external_modifiers", "modifiers"]}
         ]
       }
     },

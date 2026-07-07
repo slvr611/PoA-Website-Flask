@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, redirect, flash, g, request
 from helpers.auth_helpers import admin_required
 from helpers.data_helpers import get_data_on_category, get_data_on_item
 from helpers.render_helpers import get_linked_objects
-from helpers.change_helpers import approve_change, deny_change, force_approve_change, rescind_change
+from helpers.change_helpers import approve_change, deny_change, force_approve_change, rescind_change, revert_change
 from app_core import category_data, mongo, app
 from pymongo import DESCENDING, ASCENDING
 from bson import ObjectId
@@ -709,6 +709,18 @@ def my_changes(page=1):
         total_pages=total_pages,
         total_count=total_count,
     )
+
+
+@change_routes.route("/changes/item/<item_ref>/revert")
+@admin_required
+def revert_change_route(item_ref):
+    try:
+        change_id = ObjectId(item_ref)
+        if revert_change(change_id):
+            flash(f"Change #{item_ref} has been reverted.")
+    except Exception as e:
+        flash(f"Error reverting change: {e}")
+    return redirect(request.referrer or "/changes/archived")
 
 
 @change_routes.route("/changes/item/<item_ref>/rescind", methods=["POST"])

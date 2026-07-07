@@ -655,6 +655,94 @@ def rescind_change(change_id):
     return True
 
 
+def revert_change(change_id):
+    """Restore a target object to its state before an approved change was applied."""
+    reverter = mongo.db.players.find_one({"id": g.user.get("id", None)})
+    if reverter is None or not reverter.get("is_admin", False):
+        flash("You must be an admin to revert changes.")
+        return False
+
+    changes_collection = mongo.db.changes
+    change = changes_collection.find_one({"_id": change_id})
+    if change is None:
+        flash("Change not found.")
+        return False
+    if change["status"] != "Approved":
+        flash("Only approved changes can be reverted.")
+        return False
+
+    now = datetime.now(timezone.utc)
+    target_collection = category_data[change["target_collection"]]["database"]
+    before_data = change.get("before_implemented_data", {})
+
+    if change["change_type"] == "Add":
+        current = target_collection.find_one({"_id": change["target"]}) or {}
+        target_collection.delete_one({"_id": change["target"]})
+        changes_collection.update_one({"_id": change_id}, {"$set": {
+            "status": "Reverted",
+            "time_reverted": now,
+            "last_modified_time": now,
+            "reverter": reverter["_id"],
+            "before_revert_data": current,
+            "after_revert_data": {},
+        }})
+        propagate_updates(
+            changed_data_type=change["target_collection"],
+            changed_object_id=change["target"],
+            changed_object={},
+            reason=f"Revert of change #{change_id}"
+        )
+    elif change["change_type"] == "Remove":
+        if target_collection.find_one({"_id": change["target"]}) is not None:
+            flash("Cannot revert: the target object already exists in the collection.")
+            return False
+        if not before_data:
+            flash("Cannot revert: no before-data was recorded for this change.")
+            return False
+        restored = dict(before_data)
+        restored["_id"] = change["target"]
+        restored = _calculate_and_attach_fields(change["target_collection"], restored)
+        target_collection.insert_one(restored)
+        changes_collection.update_one({"_id": change_id}, {"$set": {
+            "status": "Reverted",
+            "time_reverted": now,
+            "last_modified_time": now,
+            "reverter": reverter["_id"],
+            "before_revert_data": {},
+            "after_revert_data": restored,
+        }})
+        propagate_updates(
+            changed_data_type=change["target_collection"],
+            changed_object_id=change["target"],
+            changed_object=restored,
+            reason=f"Revert of change #{change_id}"
+        )
+    else:
+        existing = target_collection.find_one({"_id": change["target"]})
+        if existing is None:
+            flash("Target object no longer exists.")
+            return False
+        restored = deep_merge(existing, before_data)
+        restored = _calculate_and_attach_fields(change["target_collection"], restored)
+        target_collection.update_one({"_id": change["target"]}, {"$set": restored})
+        changes_collection.update_one({"_id": change_id}, {"$set": {
+            "status": "Reverted",
+            "time_reverted": now,
+            "last_modified_time": now,
+            "reverter": reverter["_id"],
+            "before_revert_data": existing,
+            "after_revert_data": restored,
+        }})
+        propagate_updates(
+            changed_data_type=change["target_collection"],
+            changed_object_id=change["target"],
+            changed_object=restored,
+            reason=f"Revert of change #{change_id}"
+        )
+
+    return True
+
+
 def deep_merge(original, updates):
     merged = deepcopy(original)
     for key, value in updates.items():

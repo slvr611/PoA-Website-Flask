@@ -58,8 +58,8 @@
 				{% set time_label = schema.properties.time_reverted.label %}
 				{% set time_data = item["time_reverted"] %}
 				{% set changes_label = "Reverted Changes" %}
-				{% set before_data = item["before_reverted_data"] %}
-				{% set after_data = item["after_reverted_data"] %}
+				{% set before_data = item["before_revert_data"] %}
+				{% set after_data = item["after_revert_data"] %}
 			{% endif %}
 
 			<tr>
@@ -111,6 +111,12 @@
 				<a href="{{ request.path }}/approve" class="btn btn-approve">Approve</a>
 				<a href="{{ request.path }}/force-approve" class="btn btn-approve" style="opacity:0.7;" onclick="return confirm('Force-approve this change without conflict checking?')">Force Approve</a>
 				<a href="{{ request.path }}/deny" class="btn btn-deny">Deny</a>
+			</div>
+		{% endif %}
+
+		{% if item["status"] == "Approved" and g.user.is_admin %}
+			<div class="action-buttons">
+				<a href="{{ request.path }}/revert" class="btn btn-deny" onclick="return confirm('Revert this change? This will restore the target to its state before the change was applied.')">Revert</a>
 			</div>
 		{% endif %}
 		

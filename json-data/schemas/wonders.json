@@ -77,8 +77,7 @@
       "external_modifiers": {
         "bsonType": "array",
         "label": "Mechanical Modifiers",
-        "description": "The mechanical modifiers that affect the owner",
-        "hidden": true,
+        "description": "The mechanical modifiers that affect the owner nation or its ruling character",
         "items": {
           "bsonType": "object",
           "properties": {
@@ -99,7 +98,7 @@
             "modifier": {
               "bsonType": "string",
               "label": "Modifier",
-              "description": "The modifier"
+              "description": "The modifier key (e.g. stat_gain_chance for characters, food_production for nations)"
             },
             "value": {
               "bsonType": "number",
@@ -112,7 +111,7 @@
       "modifiers": {
         "bsonType": "array",
         "label": "Ongoing Modifiers",
-        "description": "Scope-based modifiers applied by this entity",
+        "description": "Scope-based modifiers applied to the owner nation or its ruling characters. Use scope 'wonder_owner_nation' for nation effects, 'wonder_owner_characters' for ruling character effects.",
         "items": {
           "bsonType": "object",
           "properties": {
@@ -121,20 +120,49 @@
               "label": "Item ID",
               "description": "Stable identifier for change tracking across reorders"
             },
-            "key": {
+            "modifier_type": {
               "bsonType": "string",
-              "label": "Modifier Key",
-              "description": "The key of the modifier"
+              "label": "Modifier Type",
+              "description": "The modifier type key"
+            },
+            "scope": {
+              "bsonType": "string",
+              "label": "Scope",
+              "description": "The scope this modifier applies to (e.g. wonder_owner_nation, wonder_owner_characters)"
             },
             "value": {
               "bsonType": "number",
               "label": "Modifier Value",
               "description": "The value of the modifier"
             },
+            "scaling": {
+              "bsonType": "string",
+              "label": "Scaling",
+              "description": "How the modifier scales"
+            },
+            "scaling_x": {
+              "bsonType": "number",
+              "label": "Scaling X",
+              "description": "The scaling divisor"
+            },
+            "scaling_extra": {
+              "bsonType": "string",
+              "label": "Scaling Extra",
+              "description": "Extra scaling parameter"
+            },
+            "max_value": {
+              "bsonType": "number",
+              "label": "Max Value",
+              "description": "Maximum value cap for this modifier"
+            },
+            "attribute": {
+              "bsonType": "string",
+              "label": "Attribute"
+            },
             "duration": {
               "bsonType": "number",
               "label": "Modifier Duration",
-              "description": "The duration of the modifier"
+              "description": "The duration of the modifier (-1 for permanent)"
             },
             "source": {
               "bsonType": "string",

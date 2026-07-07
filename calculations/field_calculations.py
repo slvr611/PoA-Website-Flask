@@ -3124,28 +3124,29 @@ def collect_external_requirements(target, schema, target_data_type):
 
 def collect_external_modifiers_from_object(object, required_fields, linked_object_schema, target_data_type, modifier_prefix=None, fields_as_modifiers=[], target=None):
     collected_modifiers = []
+    _outer_schema = linked_object_schema  # preserve original schema for the fields_as_modifiers pass
 
     for req_field in required_fields:
         if isinstance(req_field, dict):
             for key, value in req_field.items():
-                req_field_schema = linked_object_schema["properties"].get(key, {})
+                req_field_schema = _outer_schema["properties"].get(key, {})
                 collections = req_field_schema.get("collections")
                 if not collections:
                     continue
 
                 for collection in collections:
-                    linked_object_schema = category_data.get(collection, {}).get("schema", {})
+                    nested_schema = category_data.get(collection, {}).get("schema", {})
 
                     # Handle indirect links through join tables
                     if req_field_schema.get("linkCollection") and req_field_schema.get("linkQueryTarget"):
                         link_collection = req_field_schema["linkCollection"]
                         link_query_target = req_field_schema["linkQueryTarget"]
                         query_target = req_field_schema.get("queryTarget")
-                        
+
                         if query_target:
                             # Find all links in the join table
                             links = list(mongo.db[link_collection].find({link_query_target: str(object["_id"])}))
-                            
+
                             for link in links:
                                 # Check the link object itself for modifiers
                                 collected_modifiers.extend(collect_external_modifiers_from_object(link, value, category_data.get(link_collection, {}).get("schema", {}), target_data_type, modifier_prefix, target=target))
@@ -3155,14 +3156,14 @@ def collect_external_modifiers_from_object(object, required_fields, linked_objec
                                     target_id = link[query_target]
                                     target_object = mongo.db[collection].find_one({"_id": ObjectId(target_id)})
                                     if target_object:
-                                        collected_modifiers.extend(collect_external_modifiers_from_object(target_object, value, linked_object_schema, target_data_type, modifier_prefix, target=target))
+                                        collected_modifiers.extend(collect_external_modifiers_from_object(target_object, value, nested_schema, target_data_type, modifier_prefix, target=target))
 
                     elif req_field_schema.get("queryTargetAttribute"):
                         query_target = req_field_schema["queryTargetAttribute"]
                         linked_objects = list(mongo.db[collection].find({query_target: str(object["_id"])}))
                         for nested_obj in linked_objects:
                             if nested_obj.get("equipped", True):
-                                collected_modifiers.extend(collect_external_modifiers_from_object(nested_obj, value, linked_object_schema, target_data_type, modifier_prefix, target=target))
+                                collected_modifiers.extend(collect_external_modifiers_from_object(nested_obj, value, nested_schema, target_data_type, modifier_prefix, target=target))
             continue
         else:
             req_field_schema = linked_object_schema["properties"].get(req_field, {})

@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, redirect, request, flash
 from helpers.auth_helpers import admin_required
 from helpers.tick_helpers import (
-    run_tick_async, run_era_tick_async,
+    run_tick_async, run_era_tick_async, run_ai_market_matching_async,
     GENERAL_TICK_FUNCTIONS, CHARACTER_TICK_FUNCTIONS, ARTIFACT_TICK_FUNCTIONS,
     MERCHANT_TICK_FUNCTIONS, MERCENARY_TICK_FUNCTIONS, FACTION_TICK_FUNCTIONS,
     MARKET_TICK_FUNCTIONS, NATION_TICK_FUNCTIONS,
@@ -50,3 +50,5 @@ def admin_run_era_tick():
     message = run_era_tick_async(form_data)
     flash(message, "info")
     return redirect("/era_tick_helper")
+
+
