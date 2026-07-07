@@ -1039,6 +1039,23 @@ def _collect_all_terrain_rules(target):
                         upg.get("modifiers", []), f"{label} ({upg_key})"
                     ))
 
+    # Artifacts equipped by the nation's rulers
+    target_id = str(target.get("_id", ""))
+    if target_id:
+        rulers = list(category_data["characters"]["database"].find(
+            {"ruling_nation_org": target_id}, {"_id": 1}
+        ))
+        for ruler in rulers:
+            artifacts = list(category_data["artifacts"]["database"].find(
+                {"owner": str(ruler["_id"]), "equipped": True},
+                {"modifiers": 1, "name": 1}
+            ))
+            for artifact in artifacts:
+                artifact_mods = artifact.get("modifiers", [])
+                if isinstance(artifact_mods, list):
+                    label = f"Artifact: {artifact.get('name', 'Unknown Artifact')}"
+                    all_rules.extend(_extract_terrain_rules_from_list(artifact_mods, label))
+
     return all_rules
 
 
@@ -1663,6 +1680,7 @@ def _extract_labeled_from_object(obj, required_fields, linked_schema, target_dat
                     scaling_x = float(modifier.get("scaling_x") or 1)
                     scaling_extra = modifier.get("scaling_extra") or ""
                     if scaling and scaling != "flat" and target is not None:
+                        raw_val = val
                         val = val * get_scaling_multiplier(scaling, target, scaling_x=scaling_x, scaling_extra=scaling_extra)
                     plain_mods[key] = plain_mods.get(key, 0) + val
 
@@ -1702,6 +1720,7 @@ def _extract_labeled_from_object(obj, required_fields, linked_schema, target_dat
                         scaling_x = float(modifier.get("scaling_x") or 1)
                         scaling_extra = modifier.get("scaling_extra") or ""
                         if scaling and scaling != "flat" and target is not None:
+                            raw_mod_val = mod_val
                             mod_val = mod_val * get_scaling_multiplier(scaling, target, scaling_x=scaling_x, scaling_extra=scaling_extra)
                         plain_mods[mod_field] = plain_mods.get(mod_field, 0) + mod_val
                 else:
@@ -1713,6 +1732,7 @@ def _extract_labeled_from_object(obj, required_fields, linked_schema, target_dat
                         scaling_x = float(modifier.get("scaling_x") or 1)
                         scaling_extra = modifier.get("scaling_extra") or ""
                         if scaling and scaling != "flat" and target is not None:
+                            raw_mod_val = mod_val
                             mod_val = mod_val * get_scaling_multiplier(scaling, target, scaling_x=scaling_x, scaling_extra=scaling_extra)
                         plain_mods[stripped] = plain_mods.get(stripped, 0) + mod_val
 
@@ -3140,9 +3160,9 @@ def collect_external_modifiers_from_object(object, required_fields, linked_objec
                     elif req_field_schema.get("queryTargetAttribute"):
                         query_target = req_field_schema["queryTargetAttribute"]
                         linked_objects = list(mongo.db[collection].find({query_target: str(object["_id"])}))
-                        for object in linked_objects:
-                            if object.get("equipped", True):
-                                collected_modifiers.extend(collect_external_modifiers_from_object(object, value, linked_object_schema, target_data_type, modifier_prefix, target=target))
+                        for nested_obj in linked_objects:
+                            if nested_obj.get("equipped", True):
+                                collected_modifiers.extend(collect_external_modifiers_from_object(nested_obj, value, linked_object_schema, target_data_type, modifier_prefix, target=target))
             continue
         else:
             req_field_schema = linked_object_schema["properties"].get(req_field, {})
@@ -3380,6 +3400,7 @@ def sum_modifier_totals(modifiers, target=None):
         scaling_x = float(m.get("scaling_x") or 1)
         scaling_extra = m.get("scaling_extra") or ""
         if scaling and scaling != "flat" and target is not None:
+            raw_value = value
             value = value * get_scaling_multiplier(scaling, target, scaling_x=scaling_x, scaling_extra=scaling_extra)
         max_value = m.get("max_value")
         if max_value is not None:

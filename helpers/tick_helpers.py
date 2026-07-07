@@ -1518,9 +1518,10 @@ def nation_tech_cost_reduction_tick(old_nation, new_nation, schema):
         base_cost = json_tech_data.get(tech, {}).get("cost", 0)
         current_cost = value.get("cost", base_cost + old_nation.get("technology_cost_modifier", 0))
         invested = value.get("invested", 0)
-        
+        min_cost = (base_cost + 1) // 2
+
         # Reduce cost by 1 if it's higher than base cost and at least 2 higher than invested
-        if current_cost > base_cost and current_cost >= invested + 2:
+        if current_cost > base_cost and current_cost >= invested + 2 and current_cost > min_cost:
             value["cost"] = current_cost - 1
             result += f"{old_nation.get('name', 'Unknown')} has reduced the cost of {tech} from {current_cost} to {current_cost - 1}.\n"
         

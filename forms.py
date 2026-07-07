@@ -588,9 +588,10 @@ class IndividualTechDict(Form):
     cost_manually_set = BooleanField("Cost Manually Set", default=False)
 
     def initialize_cost(self, nation, name):
-        self.cost.data = json_data.get("tech", {}).get(name, {}).get("cost", 0)
-        self.cost.data += nation.get("technology_cost_modifier", 0)
-        self.cost.data = max(self.cost.data, nation.get("technology_cost_minimum", 0))
+        base_cost = json_data.get("tech", {}).get(name, {}).get("cost", 0)
+        self.cost.data = base_cost + nation.get("technology_cost_modifier", 0)
+        min_cost = (base_cost + 1) // 2
+        self.cost.data = max(self.cost.data, nation.get("technology_cost_minimum", 0), min_cost)
 
     def load_form_from_item(self, name, item, schema):
         """Loads form data from a database item"""

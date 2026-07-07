@@ -8,6 +8,9 @@
     {% if g.user is not none %}
         <a href="/characters/new">Create New Character</a>
     {% endif %}
+    {% if g.user is not none and g.user.is_admin %}
+        | <a href="/characters/edit">Edit Character List</a>
+    {% endif %}
 
     <h1>Player Characters ({{ player_characters|length }})</h1>
     {{ render_data_table(player_characters, schema, preview_references, base_url=request.path) }}

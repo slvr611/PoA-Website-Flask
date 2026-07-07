@@ -65,15 +65,15 @@ def _validate_tech_costs(form_data):
         base_cost = tech_json.get(tech_id, {}).get("cost", 0)
         if base_cost <= 0:
             continue
-        min_cost = base_cost // 2
+        min_cost = (base_cost + 1) // 2
         if submitted_cost < min_cost:
             display_name = tech_json.get(tech_id, {}).get("display_name", tech_id)
             errors.append(
                 f"'{display_name}' has a minimum cost of {min_cost} "
-                f"(half of its base cost of {base_cost}), but {submitted_cost} was submitted."
+                f"(half of its base cost of {base_cost}, rounded up), but {submitted_cost} was submitted."
             )
     if errors:
-        prefix = "Techs have a minimum cost equal to half their base cost. "
+        prefix = "Techs have a minimum cost equal to half their base cost (rounded up). "
         return False, prefix + " | ".join(errors)
     return True, None
 
