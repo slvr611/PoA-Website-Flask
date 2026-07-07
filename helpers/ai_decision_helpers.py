@@ -851,6 +851,7 @@ def select_strategic_goal(old_nation, state, personality, upkeep_ratio, prices=N
                     cities_data = json_data.get("cities", {})
                     open_city_slots = max(0, city_slots - len(existing_cities))
 
+                    _grow_researched = {k for k, v in old_nation.get("technologies", {}).items() if v.get("researched")}
                     if open_city_slots > 0:
                         can_grow = True
                         grow_avenue = f"{open_city_slots} open city slot(s)"
@@ -864,6 +865,9 @@ def select_strategic_goal(old_nation, state, personality, upkeep_ratio, prices=N
                         if existing_caps:
                             worst_type, worst_cap = min(existing_caps, key=lambda x: x[1])
                             for ct, cdata in cities_data.items():
+                                req_tech = cdata.get("requirements", {}).get("tech")
+                                if req_tech and req_tech not in _grow_researched:
+                                    continue
                                 new_cap = cdata.get("modifiers", {}).get("effective_pop_capacity", 0)
                                 if new_cap > worst_cap:
                                     can_grow = True
@@ -2149,9 +2153,13 @@ def _select_best_city(old_nation, state, exclude_types=None):
     if exclude_types:
         existing_city_types = existing_city_types | exclude_types
     existing_city_types.discard("generic")
+    nation_researched = {k for k, v in old_nation.get("technologies", {}).items() if v.get("researched")}
     city_scores = []
     for ct, cdata in cities_data.items():
         if ct in existing_city_types:
+            continue
+        req_tech = cdata.get("requirements", {}).get("tech")
+        if req_tech and req_tech not in nation_researched:
             continue
         total_cap = _estimate_city_pop_cap(ct, cities_data, old_nation)
         cost = dict(cdata.get("cost", {}))

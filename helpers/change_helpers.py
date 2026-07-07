@@ -7,7 +7,7 @@ from calculations.field_calculations import calculate_all_fields, purge_invalid_
 from copy import deepcopy
 from bson import ObjectId
 
-_NATURAL_KEY_FIELDS = ['name', 'quest_name', 'source', 'modifier_type', 'scope', 'attribute', 'resource_from', 'resource_to', 'field', 'key', 'unit_category', 'unit_stat', 'tier', 'tech_category']
+_NATURAL_KEY_FIELDS = ['name', 'quest_name', 'source', 'modifier_type', 'scope', 'attribute', 'resource_from', 'resource_to', 'field', 'key', 'unit_category', 'unit_stat', 'tier', 'tech_category', 'def_key']
 
 
 def _handle_nation_rename(nation_id, old_name, new_name):
@@ -58,9 +58,11 @@ def _reconcile_item_ids(before_data, after_data):
             if key in before_data:
                 _reconcile_item_ids(before_data[key], after_data[key])
     elif isinstance(before_data, list) and isinstance(after_data, list):
-        if not _all_have_ids(before_data):
-            return
-
+        # Note: deliberately not gated on _all_have_ids(before_data) — a single
+        # id-less item (e.g. an unused district/city slot padding out the list)
+        # would otherwise disable natural-key matching for every other item in
+        # the list. Items without a usable _id or natural key are simply
+        # skipped below rather than blocking the whole list.
         before_ids = {item['_id'] for item in before_data if isinstance(item, dict) and '_id' in item}
 
         # Index before items by natural key for O(1) lookup

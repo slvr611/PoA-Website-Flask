@@ -22,13 +22,16 @@
 		    "enum": ["None", "Airborne", "Abstemious", "Aggressive", "Aquatic", "Arcane", "Charismatic", "Courageous", "Curious", "Docile", "Fecund", "Industrious", "Lucky", "Magical", "Semi-Aquatic", "Sturdy", "Swift", "Undying", "Venerable"],
         "laws": {
           "Airborne": {
-            "nation_mundane_unit_terrain_speed_cost": -1
+            "nation_mundane_unit_terrain_speed_cost": -1,
+            "nation_mountain_trade_move_cost": -1,
+            "nation_hill_trade_move_cost": -1
           },
           "Abstemious": {
             "nation_food_consumption": -7,
             "nation_food_consumption_minimum": 3
           },
           "Aggressive": {
+            "nation_effective_territory": 4
           },
           "Aquatic": {
           },
@@ -57,22 +60,24 @@
             "nation_wonder_cost": -0.1
           },
           "Lucky": {
-            "prevent_negative_rolling_karma": 1
+            "nation_prevent_negative_rolling_karma": 1
           },
           "Magical": {
-            "nation_spell_cost": -1,
-            "nation_spell_cost_minimum": 2
+            "nation_spell_cost": -1
           },
           "Semi-Aquatic": {
             "nation_strength_on_water": 1,
-            "nation_naval_unit_speed": 1
+            "nation_naval_unit_speed": 1,
+            "nation_deep_water_trade_move_cost": -1
           },
           "Sturdy": {
             "nation_defense": 1,
-            "nation_armor_cannot_be_ignored": 1
+            "nation_armor_cannot_be_ignored": 1,
+            "character_mortal_ignore_health_state_death_chance": 1
           },
           "Swift": {
-            "nation_unit_speed": 1
+            "nation_unit_speed": 1,
+            "nation_diplomatic_range": 4
           },
           "Undying": {
             "character_elderly_age": 3,
@@ -112,7 +117,7 @@
             "nation_research_production": -1
           },
           "Ethereal": {
-            "locks_mundane_units": 1,
+            "nation_locks_mundane_units": 1,
             "character_immortal": 1,
             "nation_food_to_magic_consumption_conversion": 0.5,
             "nation_territory_max_magic_node_distance": 1
@@ -128,7 +133,7 @@
           "Hydrophobic": {
             "nation_land_strength_on_water": -3,
             "nation_naval_strength": -2,
-            "nation_locks_fisherman": 1
+            "nation_no_water_routes": 1
           },
           "Infertile": {},
           "Insatiable": {
@@ -149,7 +154,7 @@
             "nation_unit_speed_minimum": 2
           },
           "Unlucky": {
-            "prevent_positive_rolling_karma": 1
+            "nation_prevent_positive_rolling_karma": 1
           }
         }
       },

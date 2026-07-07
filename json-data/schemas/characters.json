@@ -35,6 +35,9 @@
           "stat_gain_chance",
           "immortal_stat_gain_chance",
           "elderly_age"
+        ],
+        "fields": [
+          {"wonders": ["external_modifiers"]}
         ]
       }
     },
@@ -336,15 +339,15 @@
         "laws": {
           "Healthy": {},
           "Injured": {
-            "death_chance": 0.05,
+            "health_state_death_chance": 0.05,
             "stats": -1
           },
           "Maimed": {
-            "death_chance": 0.1,
+            "health_state_death_chance": 0.1,
             "stats": -2
           },
           "Bedridden": {
-            "death_chance": 0.15,
+            "health_state_death_chance": 0.15,
             "stats": -3
           },
           "Dead": {

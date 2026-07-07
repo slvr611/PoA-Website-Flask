@@ -20,12 +20,11 @@
         "enum": ["Commodity", "Illicit", "Hub", "Luxury", "Maritime", "Militant"],
         "laws": {
           "Commodity": {
-            "member_stability_gain_chance_per_market_tier": 0.05
+            "member_nation_stability_gain_chance_per_market_tier": 0.05
           },
           "Illicit": {
             "trade_risk": 0.15,
-            "member_money_income_per_bandit_camp": 50
-            
+            "member_nation_money_income_per_bandit_camp": 50
           },
           "Hub": {
             "resource_storage_capacity": 5,
@@ -153,6 +152,12 @@
         "label": "Resource Storage Capacity",
         "description": "The resource storage capacity of the market",
         "calculated": true,
+        "hidden": true
+      },
+      "market_luxury_resource": {
+        "bsonType": "string",
+        "label": "Luxury Resource",
+        "description": "The luxury resource this Luxury market generates each session. Auto-assigned on first tick if empty.",
         "hidden": true
       },
       "minimum_trade_risk": {

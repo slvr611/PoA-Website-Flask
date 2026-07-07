@@ -997,6 +997,56 @@ class TestAllHaveIds:
         assert ch._all_have_ids([{"_id": "x"}, "scalar"]) is False
 
 
+class TestReconcileItemIds:
+    """helpers.change_helpers._reconcile_item_ids
+
+    Districts on a nation carry no 'name' field (unlike cities), so def_key is
+    their only usable natural key. hex_map_tiles reference a district by this
+    stable _id (tile.district.id) — if a resubmitted district loses its _id and
+    can't be matched back, the tile's link to it is silently orphaned.
+    """
+
+    def test_matches_district_by_def_key_when_id_missing(self):
+        before = {"districts": [
+            {"_id": "abc12345", "def_key": "farm", "node": "n1", "upgrades": []},
+            {"_id": "def67890", "def_key": "mine", "node": "n2", "upgrades": []},
+        ]}
+        after = {"districts": [
+            {"def_key": "farm", "node": "n1", "upgrades": ["irrigation"]},
+            {"_id": "def67890", "def_key": "mine", "node": "n2", "upgrades": []},
+        ]}
+        ch._reconcile_item_ids(before, after)
+        assert after["districts"][0]["_id"] == "abc12345"
+        assert after["districts"][1]["_id"] == "def67890"
+
+    def test_blank_placeholder_slot_without_id_does_not_block_reconciliation(self):
+        # A padding slot (unused district_slots capacity) with no _id used to
+        # make _all_have_ids(before) False for the *entire* list, skipping
+        # reconciliation for every real district too.
+        before = {"districts": [
+            {"_id": "abc12345", "def_key": "farm", "node": "n1"},
+            {"def_key": "", "node": ""},
+        ]}
+        after = {"districts": [
+            {"def_key": "farm", "node": "n1"},
+            {"def_key": "", "node": ""},
+        ]}
+        ch._reconcile_item_ids(before, after)
+        assert after["districts"][0]["_id"] == "abc12345"
+
+    def test_does_not_reassign_an_already_valid_id(self):
+        before = {"districts": [{"_id": "abc12345", "def_key": "farm"}]}
+        after = {"districts": [{"_id": "abc12345", "def_key": "farm"}]}
+        ch._reconcile_item_ids(before, after)
+        assert after["districts"][0]["_id"] == "abc12345"
+
+    def test_city_still_matches_by_name(self):
+        before = {"cities": [{"_id": "c1", "name": "Testopolis", "type": "town"}]}
+        after = {"cities": [{"name": "Testopolis", "type": "city"}]}
+        ch._reconcile_item_ids(before, after)
+        assert after["cities"][0]["_id"] == "c1"
+
+
 class TestKeepOnlyDifferencesListIdBased:
     """keep_only_differences_list uses ID-based matching when all items have _id."""
 

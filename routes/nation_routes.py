@@ -443,7 +443,7 @@ def _render_nation_edit(item_ref, form=None):
         form.concessions.data = json.dumps(nation.get("concessions", {}))
     _r4 = perf_counter()
 
-    form.populate_linked_fields(schema, dropdown_options)
+    form.populate_linked_fields(schema, dropdown_options, nation=nation)
     _r5 = perf_counter()
 
     def _opts(collection):

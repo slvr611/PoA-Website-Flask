@@ -617,5 +617,60 @@
         "field_template": "defensive_visibility",
         "is_visibility_modifier": true,
         "applicable_to": ["nation"]
+    },
+    "ignore_non_research_nodes": {
+        "name": "Ignore Non-Research Nodes",
+        "description": "When set, node production is disabled for all resource types except research nodes.",
+        "value_format": "number",
+        "field_template": "ignore_non_research_nodes",
+        "applicable_to": ["nation"]
+    },
+    "ignore_resource_nodes": {
+        "name": "Ignore Resource Nodes",
+        "description": "Node production for the selected resource type is completely ignored.",
+        "value_format": "number",
+        "field_template": "ignore_{resource}_nodes",
+        "extra_fields": [
+            {"key": "resource", "label": "Resource", "source": "all_resources"}
+        ],
+        "applicable_to": ["nation"]
+    },
+    "terrain_trade_move_cost": {
+        "name": "Terrain Trade Move Cost",
+        "description": "Adds to the movement cost of a terrain when calculating trade distance. Use negative values to reduce cost (minimum cost is always 1).",
+        "value_format": "number",
+        "field_template": "{terrain}_trade_move_cost",
+        "extra_fields": [
+            {"key": "terrain", "label": "Terrain", "source": "terrains"}
+        ],
+        "applicable_to": ["nation"]
+    },
+    "ignore_negative_event_karma": {
+        "name": "Ignore Negative Event Karma",
+        "description": "When set, bad events do not increase the nation's rolling karma.",
+        "value_format": "number",
+        "field_template": "ignore_negative_event_karma",
+        "applicable_to": ["nation"]
+    },
+    "ignore_positive_event_karma": {
+        "name": "Ignore Positive Event Karma",
+        "description": "When set, good events do not decrease the nation's rolling karma.",
+        "value_format": "number",
+        "field_template": "ignore_positive_event_karma",
+        "applicable_to": ["nation"]
+    },
+    "mortal_ignore_health_state_death_chance": {
+        "name": "Mortal Ignore Health State Death Chance",
+        "description": "When set on a mortal character, Injured, Maimed, and Bedridden health states do not increase the character's death chance.",
+        "value_format": "number",
+        "field_template": "mortal_ignore_health_state_death_chance",
+        "applicable_to": ["character"]
+    },
+    "no_water_routes": {
+        "name": "No Water Routes",
+        "description": "The nation cannot build routes on water terrain tiles (shallow water, deep water, hazardous water).",
+        "value_format": "number",
+        "field_template": "no_water_routes",
+        "applicable_to": ["nation"]
     }
 }

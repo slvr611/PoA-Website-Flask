@@ -4,7 +4,7 @@ from bson import ObjectId
 from helpers.data_helpers import get_data_on_category
 from helpers.ai_decision_helpers import ai_decision_tick, ai_market_matching_tick, market_price_tick
 from helpers.trade_route_helpers import run_trade_route_lifecycle, _current_session as _tr_current_session
-from calculations.field_calculations import calculate_all_fields
+from calculations.field_calculations import calculate_all_fields, collect_laws, sum_law_totals
 from pymongo import ASCENDING
 from helpers.change_helpers import system_request_change, system_approve_change
 from helpers.archive_helpers import archive_old_changes
@@ -954,6 +954,25 @@ def market_income_tick(old_market, new_market, schema):
         new_market["resource_storage"][resource] = min(new_market["resource_storage"][resource], old_market.get("market_resource_capacity", {}).get(resource, 0))
         new_market["resource_storage"][resource] = max(new_market["resource_storage"][resource], 0)
         new_market["resource_storage"][resource] = int(new_market["resource_storage"][resource])
+
+    # Luxury market: generate and store a random luxury resource each session
+    from calculations.field_calculations import collect_laws, sum_law_totals
+    law_totals = sum_law_totals(collect_laws(old_market, schema))
+    gen_per_tier = law_totals.get("generate_luxury_resources_per_market_tier", 0)
+    if gen_per_tier > 0:
+        tier_mult = int(law_totals.get("market_tier_multiplier", 1))
+        luxury_key = old_market.get("market_luxury_resource", "")
+        if not luxury_key:
+            luxury_resources = json_data.get("luxury_resources", [])
+            if luxury_resources:
+                luxury_key = random.choice(luxury_resources)["key"]
+                new_market["market_luxury_resource"] = luxury_key
+        if luxury_key:
+            gen_amount = int(gen_per_tier * tier_mult)
+            capacity = old_market.get("market_resource_capacity", {}).get(luxury_key) or tier_mult
+            current = old_market.get("resource_storage", {}).get(luxury_key, 0)
+            new_market["resource_storage"][luxury_key] = min(current + gen_amount, capacity)
+
     return ""
 
 ###########################################################
@@ -1070,10 +1089,17 @@ def nation_tech_tick(old_nation, new_nation, schema):
 
 def update_rolling_karma(old_nation, new_nation, schema):
     event_type = old_nation.get("event_type", "Unknown")
+
+    law_totals = sum_law_totals(collect_laws(old_nation, schema))
+    ignore_negative = law_totals.get("ignore_negative_event_karma", 0) >= 1
+    ignore_positive = law_totals.get("ignore_positive_event_karma", 0) >= 1
+
     if event_type in ["Horrendous", "Abysmal", "Very Bad", "Bad"]:
-        new_nation["rolling_karma"] = int(old_nation.get("rolling_karma", 0)) + 1
+        if not ignore_negative:
+            new_nation["rolling_karma"] = int(old_nation.get("rolling_karma", 0)) + 1
     elif event_type in ["Good", "Very Good", "Fantastic", "Wonderous"]:
-        new_nation["rolling_karma"] = int(old_nation.get("rolling_karma", 0)) - 1
+        if not ignore_positive:
+            new_nation["rolling_karma"] = int(old_nation.get("rolling_karma", 0)) - 1
 
     return ""
 
@@ -1175,13 +1201,22 @@ def nation_concessions_tick(old_nation, new_nation, schema):
         new_nation["concessions"] = {}
         compliance_enum = schema["properties"]["compliance"]["enum"]
         compliance_index = compliance_enum.index(old_nation["compliance"])
-        new_nation["compliance"] = compliance_enum[compliance_index - 1]
-        result += f"{old_nation.get('name', 'Unknown')} has had their compliance reduced from {old_nation.get('compliance', 'Unknown')} to {new_nation.get('compliance', 'Unknown')} due to concessions not being paid.\n"
+        if compliance_index <= 1:
+            if random.random() <= 0.5:
+                result += f"{old_nation.get('name', 'Unknown')} has immediately rebelled against their overlord!\n"
+        else:
+            new_nation["compliance"] = compliance_enum[compliance_index - 1]
+            result += (
+                f"{old_nation.get('name', 'Unknown')} has had their compliance reduced"
+                f" from {old_nation.get('compliance', 'Unknown')} to {new_nation.get('compliance', 'Unknown')}"
+                f" due to concessions not being paid.\n"
+            )
 
-    if old_nation.get("concessions_roll", 1) < old_nation.get("concessions_chance_at_tick", 0):
-        new_nation["concessions_roll"] = 1
-        new_nation["concessions_chance_at_tick"] = 0
-        return result
+    if old_nation.get("compliance", "None") in ("Loyal", "Compliant"):
+        if old_nation.get("concessions_roll", 1) < old_nation.get("concessions_chance_at_tick", 0):
+            new_nation["concessions_roll"] = 1
+            new_nation["concessions_chance_at_tick"] = 0
+            return result
 
     concessions_roll = random.random()
     new_nation["concessions_roll"] = concessions_roll
@@ -1218,6 +1253,20 @@ def nation_rebellion_tick(old_nation, new_nation, schema):
     new_nation["rebellion_chance_at_tick"] = old_nation.get("rebellion_chance", 0)
     if rebellion_roll <= old_nation.get("rebellion_chance", 0):
         result += f"{old_nation.get('name', 'Unknown')} has rebelled against their overlord.\n"
+        overlord_id = old_nation.get("overlord", "")
+        if overlord_id:
+            try:
+                join_chances = {"Defiant": 0.25, "Rebellious": 0.75}
+                other_vassals = list(mongo.db.nations.find(
+                    {"overlord": overlord_id, "_id": {"$ne": old_nation.get("_id")}},
+                    {"name": 1, "compliance": 1}
+                ))
+                for vassal in other_vassals:
+                    join_chance = join_chances.get(vassal.get("compliance", ""), 0)
+                    if join_chance > 0 and random.random() <= join_chance:
+                        result += f"{vassal.get('name', 'Unknown')} has joined the rebellion against their overlord.\n"
+            except Exception:
+                pass
 
     return result
 
@@ -1242,7 +1291,7 @@ def nation_enclave_compliance_tick(old_nation, new_nation, schema):
     if not old_nation.get("overlord") or old_nation.get("vassal_type") != "Enclave":
         return ""
     compliance = old_nation.get("compliance", "None")
-    if compliance == "None" or compliance == "Rebellious":
+    if compliance == "None":
         return ""
     try:
         overlord = mongo.db.nations.find_one(
@@ -1258,7 +1307,14 @@ def nation_enclave_compliance_tick(old_nation, new_nation, schema):
         return ""
     compliance_enum = schema["properties"]["compliance"]["enum"]
     idx = compliance_enum.index(compliance)
-    new_compliance = compliance_enum[max(1, idx - 1)]
+    if idx <= 1:
+        if random.random() <= 0.5:
+            return (
+                f"{old_nation.get('name', 'Unknown')} has immediately rebelled against their overlord"
+                f" due to religious differences!\n"
+            )
+        return ""
+    new_compliance = compliance_enum[idx - 1]
     new_nation["compliance"] = new_compliance
     return (
         f"{old_nation.get('name', 'Unknown')}'s compliance fell from {compliance} to {new_compliance}"

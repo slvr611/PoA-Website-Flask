@@ -454,13 +454,30 @@ def compute_money_income(field, target, base_value, field_schema, overall_total_
             net = get_trade_route_resource_net(nation_name, routes)
             value += net.get("money", 0)
 
+    money_per_bandit_camp = overall_total_modifiers.get("money_income_per_bandit_camp", 0)
+    if money_per_bandit_camp:
+        nation_id_str = str(target.get("_id", ""))
+        if nation_id_str:
+            from app_core import mongo as _mongo
+            market_ids = [
+                lnk["market"] for lnk in
+                _mongo.db.market_links.find({"member": nation_id_str}, {"market": 1})
+                if lnk.get("market")
+            ]
+            if market_ids:
+                bandit_count = _mongo.db.hex_map_tiles.count_documents(
+                    {"bandit_camp.market": {"$in": market_ids}}
+                )
+                value += int(money_per_bandit_camp * bandit_count)
+
     return int(value)
     
 def compute_resource_production(field, target, base_value, field_schema, overall_total_modifiers):
     production_dict = {}
 
     production_of_available_nodes = overall_total_modifiers.get("production_of_available_nodes", 0)  #TODO:  Figure out how to calculate which nodes the nation has for this modifier
-    ignore_nodes = target.get("ignore_nodes", 0)
+    ignore_nodes = overall_total_modifiers.get("ignore_nodes", 0)
+    ignore_non_research_nodes = overall_total_modifiers.get("ignore_non_research_nodes", 0)
     resource_node_value = overall_total_modifiers.get("resource_node_value", 0)
     naval_unit_count = 0
     if "naval_unit_count" in target:
@@ -475,7 +492,12 @@ def compute_resource_production(field, target, base_value, field_schema, overall
         for modifier in modifiers_to_check:
             specific_resource_production += overall_total_modifiers.get(modifier, 0)
 
-        if ignore_nodes < 1:
+        skip_nodes = (
+            ignore_nodes >= 1
+            or (ignore_non_research_nodes >= 1 and resource["key"] != "research")
+            or overall_total_modifiers.get("ignore_" + resource["key"] + "_nodes", 0) >= 1
+        )
+        if not skip_nodes:
             resource_nodes = overall_total_modifiers.get(resource["key"] + "_nodes", 0)
             specific_resource_production += resource_nodes * (2 + specific_resource_node_value)
         
@@ -605,16 +627,57 @@ def compute_nation_resource_storage_capacity(field, target, base_value, field_sc
 
 def compute_market_resource_storage_capacity(field, target, base_value, field_schema, overall_total_modifiers):
     storage_dict = {}
-    
+
     all_resources = json_data["general_resources"] + json_data["unique_resources"]
-    
+
     for resource in all_resources:
         specific_resource_storage = 0
         specific_resource_storage += overall_total_modifiers.get(resource["key"] + "_storage_capacity", 0)
         specific_resource_storage += overall_total_modifiers.get("resource_storage_capacity", 0)
         storage_dict[resource["key"]] = int(specific_resource_storage)
-    
+
+    luxury_key = target.get("market_luxury_resource", "")
+    tier_mult = int(overall_total_modifiers.get("market_tier_multiplier", 0))
+    if luxury_key and tier_mult > 0:
+        storage_dict[luxury_key] = tier_mult
+
     return storage_dict
+
+def compute_trade_risk(field, target, base_value, field_schema, overall_total_modifiers):
+    value = base_value + overall_total_modifiers.get("trade_risk", 0)
+
+    per_naval  = overall_total_modifiers.get("trade_risk_per_owner_naval_unit", 0)
+    per_land   = overall_total_modifiers.get("trade_risk_per_owner_land_unit",  0)
+    per_luxury = overall_total_modifiers.get("trade_risk_per_owner_luxury",     0)
+
+    if per_naval or per_land or per_luxury:
+        tier_mult = max(1, int(overall_total_modifiers.get("market_tier_multiplier", 1)))
+        head_id = target.get("market_head", "")
+        if head_id:
+            from app_core import mongo as _mongo
+            try:
+                head = _mongo.db.nations.find_one(
+                    {"_id": ObjectId(head_id)},
+                    {"naval_unit_count": 1, "land_unit_count": 1, "resource_storage": 1},
+                )
+                if head:
+                    if per_naval:
+                        value += per_naval * tier_mult * head.get("naval_unit_count", 0)
+                    if per_land:
+                        value += per_land * tier_mult * head.get("land_unit_count", 0)
+                    if per_luxury:
+                        luxury_keys = {r["key"] for r in json_data.get("luxury_resources", [])}
+                        storage = head.get("resource_storage", {})
+                        luxury_count = sum(
+                            v for k, v in storage.items()
+                            if k in luxury_keys and isinstance(v, (int, float)) and v > 0
+                        )
+                        value += per_luxury * luxury_count
+            except Exception:
+                pass
+
+    return value
+
 
 def compute_import_slots(field, target, base_value, field_schema, overall_total_modifiers):
     administration = target.get("administration", 0)
@@ -842,7 +905,11 @@ def compute_death_chance(field, target, base_value, field_schema, overall_total_
 
     value += overall_total_modifiers.get(field, 0)
 
-    value *= overall_total_modifiers.get("death_chance_multiplier", 1)
+    is_mortal = not overall_total_modifiers.get("immortal", 0)
+    if not (overall_total_modifiers.get("mortal_ignore_health_state_death_chance", 0) and is_mortal):
+        value += overall_total_modifiers.get("health_state_death_chance", 0)
+
+    value *= 1 + overall_total_modifiers.get("death_chance_multiplier", 0)
 
     minimum_death_chance = overall_total_modifiers.get("minimum_death_chance", 0)
 
@@ -1089,4 +1156,5 @@ CUSTOM_COMPUTE_FUNCTIONS = {
     "era_resource_stockpile_kept": compute_era_resource_stockpile_kept,
     "diplomatic_range": lambda field, target, base_value, field_schema, otm:
         int(5 * target.get("administration", 0) + 2 * target.get("trade_speed", 0) + otm.get(field, 0)),
+    "trade_risk": compute_trade_risk,
 }

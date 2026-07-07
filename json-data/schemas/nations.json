@@ -1040,11 +1040,11 @@
           },
           "Ceremonial": {},
           "Creation": {
-            "magic_node_value": -2
+            "ignore_magic_nodes": 1
           },
           "Destruction": {},
           "Manifest": {
-            "magic_node_value": -2,
+            "ignore_magic_nodes": 1,
             "_modifiers": [
               { "modifier_type": "karma", "value": 2, "scope": "nation_self", "scaling": "per_x_resource_nodes", "scaling_x": 1, "scaling_extra": "magic", "max_value": 8}
             ]
@@ -1349,7 +1349,7 @@
             "research_production": 8,
             "stability_loss_chance_per_pop": 0.05,
             "karma": -4,
-            "ignore_nodes": 1
+            "ignore_non_research_nodes": 1
           }
         }
       },

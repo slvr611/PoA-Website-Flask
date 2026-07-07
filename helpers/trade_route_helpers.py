@@ -16,6 +16,27 @@ def _terrain_move_costs():
     return out
 
 
+def _nation_move_costs(nation_doc):
+    """Return move_costs adjusted by a nation's terrain_trade_move_cost modifiers.
+
+    Reads {terrain}_trade_move_cost keys from the nation's overall_total_modifiers
+    and adds them to the base terrain costs. Impassable terrains are never made
+    passable, and passable terrain costs are floored at 1.
+    """
+    base = _terrain_move_costs()
+    if not nation_doc:
+        return base
+    otm = nation_doc.get("overall_total_modifiers") or {}
+    if not otm:
+        return base
+    adjusted = dict(base)
+    for terrain_key, base_cost in list(base.items()):
+        delta = otm.get(f"{terrain_key}_trade_move_cost", 0)
+        if delta and base_cost < _TERRAIN_IMPASSABLE:
+            adjusted[terrain_key] = max(1, base_cost + delta)
+    return adjusted
+
+
 # ---------------------------------------------------------------------------
 # Road-path Dijkstra (city-to-city, terrain-weighted)
 # ---------------------------------------------------------------------------
@@ -182,9 +203,10 @@ def get_road_path_distance(nation_a_name, nation_b_name):
     if nation_a_name == nation_b_name:
         return 0, True
 
+    nation_a_doc     = mongo.db.nations.find_one({"name": nation_a_name}, {"overall_total_modifiers": 1})
     tiles_raw        = _load_trade_tiles([nation_a_name, nation_b_name])
     portal_map       = _build_portal_map()
-    move_costs       = _terrain_move_costs()
+    move_costs       = _nation_move_costs(nation_a_doc)
     trade_wonder_ids = _get_trade_source_wonder_ids()
 
     reached = _dijkstra_from_cities(
@@ -201,7 +223,7 @@ def get_all_trade_distances(nation_name):
     Returns {other_nation_name: {cost, delay, connectable}} using the
     nation's trade_speed for delay computation.
     """
-    source = mongo.db.nations.find_one({"name": nation_name}, {"trade_speed": 1})
+    source = mongo.db.nations.find_one({"name": nation_name}, {"trade_speed": 1, "overall_total_modifiers": 1})
     if not source:
         return {}
     src_speed = source.get("trade_speed") or 7
@@ -216,7 +238,7 @@ def get_all_trade_distances(nation_name):
     target_names     = [n["name"] for n in all_nations]
     tiles_raw        = _load_trade_tiles([nation_name] + target_names)
     portal_map       = _build_portal_map()
-    move_costs       = _terrain_move_costs()
+    move_costs       = _nation_move_costs(source)
     trade_wonder_ids = _get_trade_source_wonder_ids()
 
     reached = _dijkstra_from_cities(
@@ -492,6 +514,8 @@ def get_connectable_nations(nation_name, nation_trade_speed):
     """Return list of nation dicts reachable by terrain-weighted Dijkstra from
     nation_name's cities, respecting road tile costs and portal jumps.
     """
+    nation_doc = mongo.db.nations.find_one({"name": nation_name}, {"overall_total_modifiers": 1})
+
     candidate_nations = list(mongo.db.nations.find(
         {"name": {"$ne": nation_name}},
         {"name": 1, "trade_speed": 1, "_id": 0},
@@ -502,7 +526,7 @@ def get_connectable_nations(nation_name, nation_trade_speed):
     target_names     = [n["name"] for n in candidate_nations]
     tiles_raw        = _load_trade_tiles([nation_name] + target_names)
     portal_map       = _build_portal_map()
-    move_costs       = _terrain_move_costs()
+    move_costs       = _nation_move_costs(nation_doc)
     trade_wonder_ids = _get_trade_source_wonder_ids()
 
     reached = _dijkstra_from_cities(

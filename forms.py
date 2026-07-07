@@ -1380,7 +1380,7 @@ class NationForm(BaseSchemaForm):
         
         return form
     
-    def populate_linked_fields(self, schema, dropdown_options):
+    def populate_linked_fields(self, schema, dropdown_options, nation=None):
         """Populates all linked fields with their options"""
         from time import perf_counter as _pc
         from flask import current_app as _app
@@ -1418,9 +1418,15 @@ class NationForm(BaseSchemaForm):
         self.imperial_district.form.populate_linked_fields(type_options=imperial_district_choices)
         _t4 = _pc()
 
+        nation_researched = set()
+        if nation:
+            nation_researched = {k for k, v in nation.get("technologies", {}).items() if v.get("researched")}
         city_choices = [("", "Empty Slot")]
         cities = json_data.get("cities", {})
         for city_key, city_data in cities.items():
+            req_tech = city_data.get("requirements", {}).get("tech")
+            if req_tech and req_tech not in nation_researched:
+                continue
             city_choices.append((city_key, city_data["display_name"]))
         wall_choices = [("", "No Walls")]
         walls = json_data.get("walls", {})

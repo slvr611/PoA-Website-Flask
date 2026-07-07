@@ -3,7 +3,7 @@
 		"display_name": "Generic City",
 		"cost": {
 			"wood": 10,
-			"stone": 8,
+			"stone": 6,
 			"food": 6
 		},
 		"modifiers": {
@@ -13,6 +13,9 @@
 	},
 	"agropolis": {
 		"display_name": "Agropolis",
+		"requirements": {
+			"tech": "agricultural_estates"
+		},
 		"cost": {
 			"wood": 15,
 			"food": 10,
@@ -32,6 +35,9 @@
 	},
 	"citadel": {
 		"display_name": "Citadel",
+		"requirements": {
+			"tech": "strongholds"
+		},
 		"cost": {
 			"stone": 15,
 			"wood": 5,
@@ -64,7 +70,7 @@
 		"_modifiers": [
 			{ "modifier_type": "effective_pop_capacity", "value": 1, "scope": "nation_self", "condition_scaling": "per_x_money_income", "condition_operator": ">=", "condition_value": 400 },
 			{ "modifier_type": "effective_pop_capacity", "value": 1, "scope": "nation_self", "condition_scaling": "per_x_money_income", "condition_operator": ">=", "condition_value": 1200 },
-			{ "modifier_type": "effective_pop_capacity", "value": 1, "scope": "nation_self", "condition_scaling": "per_x_money_income", "condition_operator": ">=", "condition_value": 3000 }
+			{ "modifier_type": "effective_pop_capacity", "value": 1, "scope": "nation_self", "condition_scaling": "per_x_money_income", "condition_operator": ">=", "condition_value": 2800 }
 		]
 	},
 	"heritage": {
@@ -91,7 +97,7 @@
 			"wood": 14,
 			"stone": 10,
 			"food": 8,
-			"bronze": 4
+			"iron": 3
 		},
 		"modifiers": {
 			"wood_consumption": 1,
@@ -101,6 +107,9 @@
 	},
 	"sanctuary": {
 		"display_name": "Sanctuary",
+		"requirements": {
+			"tech": "mortar_masonry"
+		},
 		"cost": {
 			"food": 14,
 			"wood": 12,

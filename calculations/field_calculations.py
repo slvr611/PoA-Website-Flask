@@ -1614,7 +1614,7 @@ def _apply_special_mod_multipliers(stripped_key, val, obj, linked_schema):
             schema_props.get("tier", {})
             .get("laws", {})
             .get(obj.get("tier", "I"), {})
-            .get("tier_multiplier", 1)
+            .get("market_tier_multiplier", 1)
         )
         if tier_mult > 0:
             final_val = val * tier_mult
@@ -1627,7 +1627,7 @@ def _apply_special_mod_multipliers(stripped_key, val, obj, linked_schema):
                     .get("tier", {})
                     .get("laws", {})
                     .get(mkt.get("tier", "I"), {})
-                    .get("tier_multiplier", 1)
+                    .get("market_tier_multiplier", 1)
                 )
                 final_val = val * tier_mult
         final_key = final_key.replace("_per_market_tier", "")
@@ -3226,13 +3226,13 @@ def collect_external_modifiers_from_object(object, required_fields, linked_objec
                             found_modifier = True
                         if found_modifier:
                             if "_per_market_tier" in modifier:
-                                if linked_object_schema.get("properties", {}).get("tier", {}).get("laws", {}).get(object.get("tier", "I"), {}).get("tier_multiplier", 1) > 0:
-                                    value *= linked_object_schema.get("properties", {}).get("tier", {}).get("laws", {}).get(object.get("tier", "I"), {}).get("tier_multiplier", 1)
+                                if linked_object_schema.get("properties", {}).get("tier", {}).get("laws", {}).get(object.get("tier", "I"), {}).get("market_tier_multiplier", 1) > 0:
+                                    value *= linked_object_schema.get("properties", {}).get("tier", {}).get("laws", {}).get(object.get("tier", "I"), {}).get("market_tier_multiplier", 1)
                                     modifier = modifier.replace("_per_market_tier", "")
                                 elif "market" in linked_object_schema.get("properties", {}):
                                     market = mongo.db["markets"].find_one({"_id": ObjectId(object["market"])})
                                     if market:
-                                        value *= category_data["markets"]["schema"]["properties"].get("tier", {}).get("laws", {}).get(market.get("tier", "I"), {}).get("tier_multiplier", 1)
+                                        value *= category_data["markets"]["schema"]["properties"].get("tier", {}).get("laws", {}).get(market.get("tier", "I"), {}).get("market_tier_multiplier", 1)
                                         modifier = modifier.replace("_per_market_tier", "")
                             if "_per_member" in modifier:
                                 member_count = mongo.db["market_links"].count_documents({"market": str(object["_id"])})

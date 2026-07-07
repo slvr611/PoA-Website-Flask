@@ -446,6 +446,20 @@ def _resync_nation_routes(nation_name):
     mongo.db.nations.update_one({"name": nation_name}, {"$set": {"road_usage": count}})
 
 
+def _is_water_terrain(terrain_key):
+    """Return True if the terrain is a water-only tile (naval-accessible but not land-traversable)."""
+    data = json_data.get("terrains", {}).get(terrain_key, {})
+    return bool(data.get("naval_speed_cost") and not data.get("speed_cost"))
+
+
+def _nation_blocks_water_routes(nation_name):
+    """Return True if the named nation has the no_water_routes modifier active."""
+    if not nation_name:
+        return False
+    nation = mongo.db.nations.find_one({"name": nation_name}, {"overall_total_modifiers": 1})
+    return bool((nation or {}).get("overall_total_modifiers", {}).get("no_water_routes", 0))
+
+
 def _sync_wonder(wonder_ref, owner_name, node_resource):
     """Update a wonder's owner_nation (string _id) and node from tile data."""
     if not isinstance(wonder_ref, dict) or not wonder_ref.get("id"):
@@ -486,6 +500,9 @@ def update_hex_map_tile(q, r):
         ) or {}).get("terrain", "")
         if tile_terrain in _ROUTE_BLOCKED.get(route_tier, set()):
             return jsonify({"error": f"Tier {route_tier} routes cannot be built on {tile_terrain} terrain."}), 422
+        route_owner = update["route"].get("owner", "")
+        if _is_water_terrain(tile_terrain) and _nation_blocks_water_routes(route_owner):
+            return jsonify({"error": f"{route_owner} cannot build routes on water terrain."}), 422
 
     # Enforce territory restrictions before saving
     if "owner" in update and update["owner"]:
@@ -1017,6 +1034,7 @@ def save_hex_map_edits():
     after_tiles = {}
     affected_nations = set()
     affected_route_owners = set()
+    errors = []
 
     for coord_key, tile_entry in tiles.items():
         # tile_entry may be {before, after} (new format) or a plain tile dict (legacy).
@@ -1042,6 +1060,14 @@ def save_hex_map_edits():
         existing = mongo.db.hex_map_tiles.find_one(
             {"q": {"$in": [q, float(q)]}, "r": {"$in": [r, float(r)]}}
         ) or {}
+
+        # Enforce no_water_routes restriction
+        if "route" in update and update["route"]:
+            tile_terrain = update.get("terrain") or existing.get("terrain", "")
+            route_owner = (update["route"] or {}).get("owner", "")
+            if _is_water_terrain(tile_terrain) and _nation_blocks_water_routes(route_owner):
+                errors.append(f"{coord_key}: {route_owner} cannot build routes on water terrain.")
+                continue
 
         # Capture before state from DB (authoritative) or client fallback.
         before_tiles[coord_key] = {
@@ -1107,7 +1133,10 @@ def save_hex_map_edits():
     result = mongo.db.changes.insert_one(change_doc)
     if after_tiles:
         bump_tile_version()
-    return jsonify({"ok": True, "saved": len(after_tiles), "change_id": str(result.inserted_id)})
+    response = {"ok": True, "saved": len(after_tiles), "change_id": str(result.inserted_id)}
+    if errors:
+        response["errors"] = errors
+    return jsonify(response)
 
 
 # ---------------------------------------------------------------------------

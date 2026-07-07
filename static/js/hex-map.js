@@ -808,7 +808,6 @@ class HexMapViewer {
         }
 
         const inner      = this.hexSize - 1;
-        const showIcons  = this.zoom >= 0.25;
         // Skip hex outlines when they'd be < 1 screen pixel — invisible and wastes time.
         const drawLines  = inner * this.zoom >= 1.0;
 
@@ -1054,8 +1053,8 @@ class HexMapViewer {
             }
         }
 
-        // ── Buildings / capitals (only rendered when zoomed in enough) ───────
-        if (showIcons && this.layers.buildings) {
+        // ── Buildings / capitals (rendered at all zoom levels — just get smaller) ──
+        if (this.layers.buildings) {
             for (let i = 0; i < allX.length; i++) {
                 const tile = allTile[i];
                 if (tile) this._drawBuildings(ctx, allX[i], allY[i], tile);
@@ -1112,7 +1111,7 @@ class HexMapViewer {
         p.frameMs       = _t6 - _t0;
         p.cellCount     = allX.length;
         p.drawLines     = drawLines;
-        p.showIcons     = showIcons;
+        p.showIcons     = this.layers.buildings;
         p.terrainBuckets = Object.keys(terrainBuckets).length;
         p.nationBuckets  = Object.keys(nationBuckets).length;
         p.sections = { setup: _t1 - _t0, cells: _t2 - _t1, terrain: _t3 - _t2,
@@ -1226,17 +1225,18 @@ class HexMapViewer {
 
     _drawBuildings(ctx, cx, cy, tile) {
         const s       = this.hexSize;
-        const szCity  = Math.max(10, s * 1.5);  // city
-        const szWond  = Math.max(10, s * 1.5);  // wonder
-        const szDist  = Math.max(10, s * 1.5);  // district
+        // Scale with hex size but guarantee a minimum screen footprint at any zoom level.
+        const szCity  = Math.max(10 / this.zoom, s * 1.5);  // city
+        const szWond  = Math.max(10 / this.zoom, s * 1.5);  // wonder
+        const szDist  = Math.max(10 / this.zoom, s * 1.5);  // district
         ctx.shadowColor = 'rgba(0,0,0,0.85)';
-        ctx.shadowBlur  = 3;
+        ctx.shadowBlur  = 3 / this.zoom;
 
         const _drawImg = (img, fallbackChar, sz) => {
             if (img) {
                 ctx.drawImage(img, cx - sz / 2, cy - sz / 2, sz, sz);
             } else {
-                const fSz = Math.max(7, s * 0.32);
+                const fSz = Math.max(7 / this.zoom, s * 0.32);
                 ctx.font         = `${fSz}px sans-serif`;
                 ctx.textAlign    = 'center';
                 ctx.textBaseline = 'middle';
@@ -1250,15 +1250,15 @@ class HexMapViewer {
         if (tile.capital) this._drawCapital(ctx, cx, cy, tile);
         if (tile.wonder)   _drawImg(this._wonderDefaultImage, '✦', szWond);
         if (tile.bandit_camp) {
-            const bcSz = Math.max(10, s * 1.5);
+            const bcSz = Math.max(10 / this.zoom, s * 1.5);
             ctx.fillStyle = '#000000';
             ctx.beginPath();
             ctx.arc(cx, cy, bcSz / 2, 0, Math.PI * 2);
             ctx.fill();
             ctx.strokeStyle = '#ff4444';
-            ctx.lineWidth = 2;
+            ctx.lineWidth = Math.max(2 / this.zoom, 0.6);
             ctx.stroke();
-            const fSz = Math.max(7, s * 0.4);
+            const fSz = Math.max(7 / this.zoom, s * 0.4);
             ctx.font = `bold ${fSz}px sans-serif`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
@@ -1301,9 +1301,9 @@ class HexMapViewer {
     _drawCapital(ctx, cx, cy, tile) {
         if (!tile.capital) return;
         const s  = this.hexSize;
-        const sz = Math.max(10, s * 1.5);
+        const sz = Math.max(10 / this.zoom, s * 1.5);
         ctx.shadowColor = 'rgba(0,0,0,0.85)';
-        ctx.shadowBlur  = 4;
+        ctx.shadowBlur  = 4 / this.zoom;
         if (this._capitalDefaultImage) {
             ctx.drawImage(this._capitalDefaultImage, cx - sz / 2, cy - sz / 2, sz, sz);
         } else {
