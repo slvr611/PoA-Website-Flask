@@ -600,7 +600,7 @@ class IndividualTechDict(Form):
             base_cost = json_data.get("tech", {}).get(name, {}).get("cost", 0)
             stored_cost = item.get("cost", base_cost)
             if base_cost > 0:
-                stored_cost = max(stored_cost, base_cost // 2)
+                stored_cost = max(stored_cost, (base_cost + 1) // 2)
             self.cost.data = stored_cost
             self.researched.data = item.get("researched", False)
             self.cost_manually_set.data = item.get("cost_manually_set", False)
