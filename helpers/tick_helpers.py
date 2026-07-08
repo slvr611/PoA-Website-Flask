@@ -1058,9 +1058,9 @@ def isolated_diplo_stance_tick(old_nation, new_nation, schema):
                 modifier["value"] = new_value
                 new_nation["modifiers"] = modifiers
                 return f"{old_nation.get('name', 'Unknown')} has had the stability gain chance modifier from their Isolated diplomatic stance increased from {old_value} to {new_value}.\n"
-        modifiers.append({"_id": uuid.uuid4().hex[:8], "field": "stability_gain_chance", "value": max(gain_rate, cap), "duration": -1, "source": "Isolated Diplomatic Stance"})
+        modifiers.append({"_id": uuid.uuid4().hex[:8], "field": "stability_gain_chance", "value": gain_rate, "duration": -1, "source": "Isolated Diplomatic Stance"})
         new_nation["modifiers"] = modifiers
-        return f"{old_nation.get('name', 'Unknown')} has had the stability gain chance modifier from their Isolated diplomatic stance increased from 0 to {max(gain_rate, cap)}.\n"
+        return f"{old_nation.get('name', 'Unknown')} has had the stability gain chance modifier from their Isolated diplomatic stance increased from 0 to {gain_rate}.\n"
 
 def ai_resource_desire_tick(old_nation, new_nation, schema):
     if old_nation.get("temperament", "None") == "Player":

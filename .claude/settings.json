@@ -5,7 +5,10 @@
       "PowerShell(\\(Get-Item \"C:\\\\Users\\\\orion\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Programming-Projects-PoA-Website-Flask\\\\d2927e54-cca2-4bfc-8fc7-f399e9ee391e\\\\tasks\\\\begps11pi.output\"\\).Length)",
       "PowerShell(\\(Get-Item \"C:\\\\Users\\\\orion\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Programming-Projects-PoA-Website-Flask\\\\d2927e54-cca2-4bfc-8fc7-f399e9ee391e\\\\tasks\\\\bk3rqla0m.output\"\\).Length)",
       "PowerShell(\\(Get-Item \"C:\\\\Users\\\\orion\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Programming-Projects-PoA-Website-Flask\\\\d2927e54-cca2-4bfc-8fc7-f399e9ee391e\\\\tasks\\\\bwl2zzpjx.output\"\\).Length)",
-      "Bash(awk -F: '$2~/[23][0-9][0-9][0-9]/')"
+      "Bash(awk -F: '$2~/[23][0-9][0-9][0-9]/')",
+      "Bash(.venv/Scripts/python.exe -c \"from PIL import Image; print\\('Pillow available'\\)\")",
+      "Bash(.venv/Scripts/pip.exe install *)",
+      "Bash(.venv/Scripts/python.exe -c ' *)"
     ]
   }
 }

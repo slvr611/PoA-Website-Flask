@@ -3,7 +3,7 @@ import math
 import requests as http_req
 from flask import Blueprint, request, jsonify, render_template, g, Response
 from bson import ObjectId
-from app_core import mongo, json_data, upload_bytes_to_s3
+from app_core import mongo, json_data, upload_bytes_to_s3, compress_and_upload_image_to_s3
 from helpers.auth_helpers import admin_required
 from helpers.hex_map_helpers import (
     get_all_tiles,
@@ -982,8 +982,8 @@ def request_hex_map_change():
     data = request.get_json() or {}
     tiles = data.get("tiles", {})
     reason = (data.get("reason") or "").strip() or None
-    before_image = data.get("before_image")
-    after_image = data.get("after_image")
+    before_image_raw = data.get("before_image")
+    after_image_raw = data.get("after_image")
 
     if not tiles:
         return jsonify({"error": "No tile changes provided."}), 400
@@ -996,6 +996,8 @@ def request_hex_map_change():
 
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc)
+
+    # Insert without images first so we have the change_id for the S3 key
     change_doc = {
         "target_collection": "hex_map",
         "target": None,
@@ -1008,10 +1010,26 @@ def request_hex_map_change():
         "differential_data": {},
         "request_reason": reason,
         "status": "Pending",
-        "before_image": before_image,
-        "after_image": after_image,
     }
     result = mongo.db.changes.insert_one(change_doc)
+    change_id = str(result.inserted_id)
+
+    # Upload images to S3 and patch the change document with URLs
+    image_updates = {}
+    if before_image_raw:
+        ok, val = compress_and_upload_image_to_s3(
+            before_image_raw, f"map-changes/{change_id}/before.jpg"
+        )
+        image_updates["before_image"] = val if ok else None
+    if after_image_raw:
+        ok, val = compress_and_upload_image_to_s3(
+            after_image_raw, f"map-changes/{change_id}/after.jpg"
+        )
+        image_updates["after_image"] = val if ok else None
+    if image_updates:
+        mongo.db.changes.update_one(
+            {"_id": result.inserted_id}, {"$set": image_updates}
+        )
     return jsonify({"ok": True, "change_id": str(result.inserted_id)})
 
 
@@ -1024,8 +1042,8 @@ def save_hex_map_edits():
     data = request.get_json() or {}
     tiles = data.get("tiles", {})
     reason = (data.get("reason") or "").strip() or None
-    before_image = data.get("before_image")
-    after_image = data.get("after_image")
+    before_image_raw = data.get("before_image")
+    after_image_raw = data.get("after_image")
 
     if not tiles:
         return jsonify({"ok": True})
@@ -1127,13 +1145,30 @@ def save_hex_map_edits():
         "session_number": session_number,
         "before_implemented_data": {"tiles": before_tiles},
         "after_implemented_data": {"tiles": after_tiles},
-        "before_image": before_image,
-        "after_image": after_image,
     }
     result = mongo.db.changes.insert_one(change_doc)
+    change_id = str(result.inserted_id)
+
+    # Upload images to S3 and patch the change document with URLs
+    image_updates = {}
+    if before_image_raw:
+        ok, val = compress_and_upload_image_to_s3(
+            before_image_raw, f"map-changes/{change_id}/before.jpg"
+        )
+        image_updates["before_image"] = val if ok else None
+    if after_image_raw:
+        ok, val = compress_and_upload_image_to_s3(
+            after_image_raw, f"map-changes/{change_id}/after.jpg"
+        )
+        image_updates["after_image"] = val if ok else None
+    if image_updates:
+        mongo.db.changes.update_one(
+            {"_id": result.inserted_id}, {"$set": image_updates}
+        )
+
     if after_tiles:
         bump_tile_version()
-    response = {"ok": True, "saved": len(after_tiles), "change_id": str(result.inserted_id)}
+    response = {"ok": True, "saved": len(after_tiles), "change_id": change_id}
     if errors:
         response["errors"] = errors
     return jsonify(response)

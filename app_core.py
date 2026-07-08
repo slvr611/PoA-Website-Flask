@@ -227,6 +227,36 @@ for file in json_files:
 
 ensure_mongo_indexes()
 
+def compress_and_upload_image_to_s3(base64_data_uri, s3_key, quality=65, max_width=1200):
+    """Decode a base64 data URI, compress to JPEG, and upload to S3.
+    Returns (success, url_or_error).
+    """
+    try:
+        import base64
+        from io import BytesIO
+        from PIL import Image
+
+        # Strip the data URI prefix (e.g. "data:image/png;base64,")
+        if "," in base64_data_uri:
+            base64_data_uri = base64_data_uri.split(",", 1)[1]
+        raw_bytes = base64.b64decode(base64_data_uri)
+
+        img = Image.open(BytesIO(raw_bytes)).convert("RGB")
+
+        # Resize down if wider than max_width while preserving aspect ratio
+        if img.width > max_width:
+            ratio = max_width / img.width
+            img = img.resize((max_width, int(img.height * ratio)), Image.LANCZOS)
+
+        out = BytesIO()
+        img.save(out, format="JPEG", quality=quality, optimize=True)
+        out.seek(0)
+
+        return upload_bytes_to_s3(out.read(), s3_key, content_type="image/jpeg")
+    except Exception as e:
+        return False, f"Image compression/upload failed: {str(e)}"
+
+
 def upload_bytes_to_s3(file_bytes, s3_key, content_type="image/jpeg"):
     """Upload file bytes directly to S3 (e.g. from a Flask file upload).
     Returns (success, public_url_or_error_message).
