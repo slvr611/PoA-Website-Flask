@@ -25,6 +25,27 @@ from app_core import mongo, json_data, category_data
 ALWAYS_USEFUL_RESOURCES = {"food", "wood", "stone"}
 
 # ---------------------------------------------------------------------------
+# Per-tick district_defs cache
+# Loaded once at the start of each AI tick and cleared afterward so that
+# score_buildable_districts (called up to 6× per nation × 180 nations) never
+# issues 1,000+ identical DB queries in one session.
+# ---------------------------------------------------------------------------
+_DISTRICT_DEFS_CACHE = None
+
+def _load_district_defs_cache():
+    """Load district_defs into the module-level cache. Call once per tick."""
+    global _DISTRICT_DEFS_CACHE
+    try:
+        _DISTRICT_DEFS_CACHE = list(mongo.db.district_defs.find({}, {"_id": 0}))
+    except Exception:
+        _DISTRICT_DEFS_CACHE = []
+
+def _clear_district_defs_cache():
+    """Release the cached district_defs list after the tick completes."""
+    global _DISTRICT_DEFS_CACHE
+    _DISTRICT_DEFS_CACHE = None
+
+# ---------------------------------------------------------------------------
 # Personality — how racial traits and temperament bias the AI
 # ---------------------------------------------------------------------------
 
@@ -1545,11 +1566,15 @@ def score_buildable_districts(old_nation, state, need_weights, market_buy_prices
     # save_penalty: 1.0 (no penalty) when wealth_factor=0, 0.5 when fully saturated.
     save_penalty = round(1.0 - 0.5 * wealth_factor, 3)
 
-    # --- DB-driven district defs ---
-    try:
-        defs = list(mongo.db.district_defs.find({}, {"_id": 0}))
-    except Exception:
-        defs = []
+    # --- DB-driven district defs (use per-tick cache when available) ---
+    global _DISTRICT_DEFS_CACHE
+    if _DISTRICT_DEFS_CACHE is not None:
+        defs = _DISTRICT_DEFS_CACHE
+    else:
+        try:
+            defs = list(mongo.db.district_defs.find({}, {"_id": 0}))
+        except Exception:
+            defs = []
 
     for dd in defs:
         dk = dd.get("key", "")
@@ -3443,6 +3468,10 @@ def ai_decision_tick(old_nation, new_nation, schema):
     except Exception as e:
         import traceback
         new_nation["ai_state"] = {"decision_log": [f"AI error: {e}", traceback.format_exc()]}
+    finally:
+        # Free tile cache immediately — it accumulates across all 180 AI nations in the
+        # tick loop and is never needed again after this function returns.
+        old_nation.pop("_legal_placement_cache", None)
 
     name = old_nation.get("name", "Unknown")
     return f"{name}: AI decision ({len(log)} actions)\n"

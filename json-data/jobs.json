@@ -216,7 +216,6 @@
 	},
 	"full_vampire": {
 		"display_name": "Vampire",
-		"static": true,
 		"requirements":{
 			"modifier": ["vampiric"]
 		},

@@ -2,7 +2,12 @@ import uuid
 import math
 from bson import ObjectId
 from helpers.data_helpers import get_data_on_category
-from helpers.ai_decision_helpers import ai_decision_tick, ai_market_matching_tick, market_price_tick, run_ai_market_matching_standalone
+import gc
+from helpers.ai_decision_helpers import (
+    ai_decision_tick, ai_market_matching_tick, market_price_tick,
+    run_ai_market_matching_standalone,
+    _load_district_defs_cache, _clear_district_defs_cache,
+)
 from helpers.trade_route_helpers import run_trade_route_lifecycle, _current_session as _tr_current_session
 from calculations.field_calculations import calculate_all_fields, collect_laws, sum_law_totals
 from pymongo import ASCENDING
@@ -246,19 +251,32 @@ def tick(form_data):
             run_key = f"run_{tick_function_label}"
             if run_key in form_data:
                 print(tick_function_label)
-                for i in range(len(old_nations)):
-                    result = tick_function(old_nations[i], new_nations[i], nation_schema)
-                    if old_nations[i].get("temperament", "None") == "Player":
-                        player_tick_summary += result
-                    elif tick_function_label in VASSAL_SPECIFIC_NATION_TICK_FUNCTIONS and old_nations[i].get("overlord", "None") != "None":
-                        overlord = old_nations[i].get("overlord", "None")
-                        try:
-                            overlord = nation_db.find_one({"_id": ObjectId(overlord)})
-                            if overlord.get("temperament", "None") == "Player":
-                                player_tick_summary += result
-                        except:
-                            pass
-                    full_tick_summary += result
+                # Pre-load district_defs into a module-level cache before the AI
+                # Decision Tick so score_buildable_districts (called up to 6× per
+                # nation × 180 nations) issues only ONE DB query instead of ~1,080.
+                is_ai_tick = tick_function_label == "AI Decision Tick"
+                if is_ai_tick:
+                    _load_district_defs_cache()
+                try:
+                    for i in range(len(old_nations)):
+                        result = tick_function(old_nations[i], new_nations[i], nation_schema)
+                        if old_nations[i].get("temperament", "None") == "Player":
+                            player_tick_summary += result
+                        elif tick_function_label in VASSAL_SPECIFIC_NATION_TICK_FUNCTIONS and old_nations[i].get("overlord", "None") != "None":
+                            overlord = old_nations[i].get("overlord", "None")
+                            try:
+                                overlord = nation_db.find_one({"_id": ObjectId(overlord)})
+                                if overlord.get("temperament", "None") == "Player":
+                                    player_tick_summary += result
+                            except:
+                                pass
+                        full_tick_summary += result
+                finally:
+                    # Clear the district_defs cache and run GC after each tick
+                    # function to release temporary objects and the cached defs list.
+                    if is_ai_tick:
+                        _clear_district_defs_cache()
+                    gc.collect()
 
         for tick_function_label, tick_function in NATION_CROSS_TICK_FUNCTIONS.items():
             if f"run_{tick_function_label}" in form_data:
@@ -362,6 +380,11 @@ def tick(form_data):
                 reason="Tick Update for " + old_nations[i]["name"]
             )
             system_approve_change(change_id)
+            # Release this nation's data immediately after saving so the GC can
+            # reclaim it rather than holding all 201 processed nation dicts until
+            # the entire save loop finishes.
+            old_nations[i] = None
+            new_nations[i] = None
 
     global_modifiers_refreshed = mongo.db["global_modifiers"].find_one({"name": "global_modifiers"})
     current_session = global_modifiers_refreshed.get("session_counter", 0) if global_modifiers_refreshed else 0
