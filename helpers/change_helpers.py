@@ -1081,8 +1081,16 @@ def recalculate_object(data_type, object_ref):
     save_obj = {k: v for k, v in object.items() if k != "_id"}
     db.update_one(search_dict, {"$set": save_obj})
 
+_MAX_PROPAGATION_DEPTH = 3
+
 def propagate_updates(changed_data_type, changed_object_id, changed_object, reason="Dependency update", _depth=0):
-    """Propagate updates to all dependent objects"""
+    """Propagate updates to all dependent objects.
+
+    Depth-limited to _MAX_PROPAGATION_DEPTH to prevent runaway recursion
+    on long vassal chains or cyclic dependency graphs from consuming all memory.
+    """
+    if _depth >= _MAX_PROPAGATION_DEPTH:
+        return
     dependent_objects = get_dependent_objects(changed_data_type, changed_object_id, changed_object)
 
     for dep in dependent_objects:

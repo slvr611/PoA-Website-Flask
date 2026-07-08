@@ -385,6 +385,10 @@ def tick(form_data):
             # the entire save loop finishes.
             old_nations[i] = None
             new_nations[i] = None
+            # Force GC every 20 nations to reclaim memory from propagate_updates
+            # cascades (character/market recalculations triggered per nation save).
+            if i % 20 == 19:
+                gc.collect()
 
     global_modifiers_refreshed = mongo.db["global_modifiers"].find_one({"name": "global_modifiers"})
     current_session = global_modifiers_refreshed.get("session_counter", 0) if global_modifiers_refreshed else 0
