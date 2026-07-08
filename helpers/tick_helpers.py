@@ -525,7 +525,7 @@ def _pick_succession_title(succession_type, previous_leader):
     positive_only = {k: v for k, v in positive_titles.items() if v.get("type") == "positive"}
     keys_ordered = list(positive_only.keys())
 
-    # Group consecutive positive titles into lines of 3 (tier 1 → 2 → 3)
+    # Group consecutive positive titles into lines of 3 (tier 1 -> 2 -> 3)
     title_lines = [keys_ordered[i:i + 3] for i in range(0, len(keys_ordered), 3)]
     title_to_line = {k: line for line in title_lines for k in line}
 
@@ -657,7 +657,7 @@ def generate_ai_character(org, org_schema, character_schema, previous_leader=Non
             reason=f"Succession ({succession_type}): primary demographics updated for {org_name}",
         )
         system_approve_change(change_id)
-        result += f"  → Updated {org_name} primary demographics via {succession_type} succession.\n"
+        result += f"  -> Updated {org_name} primary demographics via {succession_type} succession.\n"
 
     if new_char_id and previous_leader:
         prev_id_str = str(previous_leader["_id"])
@@ -673,7 +673,7 @@ def generate_ai_character(org, org_schema, character_schema, previous_leader=Non
             )
             system_approve_change(art_change_id)
         if predecessor_artifacts:
-            result += f"  → Transferred {len(predecessor_artifacts)} artifact(s) from predecessor.\n"
+            result += f"  -> Transferred {len(predecessor_artifacts)} artifact(s) from predecessor.\n"
 
     return result
 
@@ -965,28 +965,34 @@ def artifact_loss_tick(old_character, new_character, schema):
 ###########################################################
 
 def merchant_income_tick(old_merchant, new_merchant, schema):
-    new_merchant["treasury"] = int(old_merchant.get("treasury", 0)) + old_merchant.get("income", 0)
+    income = old_merchant.get("income", 0)
+    new_merchant["treasury"] = int(old_merchant.get("treasury", 0)) + income
 
     new_merchant["resource_storage"] = {}
     for resource, amount in old_merchant.get("resource_production", {}).items():
         new_merchant["resource_storage"][resource] = old_merchant.get("resource_storage", {}).get(resource, 0) + amount
-    return ""
+    name = old_merchant.get("name", "Unknown")
+    return f"{name}: +{income} gold -> {new_merchant['treasury']} treasury\n"
 
 ###########################################################
 # Mercenary Tick Functions
 ###########################################################
 
 def mercenary_upkeep_tick(old_mercenary, new_mercenary, schema):
-    new_mercenary["treasury"] = int(old_mercenary.get("treasury", 0)) - old_mercenary.get("upkeep", 0)
-    return ""
+    upkeep = old_mercenary.get("upkeep", 0)
+    new_mercenary["treasury"] = int(old_mercenary.get("treasury", 0)) - upkeep
+    name = old_mercenary.get("name", "Unknown")
+    return f"{name}: -{upkeep} gold upkeep -> {new_mercenary['treasury']} treasury\n"
 
 ###########################################################
 # Faction Tick Functions
 ###########################################################
 
 def faction_income_tick(old_faction, new_faction, schema):
-    new_faction["influence"] = int(old_faction.get("influence", 0)) + old_faction.get("influence_income", 0)
-    return ""
+    income = old_faction.get("influence_income", 0)
+    new_faction["influence"] = int(old_faction.get("influence", 0)) + income
+    name = old_faction.get("name", "Unknown")
+    return f"{name}: +{income} influence -> {new_faction['influence']}\n"
 
 ###########################################################
 # Market Tick Functions
@@ -1004,6 +1010,7 @@ def market_income_tick(old_market, new_market, schema):
     from calculations.field_calculations import collect_laws, sum_law_totals
     law_totals = sum_law_totals(collect_laws(old_market, schema))
     gen_per_tier = law_totals.get("generate_luxury_resources_per_market_tier", 0)
+    luxury_log = ""
     if gen_per_tier > 0:
         tier_mult = int(law_totals.get("market_tier_multiplier", 1))
         luxury_key = old_market.get("market_luxury_resource", "")
@@ -1017,8 +1024,12 @@ def market_income_tick(old_market, new_market, schema):
             capacity = old_market.get("market_resource_capacity", {}).get(luxury_key) or tier_mult
             current = old_market.get("resource_storage", {}).get(luxury_key, 0)
             new_market["resource_storage"][luxury_key] = min(current + gen_amount, capacity)
+            luxury_log = f", +{gen_amount} {luxury_key} (luxury)"
 
-    return ""
+    name = old_market.get("name", "Unknown")
+    produced = [f"+{amt} {r}" for r, amt in old_market.get("resource_production", {}).items() if amt]
+    produced_str = ", ".join(produced) if produced else "no production"
+    return f"{name}: {produced_str}{luxury_log}\n"
 
 ###########################################################
 # Nation Tick Functions
@@ -1106,15 +1117,30 @@ def ai_resource_desire_tick(old_nation, new_nation, schema):
     return ""
 
 def nation_income_tick(old_nation, new_nation, schema):
-    new_nation["money"] = int(old_nation.get("money", 0)) + old_nation.get("money_income", 0)
+    money_income = old_nation.get("money_income", 0)
+    new_nation["money"] = int(old_nation.get("money", 0)) + money_income
     if new_nation["money"] > new_nation.get("money_capacity", 0):
         new_nation["money"] = new_nation.get("money_capacity", 0)
     new_nation["resource_storage"] = {}
     new_nation["production_at_tick"] = old_nation.get("resource_excess", {})
     for resource, amount in old_nation.get("resource_excess", {}).items():
-        new_nation["resource_storage"][resource] = min(old_nation.get("resource_storage", {}).get(resource, 0) + amount, old_nation.get("nation_resource_capacity", {}).get(resource, 0))
-    
-    return ""
+        new_nation["resource_storage"][resource] = min(
+            old_nation.get("resource_storage", {}).get(resource, 0) + amount,
+            old_nation.get("nation_resource_capacity", {}).get(resource, 0)
+        )
+
+    if old_nation.get("temperament") != "Player":
+        return ""
+    name = old_nation.get("name", "Unknown")
+    lines = [f"{name}: +{money_income} gold -> {new_nation['money']}"]
+    notable = [
+        f"{'+' if amt > 0 else ''}{amt} {r}"
+        for r, amt in old_nation.get("resource_excess", {}).items()
+        if amt != 0
+    ]
+    if notable:
+        lines.append("  Resources: " + ", ".join(notable))
+    return "\n".join(lines) + "\n"
 
 def nation_tech_tick(old_nation, new_nation, schema):
     new_nation["research_production_at_tick"] = old_nation.get("resource_production", {}).get("research", 0)
@@ -1123,14 +1149,19 @@ def nation_tech_tick(old_nation, new_nation, schema):
 
     techs = old_nation.get("technologies")
     new_nation["technologies"] = deepcopy(techs) if isinstance(techs, dict) else {"political_philosophy": {"researched": True}}
+    result = ""
+    name = old_nation.get("name", "Unknown")
     for tech, value in new_nation["technologies"].items():
         if value.get("investing", 0) > 0:
             value["invested"] = value.get("invested", 0) + value.get("investing", 0)
             value["investing"] = 0
-            if value["invested"] >= value.get("cost", json_tech_data.get(tech, {}).get("cost", 0) + old_nation.get("technology_cost_modifier", 0)):
+            cost = value.get("cost", json_tech_data.get(tech, {}).get("cost", 0) + old_nation.get("technology_cost_modifier", 0))
+            if value["invested"] >= cost:
                 value["researched"] = True
+                display = json_tech_data.get(tech, {}).get("display_name", tech)
+                result += f"{name} has researched {display}.\n"
         new_nation["technologies"][tech] = value
-    return ""
+    return result
 
 def update_rolling_karma(old_nation, new_nation, schema):
     event_type = old_nation.get("event_type", "Unknown")
@@ -1754,18 +1785,18 @@ def district_duration_tick(old_nation, new_nation, schema):
             if m.get("field") == field_key:
                 m["value"] = m.get("value", 0) + 1
                 found = True
-                result += f"{old_nation.get('name', '?')}: {display_name} session count → {m['value']}\n"
+                result += f"{old_nation.get('name', '?')}: {display_name} session count -> {m['value']}\n"
                 break
             elif m.get("modifier_type") == "district_duration":
                 m_src = (m.get("source") or "").lower()
                 if dk.lower() in m_src or display_name.lower() in m_src:
                     m["value"] = m.get("value", 0) + 1
                     found = True
-                    result += f"{old_nation.get('name', '?')}: {display_name} session count → {m['value']} (legacy)\n"
+                    result += f"{old_nation.get('name', '?')}: {display_name} session count -> {m['value']} (legacy)\n"
                     break
         if not found:
             modifiers.append({"field": field_key, "value": 1, "duration": -1, "source": source})
-            result += f"{old_nation.get('name', '?')}: {display_name} session count → 1 (new)\n"
+            result += f"{old_nation.get('name', '?')}: {display_name} session count -> 1 (new)\n"
 
     stale = []
     for i, m in enumerate(modifiers):
@@ -1891,7 +1922,7 @@ def _era_ai_terrain_weights(nation):
         if res != "none":
             tiles_by_resource[res] = tiles_by_resource.get(res, 0) + count
 
-    # Multiplier: 0.5 (zero tiles) → 2.0 when ≥20% of effective tiles produce this resource
+    # Multiplier: 0.5 (zero tiles) -> 2.0 when ≥20% of effective tiles produce this resource
     weights = {}
     for res in _ERA_AI_BASE_GRANTS:
         frac = tiles_by_resource.get(res, 0) / total_tiles
@@ -2270,7 +2301,7 @@ def era_character_magic_decay_tick(old_character, new_character, schema):
     kept_pct = random.uniform(0.4, 0.6)
     new_character["magic_points"] = round(magic_points * kept_pct)
     kept_display = round(kept_pct * 100)
-    return f"{old_character.get('name', 'Unknown')} kept ~{kept_display}% of magic stockpile ({magic_points} → {new_character['magic_points']}).\n"
+    return f"{old_character.get('name', 'Unknown')} kept ~{kept_display}% of magic stockpile ({magic_points} -> {new_character['magic_points']}).\n"
 
 
 ERA_CHARACTER_TICK_FUNCTIONS = {

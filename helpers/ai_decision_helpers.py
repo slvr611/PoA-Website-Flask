@@ -3307,6 +3307,23 @@ def ai_decision_tick(old_nation, new_nation, schema):
         state         = evaluate_nation_state(old_nation)
         market_prices = get_stored_market_prices(old_nation)
 
+        # Overlay post-income stockpiles from new_nation so the AI sees
+        # resources produced by nation_income_tick earlier this same tick.
+        # Sessions-until-empty is recalculated to stay consistent.
+        new_storage = new_nation.get("resource_storage") or {}
+        for r in list(state["stockpiles"]):
+            if r in new_storage:
+                state["stockpiles"][r] = new_storage[r]
+        state["money"] = new_nation.get("money", state["money"])
+        for r, stockpile in state["stockpiles"].items():
+            net = state["net_production"].get(r, 0)
+            if net < 0 and stockpile > 0:
+                state["sessions_until_empty"][r] = stockpile / (-net)
+            elif net < 0:
+                state["sessions_until_empty"][r] = 0.0
+            else:
+                state["sessions_until_empty"][r] = float("inf")
+
         # --- Step 1: Upkeep floor ---
         upkeep_assignments, remaining_pops, projected_net, upkeep_log, upkeep_ratio, _ = \
             compute_upkeep_floor(state, market_prices)
