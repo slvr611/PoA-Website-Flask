@@ -3321,14 +3321,25 @@ def ai_decision_tick(old_nation, new_nation, schema):
         )
         log.extend(goal_job_log)
 
-        # Merge all assignments onto new_nation
+        # Reset all non-static jobs to 0 before writing new assignments so that
+        # running AI Decision Tick standalone (without Nation Job Cleanup Tick)
+        # doesn't accumulate duplicate assignments.  Static jobs (defined in
+        # jobs.json with "static": true) — e.g. revolutionary, partial_vampire,
+        # partial_undead — are set by other tick functions and must be preserved.
+        jobs_data = json_data.get("jobs", {})
+        static_job_keys = {k for k, v in jobs_data.items() if v.get("static")}
+        reset_jobs = {
+            jk: (cnt if jk in static_job_keys else 0)
+            for jk, cnt in new_nation.get("jobs", {}).items()
+        }
+
+        # Write fresh assignments on top of the zeroed base.
         all_assignments = dict(upkeep_assignments)
         for jk, cnt in goal_assignments.items():
             all_assignments[jk] = all_assignments.get(jk, 0) + cnt
-        existing_jobs = dict(new_nation.get("jobs", {}))
         for jk, cnt in all_assignments.items():
-            existing_jobs[jk] = existing_jobs.get(jk, 0) + cnt
-        new_nation["jobs"] = existing_jobs
+            reset_jobs[jk] = reset_jobs.get(jk, 0) + cnt
+        new_nation["jobs"] = reset_jobs
 
         # --- Step 4b: Tech target ---
         tech_target = select_tech_target(old_nation, new_nation, state, goal, personality)

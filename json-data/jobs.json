@@ -181,6 +181,7 @@
 	},
 	"revolutionary": {
 		"display_name": "Revolutionary",
+		"static": true,
 		"requirements":{
 			"empire": "on"
 		},
@@ -202,6 +203,7 @@
 	},
 	"partial_vampire": {
 		"display_name": "Vampire",
+		"static": true,
 		"requirements":{
 			"region": ["Twilight Mire"]
 		},
@@ -214,6 +216,7 @@
 	},
 	"full_vampire": {
 		"display_name": "Vampire",
+		"static": true,
 		"requirements":{
 			"modifier": ["vampiric"]
 		},
@@ -227,6 +230,7 @@
 	},
 	"partial_undead": {
 		"display_name": "Undead",
+		"static": true,
 		"production": {
 			"stability_loss_chance": 0.05,
 			"undead_chance": 0.05

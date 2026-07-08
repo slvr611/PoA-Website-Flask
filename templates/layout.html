@@ -137,9 +137,6 @@
 	{% if g.revert_warning %}
 	<div class="revert-warning-banner">
 		<span>&#9888; <strong>Warning:</strong> The website may be reverted to a previous state soon. Please do not submit any change requests until this notice is removed.</span>
-		{% if g.user and g.user.is_admin %}
-		<a href="/admin/toggle-revert-warning" class="revert-warning-dismiss">Dismiss Warning</a>
-		{% endif %}
 	</div>
 	{% endif %}
     <main>
