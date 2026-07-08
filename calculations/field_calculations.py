@@ -3662,10 +3662,23 @@ def _apply_vassal_tribute_modifiers(target, overall_total_modifiers):
     for vassal in vassals:
         v_pop   = vassal.get("pop_count", 0)
         v_type  = vassal.get("vassal_type", "None")
-        # Use the overlord's own modifiers (not {}) so vassal_tribute_flat/multiplier
-        # granted to the overlord (e.g. a "Harsh Overlord" trait) actually raises the
-        # tribute collected from every vassal, symmetric with the vassal-side effect above.
-        v_tribute = _calc_tribute(v_pop, v_type, overall_total_modifiers)
+        # Combine the overlord's own modifiers (e.g. a "Harsh Overlord" trait raising
+        # tribute from every vassal) with this specific vassal's own vassal_tribute_flat/
+        # multiplier modifiers (e.g. a vassal-side effect that reduces what it pays) —
+        # otherwise a vassal's own tribute modifier would lower their consumption but
+        # never be reflected in what the overlord actually collects from them.
+        v_own_totals = sum_modifier_totals(vassal.get("modifiers", []), vassal)
+        v_combined_modifiers = {
+            "vassal_tribute_flat": (
+                overall_total_modifiers.get("vassal_tribute_flat", 0)
+                + v_own_totals.get("vassal_tribute_flat", 0)
+            ),
+            "vassal_tribute_multiplier": (
+                overall_total_modifiers.get("vassal_tribute_multiplier", 0)
+                + v_own_totals.get("vassal_tribute_multiplier", 0)
+            ),
+        }
+        v_tribute = _calc_tribute(v_pop, v_type, v_combined_modifiers)
         for resource in _TRIBUTE_RESOURCES:
             overall_total_modifiers[f"{resource}_production"] = (
                 overall_total_modifiers.get(f"{resource}_production", 0) + v_tribute
