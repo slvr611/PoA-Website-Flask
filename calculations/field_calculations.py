@@ -2783,7 +2783,8 @@ def check_upgrade_requirements(nation, upgrade_def):
 
 
 def check_unit_requirements(target, unit_details,
-                             _district_def_keys=None, _district_categories=None):
+                             _district_def_keys=None, _district_categories=None,
+                             _unlocked_units=None):
     """Return True if target meets all requirements to use this unit.
 
     _district_def_keys / _district_categories: optional pre-computed sets
@@ -2791,7 +2792,16 @@ def check_unit_requirements(target, unit_details,
     calculate_unit_details). Without them this function queries the DB once
     per district per call — 300+ queries across 41 units × 8 districts is
     the dominant hotspot in both change approval and nation page load.
+    _unlocked_units: set of unit names granted via unit_access modifiers,
+    which bypass all other requirements.
     """
+    # Unit access override — bypasses all other requirements
+    if _unlocked_units:
+        base_name = unit_details.get("base_name", "")
+        display_name = unit_details.get("display_name", "")
+        if base_name in _unlocked_units or display_name in _unlocked_units:
+            return True
+
     # Imperial units require the nation to be an empire
     if "Imperial" in (unit_details.get("unit_class") or "") and not target.get("empire", False):
         return False
@@ -2971,9 +2981,16 @@ def calculate_unit_details(target, unit_type, modifier_totals, district_totals, 
         if cat:
             _district_categories.add(cat)
 
+    # Collect unit access overrides (unit_access modifier bypasses all requirements)
+    _unlocked_units = set()
+    for src in modifier_sources:
+        for k, v in src.items():
+            if k.startswith("unit_access_") and v > 0:
+                _unlocked_units.add(k[len("unit_access_"):])
+
     new_unit_details = {}
     for unit, details in unit_details.items():
-        if check_unit_requirements(target, details, _district_def_keys, _district_categories):
+        if check_unit_requirements(target, details, _district_def_keys, _district_categories, _unlocked_units):
             new_details = copy.deepcopy(details)
             has_name_req = bool(details.get("requirements", {}).get("name"))
             all_resource_upkeep = 0

@@ -323,6 +323,7 @@ class ModifierForm(Form):
     terrain_as = StringField("Terrain As")
     target_type = StringField("Target Type")
     target_value = StringField("Target Value")
+    unit_name = StringField("Unit Name")
     value = FloatField("Value", default=1)
     max_value = FloatField("Max Value", validators=[Optional()])
     duration = IntegerField("Duration", validators=[NumberRange()], default=-1)

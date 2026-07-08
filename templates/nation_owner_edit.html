@@ -567,11 +567,11 @@
                             </tr>
                             <tr>
                                 <th>{{ schema.properties.compliance_gain_chance.label }}:</th>
-                                <td>{{ (nation.compliance_gain_chance * 100)|int }}%</td>
+                                <td>{{ ((nation.get("compliance_gain_chance") or 0) * 100)|int }}%</td>
                             </tr>
                             <tr>
                                 <th>{{ schema.properties.compliance_loss_chance.label }}:</th>
-                                <td>{{ (nation.compliance_loss_chance * 100)|int }}%</td>
+                                <td>{{ ((nation.get("compliance_loss_chance") or 0) * 100)|int }}%</td>
                             </tr>
                             <tr>
                                 <th>{{ schema.properties.concessions_chance.label }}:</th>
@@ -1566,7 +1566,7 @@
             function buildExtraFieldsHTML(fieldName, index, modifierType, currentData) {
                 const typeDef = MODIFIER_TYPES[modifierType] || {};
                 const extraFields = typeDef.extra_fields || [];
-                const ALL_EXTRA_KEYS = ['resource', 'resource_from', 'resource_to', 'job', 'attribute', 'unit_category', 'unit_stat', 'tier', 'tech_category', 'terrain', 'node_resource', 'terrain_as', 'target_type', 'target_value'];
+                const ALL_EXTRA_KEYS = ['resource', 'resource_from', 'resource_to', 'job', 'attribute', 'unit_category', 'unit_stat', 'tier', 'tech_category', 'terrain', 'node_resource', 'terrain_as', 'target_type', 'target_value', 'unit_name'];
                 const renderedKeys = new Set();
                 let html = '';
                 for (const extra of extraFields) {
@@ -1640,6 +1640,9 @@
                                                 const tvType = (currentData && currentData.target_type) || 'all_nations';
                                                 html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
                                                                 <span id="${fieldName}-${index}-target_value-container" data-cur="${escHtml(tvCur)}" style="${tvType === 'all_nations' ? 'display:none;' : ''}"></span></div>`;
+                                } else {
+                                                html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
+                                                                <input type="text" class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}" value="${escHtml(cur)}" placeholder="${escHtml(extra.label)}"></div>`;
                                 }
                 }
                 for (const key of ALL_EXTRA_KEYS) {

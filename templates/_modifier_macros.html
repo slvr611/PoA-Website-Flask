@@ -183,10 +183,12 @@
                         <input type="text" class="form-control" name="{{ field_name }}-{{ idx }}-{{ extra.key }}" id="{{ field_name }}-{{ idx }}-{{ extra.key }}" value="{{ ef_val }}" placeholder="Region or nation name">
                       {% endif %}
                     </span>
+                  {% else %}
+                    <input type="text" class="form-control" name="{{ field_name }}-{{ idx }}-{{ extra.key }}" id="{{ field_name }}-{{ idx }}-{{ extra.key }}" value="{{ ef_val }}" placeholder="{{ extra.label }}">
                   {% endif %}
                 </div>
               {% endfor %}
-              {% for fkey in ['resource', 'resource_from', 'resource_to', 'job', 'attribute', 'unit_category', 'unit_stat', 'tier', 'tech_category', 'terrain', 'target_type', 'target_value'] %}
+              {% for fkey in ['resource', 'resource_from', 'resource_to', 'job', 'attribute', 'unit_category', 'unit_stat', 'tier', 'tech_category', 'terrain', 'target_type', 'target_value', 'unit_name'] %}
                 {% if fkey not in used_keys %}
                   <input type="hidden" name="{{ field_name }}-{{ idx }}-{{ fkey }}" id="{{ field_name }}-{{ idx }}-{{ fkey }}" value="">
                 {% endif %}
@@ -432,10 +434,12 @@
                         <input type="text" class="form-control" name="{{ ef.name }}" id="{{ ef.id }}" value="{{ cur }}" placeholder="Region name">
                       {% endif %}
                     </span>
+                  {% else %}
+                    <input type="text" class="form-control" name="{{ ef.name }}" id="{{ ef.id }}" value="{{ ef.data or '' }}" placeholder="{{ extra.label }}">
                   {% endif %}
                 </div>
               {% endfor %}
-              {% for fkey in ['resource', 'resource_from', 'resource_to', 'job', 'attribute', 'unit_category', 'unit_stat', 'tier', 'tech_category', 'terrain', 'target_type', 'target_value'] %}
+              {% for fkey in ['resource', 'resource_from', 'resource_to', 'job', 'attribute', 'unit_category', 'unit_stat', 'tier', 'tech_category', 'terrain', 'target_type', 'target_value', 'unit_name'] %}
                 {% if fkey not in used_keys %}
                 <input type="hidden" name="{{ modifier_field.form[fkey].name }}" value="">
                 {% endif %}

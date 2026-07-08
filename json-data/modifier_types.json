@@ -700,5 +700,15 @@
         "value_format": "number",
         "field_template": "no_water_routes",
         "applicable_to": ["nation"]
+    },
+    "unit_access": {
+        "name": "Unit Access",
+        "description": "Grants this nation access to a specific unit, bypassing all normal recruitment requirements. Enter the unit's base name (e.g. 'Heavy Infantry').",
+        "value_format": "number",
+        "field_template": "unit_access_{unit_name}",
+        "extra_fields": [
+            {"key": "unit_name", "label": "Unit Name"}
+        ],
+        "applicable_to": ["nation"]
     }
 }

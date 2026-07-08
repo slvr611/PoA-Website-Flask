@@ -660,11 +660,11 @@
 							</tr>
 							<tr>
 								<th>{{ schema.properties.compliance_gain_chance.label }}:</th>
-								<td>{{ pf_pct(nation.compliance_gain_chance, pn.get("compliance_gain_chance")) }}</td>
+								<td>{{ pf_pct(nation.get("compliance_gain_chance") or 0, pn.get("compliance_gain_chance")) }}</td>
 							</tr>
 							<tr>
 								<th>{{ schema.properties.compliance_loss_chance.label }}:</th>
-								<td>{{ pf_pct(nation.compliance_loss_chance, pn.get("compliance_loss_chance")) }}</td>
+								<td>{{ pf_pct(nation.get("compliance_loss_chance") or 0, pn.get("compliance_loss_chance")) }}</td>
 							</tr>
 							<tr>
 								<th>{{ schema.properties.concessions_chance.label }}:</th>
