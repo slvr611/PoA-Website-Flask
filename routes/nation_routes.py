@@ -234,7 +234,7 @@ def nation_item(item_ref):
 
     # --- Visibility ---
     from calculations.visibility import get_viewer_nation, compute_visibility, collect_visibility_modifiers
-    if "visibility_modifiers" not in nation:
+    if has_cached_breakdowns or "visibility_modifiers" not in nation:
         nation["visibility_modifiers"] = collect_visibility_modifiers(nation)
         mongo.db.nations.update_one(
             {"_id": nation["_id"]},

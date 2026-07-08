@@ -3645,7 +3645,10 @@ def _apply_vassal_tribute_modifiers(target, overall_total_modifiers):
     for vassal in vassals:
         v_pop   = vassal.get("pop_count", 0)
         v_type  = vassal.get("vassal_type", "None")
-        v_tribute = _calc_tribute(v_pop, v_type, {})
+        # Use the overlord's own modifiers (not {}) so vassal_tribute_flat/multiplier
+        # granted to the overlord (e.g. a "Harsh Overlord" trait) actually raises the
+        # tribute collected from every vassal, symmetric with the vassal-side effect above.
+        v_tribute = _calc_tribute(v_pop, v_type, overall_total_modifiers)
         for resource in _TRIBUTE_RESOURCES:
             overall_total_modifiers[f"{resource}_production"] = (
                 overall_total_modifiers.get(f"{resource}_production", 0) + v_tribute

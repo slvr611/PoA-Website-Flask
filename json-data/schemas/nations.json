@@ -35,7 +35,8 @@
       "consumption_stance",
       "tax_stance",
       "slavery_stance",
-      "vassal_type"
+      "vassal_type",
+      "compliance"
     ],
     "preview": [
       "region",
@@ -601,7 +602,30 @@
           "Compliant",
           "Loyal"
         ],
-        "hideIfNone": "overlord"
+        "hideIfNone": "overlord",
+        "laws": {
+          "None": {},
+          "Rebellious": {
+            "rebellion_chance": 0.25,
+            "concessions_chance": 0.5
+          },
+          "Defiant": {
+            "rebellion_chance": 0.15,
+            "concessions_chance": 0.4
+          },
+          "Neutral": {
+            "rebellion_chance": 0.05,
+            "concessions_chance": 0.3
+          },
+          "Compliant": {
+            "concessions_chance": 0.2,
+            "compliance_loss_chance": 0.1
+          },
+          "Loyal": {
+            "concessions_chance": 0.1,
+            "compliance_loss_chance": 0.15
+          }
+        }
       },
       "disobey_chance": {
         "bsonType": "number",
@@ -635,6 +659,22 @@
         "base_value": 4,
         "hideIfNone": "overlord"
       },
+      "compliance_gain_chance": {
+        "bsonType": "number",
+        "label": "Compliance Gain Chance",
+        "description": "Percentage chance for this vassal's compliance to improve by one level each tick",
+        "calculated": true,
+        "hideIfNone": "overlord",
+        "format": "percentage"
+      },
+      "compliance_loss_chance": {
+        "bsonType": "number",
+        "label": "Compliance Loss Chance",
+        "description": "Percentage chance for this vassal's compliance to fall by one level each tick",
+        "calculated": true,
+        "hideIfNone": "overlord",
+        "format": "percentage"
+      },
       "concessions": {
         "bsonType": "object",
         "label": "Concessions",
@@ -655,6 +695,8 @@
           "compliance",
           "disobey_chance",
           "rebellion_chance",
+          "compliance_gain_chance",
+          "compliance_loss_chance",
           "concessions_chance",
           "concessions",
           "temperament"

@@ -566,6 +566,14 @@
                                 <td>{{ (nation.rebellion_chance * 100)|int }}%</td>
                             </tr>
                             <tr>
+                                <th>{{ schema.properties.compliance_gain_chance.label }}:</th>
+                                <td>{{ (nation.compliance_gain_chance * 100)|int }}%</td>
+                            </tr>
+                            <tr>
+                                <th>{{ schema.properties.compliance_loss_chance.label }}:</th>
+                                <td>{{ (nation.compliance_loss_chance * 100)|int }}%</td>
+                            </tr>
+                            <tr>
                                 <th>{{ schema.properties.concessions_chance.label }}:</th>
                                 <td>{{ (nation.concessions_chance * 100)|int }}%</td>
                             </tr>

@@ -199,6 +199,8 @@ def _calculate_and_attach_fields(data_type, target):
         target.update(calculated_fields)
         target["breakdowns"] = breakdowns
         _update_tech_costs(target)
+        from calculations.visibility import collect_visibility_modifiers
+        target["visibility_modifiers"] = collect_visibility_modifiers(target)
     else:
         calculated_fields = calculate_all_fields(target, schema, target_data_type)
         target.update(calculated_fields)

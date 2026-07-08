@@ -1288,20 +1288,47 @@ def nation_rebellion_tick(old_nation, new_nation, schema):
 
     return result
 
-def nation_vassal_compliance_decay_tick(old_nation, new_nation, schema):
+def nation_vassal_compliance_tick(old_nation, new_nation, schema):
     if not old_nation.get("overlord"):
         return ""
-    compliance = old_nation.get("compliance", "None")
-    decay_chances = {"Loyal": 0.15, "Compliant": 0.10}
-    chance = decay_chances.get(compliance, 0)
-    if chance <= 0:
-        return ""
-    if random.random() <= chance:
-        compliance_enum = schema["properties"]["compliance"]["enum"]
-        idx = compliance_enum.index(compliance)
-        new_compliance = compliance_enum[idx - 1]
-        new_nation["compliance"] = new_compliance
-        return f"{old_nation.get('name', 'Unknown')}'s compliance fell from {compliance} to {new_compliance}.\n"
+
+    result = ""
+    compliance_gained = 0
+    compliance_lost = 0
+
+    gain_chance = old_nation.get("compliance_gain_chance", 0)
+    gain_roll = random.random()
+    new_nation["compliance_gain_roll"] = gain_roll
+    new_nation["compliance_gain_chance_at_tick"] = gain_chance
+    while gain_chance > 1:
+        compliance_gained += 1
+        gain_chance -= 1
+    if old_nation.get("compliance", "None") != "Loyal" and gain_roll <= gain_chance:
+        compliance_gained += 1
+
+    loss_chance = old_nation.get("compliance_loss_chance", 0)
+    loss_roll = random.random()
+    new_nation["compliance_loss_roll"] = loss_roll
+    new_nation["compliance_loss_chance_at_tick"] = loss_chance
+    while loss_chance > 1:
+        compliance_lost += 1
+        loss_chance -= 1
+    if loss_roll <= loss_chance:
+        compliance_lost += 1
+
+    amounts = []
+    reasons = []
+    if compliance_gained > 0:
+        amounts.append(compliance_gained)
+        reasons.append("compliance_gain_chance")
+    if compliance_lost > 0:
+        amounts.append(-compliance_lost)
+        reasons.append("compliance_loss_chance")
+
+    if amounts:
+        result += adjust_compliance(old_nation, new_nation, schema, amounts, reasons)
+
+    return result
     return ""
 
 
@@ -2114,7 +2141,7 @@ MARKET_TICK_FUNCTIONS = {
 VASSAL_SPECIFIC_NATION_TICK_FUNCTIONS = [
     "Nation Concessions Tick",
     "Nation Rebellion Tick",
-    "Nation Vassal Compliance Decay Tick",
+    "Nation Vassal Compliance Tick",
     "Nation Enclave Compliance Tick",
 ]
 
@@ -2129,7 +2156,7 @@ NATION_TICK_FUNCTIONS = {
     "Nation Stability Tick": nation_stability_tick,
     "Nation Concessions Tick": nation_concessions_tick,
     "Nation Rebellion Tick": nation_rebellion_tick,
-    "Nation Vassal Compliance Decay Tick": nation_vassal_compliance_decay_tick,
+    "Nation Vassal Compliance Tick": nation_vassal_compliance_tick,
     "Nation Enclave Compliance Tick": nation_enclave_compliance_tick,
     "Nation Passive Expansion Tick": nation_passive_expansion_tick,
     "Nation Modifier Decay Tick": modifier_decay_tick,
@@ -2338,4 +2365,20 @@ def adjust_stability(old_nation, new_nation, schema, amounts=[-1], reasons=[""])
         stability_index = len(stability_enum) - 1
     
     new_nation["stability"] = stability_enum[stability_index]
+    return result
+
+
+def adjust_compliance(old_nation, new_nation, schema, amounts=[-1], reasons=[""]):
+    result = ""
+    compliance_enum = schema["properties"]["compliance"]["enum"]
+    floor_index = compliance_enum.index("Rebellious")
+    ceiling_index = len(compliance_enum) - 1
+    compliance_index = compliance_enum.index(old_nation.get("compliance", "None"))
+    for i in range(min(len(amounts), len(reasons))):
+        compliance_index += amounts[i]
+        gain_or_loss = "gained" if amounts[i] > 0 else "lost"
+        result += f"{old_nation.get('name', 'Unknown')} has {gain_or_loss} {abs(amounts[i])} level(s) of compliance due to {reasons[i]}.\n"
+    compliance_index = max(floor_index, min(compliance_index, ceiling_index))
+
+    new_nation["compliance"] = compliance_enum[compliance_index]
     return result

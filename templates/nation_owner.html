@@ -659,6 +659,14 @@
 								<td>{{ pf_pct(nation.rebellion_chance, pn.get("rebellion_chance")) }}</td>
 							</tr>
 							<tr>
+								<th>{{ schema.properties.compliance_gain_chance.label }}:</th>
+								<td>{{ pf_pct(nation.compliance_gain_chance, pn.get("compliance_gain_chance")) }}</td>
+							</tr>
+							<tr>
+								<th>{{ schema.properties.compliance_loss_chance.label }}:</th>
+								<td>{{ pf_pct(nation.compliance_loss_chance, pn.get("compliance_loss_chance")) }}</td>
+							</tr>
+							<tr>
 								<th>{{ schema.properties.concessions_chance.label }}:</th>
 								<td>{{ pf_pct(nation.concessions_chance, pn.get("concessions_chance")) }}</td>
 							</tr>
@@ -704,7 +712,7 @@
 						<table class="info-table">
 							<thead>
 								<tr class="resources-header-row">
-									<th colspan="7" class="resources-header">Vassals</th>
+									<th colspan="9" class="resources-header">Vassals</th>
 								</tr>
 								<tr>
 									<th>Nation</th>
@@ -712,6 +720,8 @@
 									<th>Compliance</th>
 									<th>Chance to Disobey</th>
 									<th>Rebellion Chance</th>
+									<th>Compliance Gain Chance</th>
+									<th>Compliance Loss Chance</th>
 									<th>Concessions Chance</th>
 									<th>Concessions</th>
 									<th>Temperament</th>
@@ -729,6 +739,10 @@
 										<td>{{ (vassal.get("disobey_chance", 0) * 100)|int }}%</td>
 
 										<td>{{ (vassal.get("rebellion_chance", 0) * 100)|int }}%</td>
+
+										<td>{{ (vassal.get("compliance_gain_chance", 0) * 100)|int }}%</td>
+
+										<td>{{ (vassal.get("compliance_loss_chance", 0) * 100)|int }}%</td>
 
 										<td>{{ (vassal.get("concessions_chance", 0) * 100)|int }}%</td>
 

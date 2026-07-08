@@ -59,6 +59,20 @@
         "field_template": "civil_war_chance",
         "applicable_to": ["nation"]
     },
+    "compliance_gain_chance": {
+        "name": "Compliance Gain Chance",
+        "description": "Increases the chance for a vassal's compliance to improve by one level each tick.",
+        "value_format": "percentage",
+        "field_template": "compliance_gain_chance",
+        "applicable_to": ["nation"]
+    },
+    "compliance_loss_chance": {
+        "name": "Compliance Loss Chance",
+        "description": "Increases the chance for a vassal's compliance to fall by one level each tick.",
+        "value_format": "percentage",
+        "field_template": "compliance_loss_chance",
+        "applicable_to": ["nation"]
+    },
     "death_chance": {
         "name": "Death Chance",
         "value_format": "percentage",
@@ -528,6 +542,20 @@
         "name": "Vassal Slots",
         "value_format": "number",
         "field_template": "vassal_slots",
+        "applicable_to": ["nation"]
+    },
+    "vassal_tribute_flat": {
+        "name": "Vassal Tribute (Flat)",
+        "description": "Added to a vassal's per-resource tribute amount (food/wood/stone) before the multiplier is applied. On the vassal, this raises their consumption of those resources; on the overlord, it raises their production by the same amount per vassal.",
+        "value_format": "number",
+        "field_template": "vassal_tribute_flat",
+        "applicable_to": ["nation"]
+    },
+    "vassal_tribute_multiplier": {
+        "name": "Vassal Tribute Multiplier",
+        "description": "Fractional bonus applied to a vassal's tribute amount (e.g. 0.5 = +50%). On the vassal, this raises their consumption of tribute resources; on the overlord, it raises their production by the same amount per vassal.",
+        "value_format": "percentage",
+        "field_template": "vassal_tribute_multiplier",
         "applicable_to": ["nation"]
     },
     "territory_node_proximity_limit": {

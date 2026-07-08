@@ -144,41 +144,25 @@ def compute_disobey_chance(field, target, base_value, field_schema, overall_tota
     return value
 
 def compute_rebellion_chance(field, target, base_value, field_schema, overall_total_modifiers):
+    # Base per-compliance-level value now comes from the "compliance" law
+    # (json-data/schemas/nations.json), folded into overall_total_modifiers
+    # alongside any tech/trait modifiers targeting this field.
     compliance = target.get("compliance", "None")
-    
-    value = 0
 
-    match compliance:
-        case "Rebellious":
-            value = 0.25
-        case "Defiant":
-            value = 0.15 + overall_total_modifiers.get("rebellion_chance_above_rebellious", 0)
-        case "Neutral":
-            value = 0.05 + overall_total_modifiers.get("rebellion_chance_above_rebellious", 0)
-    
-    value += overall_total_modifiers.get(field, 0)
+    value = base_value + overall_total_modifiers.get(field, 0)
+
+    if compliance in ("Defiant", "Neutral"):
+        value += overall_total_modifiers.get("rebellion_chance_above_rebellious", 0)
+
     value = round(max(value, 0), 2)
 
     return value
 
 def compute_concessions_chance(field, target, base_value, field_schema, overall_total_modifiers):
-    compliance = target.get("compliance", "None")
-    
-    value = 0
-
-    match compliance:
-        case "Rebellious":
-            value = 0.5
-        case "Defiant":
-            value = 0.4
-        case "Neutral":
-            value = 0.3
-        case "Compliant":
-            value = 0.2
-        case "Loyal":
-            value = 0.1
-
-    value += overall_total_modifiers.get(field, 0)
+    # Base per-compliance-level value now comes from the "compliance" law
+    # (json-data/schemas/nations.json), folded into overall_total_modifiers
+    # alongside any tech/trait modifiers targeting this field.
+    value = base_value + overall_total_modifiers.get(field, 0)
     value = round(max(value, 0), 2)
 
     return value
@@ -186,8 +170,24 @@ def compute_concessions_chance(field, target, base_value, field_schema, overall_
 def compute_concessions_qty(field, target, base_value, field_schema, overall_total_modifiers):
     value = base_value + overall_total_modifiers.get(field, 0)
     value *= overall_total_modifiers.get("concessions_qty_mult", 1)
-    
+
     return int(value)
+
+def compute_compliance_gain_chance(field, target, base_value, field_schema, overall_total_modifiers):
+    # No base value — this chance is purely modifier-driven (tech/traits/laws).
+    value = base_value + overall_total_modifiers.get(field, 0)
+    value = round(max(value, 0), 2)
+
+    return value
+
+def compute_compliance_loss_chance(field, target, base_value, field_schema, overall_total_modifiers):
+    # Base per-compliance-level value now comes from the "compliance" law
+    # (json-data/schemas/nations.json), folded into overall_total_modifiers
+    # alongside any tech/trait modifiers targeting this field.
+    value = base_value + overall_total_modifiers.get(field, 0)
+    value = round(max(value, 0), 2)
+
+    return value
 
 def compute_working_pop_count(field, target, base_value, field_schema, overall_total_modifiers):
     workers_assigned = target.get("jobs", {})
@@ -1091,6 +1091,8 @@ CUSTOM_COMPUTE_FUNCTIONS = {
     "rebellion_chance": compute_rebellion_chance,
     "concessions_chance": compute_concessions_chance,
     "concessions_qty": compute_concessions_qty,
+    "compliance_gain_chance": compute_compliance_gain_chance,
+    "compliance_loss_chance": compute_compliance_loss_chance,
     "working_pop_count": compute_working_pop_count,
     "pop_count": compute_pop_count,
     "effective_pop_capacity": compute_effective_pop_capacity,
