@@ -1155,7 +1155,9 @@ def nation_tech_tick(old_nation, new_nation, schema):
         if value.get("investing", 0) > 0:
             value["invested"] = value.get("invested", 0) + value.get("investing", 0)
             value["investing"] = 0
-            cost = value.get("cost", json_tech_data.get(tech, {}).get("cost", 0) + old_nation.get("technology_cost_modifier", 0))
+            _tech_def = json_tech_data.get(tech, {})
+            _cat_mod = (old_nation.get("technology_category_cost_modifiers", {}) or {}).get((_tech_def.get("type") or "").lower(), 0)
+            cost = value.get("cost", _tech_def.get("cost", 0) + old_nation.get("technology_cost_modifier", 0) + _cat_mod)
             if value["invested"] >= cost:
                 value["researched"] = True
                 display = json_tech_data.get(tech, {}).get("display_name", tech)
@@ -1674,8 +1676,10 @@ def nation_tech_cost_reduction_tick(old_nation, new_nation, schema):
     
     techs = new_nation.get("technologies") or {}
     for tech, value in (techs.items() if isinstance(techs, dict) else []):
-        base_cost = json_tech_data.get(tech, {}).get("cost", 0)
-        current_cost = value.get("cost", base_cost + old_nation.get("technology_cost_modifier", 0))
+        _tech_def = json_tech_data.get(tech, {})
+        base_cost = _tech_def.get("cost", 0)
+        _cat_mod = (old_nation.get("technology_category_cost_modifiers", {}) or {}).get((_tech_def.get("type") or "").lower(), 0)
+        current_cost = value.get("cost", base_cost + old_nation.get("technology_cost_modifier", 0) + _cat_mod)
         invested = value.get("invested", 0)
         min_cost = (base_cost + 1) // 2
 

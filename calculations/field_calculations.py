@@ -511,6 +511,17 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
     if target_data_type == "nation":
         _apply_vassal_tribute_modifiers(target, overall_total_modifiers)
 
+        # Persist per-category tech cost modifiers (e.g. military_technology_cost_modifier)
+        # so tech cost consumers can apply them — these keys are dynamic and not schema fields.
+        _tc_suffix = "_technology_cost_modifier"
+        _tc_cat_mods = {
+            k[:-len(_tc_suffix)]: v
+            for k, v in overall_total_modifiers.items()
+            if k.endswith(_tc_suffix) and v
+        }
+        calculated_values["technology_category_cost_modifiers"] = _tc_cat_mods
+        target["technology_category_cost_modifiers"] = _tc_cat_mods
+
     record_timing("capacity_and_meta_modifiers_ms", phase_start)
 
     phase_start = perf_counter()

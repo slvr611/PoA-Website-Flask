@@ -1,4 +1,4 @@
-{% macro render_tech_tree(nation_tech, tech_cost_modifier, tech_cost_minimum, json_data, editable=False, form=None, form_json=None) %}
+{% macro render_tech_tree(nation_tech, tech_cost_modifier, tech_cost_minimum, json_data, editable=False, form=None, form_json=None, tech_category_cost_modifiers={}) %}
 <section class="tech-section">
     <h2>Tech</h2>
     <div class="tech-controls" style="margin-bottom: 10px;">
@@ -29,6 +29,7 @@
     const nation_techs = {{ nation_tech|tojson }};
     const tech_cost_modifier = {{ tech_cost_modifier|tojson }};
     const tech_cost_minimum = {{ tech_cost_minimum|tojson }};
+    const tech_category_cost_modifiers = {{ tech_category_cost_modifiers|tojson }};
     const editable = {{ editable|tojson }};
     const form = {{ form_json|tojson if form_json else 'null' }};
 
@@ -109,7 +110,8 @@
 
         if (!tech && !nation_tech) return 0;
         
-        let cost = nation_tech?.cost || Math.max(tech?.cost + (tech_cost_modifier || 0), (tech_cost_minimum || 2));
+        const cat_modifier = tech_category_cost_modifiers[(tech?.type || '').toLowerCase()] || 0;
+        let cost = nation_tech?.cost || Math.max(tech?.cost + (tech_cost_modifier || 0) + cat_modifier, (tech_cost_minimum || 2));
         
         return cost;
     }

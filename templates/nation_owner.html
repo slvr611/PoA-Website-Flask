@@ -1533,7 +1533,7 @@
 		</div>
 		<div class="section-content">
 			{% if visibility_level >= 3 %}
-			{{ render_tech_tree(nation.get("technologies", {"political_philosophy": {"researched": true}}), nation.get("technology_cost_modifier", 0), nation.get("technology_cost_minimum", 2), json_data) }}
+			{{ render_tech_tree(nation.get("technologies", {"political_philosophy": {"researched": true}}), nation.get("technology_cost_modifier", 0), nation.get("technology_cost_minimum", 2), json_data, tech_category_cost_modifiers=nation.get("technology_category_cost_modifiers", {})) }}
 		{% else %}
 				<p class="visibility-locked">Requires Tier 3 visibility.</p>
 			{% endif %}

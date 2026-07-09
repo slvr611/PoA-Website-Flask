@@ -170,6 +170,7 @@ def _update_tech_costs(nation):
     """
     tech_json = json_data.get("tech", {})
     cost_modifier = nation.get("technology_cost_modifier", 0)
+    category_modifiers = nation.get("technology_category_cost_modifiers", {}) or {}
     technologies = nation.get("technologies")
     if not isinstance(technologies, dict):
         return
@@ -178,9 +179,12 @@ def _update_tech_costs(nation):
             continue
         if tech_data.get("cost_manually_set", False):
             continue
-        base_cost = tech_json.get(tech_id, {}).get("cost", 0)
+        tech_def = tech_json.get(tech_id, {})
+        base_cost = tech_def.get("cost", 0)
+        category = (tech_def.get("type") or "").lower()
+        cat_modifier = category_modifiers.get(category, 0)
         min_cost = base_cost // 2
-        tech_data["cost"] = max(base_cost + cost_modifier, min_cost)
+        tech_data["cost"] = max(base_cost + cost_modifier + cat_modifier, min_cost)
 
 
 def _calculate_and_attach_fields(data_type, target):

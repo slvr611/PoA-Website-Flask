@@ -1247,27 +1247,42 @@ def market_item(item_ref):
     )
 
 def _apply_trade_fulfillment_to_nation(after_data, trade_type, resource, price, quantity):
-    """Give the AI nation the goods/money side of a fulfilled trade.
+    """Apply both sides of a fulfilled trade to the AI nation.
 
     A player fulfilling a "Sell" desire is buying the resource from the AI —
-    the AI receives the money. A player fulfilling a "Buy"/"Need to Buy"
-    desire is selling the resource to the AI — the AI receives the resource.
-    Mutates after_data in place, clamped to the nation's money/resource caps.
+    the AI gains money and loses the resource (limited to what it holds).
+    A player fulfilling a "Buy"/"Need to Buy" desire is selling the resource
+    to the AI — the AI gains the resource and pays for it (limited to what it
+    can afford). Mutates after_data in place, clamped to the nation's
+    money/resource caps. Returns the quantity actually fulfilled.
     """
+    storage = dict(after_data.get("resource_storage", {}))
     if "Sell" in trade_type:
+        available = storage.get(resource, 0)
+        quantity = max(0, min(quantity, available))
+        if quantity <= 0:
+            return 0
+        storage[resource] = available - quantity
+        after_data["resource_storage"] = storage
         money_cap = after_data.get("money_capacity")
         new_money = after_data.get("money", 0) + (price * quantity)
         if money_cap is not None:
             new_money = min(new_money, money_cap)
         after_data["money"] = new_money
     elif "Buy" in trade_type:
-        storage = dict(after_data.get("resource_storage", {}))
+        money = after_data.get("money", 0)
+        if price > 0:
+            quantity = max(0, min(quantity, int(money // price)))
+        if quantity <= 0:
+            return 0
         new_amount = storage.get(resource, 0) + quantity
         resource_cap = after_data.get("nation_resource_capacity", {}).get(resource)
         if resource_cap is not None:
             new_amount = min(new_amount, resource_cap)
         storage[resource] = new_amount
         after_data["resource_storage"] = storage
+        after_data["money"] = money - (price * quantity)
+    return quantity
 
 
 @data_item_routes.route("/markets/trade/request", methods=["POST"])
@@ -1292,18 +1307,21 @@ def market_trade_request():
     after_data = deepcopy(nation)
     
     # Find and update the resource desire
+    fulfilled_quantity = None
     for i, desire in enumerate(after_data.get("resource_desires", [])):
         if desire.get("resource") == resource and desire.get("trade_type") == trade_type and desire.get("price") == price:
-            # Calculate new quantity
             current_quantity = desire.get("quantity", 0)
-            new_quantity = max(0, current_quantity - quantity)
-            fulfilled_quantity = current_quantity - new_quantity
-
-            # Update the quantity
-            after_data["resource_desires"][i]["quantity"] = new_quantity
-            if fulfilled_quantity > 0:
-                _apply_trade_fulfillment_to_nation(after_data, trade_type, resource, price, fulfilled_quantity)
+            requested = min(quantity, current_quantity)
+            fulfilled_quantity = (
+                _apply_trade_fulfillment_to_nation(after_data, trade_type, resource, price, requested)
+                if requested > 0 else 0
+            )
+            after_data["resource_desires"][i]["quantity"] = current_quantity - fulfilled_quantity
             break
+
+    if fulfilled_quantity == 0:
+        flash("Trade could not be fulfilled — the nation lacks the stock or funds to complete it.")
+        return redirect(request.referrer or "/markets")
 
     # Create change request
     change_id = request_change(
@@ -1341,18 +1359,21 @@ def market_trade_save():
     after_data = deepcopy(nation)
     
     # Find and update the resource desire
+    fulfilled_quantity = None
     for i, desire in enumerate(after_data.get("resource_desires", [])):
         if desire.get("resource") == resource and desire.get("trade_type") == trade_type and desire.get("price") == price:
-            # Calculate new quantity
             current_quantity = desire.get("quantity", 0)
-            new_quantity = max(0, current_quantity - quantity)
-            fulfilled_quantity = current_quantity - new_quantity
-
-            # Update the quantity
-            after_data["resource_desires"][i]["quantity"] = new_quantity
-            if fulfilled_quantity > 0:
-                _apply_trade_fulfillment_to_nation(after_data, trade_type, resource, price, fulfilled_quantity)
+            requested = min(quantity, current_quantity)
+            fulfilled_quantity = (
+                _apply_trade_fulfillment_to_nation(after_data, trade_type, resource, price, requested)
+                if requested > 0 else 0
+            )
+            after_data["resource_desires"][i]["quantity"] = current_quantity - fulfilled_quantity
             break
+
+    if fulfilled_quantity == 0:
+        flash("Trade could not be fulfilled — the nation lacks the stock or funds to complete it.")
+        return redirect(request.referrer or "/markets")
 
     # Create and approve change request
     change_id = request_change(

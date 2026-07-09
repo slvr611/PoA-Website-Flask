@@ -1089,7 +1089,7 @@
                 <span class="toggle-icon">▼</span>
             </div>
             <div class="section-content">
-                {{ render_tech_tree(nation.get("technologies", {"political_philosophy": {"researched": true}}), nation.get("technology_cost_modifier", 0), nation.get("technology_cost_minimum", 2), json_data, editable=True, form=form, form_json=form_json["technologies"]) }}
+                {{ render_tech_tree(nation.get("technologies", {"political_philosophy": {"researched": true}}), nation.get("technology_cost_modifier", 0), nation.get("technology_cost_minimum", 2), json_data, editable=True, form=form, form_json=form_json["technologies"], tech_category_cost_modifiers=nation.get("technology_category_cost_modifiers", {})) }}
             </div>
         </div>
 

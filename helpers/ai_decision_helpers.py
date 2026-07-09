@@ -3727,9 +3727,7 @@ def _run_ai_market_matching(old_nations, new_nations, log_lines):
             if delay is None or delay > AI_MATCH_MAX_DELAY:
                 continue
 
-            qty      = min(buy["quantity"], sell["quantity"])
             price    = sell["price"]
-            total    = qty * price
             resource = buy["resource"]
 
             buyer  = new_nations[buy["nation_idx"]]
@@ -3737,10 +3735,27 @@ def _run_ai_market_matching(old_nations, new_nations, log_lines):
 
             b_storage = buyer.setdefault("resource_storage", {})
             s_storage = seller.setdefault("resource_storage", {})
+
+            # Limit by seller stock, buyer funds, and buyer storage capacity
+            qty = min(buy["quantity"], sell["quantity"], s_storage.get(resource, 0))
+            if price > 0:
+                qty = min(qty, int(buyer.get("money", 0) // price))
+            b_cap = (buyer.get("nation_resource_capacity") or {}).get(resource)
+            if b_cap is not None:
+                qty = min(qty, b_cap - b_storage.get(resource, 0))
+            qty = int(qty)
+            if qty <= 0:
+                continue
+            total = qty * price
+
             b_storage[resource] = b_storage.get(resource, 0) + qty
             s_storage[resource] = s_storage.get(resource, 0) - qty
-            buyer["money"]  = buyer.get("money", 0) - total
-            seller["money"] = seller.get("money", 0) + total
+            buyer["money"] = buyer.get("money", 0) - total
+            new_seller_money = seller.get("money", 0) + total
+            s_money_cap = seller.get("money_capacity")
+            if s_money_cap is not None:
+                new_seller_money = min(new_seller_money, s_money_cap)
+            seller["money"] = new_seller_money
 
             buy["quantity"]  -= qty
             sell["quantity"] -= qty
