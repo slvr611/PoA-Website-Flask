@@ -4,13 +4,16 @@ Usage:
     python scripts/archive_old_changes.py
 
 Connects to MongoDB via the MONGO_URI env var (loaded from .env), exports
-all non-pending changes whose last_modified_time is older than MONTHS_TO_KEEP
-months to the S3 backups/ folder, then deletes them from MongoDB.
+non-pending changes in streaming batches to S3, then deletes them.
+
+Dates in this collection are stored as ISO strings (e.g. "2025-10-09 09:30:00"),
+so MongoDB-side filtering uses string comparison (ISO format sorts correctly).
 """
 
 import os
 import sys
 import datetime
+import json
 from urllib.parse import urlparse
 
 from dotenv import load_dotenv
@@ -21,25 +24,28 @@ from bson import json_util
 import boto3
 
 # ── Configurable ──────────────────────────────────────────────────────────────
-MONTHS_TO_KEEP = 6
+MONTHS_TO_KEEP = 3   # archive changes older than this
+BATCH_SIZE = 500     # docs per S3 file
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def upload_to_s3(file_path, s3_key):
+def get_s3_client():
     s3_bucket = os.getenv("S3_BUCKET_NAME")
     aws_access_key = os.getenv("AWS_ACCESS_KEY_ID")
     aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
-
     if not s3_bucket or not aws_access_key or not aws_secret_key:
-        return False, "S3 configuration missing"
-
-    s3_client = boto3.client(
+        return None, None, "S3 configuration missing"
+    client = boto3.client(
         's3',
         aws_access_key_id=aws_access_key,
-        aws_secret_access_key=aws_secret_key
+        aws_secret_access_key=aws_secret_key,
     )
-    s3_client.upload_file(file_path, s3_bucket, s3_key)
-    return True, f"s3://{s3_bucket}/{s3_key}"
+    return client, s3_bucket, None
+
+
+def upload_bytes_to_s3(client, bucket, key, data: bytes):
+    from io import BytesIO
+    client.upload_fileobj(BytesIO(data), bucket, key)
 
 
 def main():
@@ -56,82 +62,70 @@ def main():
     client = MongoClient(mongo_uri, serverSelectionTimeoutMS=10000)
     db = client[db_name]
 
-    cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=MONTHS_TO_KEEP * 30)
-
-    def parse_dt(value):
-        """Return a timezone-aware datetime from either a datetime object or a string."""
-        if isinstance(value, datetime.datetime):
-            return value if value.tzinfo else value.replace(tzinfo=datetime.timezone.utc)
-        if isinstance(value, str):
-            # Handle trailing Z (Python < 3.11 fromisoformat doesn't accept it)
-            normalized = value.rstrip('Z')
-            try:
-                dt = datetime.datetime.fromisoformat(normalized)
-            except ValueError:
-                return None
-            return dt if dt.tzinfo else dt.replace(tzinfo=datetime.timezone.utc)
-        return None
-
-    def is_older_than_cutoff(doc):
-        """Check the most relevant date field for the doc's status."""
-        status = doc.get("status")
-        field = "time_implemented" if status == "Approved" else "time_denied" if status == "Denied" else "last_modified_time"
-        dt = parse_dt(doc.get(field)) or parse_dt(doc.get("last_modified_time"))
-        return dt is not None and dt < cutoff
-
-    all_non_pending = list(db.changes.find({"status": {"$ne": "Pending"}}))
-    docs = [d for d in all_non_pending if is_older_than_cutoff(d)]
-
-    if not docs:
-        print(f"No changes older than {MONTHS_TO_KEEP} months found. Nothing to do.")
-        return
-
-    print(f"Found {len(docs)} changes to archive (older than {MONTHS_TO_KEEP} months).")
-
-    timestamp = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%d_%H%M%S')
-    filename = f"changes_archive_manual_{timestamp}.json"
-    tmp_path = os.path.join(os.getcwd(), filename)
-
-    with open(tmp_path, 'w') as f:
-        f.write(json_util.dumps(docs, indent=2))
-
-    print(f"Exported to {tmp_path}. Uploading to S3...")
-
-    success, message = upload_to_s3(tmp_path, f"backups/{filename}")
-    os.remove(tmp_path)
-
-    if not success:
-        print(f"ERROR: S3 upload failed ({message}). Changes NOT deleted.")
+    s3_client, s3_bucket, s3_err = get_s3_client()
+    if s3_err:
+        print(f"ERROR: {s3_err}")
         sys.exit(1)
 
-    print(f"Uploaded: {message}")
+    # Cutoff as an ISO string (dates in the collection are stored as strings)
+    cutoff_str = (
+        datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=MONTHS_TO_KEEP * 30)
+    ).strftime('%Y-%m-%d')
 
-    ids = [d["_id"] for d in docs]
-    result = db.changes.delete_many({"_id": {"$in": ids}})
+    print(f"Archiving non-pending changes with time_implemented < {cutoff_str} ...")
 
-    if result.deleted_count == len(docs):
-        print(f"Deleted {result.deleted_count} changes from MongoDB.")
-    else:
-        # Batch delete under-counted — fall back to individual deletes.
-        # This handles the case where old _id values are stored as strings
-        # while some are ObjectIds, causing $in type mismatches.
-        print(f"Batch delete only removed {result.deleted_count}/{len(docs)} — retrying remaining individually.")
-        already_deleted = set()
-        # Re-fetch what's still in the collection from our set
-        remaining = list(db.changes.find({"_id": {"$in": ids}}))
-        deleted_individually = 0
-        for doc in remaining:
-            _id = doc["_id"]
-            if _id in already_deleted:
-                continue
-            r = db.changes.delete_one({"_id": _id})
-            if r.deleted_count:
-                deleted_individually += 1
-                already_deleted.add(_id)
-            else:
-                print(f"  WARNING: could not delete _id={_id!r} (type {type(_id).__name__})")
-        total = result.deleted_count + deleted_individually
-        print(f"Deleted {total}/{len(docs)} changes from MongoDB.")
+    # Build the filter — approved changes use time_implemented; others use last_modified_time
+    query = {
+        "status": {"$ne": "Pending"},
+        "$or": [
+            {"time_implemented": {"$lt": cutoff_str}},
+            {
+                "time_implemented": {"$exists": False},
+                "last_modified_time": {"$lt": cutoff_str},
+            },
+        ],
+    }
+
+    total = db.changes.count_documents(query)
+    if total == 0:
+        print(f"No changes older than {MONTHS_TO_KEEP} months. Nothing to do.")
+        return
+
+    print(f"Found {total} changes to archive.")
+
+    timestamp = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%d_%H%M%S')
+    batch_num = 0
+    deleted_total = 0
+    batch_ids = []
+    batch_docs = []
+
+    def flush_batch():
+        nonlocal batch_num, deleted_total, batch_ids, batch_docs
+        if not batch_docs:
+            return
+        batch_num += 1
+        key = f"backups/changes_archive_{timestamp}_batch{batch_num:04d}.json"
+        data = json_util.dumps(batch_docs, indent=2).encode()
+        upload_bytes_to_s3(s3_client, s3_bucket, key, data)
+        result = db.changes.delete_many({"_id": {"$in": batch_ids}})
+        deleted_total += result.deleted_count
+        print(f"  Batch {batch_num}: archived {len(batch_docs)} → s3://{s3_bucket}/{key}, deleted {result.deleted_count}")
+        batch_ids = []
+        batch_docs = []
+
+    cursor = db.changes.find(query, no_cursor_timeout=True).batch_size(BATCH_SIZE)
+    try:
+        for doc in cursor:
+            batch_docs.append(doc)
+            batch_ids.append(doc["_id"])
+            if len(batch_docs) >= BATCH_SIZE:
+                flush_batch()
+        flush_batch()  # remaining
+    finally:
+        cursor.close()
+
+    print(f"\nDone. Archived and deleted {deleted_total}/{total} changes.")
+    print(f"Remaining in collection: {db.changes.count_documents({})}")
 
 
 if __name__ == "__main__":

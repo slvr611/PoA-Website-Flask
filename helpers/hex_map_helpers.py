@@ -212,12 +212,24 @@ def get_nation_connected_tiles(nation_name):
     return visited
 
 
+def route_cost_reduction(tile):
+    """Movement-cost reduction granted by a route on this tile.
+    Tier 3 routes reduce entry cost by 2; tier 2 routes by 1 (minimum cost 1).
+    """
+    tier = ((tile or {}).get("route") or {}).get("tier")
+    if tier == 3:
+        return 2
+    if tier == 2:
+        return 1
+    return 0
+
+
 def compute_admin_range_out_of_range(nation_name, admin, nomadic=False, all_tiles=None):
     """Return a set of (q, r) owned by nation_name that exceed admin movement range.
 
-    Non-nomadic: limit = admin * 2, measured from building tiles (city/district/wonder);
+    Non-nomadic: limit = admin * 4, measured from building tiles (city/district/wonder);
     falls back to capital tile if no buildings exist.
-    Nomadic: limit = admin * 4, always measured from capital tile only (no buildings).
+    Nomadic: limit = admin * 8, always measured from capital tile only (no buildings).
     If no source tile is found, all owned tiles are returned as out-of-range.
 
     "Entering a tile is sufficient" rule: a tile T is in-range when the cost to
@@ -225,7 +237,7 @@ def compute_admin_range_out_of_range(nation_name, admin, nomadic=False, all_tile
     Building tiles themselves are always in range.
     """
     IMPASSABLE = 9999
-    limit = admin * (4 if nomadic else 2)
+    limit = admin * (8 if nomadic else 4)
 
     terrain_data = json_data.get("terrains", {})
     move_cost = {
@@ -298,8 +310,9 @@ def compute_admin_range_out_of_range(nation_name, admin, nomadic=False, all_tile
             cost = move_cost.get(terrain, IMPASSABLE)
             if cost >= IMPASSABLE:
                 continue
-            if tile and (tile.get("route") or {}).get("tier") == 3:
-                cost = max(1, cost - 1)
+            reduction = route_cost_reduction(tile)
+            if reduction:
+                cost = max(1, cost - reduction)
             new_dist = d + cost
             if new_dist < dist.get((nq, nr), INF):
                 dist[(nq, nr)] = new_dist
@@ -330,8 +343,9 @@ def compute_admin_range_out_of_range(nation_name, admin, nomadic=False, all_tile
         tile = tile_map.get(coord)
         terrain = tile.get("terrain", "disconnected") if tile else "disconnected"
         cost = move_cost.get(terrain, IMPASSABLE)
-        if tile and (tile.get("route") or {}).get("tier") == 3:
-            cost = max(1, cost - 1)
+        reduction = route_cost_reduction(tile)
+        if reduction:
+            cost = max(1, cost - reduction)
         d = dist.get(coord, INF)
         if d == INF or (d - cost) >= limit:
             out_of_range.add(coord)
@@ -358,8 +372,8 @@ def _dijkstra_from_sources(sources, tile_map, portal_map, terrain_move_costs):
     """Multi-source Dijkstra across all tiles. Returns {(q, r): distance} for every reachable tile.
 
     Impassable terrain (cost >= 9999) is never entered.  Tier-3 route tiles reduce
-    their entry cost by 1 (minimum 1).  Same-colour portal pairs are treated as
-    zero-extra-cost virtual neighbours.
+    their entry cost by 2 and tier-2 by 1 (minimum 1).  Same-colour portal pairs are
+    treated as zero-extra-cost virtual neighbours.
     """
     IMPASSABLE = 9999
     INF = float("inf")
@@ -378,8 +392,9 @@ def _dijkstra_from_sources(sources, tile_map, portal_map, terrain_move_costs):
             cost = terrain_move_costs.get(tile.get("terrain", ""), IMPASSABLE)
             if cost >= IMPASSABLE:
                 continue
-            if (tile.get("route") or {}).get("tier") == 3:
-                cost = max(1, cost - 1)
+            reduction = route_cost_reduction(tile)
+            if reduction:
+                cost = max(1, cost - reduction)
             nd = d + cost
             if nd < dist.get((nq, nr), INF):
                 dist[(nq, nr)] = nd

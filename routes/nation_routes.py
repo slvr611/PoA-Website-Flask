@@ -703,10 +703,12 @@ def nation_edit_approve(item_ref):
         after_data=form_data,
         reason=form_data.pop("reason", "No Reason Given")
     )
-    approve_change(change_id)
+    approved = approve_change(change_id)
 
-    flash(f"Change request #{change_id} created and approved.")
-    return redirect("/nations/item/" + form_data["name"])
+    if approved:
+        flash(f"Change request #{change_id} created and approved.")
+        return redirect("/nations/item/" + form_data["name"])
+    return redirect(f"/nations/edit/{item_ref}")
 
 @nation_routes.route("/nations/edit_jobs/<item_ref>", methods=["GET"])
 @owner_required("nations")

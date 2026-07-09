@@ -2050,7 +2050,7 @@
         "description": "The distance at which the nation can trade with other nations or merchant companies",
         "calculated": true,
         "show_breakdown": true,
-        "base_value": 8
+        "base_value": 12
       },
       "diplomatic_range": {
         "bsonType": "number",

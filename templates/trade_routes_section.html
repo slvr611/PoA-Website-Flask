@@ -100,14 +100,13 @@
         <td>{% if r.duration_ticks %}{{ r.duration_ticks }} ticks{% else %}Indefinite{% endif %}</td>
         <td>{% if r.proposal_note %}<em class="text-muted" style="font-size:0.82rem;">{{ r.proposal_note }}</em>{% endif %}</td>
         {% if editable %}
+        {# Buttons associate with stub forms in trade_routes_forms.html via the
+           form attribute — inline <form> tags here would nest inside the nation
+           edit form and close it early, breaking its Save buttons. #}
         <td>
-          <form action="/trade_routes/{{ r._id }}/accept" method="POST" style="display:inline">
-            <button type="submit" class="btn btn-success btn-sm">Accept</button>
-          </form>
-          <form action="/trade_routes/{{ r._id }}/reject" method="POST" style="display:inline">
-            <button type="submit" class="btn btn-danger btn-sm"
-                    onclick="return confirm('Reject this trade route proposal?')">Reject</button>
-          </form>
+          <button type="submit" form="tr-frm-{{ r._id }}-accept" class="btn btn-success btn-sm">Accept</button>
+          <button type="submit" form="tr-frm-{{ r._id }}-reject" class="btn btn-danger btn-sm"
+                  onclick="return confirm('Reject this trade route proposal?')">Reject</button>
         </td>
         {% endif %}
       </tr>
@@ -144,11 +143,8 @@
         <td>{% if r.duration_ticks %}{{ r.duration_ticks }} ticks{% else %}Indefinite{% endif %}</td>
         {% if editable %}
         <td>
-          <form action="/trade_routes/{{ r._id }}/cancel" method="POST" style="display:inline">
-            <input type="hidden" name="cancelling_nation" value="{{ tr_nation_name }}">
-            <button type="submit" class="btn btn-warning btn-sm"
-                    onclick="return confirm('Withdraw this trade route proposal?')">Withdraw</button>
-          </form>
+          <button type="submit" form="tr-frm-{{ r._id }}-cancel" class="btn btn-warning btn-sm"
+                  onclick="return confirm('Withdraw this trade route proposal?')">Withdraw</button>
         </td>
         {% endif %}
       </tr>
@@ -199,13 +195,10 @@
         </td>
         {% if editable %}
         <td>
-          <form action="/trade_routes/{{ r._id }}/cancel" method="POST" style="display:inline">
-            <input type="hidden" name="cancelling_nation" value="{{ tr_nation_name }}">
-            <button type="submit" class="btn btn-warning btn-sm"
-                    onclick="return confirm('Cancel this trade route? Goods may continue arriving for {{ r.delay }} more tick(s) based on delay tier.')">
-              Cancel
-            </button>
-          </form>
+          <button type="submit" form="tr-frm-{{ r._id }}-cancel" class="btn btn-warning btn-sm"
+                  onclick="return confirm('Cancel this trade route? Goods may continue arriving for {{ r.delay }} more tick(s) based on delay tier.')">
+            Cancel
+          </button>
         </td>
         {% endif %}
       </tr>
@@ -258,14 +251,17 @@
 {% if editable %}
 <p class="tr-section-label" style="margin-top: 1rem;">Propose New Trade Route</p>
 {% if connectable_nations %}
-<form id="tr-propose-form" action="/trade_routes/propose" method="POST">
-  <input type="hidden" name="proposer_nation" value="{{ tr_nation_name }}">
-  <input type="hidden" id="tr-a-to-b-json" name="resources_a_to_b" value="[]">
-  <input type="hidden" id="tr-b-to-a-json" name="resources_b_to_a" value="[]">
+{# The actual <form id="tr-propose-form"> is an empty stub in trade_routes_forms.html;
+   every field here associates with it via the form attribute so that this UI can sit
+   inside the nation edit form without nesting <form> elements. #}
+<div id="tr-propose-ui">
+  <input type="hidden" name="proposer_nation" value="{{ tr_nation_name }}" form="tr-propose-form">
+  <input type="hidden" id="tr-a-to-b-json" name="resources_a_to_b" value="[]" form="tr-propose-form">
+  <input type="hidden" id="tr-b-to-a-json" name="resources_b_to_a" value="[]" form="tr-propose-form">
 
   <div style="margin-bottom: 0.6rem;">
     <label style="color: #aaa; font-size: 0.82rem;">Trade Partner</label><br>
-    <select name="acceptor_nation" class="form-control" style="max-width: 280px; font-size: 0.85rem;" id="tr-partner-select">
+    <select name="acceptor_nation" class="form-control" style="max-width: 280px; font-size: 0.85rem;" id="tr-partner-select" form="tr-propose-form">
       <option value="">— select nation —</option>
       {% for cn in connectable_nations %}
       <option value="{{ cn.name }}" data-distance="{{ cn.road_distance }}" data-delay="{{ cn.delay }}">
@@ -295,18 +291,18 @@
   <div style="margin-top: 0.6rem;">
     <label style="color: #aaa; font-size: 0.82rem;">Duration (ticks, 0 = indefinite)</label><br>
     <input type="number" name="duration_ticks" value="0" min="0" class="form-control"
-           style="max-width: 100px; font-size: 0.85rem;">
+           style="max-width: 100px; font-size: 0.85rem;" form="tr-propose-form">
   </div>
 
   <div style="margin-top: 0.6rem;">
     <label style="color: #aaa; font-size: 0.82rem;">Note for partner (optional)</label><br>
     <input type="text" name="proposal_note" maxlength="300" class="form-control"
-           style="max-width: 480px; font-size: 0.85rem;" placeholder="e.g. mutual benefit, alliance support…">
+           style="max-width: 480px; font-size: 0.85rem;" placeholder="e.g. mutual benefit, alliance support…" form="tr-propose-form">
   </div>
 
-  <button type="submit" class="btn btn-primary btn-sm" style="margin-top: 0.75rem;"
+  <button type="submit" class="btn btn-primary btn-sm" style="margin-top: 0.75rem;" form="tr-propose-form"
           onclick="return trSerializeAndValidate()">Propose Route</button>
-</form>
+</div>
 
 <script>
 const TR_RESOURCES = [
@@ -316,7 +312,7 @@ const TR_RESOURCES = [
 ];
 
 function trResourceSelect(name) {
-  let sel = '<select class="form-control" name="' + name + '" style="width:160px">';
+  let sel = '<select class="form-control" name="' + name + '" style="width:160px" form="tr-propose-form">';
   sel += '<option value="">— resource —</option>';
   TR_RESOURCES.forEach(r => {
     sel += '<option value="' + r.key + '">' + r.name + '</option>';
@@ -331,7 +327,7 @@ function trAddRow(containerId, dir) {
   row.dataset.dir = dir;
   row.innerHTML =
     trResourceSelect('tr_res_' + dir) +
-    '<input type="number" class="form-control" placeholder="qty" min="1" value="1" style="width:70px">' +
+    '<input type="number" class="form-control" placeholder="qty" min="1" value="1" style="width:70px" form="tr-propose-form">' +
     '<button type="button" style="background:none;border:none;color:#f88;cursor:pointer;font-size:1rem" onclick="this.closest(\'.tr-resource-row\').remove()">✕</button>';
   document.getElementById(containerId).appendChild(row);
 }

@@ -314,15 +314,16 @@
                                             None
                                         {% endif %}
                                         </td>
-                                        <form method="POST" action="{{ pop['link'].replace('item', 'clone') }}/save" style="display: inline;" data-prevent-enter-submit="true">
-                                            <td>
-                                                <input type="text" id="pop_reason" name="pop_reason" value="">
-                                            </td>
-                                            {% if g.user.is_admin %}
-                                                <td><button type="submit" formaction="{{ pop['link'].replace('item', 'clone') }}/save" class="btn btn-primary">Clone Now</button></td>
-                                            {% endif %}
-                                            <td><button type="submit" formaction="{{ pop['link'].replace('item', 'clone') }}/request" class="btn btn-primary">Request Clone</button></td>
-                                        </form>
+                                        {# Clone controls associate with a stub form emitted after the main
+                                           form via the HTML5 form attribute — a <form> nested here would
+                                           close the main edit form early and break the Save buttons. #}
+                                        <td>
+                                            <input type="text" name="pop_reason" value="" form="pop-clone-{{ pop['_id'] }}">
+                                        </td>
+                                        {% if g.user.is_admin %}
+                                            <td><button type="submit" form="pop-clone-{{ pop['_id'] }}" formaction="{{ pop['link'].replace('item', 'clone') }}/save" class="btn btn-primary">Clone Now</button></td>
+                                        {% endif %}
+                                        <td><button type="submit" form="pop-clone-{{ pop['_id'] }}" formaction="{{ pop['link'].replace('item', 'clone') }}/request" class="btn btn-primary">Request Clone</button></td>
                                     </tr>
                                 {% endfor %}
                             </tbody>
@@ -1973,6 +1974,17 @@
             </div>
         </div>
     </form>
+
+    {# Stub forms for controls rendered inside the main edit form above (pop clone
+       buttons, trade route actions). They must live OUTSIDE the main form: a <form>
+       nested inside it is dropped by the browser's parser but its </form> closes
+       the main form early, orphaning the Save/Request buttons. #}
+    {% for pop in linked_objects.get("pops", []) %}
+        <form id="pop-clone-{{ pop['_id'] }}" method="POST"></form>
+    {% endfor %}
+    {% with editable = True %}
+    {% include "trade_routes_forms.html" with context %}
+    {% endwith %}
 </div>
 {{ modifier_shared_js() }}
 {% endblock %}

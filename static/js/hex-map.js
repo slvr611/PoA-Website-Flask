@@ -2201,7 +2201,7 @@ class HexMapViewer {
         for (const [nationName, ownedTiles] of nationTiles) {
             const admin    = this.nationAdmin.get(nationName) || 1;
             const isNomadic = this.nationNomadic.get(nationName) || false;
-            const limit    = admin * (isNomadic ? 4 : 2);
+            const limit    = admin * (isNomadic ? 8 : 4);
 
             // Determine sources: nomadic → capital only; non-nomadic → buildings, fall back to capital
             let sources;
@@ -2245,7 +2245,9 @@ class HexMapViewer {
                     const terrain = ntile ? (ntile.terrain || 'disconnected') : 'disconnected';
                     let cost = TERRAIN_MOVE_COST[terrain] ?? _TERRAIN_MOVE_IMPASSABLE;
                     if (cost >= _TERRAIN_MOVE_IMPASSABLE) continue;
-                    if (ntile?.route?.tier === 3) cost = Math.max(1, cost - 1);
+                    const routeTier = ntile?.route?.tier;
+                    if (routeTier === 3) cost = Math.max(1, cost - 2);
+                    else if (routeTier === 2) cost = Math.max(1, cost - 1);
                     const nd = d + cost;
                     if (nd < (dist.get(nkey) ?? INF)) {
                         dist.set(nkey, nd);
@@ -2279,7 +2281,8 @@ class HexMapViewer {
                     this._adminDistData.set(t.key, { dist: Infinity, tileCost: 0, entrance: Infinity, limit, inRange: false, isSource: false });
                 } else {
                     let tileCost = TERRAIN_MOVE_COST[t.terrain] ?? _TERRAIN_MOVE_IMPASSABLE;
-                    if (t.routeTier === 3) tileCost = Math.max(1, tileCost - 1);
+                    if (t.routeTier === 3) tileCost = Math.max(1, tileCost - 2);
+                    else if (t.routeTier === 2) tileCost = Math.max(1, tileCost - 1);
                     const entrance = d - tileCost;
                     const inRange = entrance < limit;
                     if (!inRange) this._outOfRangeTiles.add(t.key);

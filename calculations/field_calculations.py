@@ -2666,7 +2666,7 @@ def _compute_legal_placement(nation, owned_tiles=None):
         # Compute out-of-range tiles for admin distance awareness
         admin = nation.get("administration", 1)
         nomadic = nation.get("government_type", "") in ("Nomadic", "nomadic")
-        admin_range = admin * (4 if nomadic else 2)
+        admin_range = admin * (8 if nomadic else 4)
         result["admin_range"] = admin_range
 
         try:

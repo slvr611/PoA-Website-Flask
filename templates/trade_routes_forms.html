@@ -1,0 +1,32 @@
+{#
+  Trade Routes Stub Forms Partial
+
+  Empty <form> elements that the action buttons and propose-form fields in
+  trade_routes_section.html reference via the HTML5 form attribute.
+
+  Kept separate from the section partial so pages that embed the section
+  inside another <form> (nation_owner_edit.html's main edit form) can emit
+  these AFTER that form closes. A <form> nested inside another form is
+  invalid HTML: browsers drop the inner start tag but honor its </form>,
+  closing the outer form early and orphaning every control after it —
+  which silently broke the nation edit page's Save/Request buttons.
+
+  Expected context: nation, trade_routes, editable, connectable_nations.
+#}
+{% if editable %}
+  {% set tr_nation_name = nation.get("name", "") %}
+  {% for r in trade_routes %}
+    {% if r.status == "pending" %}
+      <form id="tr-frm-{{ r._id }}-accept" action="/trade_routes/{{ r._id }}/accept" method="POST"></form>
+      <form id="tr-frm-{{ r._id }}-reject" action="/trade_routes/{{ r._id }}/reject" method="POST"></form>
+    {% endif %}
+    {% if r.status in ("pending", "active") %}
+      <form id="tr-frm-{{ r._id }}-cancel" action="/trade_routes/{{ r._id }}/cancel" method="POST">
+        <input type="hidden" name="cancelling_nation" value="{{ tr_nation_name }}">
+      </form>
+    {% endif %}
+  {% endfor %}
+  {% if connectable_nations %}
+    <form id="tr-propose-form" action="/trade_routes/propose" method="POST"></form>
+  {% endif %}
+{% endif %}

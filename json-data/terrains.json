@@ -3,19 +3,19 @@
 		"display_name": "Plains",
 		"resource": "food",
 		"count_required": 4,
-		"speed_cost": 1
+		"speed_cost": 2
 	},
 	"forest": {
 		"display_name": "Forest",
 		"resource": "wood",
 		"count_required": 4,
-		"speed_cost": 2
+		"speed_cost": 3
 	},
 	"dense_forest": {
 		"display_name": "Dense Forest",
 		"resource": "wood",
 		"count_required": 3,
-		"speed_cost": 3
+		"speed_cost":4
 	},
 	"urban": {
 		"display_name": "Urban",
@@ -27,13 +27,13 @@
 		"display_name": "Hill",
 		"resource": "stone",
 		"count_required": 4,
-		"speed_cost": 2
+		"speed_cost": 3
 	},
 	"mountain": {
 		"display_name": "Mountain",
 		"resource": "stone",
 		"count_required": 3,
-		"speed_cost": 3
+		"speed_cost": 5
 	},
 	"river": {
 		"display_name": "River",
@@ -46,31 +46,31 @@
 		"display_name": "Desert",
 		"resource": "mounts",
 		"count_required": 3,
-		"speed_cost": 1
+		"speed_cost": 2
 	},
 	"tundra": {
 		"display_name": "Tundra",
 		"resource": "mounts",
 		"count_required": 3,
-		"speed_cost": 1
+		"speed_cost": 2
 	},
 	"marsh": {
 		"display_name": "Marsh",
 		"resource": "wood",
 		"count_required": 3,
-		"speed_cost": 2
+		"speed_cost": 3
 	},
 	"hazardous_land": {
 		"display_name": "Hazardous Land",
 		"resource": "magic",
 		"count_required": 5,
-		"speed_cost": 2
+		"speed_cost": 3
 	},
 	"shallow_water": {
 		"display_name": "Shallow Water",
 		"resource": "food",
 		"count_required": 4,
-		"naval_speed_cost": 2
+		"naval_speed_cost": 1
 	},
 	"deep_water": {
 		"display_name": "Deep Water",
@@ -82,7 +82,7 @@
 		"display_name": "Hazardous Water",
 		"resource": "magic",
 		"count_required": 5,
-		"naval_speed_cost": 2
+		"naval_speed_cost": 3
 	},
 	"disconnected": {
 		"display_name": "Disconnected",

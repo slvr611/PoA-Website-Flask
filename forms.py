@@ -327,7 +327,11 @@ class ModifierForm(Form):
     value = FloatField("Value", default=1)
     max_value = FloatField("Max Value", validators=[Optional()])
     duration = IntegerField("Duration", validators=[NumberRange()], default=-1)
-    source = StringField("Source", validators=[DataRequired()])
+    # No DataRequired: system/tick-generated modifiers legitimately have empty
+    # sources, and the rendered `required` attribute silently blocks submission
+    # of the whole edit form when such a modifier sits in a collapsed section
+    # (the browser can't focus the hidden field to show its validation bubble).
+    source = StringField("Source")
     condition_scaling = StringField("Condition Scaling")
     condition_scaling_x = FloatField("Condition Scaling X", validators=[Optional()])
     condition_scaling_extra = StringField("Condition Scaling Extra")
