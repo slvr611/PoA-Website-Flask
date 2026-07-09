@@ -89,23 +89,24 @@ const RESOURCE_COLORS = Object.fromEntries(ALL_RESOURCES.map(r => [r.key, _resou
 // Alpha applied to all terrain fills so the background image shows through.
 const TERRAIN_FILL_ALPHA = 0.40;
 
-// Land movement costs per terrain (mirrors terrains.json speed_cost).
-// Terrain with no entry → treated as impassable by the admin-range Dijkstra.
+// Land movement costs per terrain — seeded with fallback values, overwritten by
+// loadConfig() from the server's terrains.json data (speed_cost, falling back to
+// naval_speed_cost). Terrain with no entry → impassable to the admin-range Dijkstra.
 const TERRAIN_MOVE_COST = {
-    plains:         1,
-    urban:          1,
-    desert:         1,
-    tundra:         1,
-    forest:         2,
-    hill:           2,
-    marsh:          2,
-    hazardous_land: 2,
-    dense_forest:    3,
-    mountain:        3,
+    plains:          2,
+    urban:           1,
+    desert:          2,
+    tundra:          2,
+    forest:          3,
+    hill:            3,
+    marsh:           3,
+    hazardous_land:  3,
+    dense_forest:    4,
+    mountain:        5,
     river:           3,
-    shallow_water:   2,
+    shallow_water:   1,
     deep_water:      3,
-    hazardous_water: 2,
+    hazardous_water: 3,
 };
 const _TERRAIN_MOVE_IMPASSABLE = 9999;
 
@@ -370,6 +371,15 @@ class HexMapViewer {
         }
         if (cfg.city_types) {
             this._cityTypes = cfg.city_types;
+        }
+        if (cfg.terrains) {
+            // Rebuild movement costs from the server's terrains.json — same rule as
+            // the backend: speed_cost, else naval_speed_cost, else impassable.
+            for (const k of Object.keys(TERRAIN_MOVE_COST)) delete TERRAIN_MOVE_COST[k];
+            for (const [k, v] of Object.entries(cfg.terrains)) {
+                const cost = v.speed_cost || v.naval_speed_cost;
+                if (cost) TERRAIN_MOVE_COST[k] = cost;
+            }
         }
         if (cfg.viewer_nation) {
             this._overlayNation = cfg.viewer_nation;

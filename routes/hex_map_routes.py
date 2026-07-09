@@ -115,6 +115,7 @@ def hex_map_config():
             "luxury_resources":   _res_list("luxury_resources"),
             "city_types":         city_types,
             "viewer_nation":      viewer_nation_name,
+            "terrains":           json_data.get("terrains", {}),
         }
     )
 
