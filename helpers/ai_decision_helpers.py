@@ -297,7 +297,18 @@ def evaluate_nation_state(old_nation):
 
     # Strip last session's (now-cleared) job effects to get a structural baseline,
     # so initial weights reflect what the nation produces with zero jobs assigned.
+    #
+    # Production and consumption are stripped SEPARATELY and re-clamped at 0,
+    # mirroring compute_resource_production / compute_resource_consumption.
+    # Working on the combined excess would lose the production floor: a nation
+    # with a global production malus (e.g. Savior's -1 to everything) absorbed
+    # by the clamp would show a phantom deficit after job production is removed
+    # (hunter 2 food, savior -1 → production 1; strip 2 → -1, but the true
+    # no-jobs production is max(0-1, 0) = 0) — and the AI would pin a pop to
+    # "fix" a deficit that doesn't exist without the job.
     persistent_job_keys = {"undead", "partial_vampire", "full_vampire", "revolutionary"}
+    base_production  = dict(old_nation.get("resource_production", {}))
+    base_consumption = dict(old_nation.get("resource_consumption", {}))
     base_excess = dict(old_nation.get("resource_excess", {}))
     jobs_map = json_data.get("jobs", {})
     for jk, count in old_nation.get("jobs", {}).items():
@@ -305,12 +316,34 @@ def evaluate_nation_state(old_nation):
             continue
         jdata = jobs_map.get(jk, {})
         for r, amt in jdata.get("production", {}).items():
-            if isinstance(amt, (int, float)):
+            if not isinstance(amt, (int, float)):
+                continue
+            if r in base_production:
+                base_production[r] = base_production.get(r, 0) - amt * count
+            else:
+                # Non-resource production fields (stability chances etc.)
                 base_excess[r] = base_excess.get(r, 0) - amt * count
         for r, amt in jdata.get("upkeep", {}).items():
-            if isinstance(amt, (int, float)):
+            if not isinstance(amt, (int, float)):
+                continue
+            if r in base_consumption:
+                base_consumption[r] = base_consumption.get(r, 0) - amt * count
+            else:
                 base_excess[r] = base_excess.get(r, 0) + amt * count
+    # Recompute excess for resource keys with both sides clamped at 0, exactly
+    # as the game does when no jobs are assigned.
+    for r in set(base_production) | set(base_consumption):
+        base_excess[r] = int(max(base_production.get(r, 0), 0) - max(base_consumption.get(r, 0), 0))
     resource_excess  = base_excess
+
+    # How much production malus the clamp is absorbing per resource (a negative
+    # stripped baseline means e.g. Savior's -1 is sitting under the 0 floor).
+    # The first units of NEW production must overcome this before they raise
+    # net production — job projection loops consume it before crediting.
+    production_clamp_absorbed = {
+        r: -v for r, v in base_production.items()
+        if isinstance(v, (int, float)) and v < 0
+    }
     resource_storage = old_nation.get("resource_storage", {})
 
     stockpiles = {}
@@ -432,6 +465,7 @@ def evaluate_nation_state(old_nation):
         "territory_types":       territory_types,
         "resource_capacity":     old_nation.get("nation_resource_capacity", {}),
         "active_resources":      active_resources,
+        "production_clamp_absorbed": production_clamp_absorbed,
     }
 
 
@@ -540,10 +574,31 @@ def compute_need_weights(state, prices=None):
 # Job scoring
 # ---------------------------------------------------------------------------
 
-def score_jobs(state, need_weights, prices=None):
+def _consume_clamp_absorbed(absorbed, r, amount):
+    """Consume the production-clamp-absorbed malus for resource r and return
+    the EFFECTIVE amount that actually raises net production. Mutates
+    `absorbed` — each unit of new production first fills the hole under the
+    0 floor (e.g. Savior's -1) before having any real effect."""
+    if not absorbed or amount <= 0:
+        return amount
+    eat = min(absorbed.get(r, 0), amount)
+    if eat > 0:
+        absorbed[r] -= eat
+        if absorbed[r] <= 0:
+            del absorbed[r]
+        return amount - eat
+    return amount
+
+
+def score_jobs(state, need_weights, prices=None, clamp_absorbed=None):
     """
     Compute efficiency score for each available job.
     Factors in: resource need weights, market price normalisation, district bonus.
+
+    clamp_absorbed: optional {resource: amount} of production malus currently
+    absorbed by the per-resource clamp at 0. The NEXT pop's production of such
+    a resource is reduced by that amount (read-only here — callers consume it
+    when they actually assign the pop).
     """
     prices = prices if prices is not None else _base_prices()
     nation_districts = state["existing_def_keys"] | state["existing_types"]
@@ -554,6 +609,8 @@ def score_jobs(state, need_weights, prices=None):
         upkeep_cost = 0.0
 
         for field, amount in job.get("production", {}).items():
+            if clamp_absorbed and isinstance(amount, (int, float)) and clamp_absorbed.get(field, 0) > 0:
+                amount = max(0, amount - clamp_absorbed[field])
             if field in need_weights:
                 prod_value += need_weights[field] * amount * _price_scale(field, prices)
             elif field in PRODUCTION_FIELD_MAP:
@@ -671,6 +728,7 @@ def compute_upkeep_floor(state, prices=None):
                     unresolved.add(r)
         state["unresolved_deficits"] = unresolved
         state["upkeep_burden"] = {}
+        state["production_clamp_absorbed_remaining"] = dict(state.get("production_clamp_absorbed") or {})
         return {}, 0, dict(state["net_production"]), [], 0.0, unresolved
 
     prices = prices if prices is not None else _base_prices()
@@ -679,6 +737,13 @@ def compute_upkeep_floor(state, prices=None):
     pops_remaining = state["idle_pops"]
     total_idle = state["idle_pops"]
     log = []
+
+    # Production malus absorbed by the 0-floor clamp (e.g. Savior's -1): the
+    # first units of newly assigned job production fill this hole before
+    # raising net production. Scoring stays optimistic (so a job that needs a
+    # second pop to overcome the malus still gets tried) but the projection is
+    # exact — the loop keeps assigning until the deficit is REALLY fixed.
+    clamp_absorbed = dict(state.get("production_clamp_absorbed") or {})
 
     while pops_remaining > 0:
         # Find the most critical deficit
@@ -725,7 +790,7 @@ def compute_upkeep_floor(state, prices=None):
         job = state["available_jobs"][best]
         for r, amt in job.get("production", {}).items():
             if isinstance(amt, (int, float)) and r in projected_net:
-                projected_net[r] = projected_net.get(r, 0) + amt
+                projected_net[r] = projected_net.get(r, 0) + _consume_clamp_absorbed(clamp_absorbed, r, amt)
         for r, amt in job.get("upkeep", {}).items():
             if isinstance(amt, (int, float)) and r in projected_net:
                 projected_net[r] = projected_net.get(r, 0) - amt
@@ -767,6 +832,10 @@ def compute_upkeep_floor(state, prices=None):
         if pr:
             burden[pr] = burden.get(pr, 0) + cnt
     state["upkeep_burden"] = burden
+
+    # Clamp-absorbed malus not yet overcome by upkeep jobs — goal job
+    # assignment continues consuming from here.
+    state["production_clamp_absorbed_remaining"] = clamp_absorbed
 
     return (
         {k: v for k, v in assignments.items() if v > 0},
@@ -3158,6 +3227,14 @@ def assign_goal_jobs(state, goal, remaining_pops, projected_net, district_plan, 
 
     resource_capacity = state.get("resource_capacity", {})
 
+    # Production malus still absorbed by the 0-floor clamp after upkeep jobs
+    # (e.g. Savior's -1): the next pop's production of such a resource is
+    # partially eaten, so both the job scores and the projection account for it.
+    clamp_absorbed = dict(
+        state.get("production_clamp_absorbed_remaining",
+                  state.get("production_clamp_absorbed")) or {}
+    )
+
     while pops_left > 0:
         # Recompute goal boosts each iteration using projected stockpiles
         # so shortfall detection accounts for production from already-assigned pops
@@ -3199,7 +3276,7 @@ def assign_goal_jobs(state, goal, remaining_pops, projected_net, district_plan, 
                 if cap > 0 and state["stockpiles"].get(r, 0) + net_r >= cap:
                     goal_weights[r] = min(goal_weights[r], max(1.0, goal_weights[r] * 0.2))
 
-        job_scores = score_jobs(state, goal_weights, prices)
+        job_scores = score_jobs(state, goal_weights, prices, clamp_absorbed=clamp_absorbed)
         positive = {k: v for k, v in job_scores.items() if v > 0.05}
         if not positive:
             break
@@ -3246,7 +3323,7 @@ def assign_goal_jobs(state, goal, remaining_pops, projected_net, district_plan, 
         job = state["available_jobs"][best]
         for r, amt in job.get("production", {}).items():
             if isinstance(amt, (int, float)) and r in projected_net:
-                projected_net[r] = projected_net.get(r, 0) + amt
+                projected_net[r] = projected_net.get(r, 0) + _consume_clamp_absorbed(clamp_absorbed, r, amt)
         for r, amt in job.get("upkeep", {}).items():
             if isinstance(amt, (int, float)) and r in projected_net:
                 projected_net[r] = projected_net.get(r, 0) - amt
@@ -3760,6 +3837,7 @@ def ai_decision_tick(old_nation, new_nation, schema):
             "strategic_goal": goal,
             "secondary_goal": secondary_goal,
             "future_utility": state.get("future_utility", {}),
+            "production_clamp_absorbed": state.get("production_clamp_absorbed", {}),
             "goal_candidates": goal_candidates,
             "upkeep_ratio": round(upkeep_ratio, 2),
             "upkeep_assignments": upkeep_assignments,
@@ -3890,17 +3968,21 @@ def _post_trade_build_and_rejob(old_nation, new_nation, log_lines):
 
         prices = get_stored_market_prices(old_nation)
 
-        # projected_net: base net_production + contributions from already-assigned jobs
+        # projected_net: base net_production + contributions from already-assigned
+        # jobs, with the first units of production filling any clamp-absorbed
+        # malus (e.g. Savior's -1) before counting.
         projected_net = dict(state["net_production"])
+        clamp_absorbed = dict(state.get("production_clamp_absorbed") or {})
         all_jobs_data = json_data.get("jobs", {})
         for jk, cnt in new_nation.get("jobs", {}).items():
             jd = state["available_jobs"].get(jk) or all_jobs_data.get(jk, {})
             for r, amt in jd.get("production", {}).items():
                 if isinstance(amt, (int, float)):
-                    projected_net[r] = projected_net.get(r, 0) + amt * cnt
+                    projected_net[r] = projected_net.get(r, 0) + _consume_clamp_absorbed(clamp_absorbed, r, amt * cnt)
             for r, amt in jd.get("upkeep", {}).items():
                 if isinstance(amt, (int, float)):
                     projected_net[r] = projected_net.get(r, 0) - amt * cnt
+        state["production_clamp_absorbed_remaining"] = clamp_absorbed
 
         new_assignments, job_log, _ = assign_goal_jobs(
             state, goal_data, idle_pops, projected_net, None, prices

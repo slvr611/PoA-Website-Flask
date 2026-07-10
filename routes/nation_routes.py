@@ -48,6 +48,29 @@ def _get_district_defs():
     return defs_full, defs_map, categories
 
 
+def _apply_paid_concessions(form_data, nation):
+    """If the edit form's Reset Concessions button was used, add the cleared
+    concession amounts to the nation's resource stockpile (capped to capacity).
+    The button stashes the owed amounts in the hidden `paid_concessions` field."""
+    try:
+        paid = json.loads(request.form.get("paid_concessions") or "{}")
+    except (json.JSONDecodeError, TypeError):
+        return
+    if not isinstance(paid, dict) or not paid:
+        return
+    storage = dict(form_data.get("resource_storage") or nation.get("resource_storage") or {})
+    caps = nation.get("nation_resource_capacity") or {}
+    for res, qty in paid.items():
+        if not isinstance(qty, (int, float)) or qty <= 0:
+            continue
+        new_amount = storage.get(res, 0) + qty
+        cap = caps.get(res)
+        if cap is not None:
+            new_amount = min(new_amount, cap)
+        storage[res] = new_amount
+    form_data["resource_storage"] = storage
+
+
 def _validate_tech_costs(form_data):
     """Return (True, None) or (False, error_message) checking each tech's submitted
     cost is at least floor(base_cost / 2).  Techs with base_cost == 0 are skipped."""
@@ -589,6 +612,9 @@ def nation_edit_request(item_ref):
         except (json.JSONDecodeError, TypeError):
             form_data['concessions'] = {}
 
+    # Reset Concessions button: pay the cleared demands into the stockpile
+    _apply_paid_concessions(form_data, nation)
+
     # Deserialize upgrades JSON strings back to lists for each district
     for dist in form_data.get('districts', []):
         if isinstance(dist.get('upgrades'), str):
@@ -672,6 +698,9 @@ def nation_edit_approve(item_ref):
                 form_data['concessions'] = json.loads(form_data['concessions'])
         except (json.JSONDecodeError, TypeError):
             form_data['concessions'] = {}
+
+    # Reset Concessions button: pay the cleared demands into the stockpile
+    _apply_paid_concessions(form_data, nation)
 
     # Deserialize upgrades JSON strings back to lists for each district
     for dist in form_data.get('districts', []):

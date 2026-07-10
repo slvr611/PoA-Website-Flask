@@ -365,10 +365,10 @@
         <div class="admin-tool-card">
             <div class="admin-tool-card-body">
                 <h3 class="admin-tool-card-title">Wipe All Concessions</h3>
-                <p class="admin-tool-card-desc">Clear all pending concession demands from every vassal nation.</p>
+                <p class="admin-tool-card-desc">Clear all pending concession demands from every vassal nation, adding the demanded resources to each vassal's stockpile (as if paid by their overlord).</p>
                 <form action="/admin/wipe_concessions" method="POST">
                     <button type="submit" class="btn btn-danger btn-sm"
-                            onclick="return confirm('This will clear all concessions from every nation. Continue?')">
+                            onclick="return confirm('This will clear all concessions from every nation and add the demanded resources to their stockpiles. Continue?')">
                         Wipe Concessions
                     </button>
                 </form>

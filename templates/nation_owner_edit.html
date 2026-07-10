@@ -593,7 +593,8 @@
                                         {% endif %}
                                     </div>
                                     {{ form.concessions(id="concessions-field") }}
-                                    <button type="button" class="btn btn-primary" onclick="resetConcessions()">Reset Concessions</button>
+                                    <input type="hidden" name="paid_concessions" id="paid-concessions-field" value="">
+                                    <button type="button" class="btn btn-primary" onclick="resetConcessions()" title="Clear the concession demands and add the demanded resources to this nation's stockpile on save">Reset Concessions</button>
                                 </td>
                             </tr>
                         </table>
@@ -1829,11 +1830,13 @@
             }
 
             function resetConcessions() {
+                const concessionsField = document.getElementById('concessions-field');
+                // Record what was owed so the server pays it into the stockpile on save
+                const paidField = document.getElementById('paid-concessions-field');
+                if (paidField) paidField.value = concessionsField.value || '{}';
+
                 const concessionsDiv = document.getElementById('concessions');
                 concessionsDiv.textContent = '';
-                
-                // Clear the hidden input field
-                const concessionsField = document.getElementById('concessions-field');
                 concessionsField.value = JSON.stringify({});
             }
 

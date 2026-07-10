@@ -1042,12 +1042,35 @@ def sync_cities_apply():
 @admin_tool_routes.route("/admin/wipe_concessions", methods=["POST"])
 @admin_required
 def wipe_concessions():
-    """Clear the concessions dict on every nation."""
-    result = mongo.db.nations.update_many(
+    """Clear the concessions dict on every nation, paying the demanded
+    resources into each nation's stockpile (clamped to resource capacity)."""
+    nations = list(mongo.db.nations.find(
         {"concessions": {"$exists": True, "$ne": {}}},
-        {"$set": {"concessions": {}}}
+        {"concessions": 1, "resource_storage": 1, "nation_resource_capacity": 1},
+    ))
+    for nation in nations:
+        concessions = nation.get("concessions")
+        if not isinstance(concessions, dict):
+            concessions = {}
+        storage = dict(nation.get("resource_storage") or {})
+        caps = nation.get("nation_resource_capacity") or {}
+        for res, qty in concessions.items():
+            if not isinstance(qty, (int, float)) or qty <= 0:
+                continue
+            new_amount = storage.get(res, 0) + qty
+            cap = caps.get(res)
+            if cap is not None:
+                new_amount = min(new_amount, cap)
+            storage[res] = new_amount
+        mongo.db.nations.update_one(
+            {"_id": nation["_id"]},
+            {"$set": {"concessions": {}, "resource_storage": storage}},
+        )
+    flash(
+        f"Wiped concessions from {len(nations)} nation(s) and added the demanded "
+        f"resources to their stockpiles.",
+        "success",
     )
-    flash(f"Wiped concessions from {result.modified_count} nation(s).", "success")
     return redirect(url_for("admin_tool_routes.admin_tools"))
 
 
@@ -1684,6 +1707,7 @@ def ai_goals_preview():
             "strategic_goal": strategic_goal,
             "secondary_goal": secondary_goal,
             "future_utility": future_utility,
+            "production_clamp_absorbed": state.get("production_clamp_absorbed", {}),
             "upkeep_ratio": round(upkeep_ratio, 2),
             "upkeep_assignments": upkeep_assignments,
             "goal_assignments": goal_assignments,
