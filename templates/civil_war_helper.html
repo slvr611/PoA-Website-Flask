@@ -1,0 +1,92 @@
+{% extends "layout.html" %}
+
+{% block title %}Civil War Helper{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1>Civil War Helper</h1>
+    <p class="text-muted">
+        Splits a nation in two: creates a breakaway nation as a copy of the source
+        and moves the selected pops to it. Leadership, diplomacy, wars, vassals, and
+        map-derived data stay with the source nation.
+    </p>
+
+    <form method="get" action="/civil_war_helper">
+        <label for="nation-select"><strong>Source nation:</strong></label>
+        <select id="nation-select" name="nation" onchange="this.form.submit()">
+            <option value="">— Select a nation —</option>
+            {% for nation in nations %}
+                <option value="{{ nation._id }}" {% if selected_id == nation._id|string %}selected{% endif %}>{{ nation.name }}</option>
+            {% endfor %}
+        </select>
+        <noscript><button type="submit">Load</button></noscript>
+    </form>
+
+    {% if selected_nation %}
+    <hr>
+    <h2>Split {{ selected_nation.name }}</h2>
+
+    <form method="post" action="/civil_war_helper/execute"
+          onsubmit="return confirm('Execute the civil war? This creates the new nation and moves the selected pops immediately.')">
+        <input type="hidden" name="source_nation" value="{{ selected_id }}">
+
+        <p>
+            <label for="new-name"><strong>New nation name:</strong></label>
+            <input type="text" id="new-name" name="new_name" required placeholder="Breakaway nation name">
+        </p>
+
+        <p>
+            <label><input type="checkbox" name="copy_units"> Copy military units to the new nation</label><br>
+            <label><input type="checkbox" name="copy_districts"> Copy districts, cities &amp; wonders to the new nation</label><br>
+            <label for="transfer-pct">Transfer <input type="number" id="transfer-pct" name="transfer_pct" value="0" min="0" max="100" style="width:4em;">% of money and stored resources
+                <span class="text-muted">(subtracted from {{ selected_nation.name }})</span></label>
+        </p>
+
+        <h3>Pops to move</h3>
+        {% if pop_groups %}
+        <table class="info-table">
+            <thead>
+                <tr>
+                    <th>Race</th>
+                    <th>Culture</th>
+                    <th>Religion</th>
+                    <th>Slave</th>
+                    <th>Available</th>
+                    <th>Move to new nation</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for group in pop_groups %}
+                <tr>
+                    <td>{{ group.race }}</td>
+                    <td>{{ group.culture }}</td>
+                    <td>{{ group.religion }}</td>
+                    <td>{{ "Yes" if group.slave else "No" }}</td>
+                    <td>{{ group.count }}</td>
+                    <td>
+                        <input type="number" name="move|{{ group.key }}" value="0"
+                               min="0" max="{{ group.count }}" style="width:5em;">
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="text-muted">This nation has no pops.</p>
+        {% endif %}
+
+        <div class="button-container">
+            <button type="submit" class="submit-button">Execute Civil War</button>
+        </div>
+    </form>
+
+    <hr>
+    <h3>After executing</h3>
+    <ol>
+        <li>Open the <a href="/map" target="_blank">map</a>, enter Edit Mode, and paint the breakaway nation's territory (including its capital tile).</li>
+        <li>Run <strong>Tools ▾ → Sync Territory</strong> on the map so both nations' territory data is recounted.</li>
+        <li>Assign rulers/players to the new nation and adjust anything else (laws, stances, notes) on its edit page.</li>
+    </ol>
+    {% endif %}
+</div>
+{% endblock %}

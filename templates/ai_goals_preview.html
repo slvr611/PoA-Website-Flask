@@ -115,6 +115,25 @@
                     {{ "%.0f"|format(upkeep_ratio * 100) }}%
                 </strong> of workforce on upkeep
             </div>
+            {% if secondary_goal %}
+            <div style="font-size:0.78rem;color:#888;margin-bottom:0.3rem;">
+                Secondary goal: <strong style="color:#8af;">{{ secondary_goal.get("display_name", "?") }}</strong>
+                <span style="font-family:monospace;">({{ secondary_goal.get("score", 0) }})</span>
+                {% if strategic_goal.get("type") == "grow_economy" %}
+                <span style="color:#666;">— doubles its districts' costs in future-utility weighting</span>
+                {% endif %}
+            </div>
+            {% endif %}
+            {% if future_utility and strategic_goal.get("type") == "grow_economy" %}
+            <details style="margin-top:0.3rem;">
+                <summary style="font-size:0.8rem;color:#888;cursor:pointer;">Future construction utility (resource → share of upcoming build costs)</summary>
+                <div style="font-size:0.78rem;font-family:monospace;color:#aaa;padding:0.2rem 0.3rem;">
+                    {% for r, share in future_utility|dictsort(by='value', reverse=true) %}
+                    <div>{{ r }}: {{ "%.0f"|format(share * 100) }}%</div>
+                    {% endfor %}
+                </div>
+            </details>
+            {% endif %}
             {% endif %}
             {% if goal_candidates %}
             <details style="margin-top:0.5rem;">
@@ -314,13 +333,14 @@
     <!-- Row 4: District Scores + Plan -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
         <div class="ai-panel">
-            <h3>District Scores (top 10) — Goal: {{ strategic_goal.get("display_name", "?") }}</h3>
+            <h3>District Scores (top 12) — Goal: {{ strategic_goal.get("display_name", "?") }}</h3>
             <p class="text-muted" style="font-size:0.78rem;margin-bottom:0.5rem;">
-                Score = modifier value + unlocked jobs + market opportunity - cost penalty. Goal-aligned districts get a bonus multiplier.
+                Score = modifier value + unlocked jobs + upkeep-pop credit + market opportunity - cost penalty. Goal-aligned districts get a bonus multiplier.
+                Greyed candidates scored &le; 0 and are never built — shown so losing districts are explainable.
                 {{ state.get("open_district_slots", 0) }} open slot{{ "s" if state.get("open_district_slots", 0) != 1 }}.
             </p>
             {% if district_scores %}
-            {% for entry in district_scores[:10] %}
+            {% for entry in district_scores[:12] %}
             {% set score = entry[0] %}
             {% set dk = entry[1] %}
             {% set name = entry[2] %}
@@ -329,13 +349,15 @@
             {% set mod_bd = entry[6] if entry|length > 6 else [] %}
             {% set ujobs = entry[7] if entry|length > 7 else [] %}
             {% set has_goal_tag = "[GOAL:" in rationale %}
-            <div style="border:1px solid #333;border-radius:4px;padding:0.5rem 0.75rem;margin-bottom:0.5rem;{% if loop.first %}border-color:#4caf50;{% elif has_goal_tag %}border-color:#2a4a2a;{% endif %}">
+            {% set is_negative = score <= 0 %}
+            <div style="border:1px solid #333;border-radius:4px;padding:0.5rem 0.75rem;margin-bottom:0.5rem;{% if is_negative %}opacity:0.55;{% elif loop.first %}border-color:#4caf50;{% elif has_goal_tag %}border-color:#2a4a2a;{% endif %}">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.3rem;">
                     <strong style="font-size:0.9rem;">
                         {{ name }}
                         {% if has_goal_tag %}<span style="font-size:0.72rem;color:#8f8;margin-left:0.3rem;">GOAL-ALIGNED</span>{% endif %}
+                        {% if is_negative %}<span style="font-size:0.72rem;color:#f88;margin-left:0.3rem;">NOT VIABLE</span>{% endif %}
                     </strong>
-                    <span style="font-family:monospace;font-size:0.9rem;{% if loop.first %}color:#8f8;{% else %}color:#8af;{% endif %}">{{ "%.2f"|format(score) }}</span>
+                    <span style="font-family:monospace;font-size:0.9rem;{% if is_negative %}color:#f88;{% elif loop.first %}color:#8f8;{% else %}color:#8af;{% endif %}">{{ "%.2f"|format(score) }}</span>
                 </div>
                 <div style="font-size:0.78rem;color:#888;margin-bottom:0.3rem;">
                     Cost: {% for r, amt in cost.items() %}{{ r }}:{{ amt }}{% if not loop.last %}, {% endif %}{% endfor %}

@@ -108,6 +108,216 @@ def process_pop_growth():
 
     return redirect("/pop_growth_helper")
 
+# ── Civil War Helper ─────────────────────────────────────────────────────────
+
+# Fields never copied to the breakaway nation: identity, relationships,
+# map-derived data, and cached/calculated values (recomputed on approval).
+_CIVIL_WAR_EXCLUDED_FIELDS = [
+    "_id", "name",
+    "rulers", "players",
+    "wars", "factions", "hired_mercenaries",
+    "markets", "owned_markets",
+    "overlord", "vassal_type", "vassals", "compliance", "concessions",
+    "diplomatic_relations_1", "diplomatic_relations_2",
+    "pops",
+    "territory_types", "road_usage",
+    "imperial_district",
+    "progress_quests",
+    "ai_state", "notes",
+    "breakdowns", "visibility_modifiers",
+]
+
+
+def _civil_war_pop_groups(nation_id_str):
+    """Group a nation's pops by race/culture/religion/slave with display names."""
+    pipeline = [
+        {"$match": {"nation": nation_id_str}},
+        {"$group": {
+            "_id": {
+                "race":     {"$ifNull": ["$race", ""]},
+                "culture":  {"$ifNull": ["$culture", ""]},
+                "religion": {"$ifNull": ["$religion", ""]},
+                "slave":    {"$ifNull": ["$slave", False]},
+            },
+            "count": {"$sum": 1},
+        }},
+    ]
+    groups = list(mongo.db.pops.aggregate(pipeline))
+
+    def _names(collection, ids):
+        ids = [i for i in ids if i]
+        if not ids:
+            return {}
+        docs = collection.find(
+            {"_id": {"$in": [ObjectId(i) for i in ids]}}, {"name": 1}
+        )
+        return {str(d["_id"]): d.get("name", "?") for d in docs}
+
+    race_names     = _names(mongo.db.races,     {g["_id"]["race"] for g in groups})
+    culture_names  = _names(mongo.db.cultures,  {g["_id"]["culture"] for g in groups})
+    religion_names = _names(mongo.db.religions, {g["_id"]["religion"] for g in groups})
+
+    result = []
+    for g in groups:
+        k = g["_id"]
+        slave_flag = "1" if k["slave"] else "0"
+        result.append({
+            "key":      f"{k['race']}|{k['culture']}|{k['religion']}|{slave_flag}",
+            "race":     race_names.get(k["race"], "None"),
+            "culture":  culture_names.get(k["culture"], "None"),
+            "religion": religion_names.get(k["religion"], "None"),
+            "slave":    bool(k["slave"]),
+            "count":    g["count"],
+        })
+    result.sort(key=lambda x: (x["slave"], x["race"], x["culture"], x["religion"]))
+    return result
+
+
+@admin_tool_routes.route("/civil_war_helper")
+@admin_required
+def civil_war_helper():
+    schema, db = get_data_on_category("nations")
+    nations = list(db.find({}, {"name": 1}).sort("name", ASCENDING))
+
+    selected_nation = None
+    pop_groups = []
+    selected_id = request.args.get("nation", "")
+    if selected_id:
+        try:
+            selected_nation = db.find_one({"_id": ObjectId(selected_id)}, {"name": 1})
+        except Exception:
+            selected_nation = None
+        if selected_nation:
+            pop_groups = _civil_war_pop_groups(selected_id)
+
+    return render_template(
+        "civil_war_helper.html",
+        nations=nations,
+        selected_nation=selected_nation,
+        selected_id=selected_id,
+        pop_groups=pop_groups,
+    )
+
+
+@admin_tool_routes.route("/civil_war_helper/execute", methods=["POST"])
+@admin_required
+def civil_war_execute():
+    from helpers.change_helpers import request_change, approve_change, _calculate_and_attach_fields
+
+    schema, db = get_data_on_category("nations")
+
+    source_id = request.form.get("source_nation", "")
+    new_name = (request.form.get("new_name") or "").strip()
+
+    try:
+        source = db.find_one({"_id": ObjectId(source_id)})
+    except Exception:
+        source = None
+    if source is None:
+        flash("Source nation not found.")
+        return redirect("/civil_war_helper")
+    if not new_name:
+        flash("The new nation needs a name.")
+        return redirect(f"/civil_war_helper?nation={source_id}")
+    if db.find_one({"name": new_name}) is not None:
+        flash(f"A nation named '{new_name}' already exists.")
+        return redirect(f"/civil_war_helper?nation={source_id}")
+
+    # ── Build the breakaway nation as a copy of the source ──
+    new_nation = deepcopy(source)
+    for f in _CIVIL_WAR_EXCLUDED_FIELDS:
+        new_nation.pop(f, None)
+    if request.form.get("copy_units") != "on":
+        for f in ["land_units", "naval_units", "support_units"]:
+            new_nation.pop(f, None)
+    if request.form.get("copy_districts") != "on":
+        for f in ["districts", "cities", "wonders"]:
+            new_nation.pop(f, None)
+    new_nation["name"] = new_name
+
+    # Transfer a percentage of money and stored resources (subtracted from source)
+    try:
+        pct = max(0, min(100, int(request.form.get("transfer_pct") or 0))) / 100.0
+    except ValueError:
+        pct = 0.0
+    money_moved = int(source.get("money", 0) * pct)
+    storage_moved = {}
+    for res, qty in (source.get("resource_storage") or {}).items():
+        moved = int((qty or 0) * pct)
+        if moved:
+            storage_moved[res] = moved
+    new_nation["money"] = money_moved
+    new_nation["resource_storage"] = storage_moved
+
+    # Create via the change system for an auditable, revertible record
+    change_id = request_change(
+        data_type="nations",
+        item_id=None,
+        change_type="Add",
+        before_data={},
+        after_data=new_nation,
+        reason=f"Civil war: split from {source['name']}",
+    )
+    approve_change(change_id)
+
+    new_doc = db.find_one({"name": new_name}, {"_id": 1})
+    if new_doc is None:
+        flash("Failed to create the new nation — see the change log.")
+        return redirect(f"/civil_war_helper?nation={source_id}")
+    new_id_str = str(new_doc["_id"])
+
+    # ── Subtract transferred money/resources from the source ──
+    if money_moved or storage_moved:
+        updates = {"money": source.get("money", 0) - money_moved}
+        for res, moved in storage_moved.items():
+            updates[f"resource_storage.{res}"] = (source.get("resource_storage", {}).get(res, 0)) - moved
+        db.update_one({"_id": source["_id"]}, {"$set": updates})
+
+    # ── Move the selected pops ──
+    moved_pops = 0
+    for key, val in request.form.items():
+        if not key.startswith("move|"):
+            continue
+        try:
+            qty = int(val or 0)
+        except ValueError:
+            qty = 0
+        if qty <= 0:
+            continue
+        _, race, culture, religion, slave_flag = key.split("|")
+        # Empty group values must also match pops where the field is missing/null
+        def _field_match(v):
+            return v if v else {"$in": ["", None]}
+        match = {
+            "nation": source_id,
+            "race": _field_match(race),
+            "culture": _field_match(culture),
+            "religion": _field_match(religion),
+        }
+        if slave_flag == "1":
+            match["slave"] = True
+        else:
+            match["slave"] = {"$ne": True}
+        ids = [d["_id"] for d in mongo.db.pops.find(match, {"_id": 1}).limit(qty)]
+        if ids:
+            mongo.db.pops.update_many({"_id": {"$in": ids}}, {"$set": {"nation": new_id_str}})
+            moved_pops += len(ids)
+
+    # ── Recalculate both nations so pop counts and derived fields are current ──
+    for nid in [source["_id"], new_doc["_id"]]:
+        doc = db.find_one({"_id": nid})
+        if doc:
+            doc = _calculate_and_attach_fields("nations", doc)
+            db.update_one({"_id": nid}, {"$set": {k: v for k, v in doc.items() if k != "_id"}})
+
+    flash(
+        f"Civil war executed: created '{new_name}' (change #{change_id}), moved {moved_pops} pops"
+        + (f", transferred {int(pct * 100)}% of money and stored resources" if pct > 0 else "")
+        + ". Now paint the new nation's territory on the map, then run Sync Territory."
+    )
+    return redirect(f"/nations/item/{new_name}")
+
+
 @admin_tool_routes.route("/database_management", methods=["GET"])
 @admin_required
 def database_management():
@@ -1315,6 +1525,7 @@ def ai_goals_preview():
         assign_goal_jobs, select_tech_target,
         generate_goal_trade_desires, get_stored_market_prices,
         score_buildable_districts, score_jobs, _weights_from_net,
+        _future_resource_utility,
     )
     from calculations.field_calculations import calculate_all_fields
     from copy import deepcopy
@@ -1358,6 +1569,8 @@ def ai_goals_preview():
     goal_job_log = []
     upkeep_ratio = 0.0
     strategic_goal = {}
+    secondary_goal = None
+    future_utility = {}
     goal_candidates = []
     desires = []
     district_plan = None
@@ -1384,6 +1597,7 @@ def ai_goals_preview():
         # cap is enforced dynamically during job assignment loops)
         need_weights = _weights_from_net(
             projected_net, state["stockpiles"], market_prices, state["money_income"],
+            active_resources=state.get("active_resources"),
         )
         job_scores = score_jobs(state, need_weights, market_prices)
 
@@ -1392,6 +1606,17 @@ def ai_goals_preview():
             nation, state, personality, upkeep_ratio, market_prices
         )
         initial_goal = dict(strategic_goal)
+
+        # Secondary goal (runner-up) + future construction utility — mirrors
+        # ai_decision_tick so grow_economy weighting previews accurately.
+        secondary_goal = next(
+            (c for c in goal_candidates
+             if c.get("type") != strategic_goal.get("type") and c.get("score", 0) > 0),
+            None,
+        )
+        state["secondary_goal"] = secondary_goal
+        future_utility = _future_resource_utility(state, secondary_goal, nation)
+        state["future_utility"] = future_utility
 
         # Step 3: Goal-aware district (may build multiple, re-evaluates upkeep after each)
         dummy = deepcopy(nation)
@@ -1457,6 +1682,8 @@ def ai_goals_preview():
             "personality": {k: round(v, 2) for k, v in personality.items()},
             "initial_goal": initial_goal.get("type", "?") + f" ({initial_goal.get('score', 0)})",
             "strategic_goal": strategic_goal,
+            "secondary_goal": secondary_goal,
+            "future_utility": future_utility,
             "upkeep_ratio": round(upkeep_ratio, 2),
             "upkeep_assignments": upkeep_assignments,
             "goal_assignments": goal_assignments,
@@ -1468,7 +1695,7 @@ def ai_goals_preview():
             },
             "district_scores": [
                 {"name": e[2], "score": round(e[0], 2), "rationale": e[4]}
-                for e in (district_scores or [])[:8]
+                for e in (district_scores or [])[:12]
             ],
             "district_plan": {
                 "name": district_plan.get("display_name", "?"),
@@ -1497,6 +1724,8 @@ def ai_goals_preview():
         next_name=next_name,
         personality=personality,
         strategic_goal=strategic_goal,
+        secondary_goal=secondary_goal,
+        future_utility=future_utility,
         goal_candidates=goal_candidates,
         state=state,
         need_weights=need_weights,

@@ -112,6 +112,7 @@
                     <button id="hex-sync-regions-btn" class="map-tools-item" title="Set each nation's region based on their capital tile's region, or the region covering most of their territory">Sync Nation Regions</button>
                     <button id="hex-purge-oob-btn" class="map-tools-item" title="Delete tiles outside configured grid bounds (removes stale tiles from old coordinate systems)">Purge OOB Tiles</button>
                     <button id="hex-normalize-coords-btn" class="map-tools-item" title="Convert any tiles with float q/r coordinates to integers (fixes tiles that revert after saving)">Fix Tile Coords</button>
+                    <button id="hex-download-map-btn" class="map-tools-item" title="Download a high-resolution image of the full map (political, nodes, luxury, buildings — public view, no districts)">Download Map Image</button>
                     <a href="/admin/grid-calibration" class="map-tools-item" target="_blank">Grid Calibration ↗</a>
                 </div>
             </div>
@@ -720,6 +721,23 @@ document.addEventListener('DOMContentLoaded', function () {
             const d = await r.json();
             snapBtn.textContent = d.message || (r.ok ? 'Snapshot taken' : 'Error');
             setTimeout(() => { snapBtn.textContent = 'Snapshot'; }, 4000);
+        });
+    }
+
+    const downloadMapBtn = document.getElementById('hex-download-map-btn');
+    if (downloadMapBtn) {
+        downloadMapBtn.addEventListener('click', async () => {
+            if (!hexViewer) return;
+            downloadMapBtn.textContent = 'Rendering…';
+            downloadMapBtn.disabled = true;
+            try {
+                const ok = await hexViewer.downloadMapImage();
+                downloadMapBtn.textContent = ok ? 'Downloaded!' : 'Error';
+            } catch (e) {
+                downloadMapBtn.textContent = 'Error';
+            }
+            downloadMapBtn.disabled = false;
+            setTimeout(() => { downloadMapBtn.textContent = 'Download Map Image'; }, 4000);
         });
     }
 

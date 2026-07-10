@@ -92,6 +92,17 @@ PRODUCTION_FIELD_MAP = {
     "backlash_reduction":       (None,        0.3),
 }
 
+# Fields where a NEGATIVE modifier value is beneficial (e.g. guardhouse's
+# stability_loss_chance -0.35). Goal-alignment matching must accept these.
+NEGATIVE_IS_GOOD = frozenset({
+    "stability_loss_chance",
+    "blacklash_chance",
+    "stability_loss_chance_on_leader_death",
+    "tech_category_cost_modifier",
+    "technology_cost_modifier",
+    "defensive_visibility",
+})
+
 # ---------------------------------------------------------------------------
 # Strategic goals — the goal-first AI architecture
 # ---------------------------------------------------------------------------
@@ -163,6 +174,8 @@ GOAL_TEMPERAMENT_MULT = {
     "Neutral":     {},
 }
 
+# Real district_defs categories: production, food, commerce, warfare, society,
+# government, education, magic. Any other name here silently never matches.
 GOAL_DISTRICT_AFFINITY = {
     "stabilize_economy": {
         "job_resources": [],
@@ -171,38 +184,41 @@ GOAL_DISTRICT_AFFINITY = {
         "dynamic": True,
     },
     "stabilize_nation": {
-        "job_resources": ["stability_gain_chance", "stability_loss_chance"],
+        "job_resources": ["stability_gain_chance", "stability_loss_chance", "max_stability_gain_chance"],
+        "modifier_fields": ["stability_gain_chance", "stability_loss_chance", "max_stability_gain_chance"],
         "categories": [],
         "bonus": 1.5,
     },
     "grow_economy": {
         "job_resources": ["food", "wood", "stone", "iron", "mounts", "money_income"],
-        "categories": ["production", "economic"],
+        "categories": ["production", "food", "commerce"],
         "bonus": 1.3,
     },
     "prepare_war": {
         "job_resources": ["iron", "gunpowder"],
-        "categories": ["military"],
+        "categories": ["warfare"],
         "bonus": 1.4,
     },
     "develop_technology": {
         "job_resources": ["research"],
+        "modifier_fields": ["research"],
         "categories": [],
         "bonus": 1.5,
     },
     "grow_population": {
         "modifier_fields": ["effective_pop_capacity"],
-        "categories": ["housing"],
+        "categories": [],
         "bonus": 1.4,
     },
     "convert_population": {
         "job_resources": ["backlash_reduction"],
-        "categories": ["religious"],
+        "def_keys": ["church", "home"],
+        "categories": [],
         "bonus": 1.4,
     },
     "expand_trade": {
-        "modifier_fields": ["trade_slots", "money_income"],
-        "categories": ["trade"],
+        "modifier_fields": ["trade_slots", "money_income", "trade_speed", "route_capacity"],
+        "categories": ["commerce"],
         "bonus": 1.3,
     },
     "build_wonder": {
@@ -382,6 +398,19 @@ def evaluate_nation_state(old_nation):
 
     territory_types = old_nation.get("territory_types", {})
 
+    # Resources the nation actually participates in — produced or consumed by
+    # any source (districts, terrain, jobs, modifiers). Used by _weights_from_net
+    # so untouched exotics (zero stock, zero use) don't get the low-stockpile
+    # buffer weight and outrank staples the nation actually runs on.
+    active_resources = set()
+    for src in (old_nation.get("resource_production", {}), old_nation.get("resource_consumption", {})):
+        for r, amt in src.items():
+            if isinstance(amt, (int, float)) and amt > 0:
+                active_resources.add(r)
+    for r, net in net_production.items():
+        if net != 0:
+            active_resources.add(r)
+
     return {
         "stockpiles":            stockpiles,
         "net_production":        net_production,
@@ -402,6 +431,7 @@ def evaluate_nation_state(old_nation):
         "trade_speed":           old_nation.get("trade_speed", 7),
         "territory_types":       territory_types,
         "resource_capacity":     old_nation.get("nation_resource_capacity", {}),
+        "active_resources":      active_resources,
     }
 
 
@@ -409,7 +439,7 @@ def evaluate_nation_state(old_nation):
 # Need weights
 # ---------------------------------------------------------------------------
 
-def _weights_from_net(net_production, stockpiles, prices, money_income, resource_capacity=None):
+def _weights_from_net(net_production, stockpiles, prices, money_income, resource_capacity=None, active_resources=None):
     """
     Core weight computation from a net-production snapshot.
     Called by compute_need_weights and by assign_ai_jobs after each pop assignment.
@@ -435,7 +465,16 @@ def _weights_from_net(net_production, stockpiles, prices, money_income, resource
         stockpile = stockpiles.get(r, 0)
 
         if net >= 0:
-            if stockpile < 5 and net < 1:
+            # The low-stockpile buffer weight only applies to resources the
+            # nation actually participates in (when active_resources is known):
+            # an exotic it neither produces nor consumes is not worth 1.3/unit
+            # just because the stockpile is empty.
+            participates = (
+                active_resources is None
+                or r in active_resources
+                or r in ALWAYS_USEFUL_RESOURCES
+            )
+            if stockpile < 5 and net < 1 and participates:
                 w = 1.3
             elif r in ALWAYS_USEFUL_RESOURCES:
                 # Food, wood, and stone are broadly useful for almost any goal
@@ -493,6 +532,7 @@ def compute_need_weights(state, prices=None):
         prices if prices is not None else _base_prices(),
         state["money_income"],
         state.get("resource_capacity"),
+        active_resources=state.get("active_resources"),
     )
 
 
@@ -570,7 +610,8 @@ def assign_ai_jobs(state, need_weights, prices=None):
 
     while pops_remaining > 0:
         curr_weights = _weights_from_net(
-            projected_net, state["stockpiles"], prices, state["money_income"]
+            projected_net, state["stockpiles"], prices, state["money_income"],
+            active_resources=state.get("active_resources"),
         )
         job_scores = score_jobs(state, curr_weights, prices)
         positive   = {k: v for k, v in job_scores.items() if v > 0.05}
@@ -620,7 +661,17 @@ def compute_upkeep_floor(state, prices=None):
         upkeep ran out of pops or no job could fix them.
     """
     if state["idle_pops"] <= 0:
-        return {}, 0, dict(state["net_production"]), [], 0.0, set()
+        # No workforce at all — every critical deficit is unfixable by jobs.
+        unresolved = set()
+        for r, net in state["net_production"].items():
+            if net < 0:
+                stockpile = state["stockpiles"].get(r, 0)
+                sessions = stockpile / (-net) if stockpile > 0 else 0
+                if sessions < 4:
+                    unresolved.add(r)
+        state["unresolved_deficits"] = unresolved
+        state["upkeep_burden"] = {}
+        return {}, 0, dict(state["net_production"]), [], 0.0, unresolved
 
     prices = prices if prices is not None else _base_prices()
     projected_net = dict(state["net_production"])
@@ -648,7 +699,8 @@ def compute_upkeep_floor(state, prices=None):
         # Only consider jobs that produce a resource currently in deficit
         deficit_resources = {r for r, net in projected_net.items() if net < 0}
         curr_weights = _weights_from_net(
-            projected_net, state["stockpiles"], prices, state["money_income"]
+            projected_net, state["stockpiles"], prices, state["money_income"],
+            active_resources=state.get("active_resources"),
         )
         job_scores = score_jobs(state, curr_weights, prices)
         positive = {}
@@ -682,15 +734,16 @@ def compute_upkeep_floor(state, prices=None):
     upkeep_ratio = upkeep_pops / total_idle if total_idle > 0 else 0.0
 
     # Identify resources still in critical deficit after upkeep exhausted options
-    # (ran out of pops or no job available). These are genuine survival needs.
+    # (ran out of pops, or no job produces the resource). These are genuine
+    # survival needs. When the loop stopped voluntarily (all deficits buffered
+    # past 4 sessions) this scan finds nothing.
     unresolved = set()
-    if pops_remaining <= 0:
-        for r, net in projected_net.items():
-            if net < 0:
-                stockpile = state["stockpiles"].get(r, 0)
-                sessions = stockpile / (-net) if stockpile > 0 else 0
-                if sessions < 4:
-                    unresolved.add(r)
+    for r, net in projected_net.items():
+        if net < 0:
+            stockpile = state["stockpiles"].get(r, 0)
+            sessions = stockpile / (-net) if stockpile > 0 else 0
+            if sessions < 4:
+                unresolved.add(r)
 
     for jk, cnt in sorted(assignments.items(), key=lambda x: -x[1]):
         if cnt > 0:
@@ -698,6 +751,22 @@ def compute_upkeep_floor(state, prices=None):
             log.append(f"Upkeep: {cnt}× {job.get('display_name', jk)}")
     if upkeep_pops > 0:
         log.append(f"Upkeep floor: {upkeep_pops}/{total_idle} pops ({upkeep_ratio:.0%} of workforce)")
+
+    # Stash on state so district scoring can treat deficits jobs CANNOT fix as
+    # genuinely critical while job-covered deficits stay an efficiency concern.
+    state["unresolved_deficits"] = unresolved
+
+    # {resource: pops pinned to producing it} — how much workforce each
+    # resource's upkeep consumes. Used by stabilize_economy weighting.
+    burden = {}
+    for jk, cnt in assignments.items():
+        if cnt <= 0:
+            continue
+        jdata = state["available_jobs"].get(jk, {})
+        pr = _get_primary_resource(jdata)
+        if pr:
+            burden[pr] = burden.get(pr, 0) + cnt
+    state["upkeep_burden"] = burden
 
     return (
         {k: v for k, v in assignments.items() if v > 0},
@@ -1519,12 +1588,22 @@ def score_buildable_districts(old_nation, state, need_weights, market_buy_prices
     nation_jobs = job_assignments if job_assignments is not None else old_nation.get("jobs", {})
     results = []
 
+    # Deficits that upkeep jobs could NOT cover are genuine survival problems —
+    # score districts against their full critical urgency. Job-covered deficits
+    # deliberately keep their post-upkeep weight (an efficiency concern handled
+    # by the upkeep-burden credit below), so trade/job urgency is untouched.
+    unresolved = state.get("unresolved_deficits") or set()
+    if unresolved:
+        need_weights = dict(need_weights)
+        for r in unresolved:
+            need_weights[r] = max(need_weights.get(r, 0), 5.0)
+
     # Pre-compute discretionary pop info once for all district evaluations.
     upkeep_total = sum(nation_jobs.values()) if nation_jobs else 0
     remaining_pops = max(0, state["idle_pops"] - upkeep_total)
     job_shares = {}
+    all_job_scores = score_jobs(state, need_weights, market_buy_prices)
     if remaining_pops > 0:
-        all_job_scores = score_jobs(state, need_weights, market_buy_prices)
         total_positive = sum(max(0, s) for s in all_job_scores.values())
         if total_positive > 0:
             job_shares = {
@@ -1533,6 +1612,30 @@ def score_buildable_districts(old_nation, state, need_weights, market_buy_prices
                 if sc > 0
             }
     discretionary_info = {"remaining_pops": remaining_pops, "job_shares": job_shares}
+
+    # Upkeep-burden credit inputs: which resources have pops pinned to sustaining
+    # them, how much one pop produces of each, and what a freed pop would be worth
+    # (median positive job score — the job it would take instead).
+    jobs_json = json_data.get("jobs", {})
+    upkeep_burden = {}   # {resource: pops pinned to jobs whose primary output is it}
+    per_pop_prod = {}    # {resource: per-pop production of the covering job}
+    for jk, cnt in (nation_jobs or {}).items():
+        if not isinstance(cnt, (int, float)) or cnt <= 0:
+            continue
+        jdata = state["available_jobs"].get(jk) or jobs_json.get(jk, {})
+        pr = _get_primary_resource(jdata)
+        if not pr:
+            continue
+        amt = jdata.get("production", {}).get(pr, 0)
+        if not isinstance(amt, (int, float)) or amt <= 0:
+            continue
+        upkeep_burden[pr] = upkeep_burden.get(pr, 0) + cnt
+        per_pop_prod[pr] = max(per_pop_prod.get(pr, 0), amt)
+    positive_job_scores = sorted(s for s in all_job_scores.values() if s > 0)
+    pop_opportunity_value = (
+        positive_job_scores[len(positive_job_scores) // 2]
+        if positive_job_scores else 0.0
+    )
 
     # Build a merged nation view for requirement checks that includes
     # districts built earlier this session (state["existing_def_keys"] is updated
@@ -1731,18 +1834,35 @@ def score_buildable_districts(old_nation, state, need_weights, market_buy_prices
             if r != "money"
         ) * 2.0 + (recurring_upkeep.get("money", 0) / max(state["money"] + 1, 1)) * 10
 
-        score = mod_value + job_value + node_value + market_bonus - cost_penalty - upkeep_penalty
-        if score <= 0:
-            continue
+        # Upkeep-burden (efficiency) credit: district production that replaces
+        # what pinned upkeep pops currently produce frees those pops for better
+        # jobs. Valued at the freed pop count × median positive job score.
+        # This is where a Farm beats a Ranch for a nation feeding itself with
+        # hunters — without ever marking food "critical" for trade purposes.
+        efficiency_credit = 0.0
+        pops_freed = 0.0
+        if upkeep_burden and pop_opportunity_value > 0:
+            for bd_field, bd_val, *_rest in mod_breakdown:
+                if not bd_field.endswith("_production") or bd_val <= 0:
+                    continue
+                rk = bd_field[: -len("_production")]
+                if rk in upkeep_burden and per_pop_prod.get(rk, 0) > 0:
+                    pops_freed += min(upkeep_burden[rk], bd_val / per_pop_prod[rk])
+            if pops_freed > 0:
+                efficiency_credit = pops_freed * pop_opportunity_value
+
+        score = mod_value + job_value + node_value + market_bonus + efficiency_credit - cost_penalty - upkeep_penalty
 
         # Non-affordable districts get a save_penalty scaled by how liquid the
         # nation is: large stockpiles → strong preference to spend now → steep
         # penalty on districts that can't be built immediately; small stockpiles
         # → it's fine to save a few sessions for the better option.
-        if not can_afford_now:
+        if not can_afford_now and score > 0:
             score *= save_penalty
 
         parts = [f"modifiers {mod_value:.1f}"]
+        if efficiency_credit > 0:
+            parts.append(f"frees ~{pops_freed:.1f} upkeep pops (+{efficiency_credit:.1f})")
         if unlocked_jobs:
             job_names = ", ".join(f"{j['name']} ({j['scaled_score']})" for j in unlocked_jobs)
             parts.append(f"unlocks jobs +{job_value:.1f} [{job_names}]")
@@ -1807,6 +1927,9 @@ def update_district_plan(old_nation, new_nation, state, goals, personality, mark
     """
     current_plan = old_nation.get("ai_state", {}).get("planned_district")
     scored       = score_buildable_districts(old_nation, state, need_weights, market_buy_prices, job_assignments)
+    # Negative-scored entries are kept in results for debuggability only —
+    # never plan or build them.
+    scored       = [s for s in scored if s[0] > 0]
 
     if not scored:
         return None
@@ -2055,6 +2178,19 @@ def _score_best_city_tile(legal_placement, city_type, need_weights, prices):
     return None, 0, ""
 
 
+def _nation_is_nomadic(nation):
+    """Nomadic nations roam — their districts and cities exist on the nation
+    doc only and are never placed on hex map tiles."""
+    if nation.get("is_nomadic"):
+        return True
+    gov = nation.get("government_type", "")
+    try:
+        laws = category_data["nations"]["schema"]["properties"]["government_type"]["laws"]
+        return laws.get(gov, {}).get("nomadic", 0) > 0
+    except Exception:
+        return False
+
+
 def _pick_district_tile(legal_placement, dd, key, need_weights, prices):
     """Pick the best legal tile to place a district on, reusing the same
     node-value scoring as city placement (_score_tile).
@@ -2201,7 +2337,8 @@ def _select_best_city(old_nation, state, exclude_types=None):
         legal = _compute_legal_placement(old_nation)
         prices = _base_prices()
         baseline_w = _weights_from_net(
-            state["net_production"], state["stockpiles"], prices, state["money_income"]
+            state["net_production"], state["stockpiles"], prices, state["money_income"],
+            active_resources=state.get("active_resources"),
         )
 
         best = city_scores[0]
@@ -2368,16 +2505,25 @@ def sync_nation_cities(nation, dry_run=True, tiles_with_city=None, owned_tiles=N
     # --- Direction 2: Nation → Map ---
     # Skip blank placeholder entries (no type set) — these are unused city
     # slots, not real cities, and should never be placed on the map.
+    # Nomadic nations are skipped entirely: their cities live on the nation
+    # doc only and must never be placed on map tiles.
     to_place = [
         c for c in nation_cities
         if c.get("_id") and c["_id"] not in tile_city_ids and c.get("type")
     ]
+    if to_place and _nation_is_nomadic(nation):
+        report["skipped_nomadic"] = [
+            {"id": c["_id"], "name": c.get("name", ""), "type": c.get("type", "")}
+            for c in to_place
+        ]
+        to_place = []
     if to_place and nation_name:
         from calculations.field_calculations import _compute_legal_placement
         prices = _base_prices()
         state = evaluate_nation_state(nation)
         baseline_w = _weights_from_net(
-            state["net_production"], state["stockpiles"], prices, state["money_income"]
+            state["net_production"], state["stockpiles"], prices, state["money_income"],
+            active_resources=state.get("active_resources"),
         )
         has_city_on_map = bool(tile_city_ids)
 
@@ -2436,6 +2582,21 @@ def sync_nation_cities(nation, dry_run=True, tiles_with_city=None, owned_tiles=N
     return report
 
 
+def _district_category(dk):
+    """Category of a district def, via the per-tick cache when loaded."""
+    global _DISTRICT_DEFS_CACHE
+    if _DISTRICT_DEFS_CACHE is not None:
+        for dd in _DISTRICT_DEFS_CACHE:
+            if dd.get("key") == dk:
+                return dd.get("category", "")
+        return ""
+    try:
+        dd_doc = mongo.db.district_defs.find_one({"key": dk}, {"category": 1, "_id": 0})
+        return (dd_doc or {}).get("category", "")
+    except Exception:
+        return ""
+
+
 def _apply_goal_alignment(scored, goal_type, state=None):
     """Apply goal-alignment bonus multiplier to scored districts.
     For "dynamic" goals (e.g. stabilize_economy), goal_job_resources is computed
@@ -2445,6 +2606,7 @@ def _apply_goal_alignment(scored, goal_type, state=None):
     goal_categories = set(affinity.get("categories", []))
     goal_job_resources = set(affinity.get("job_resources", []))
     goal_modifier_fields = set(affinity.get("modifier_fields", []))
+    goal_def_keys = set(affinity.get("def_keys", []))
     if affinity.get("dynamic"):
         if state is not None:
             goal_job_resources = {
@@ -2452,6 +2614,9 @@ def _apply_goal_alignment(scored, goal_type, state=None):
             }
         else:
             return scored, goal_categories, goal_job_resources, goal_modifier_fields
+
+    def _beneficial(field, val):
+        return val > 0 or (field in NEGATIVE_IS_GOOD and val < 0)
 
     adjusted = []
     for entry in scored:
@@ -2461,13 +2626,14 @@ def _apply_goal_alignment(scored, goal_type, state=None):
         uj = entry[7] if len(entry) > 7 else []
         g_match = False
         g_reason = ""
-        try:
-            dd_doc = mongo.db.district_defs.find_one({"key": dk}, {"category": 1, "_id": 0})
-            if dd_doc and dd_doc.get("category", "") in goal_categories:
+        if goal_def_keys and dk in goal_def_keys:
+            g_match = True
+            g_reason = f"goal district '{dk}'"
+        if not g_match and goal_categories:
+            category = _district_category(dk)
+            if category in goal_categories:
                 g_match = True
-                g_reason = f"category '{dd_doc['category']}'"
-        except Exception:
-            pass
+                g_reason = f"category '{category}'"
         if not g_match and uj:
             for j in uj:
                 for p in j.get("production", []):
@@ -2479,13 +2645,13 @@ def _apply_goal_alignment(scored, goal_type, state=None):
                     break
         if not g_match and goal_modifier_fields and mod_bd:
             for field, val, *_ in mod_bd:
-                if field in goal_modifier_fields and val > 0:
+                if field in goal_modifier_fields and _beneficial(field, val):
                     g_match = True
                     g_reason = f"modifier {field}"
                     break
         if not g_match and goal_job_resources and mod_bd:
             for field, val, *_ in mod_bd:
-                if val > 0:
+                if _beneficial(field, val):
                     res_key = field
                     if field.endswith("_production"):
                         res_key = field[:-len("_production")]
@@ -2493,11 +2659,89 @@ def _apply_goal_alignment(scored, goal_type, state=None):
                         g_match = True
                         g_reason = f"produces {res_key}"
                         break
-        fs = base_score * bonus_mult if g_match else base_score
+        # Only boost positive scores — amplifying a negative score would make
+        # goal-relevant districts look WORSE in the debug list.
+        fs = base_score * bonus_mult if (g_match and base_score > 0) else base_score
         gt = f" [GOAL: {g_reason} ×{bonus_mult}]" if g_match else ""
         adjusted.append((fs, dk, display_name, cost_d, rationale + gt, source, mod_bd, uj))
     adjusted.sort(key=lambda x: x[0], reverse=True)
     return adjusted, goal_categories, goal_job_resources, goal_modifier_fields
+
+
+def _district_matches_goal(dd, goal_type, state=None):
+    """Whether a district def is relevant to a goal's affinity — by def_key,
+    category, or a beneficial modifier in the goal's fields/resources.
+    Works from the raw district def (no scoring needed)."""
+    affinity = GOAL_DISTRICT_AFFINITY.get(goal_type, {})
+    if not affinity:
+        return False
+    if dd.get("key", "") in set(affinity.get("def_keys", [])):
+        return True
+    if dd.get("category", "") in set(affinity.get("categories", [])):
+        return True
+    goal_fields = set(affinity.get("modifier_fields", [])) | set(affinity.get("job_resources", []))
+    if affinity.get("dynamic") and state is not None:
+        goal_fields |= {r for r, net in state.get("net_production", {}).items() if net < 0}
+    if not goal_fields:
+        return False
+    for m in dd.get("modifiers", []):
+        field = _try_resolve_field(m)
+        val = m.get("value", 0)
+        if not isinstance(val, (int, float)):
+            continue
+        if not (val > 0 or (field in NEGATIVE_IS_GOOD and val < 0)):
+            continue
+        res_key = field[: -len("_production")] if field.endswith("_production") else field
+        if field in goal_fields or res_key in goal_fields:
+            return True
+    return False
+
+
+def _future_resource_utility(state, secondary_goal=None, old_nation=None):
+    """
+    How useful each resource will be for FUTURE construction: aggregate the
+    build costs of every district the nation could still build and normalize
+    to per-resource shares (summing to 1). Districts matching the secondary
+    goal's affinity count double — "produce what the next goal will need".
+    Drives grow_economy's resource weighting instead of a hardcoded list.
+    """
+    global _DISTRICT_DEFS_CACHE
+    if _DISTRICT_DEFS_CACHE is not None:
+        defs = _DISTRICT_DEFS_CACHE
+    else:
+        try:
+            defs = list(mongo.db.district_defs.find({}, {"_id": 0}))
+        except Exception:
+            defs = []
+
+    check_reqs = None
+    if old_nation is not None:
+        from calculations.field_calculations import check_district_requirements
+        check_reqs = check_district_requirements
+
+    secondary_type = (secondary_goal or {}).get("type", "")
+    totals = {}
+    for dd in defs:
+        dk = dd.get("key", "")
+        if not dk:
+            continue
+        existing = state.get("existing_def_key_counts", {}).get(dk, 0)
+        if existing >= dd.get("map_count", 1):
+            continue
+        if check_reqs is not None and not check_reqs(old_nation, dd):
+            continue
+        mult = 2.0 if secondary_type and _district_matches_goal(dd, secondary_type, state) else 1.0
+        for r, amt in dd.get("cost", {}).items():
+            if isinstance(amt, (int, float)) and amt > 0:
+                if r == "money":
+                    # Money costs run 250-2000 vs 2-20 for resources; convert to
+                    # resource-equivalent units (base price 50) so shares compare.
+                    amt = amt / 50.0
+                totals[r] = totals.get(r, 0) + amt * mult
+    total = sum(totals.values())
+    if total <= 0:
+        return {}
+    return {r: round(v / total, 4) for r, v in totals.items()}
 
 
 def _goal_adjusted_need_weights(need_weights, goal_type, state=None):
@@ -2507,22 +2751,43 @@ def _goal_adjusted_need_weights(need_weights, goal_type, state=None):
     so they need proportionally larger weights to compete in district scoring."""
     w = dict(need_weights)
     if goal_type == "stabilize_nation":
+        # TODO: law changes are the primary lever for this goal — not yet implemented
         w["stability_gain_chance"] = w.get("stability_gain_chance", 0.6) + 60.0
         w["stability_loss_chance"] = w.get("stability_loss_chance", -0.8) - 45.0
+        w["max_stability_gain_chance"] = w.get("max_stability_gain_chance", 0.6) + 40.0
     elif goal_type == "prepare_war":
         for r in ("iron", "gunpowder"):
             w[r] = w.get(r, 1.3) + 2.0
     elif goal_type == "develop_technology":
         w["research"] = w.get("research", 0.4) + 3.0
     elif goal_type == "stabilize_economy" and state is not None:
-        # The whole point of this goal is reducing upkeep burden — resources
-        # currently in deficit (baseline, before any jobs) need a dramatic
-        # weight multiplier so districts that fix them decisively beat
-        # districts producing resources the nation has no actual need for
-        # (e.g. a Ranch's mounts when food/wood/stone are short).
-        for r, net in state.get("net_production", {}).items():
-            if net < 0:
-                w[r] = w.get(r, 1.3) * 4.0 + 2.0
+        # The point of this goal is keeping the upkeep share of the workforce
+        # low enough that spare pops exist for districts/units. Two tiers:
+        # (a) deficits jobs could NOT cover — genuine survival, dramatic boost;
+        # (b) resources with pops pinned to sustaining them — boost scales with
+        #     how much of the workforce they consume (9/10 pops on hunters →
+        #     food districts dominate), modest to avoid double-counting the
+        #     upkeep-burden credit in score_buildable_districts.
+        unresolved = state.get("unresolved_deficits") or set()
+        for r in unresolved:
+            w[r] = w.get(r, 1.3) * 4.0 + 2.0
+        burden = state.get("upkeep_burden") or {}
+        total_pops = max(1, state.get("total_pops", 1))
+        for r, pinned in burden.items():
+            if r in unresolved:
+                continue
+            w[r] = w.get(r, 0.8) * (1.0 + 2.0 * pinned / total_pops)
+    elif goal_type == "grow_economy" and state is not None:
+        # Weight resources by how useful they'll be for FUTURE construction
+        # (aggregate district build costs, secondary-goal districts doubled)
+        # instead of a hardcoded staples list.
+        utility = state.get("future_utility")
+        if utility is None:
+            utility = _future_resource_utility(state, state.get("secondary_goal"))
+        for r, share in utility.items():
+            if r == "money":
+                continue
+            w[r] = w.get(r, 0.3) + share * 10.0
     return w
 
 
@@ -2545,6 +2810,9 @@ def evaluate_goal_district(old_nation, new_nation, state, goal, need_weights, pr
     max_builds = 5
     built_count = 0
 
+    # Nomads build districts/cities on the nation doc but never claim map tiles.
+    is_nomadic = _nation_is_nomadic(old_nation)
+
     # Apply goal-specific weight adjustments so district scoring
     # properly values goal-relevant modifiers (e.g. stability for stabilize_nation)
     scoring_weights = _goal_adjusted_need_weights(need_weights, goal.get("type", ""), state)
@@ -2553,9 +2821,10 @@ def evaluate_goal_district(old_nation, new_nation, state, goal, need_weights, pr
     scored = score_buildable_districts(old_nation, state, scoring_weights, prices, upkeep_assignments)
     adjusted, _, _, _ = _apply_goal_alignment(scored, goal.get("type", ""), state) if scored else ([], set(), set(), set())
 
-    # Log initial scores for debugging
+    # Log initial scores for debugging — includes negative-scored candidates
+    # (kept in results, never built) so losing districts are explainable.
     district_log.append(f"[initial goal: {goal.get('type', '?')}]")
-    for entry in adjusted[:6]:
+    for entry in adjusted[:10]:
         district_log.append(f"[initial] {entry[2]}: {entry[0]:.2f} — {entry[4]}")
 
     personality = get_ai_personality(old_nation)
@@ -2603,16 +2872,21 @@ def evaluate_goal_district(old_nation, new_nation, state, goal, need_weights, pr
                             new_nation["resource_storage"] = storage
 
                     # Create the city entry and place it on the map tile.
+                    # Nomads never place cities on the map — the city lives
+                    # on the nation doc only.
                     import uuid
                     city_id = uuid.uuid4().hex[:8]
                     city_type = city_plan.get("key", "generic")
-                    placement = city_plan.get("placement")
-                    coord = (placement["q"], placement["r"]) if placement else None
-                    node_key = _claim_city_tile(
-                        old_nation.get("name", ""), city_id, city_type,
-                        coord, set_capital=city_plan.get("set_capital", False),
-                        dry_run=dry_run,
-                    )
+                    if is_nomadic:
+                        coord, node_key = None, ""
+                    else:
+                        placement = city_plan.get("placement")
+                        coord = (placement["q"], placement["r"]) if placement else None
+                        node_key = _claim_city_tile(
+                            old_nation.get("name", ""), city_id, city_type,
+                            coord, set_capital=city_plan.get("set_capital", False),
+                            dry_run=dry_run,
+                        )
                     city_entry = {
                         "_id": city_id,
                         "name": "",
@@ -2658,6 +2932,7 @@ def evaluate_goal_district(old_nation, new_nation, state, goal, need_weights, pr
                 nw_updated = _weights_from_net(
                     upkeep_projected, state["stockpiles"], prices, state["money_income"],
                     state.get("resource_capacity"),
+                    active_resources=state.get("active_resources"),
                 )
                 nw_updated = _goal_adjusted_need_weights(nw_updated, goal.get("type", ""), state)
                 scored = score_buildable_districts(old_nation, state, nw_updated, prices, upkeep_assignments)
@@ -2698,7 +2973,7 @@ def evaluate_goal_district(old_nation, new_nation, state, goal, need_weights, pr
                 import uuid
                 district_id = uuid.uuid4().hex[:8]
                 coord, node_key = None, ""
-                if c_source == "db":
+                if c_source == "db" and not is_nomadic:
                     dd = mongo.db.district_defs.find_one({"key": c_key})
                     if dd:
                         from calculations.field_calculations import _compute_legal_placement
@@ -2837,14 +3112,29 @@ def _compute_goal_resource_needs(goal, district_plan, state, projected_net=None)
     elif goal_type == "expand_trade":
         boosts["money_income"] = boosts.get("money_income", 0) + 2.0
     elif goal_type == "stabilize_economy":
-        # Boost whatever is in deficit
-        for r, net in state["net_production"].items():
+        # Boost what is STILL in deficit given the pops assigned so far, so
+        # boosts turn off once a resource reaches excess and spare pops flow
+        # to the next need instead of piling onto a solved deficit.
+        live_net = projected_net if projected_net is not None else state["net_production"]
+        for r, net in live_net.items():
             if net < 0:
                 boosts[r] = boosts.get(r, 0) + 2.0
     elif goal_type == "grow_economy":
-        for r in ("food", "wood", "stone", "iron", "mounts"):
-            boosts[r] = boosts.get(r, 0) + 1.0
-        boosts["money_income"] = boosts.get("money_income", 0) + 1.5
+        # Produce what future construction will need (secondary-goal districts
+        # counted double) instead of a hardcoded staples list.
+        utility = state.get("future_utility")
+        if utility is None:
+            utility = _future_resource_utility(state, state.get("secondary_goal"))
+        if utility:
+            for r, share in utility.items():
+                if r == "money":
+                    continue
+                boosts[r] = boosts.get(r, 0) + share * 8.0
+            boosts["money_income"] = boosts.get("money_income", 0) + utility.get("money", 0) * 8.0 + 1.0
+        else:
+            for r in ("food", "wood", "stone", "iron", "mounts"):
+                boosts[r] = boosts.get(r, 0) + 1.0
+            boosts["money_income"] = boosts.get("money_income", 0) + 1.5
     elif goal_type == "grow_population":
         boosts["food"] = boosts.get("food", 0) + 1.5
 
@@ -2878,6 +3168,7 @@ def assign_goal_jobs(state, goal, remaining_pops, projected_net, district_plan, 
         base_weights = _weights_from_net(
             projected_net, state["stockpiles"], prices, state["money_income"],
             resource_capacity,
+            active_resources=state.get("active_resources"),
         )
 
         # Apply goal resource boosts
@@ -3335,6 +3626,7 @@ def ai_decision_tick(old_nation, new_nation, schema):
         # iteration recalculates weights with the updated projected_net.
         need_weights = _weights_from_net(
             projected_net, state["stockpiles"], market_prices, state["money_income"],
+            active_resources=state.get("active_resources"),
         )
         job_scores = score_jobs(state, need_weights, market_prices)
 
@@ -3345,6 +3637,20 @@ def ai_decision_tick(old_nation, new_nation, schema):
         initial_goal = dict(goal)
         log.append(f"Strategic goal: {goal['display_name']} (score {goal['score']})")
         log.append(f"  Rationale: {goal['rationale']}")
+
+        # Secondary goal (runner-up candidate) — grow_economy weights resources
+        # by what the NEXT goal will need to build. Computed once per nation
+        # and stashed on state for _goal_adjusted_need_weights /
+        # _compute_goal_resource_needs.
+        secondary_goal = next(
+            (c for c in goal_candidates
+             if c.get("type") != goal.get("type") and c.get("score", 0) > 0),
+            None,
+        )
+        state["secondary_goal"] = secondary_goal
+        state["future_utility"] = _future_resource_utility(state, secondary_goal, old_nation)
+        if secondary_goal:
+            log.append(f"Secondary goal: {secondary_goal['display_name']} (score {secondary_goal['score']})")
 
         # --- Step 3: Goal-aware district/city building (may build multiple, re-evaluates goal after each) ---
         district_plan, district_scores, district_log, upkeep_assignments, goal = evaluate_goal_district(
@@ -3452,6 +3758,8 @@ def ai_decision_tick(old_nation, new_nation, schema):
             "personality": {k: round(v, 2) for k, v in personality.items()},
             "initial_goal": initial_goal,
             "strategic_goal": goal,
+            "secondary_goal": secondary_goal,
+            "future_utility": state.get("future_utility", {}),
             "goal_candidates": goal_candidates,
             "upkeep_ratio": round(upkeep_ratio, 2),
             "upkeep_assignments": upkeep_assignments,
@@ -3472,6 +3780,7 @@ def ai_decision_tick(old_nation, new_nation, schema):
         # --- Persist AI state ---
         new_nation["ai_state"] = {
             "strategic_goal":     goal,
+            "secondary_goal":     secondary_goal,
             "goal_candidates":    goal_candidates,
             "upkeep_assignments": upkeep_assignments,
             "upkeep_ratio":       round(upkeep_ratio, 2),
@@ -3525,7 +3834,8 @@ def _post_trade_build_and_rejob(old_nation, new_nation, log_lines):
     district_id = uuid.uuid4().hex[:8]
     coord, node_key = None, ""
     dd = None
-    if plan.get("source", "db") == "db":
+    # Nomads build the district on the nation doc only — never claim a map tile.
+    if plan.get("source", "db") == "db" and not _nation_is_nomadic(old_nation):
         dd = mongo.db.district_defs.find_one({"key": def_key})
         if dd:
             from calculations.field_calculations import _compute_legal_placement

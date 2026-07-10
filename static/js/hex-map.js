@@ -267,6 +267,9 @@ class HexMapViewer {
         this._wonderDefaultImage = null;   // HTMLImageElement | null
         // Default capital image shown for all capitals on the map
         this._capitalDefaultImage = null;  // HTMLImageElement | null
+        // In-flight icon image loads — awaited by downloadMapImage so captures
+        // never render before city/wonder/district/capital icons are ready
+        this._iconLoadPromises = new Set();
 
         // Tile data
         this.tiles        = new Map();   // "q,r" -> tile object
@@ -538,6 +541,49 @@ class HexMapViewer {
         } catch (_) {}
     }
 
+    // Register an in-flight icon image so captures can await it (resolves on
+    // load or error; removes itself from the set when settled).
+    _trackIconLoad(img) {
+        const p = new Promise(resolve => {
+            img.addEventListener('load',  resolve, { once: true });
+            img.addEventListener('error', resolve, { once: true });
+        }).then(() => this._iconLoadPromises.delete(p));
+        this._iconLoadPromises.add(p);
+    }
+
+    // Wait for all currently in-flight icon images (city/wonder/district/capital).
+    async _waitForIconImages(timeoutMs = 15000) {
+        if (!this._iconLoadPromises.size) return;
+        await Promise.race([
+            Promise.all([...this._iconLoadPromises]),
+            new Promise(resolve => setTimeout(resolve, timeoutMs)),
+        ]);
+    }
+
+    // Make sure every icon image is actually loaded before a capture: re-fetch the
+    // icon URL endpoints, retry anything missing or previously failed, then wait.
+    async _ensureIconImages() {
+        try {
+            const [imgResp, wonderResp, cityResp, capResp] = await Promise.all([
+                fetch('/api/district-defs/image-map'),
+                fetch('/api/wonders/default-image'),
+                fetch('/api/cities/image-map'),
+                fetch('/api/capitals/default-image'),
+            ]);
+            const imgMap  = await imgResp.json().catch(() => ({}));
+            const wonder  = await wonderResp.json().catch(() => ({}));
+            const cityMap = await cityResp.json().catch(() => ({}));
+            const capital = await capResp.json().catch(() => ({}));
+            // The dict loaders skip entries already cached as loaded images, so
+            // this only re-requests missing or failed (null) entries.
+            this._loadDistrictImages(imgMap);
+            this._loadCityTypeImages(cityMap);
+            if (!this._wonderDefaultImage)  this._loadWonderDefaultImage(wonder.url || '');
+            if (!this._capitalDefaultImage) this._loadCapitalDefaultImage(capital.url || '');
+        } catch (_) {}
+        await this._waitForIconImages();
+    }
+
     _loadDistrictImages(imgMap) {
         let pending = 0;
         for (const [key, url] of Object.entries(imgMap)) {
@@ -546,6 +592,7 @@ class HexMapViewer {
             const img = new Image();
             img.onload  = () => { this._districtImages[key] = img; if (--pending === 0) this.render(); };
             img.onerror = () => { this._districtImages[key] = null; if (--pending === 0) this.render(); };
+            this._trackIconLoad(img);
             img.src = url;
         }
     }
@@ -558,6 +605,7 @@ class HexMapViewer {
             const img = new Image();
             img.onload  = () => { this._cityTypeImages[key] = img; if (--pending === 0) this.render(); };
             img.onerror = () => { this._cityTypeImages[key] = null; if (--pending === 0) this.render(); };
+            this._trackIconLoad(img);
             img.src = url;
         }
     }
@@ -567,6 +615,7 @@ class HexMapViewer {
         const img = new Image();
         img.onload  = () => { this._wonderDefaultImage = img; this.render(); };
         img.onerror = () => { this._wonderDefaultImage = null; };
+        this._trackIconLoad(img);
         img.src = url;
     }
 
@@ -575,6 +624,7 @@ class HexMapViewer {
         const img = new Image();
         img.onload  = () => { this._capitalDefaultImage = img; this.render(); };
         img.onerror = () => { this._capitalDefaultImage = null; };
+        this._trackIconLoad(img);
         img.src = url;
     }
 
@@ -1228,7 +1278,9 @@ class HexMapViewer {
 
     // Returns true if the viewer can see visibility-gated info (districts, admin range)
     // for the given nation owner.  Admins with _adminView bypass this.
+    // _capturePublicView forces the no-nation-player perspective (nothing private visible).
     _canSeePrivate(owner) {
+        if (this._capturePublicView) return false;
         if (this._adminView || !owner) return true;
         return (this._visibilityMap[owner] ?? 0) >= 3;
     }
@@ -2974,6 +3026,176 @@ class HexMapViewer {
         this.render();
 
         return { before: beforeImage, after: afterImage };
+    }
+
+    // Render the entire map to a high-resolution image and trigger a download.
+    // Fixed layer set: political + nodes + luxury nodes + buildings, rendered from
+    // the public (no-nation player) perspective so districts stay hidden.
+    async downloadMapImage(targetWidth = 6000) {
+        if (!this.tiles.size) return false;
+
+        // Tight world-space bounds from every tile's actual pixel position.
+        // (Corner-combination q/r bounds badly overestimate the extent in axial
+        // coordinates, producing huge empty margins.)
+        const pad = this.hexSize * 1.5;
+        let wxMin = Infinity, wxMax = -Infinity, wyMin = Infinity, wyMax = -Infinity;
+        for (const key of this.tiles.keys()) {
+            const [q, r] = key.split(',').map(Number);
+            const p = this._axialToPixel(q, r);
+            if (p.x < wxMin) wxMin = p.x; if (p.x > wxMax) wxMax = p.x;
+            if (p.y < wyMin) wyMin = p.y; if (p.y > wyMax) wyMax = p.y;
+        }
+        wxMin -= pad; wxMax += pad; wyMin -= pad; wyMax += pad;
+        const ww = wxMax - wxMin, wh = wyMax - wyMin;
+        const aspect = wh / (ww || 1);
+
+        // Capped so the OSD background viewer's canvas (container size × devicePixelRatio)
+        // stays under the 16384px browser canvas limit on high-DPI displays.
+        const MAX_DIM = 7000;
+        let captureW = Math.min(targetWidth, MAX_DIM);
+        let captureH = Math.round(captureW * aspect);
+        if (captureH > MAX_DIM) { captureH = MAX_DIM; captureW = Math.round(captureH / aspect); }
+
+        const offCanvas  = document.createElement('canvas');
+        offCanvas.width  = captureW;
+        offCanvas.height = captureH;
+
+        // Save state
+        const mainCanvas = this.canvas, mainCtx = this.ctx;
+        const savedPanX = this.panX, savedPanY = this.panY, savedZoom = this.zoom;
+        const savedLayers = { ...this.layers };
+
+        // Fixed layer set for the export
+        for (const k of Object.keys(this.layers)) this.layers[k] = false;
+        this.layers.political    = true;
+        this.layers.nodes        = true;
+        this.layers.luxury_nodes = true;
+        this.layers.buildings    = true;
+
+        this.canvas = offCanvas;
+        this.ctx    = offCanvas.getContext('2d');
+        this._capturingImage    = true;
+        this._capturePublicView = true;
+
+        let dataUrl = null;
+        try {
+            // Fit the tight world bounds exactly (bypasses interactive zoom clamps)
+            this.zoom = Math.min(captureW / ww, captureH / wh);
+            this.panX = captureW / 2 - ((wxMin + wxMax) / 2) * this.zoom;
+            this.panY = captureH / 2 - ((wyMin + wyMax) / 2) * this.zoom;
+            const capZoom = this.zoom, capPanX = this.panX, capPanY = this.panY;
+
+            // Ensure city/wonder/district/capital icons are loaded (retries failures)
+            await this._ensureIconImages();
+
+            this._buildTerrainPaths();
+            this.render();
+            await this._waitTwoFrames();
+
+            // Composite background + hex layers onto an opaque canvas (JPEG has no alpha).
+            // The background is assembled tile-by-tile from the DZI pyramid rather than
+            // through an OSD viewer, so every tile is guaranteed to be drawn.
+            const out  = document.createElement('canvas');
+            out.width  = captureW;
+            out.height = captureH;
+            const octx = out.getContext('2d');
+            octx.fillStyle = '#1a1a2a';
+            octx.fillRect(0, 0, captureW, captureH);
+            try { await this._drawDziBackground(octx, capZoom, capPanX, capPanY); } catch (_) {}
+            octx.drawImage(offCanvas, 0, 0);
+            dataUrl = out.toDataURL('image/jpeg', 0.92);
+        } finally {
+            // Restore state
+            this._capturingImage    = false;
+            this._capturePublicView = false;
+            this.layers  = savedLayers;
+            this.canvas  = mainCanvas;
+            this.ctx     = mainCtx;
+            this.panX = savedPanX; this.panY = savedPanY; this.zoom = savedZoom;
+            this._buildTerrainPaths();
+            this.render();
+        }
+
+        if (!dataUrl) return false;
+        const link = document.createElement('a');
+        link.href = dataUrl;
+        link.download = `poa-map-${new Date().toISOString().slice(0, 10)}.jpg`;
+        link.click();
+        return true;
+    }
+
+    // Assemble the DZI background directly onto a canvas by fetching every tile of
+    // the appropriate pyramid level through the same-origin proxy. Deterministic —
+    // unlike an OSD viewer, which can silently skip tiles under load. Tiles are
+    // fetched with limited concurrency and up to 3 attempts each.
+    async _drawDziBackground(octx, zoom, panX, panY) {
+        if (!this.bgDziUrl) return false;
+
+        const resp = await fetch(
+            `/api/hex-map/s3-proxy/manifest?url=${encodeURIComponent(this.bgDziUrl)}`
+        );
+        if (!resp.ok) return false;
+        const xmlText = await resp.text();
+        const doc     = new DOMParser().parseFromString(xmlText, 'application/xml');
+        const imgEl   = doc.querySelector('Image');
+        const sizeEl  = doc.querySelector('Size');
+        const imgW    = parseInt(sizeEl?.getAttribute('Width')   || '0');
+        const imgH    = parseInt(sizeEl?.getAttribute('Height')  || '0');
+        const tSize   = parseInt(imgEl?.getAttribute('TileSize') || '256');
+        const ovlap   = parseInt(imgEl?.getAttribute('Overlap')  || '1');
+        const fmt     = imgEl?.getAttribute('Format') || 'jpg';
+        if (!imgW || !imgH) return false;
+
+        const dziBase  = this.bgDziUrl.replace(/\.dzi$/, '');
+        const maxLevel = Math.ceil(Math.log2(Math.max(imgW, imgH)));
+
+        // Destination rect in capture-canvas pixels — same world placement the live
+        // viewer uses: offset (bgOffsetX, bgOffsetY), width worldWidth × bgScale.
+        const bgWorldW = this._worldWidth() * (this.bgScale || 1.0);
+        const dx = (this.bgOffsetX || 0) * zoom + panX;
+        const dy = (this.bgOffsetY || 0) * zoom + panY;
+        const dw = bgWorldW * zoom;
+
+        // Smallest pyramid level that still covers the destination resolution
+        let level = maxLevel;
+        for (let L = 0; L <= maxLevel; L++) {
+            if (Math.ceil(imgW / Math.pow(2, maxLevel - L)) >= dw) { level = L; break; }
+        }
+        const scaleDiv = Math.pow(2, maxLevel - level);
+        const lvlW  = Math.ceil(imgW / scaleDiv);
+        const lvlH  = Math.ceil(imgH / scaleDiv);
+        const scale = dw / lvlW;
+
+        const jobs = [];
+        for (let ty = 0; ty < Math.ceil(lvlH / tSize); ty++)
+            for (let tx = 0; tx < Math.ceil(lvlW / tSize); tx++)
+                jobs.push([tx, ty]);
+
+        let jobIdx = 0;
+        const worker = async () => {
+            while (jobIdx < jobs.length) {
+                const [tx, ty] = jobs[jobIdx++];
+                const s3Url = `${dziBase}_files/${level}/${tx}_${ty}.${fmt}`;
+                const url   = `/api/hex-map/s3-proxy/tile?url=${encodeURIComponent(s3Url)}`;
+                for (let attempt = 0; attempt < 3; attempt++) {
+                    try {
+                        const r = await fetch(url);
+                        if (!r.ok) { if (r.status === 404) break; continue; }
+                        const bmp = await createImageBitmap(await r.blob());
+                        // Interior tiles carry `ovlap` extra pixels on their leading edges
+                        const px = tx * tSize - (tx > 0 ? ovlap : 0);
+                        const py = ty * tSize - (ty > 0 ? ovlap : 0);
+                        octx.drawImage(bmp,
+                            dx + px * scale, dy + py * scale,
+                            bmp.width * scale, bmp.height * scale);
+                        if (bmp.close) bmp.close();
+                        break;
+                    } catch (_) { /* retry */ }
+                }
+            }
+        };
+        await Promise.all(Array.from({ length: 12 }, worker));
+        return true;
     }
 
     async submitChange(reason) {
