@@ -385,6 +385,8 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
         # Store for use in breakdown tooltips (same data as the calculation)
         target["_calc_cache"]["effective_territory_types"] = effective_territory_types
         territory_terrain_totals = collect_territory_terrain(effective_territory_types, all_terrain_rules)
+        for _k, _v in collect_flaming_ravager_terrain_modifiers(target, effective_territory_types).items():
+            territory_terrain_totals[_k] = territory_terrain_totals.get(_k, 0) + _v
         record_timing("ts_territory_terrain_ms", _sub)
 
         _sub = perf_counter()
@@ -1428,11 +1430,33 @@ def collect_prosperity_modifiers(target):
     return dict(_PROSPERITY_EFFECTS.get((tier, role), {}))
 
 
+def _flaming_ravager_effect(target):
+    """Resolve the (research_bonus, hex_divisor, windfall_qty) tuple for this
+    target if it's a Ravager in Frigid Caps at a tier with an effect, else None."""
+    if target.get("prosperity_role") != "Ravager":
+        return None
+    region_id = target.get("region", "")
+    if not region_id:
+        return None
+    try:
+        region_doc = category_data["regions"]["database"].find_one(
+            {"_id": ObjectId(region_id)}, {"name": 1, "prosperity": 1}
+        )
+    except Exception:
+        return None
+    if not region_doc or region_doc.get("name") != FLAMING_RAVAGER_REGION:
+        return None
+    return _FLAMING_RAVAGER_EFFECTS.get(region_doc.get("prosperity", "Hopeful"))
+
+
 def collect_flaming_ravager_modifiers(target):
     """One-off regional bonus REPLACING collect_prosperity_modifiers' generic
     Ravager effects for nations in the Frigid Caps region: extra research
-    production, Magic from hazardous terrain, and (at the worse tiers) a
-    resource windfall each time they finish researching a technology.
+    production and (at the worse tiers) a resource windfall each time they
+    finish researching a technology. The Magic-from-hazardous-terrain half of
+    this effect is computed separately by collect_flaming_ravager_terrain_modifiers,
+    since it needs the admin-range/proximity-corrected terrain counts that
+    aren't ready yet at this point in calculate_all_fields.
 
     The "increased volcano success chance" flavor for this mechanic is
     narrative/GM-adjudicated and not modeled here. The "Renaissance ends
@@ -1440,34 +1464,32 @@ def collect_flaming_ravager_modifiers(target):
     (helpers/tick_helpers.py); this function only reads the region's current
     prosperity tier.
     """
-    if target.get("prosperity_role") != "Ravager":
-        return {}
-    region_id = target.get("region", "")
-    if not region_id:
-        return {}
-    try:
-        region_doc = category_data["regions"]["database"].find_one(
-            {"_id": ObjectId(region_id)}, {"name": 1, "prosperity": 1}
-        )
-    except Exception:
-        return {}
-    if not region_doc or region_doc.get("name") != FLAMING_RAVAGER_REGION:
-        return {}
-    effect = _FLAMING_RAVAGER_EFFECTS.get(region_doc.get("prosperity", "Hopeful"))
+    effect = _flaming_ravager_effect(target)
     if not effect:
         return {}
-    research_bonus, hex_divisor, windfall_qty = effect
-
-    territory_types = target.get("territory_types") or {}
-    hazardous_hexes = territory_types.get("hazardous_land", 0) + territory_types.get("hazardous_water", 0)
-
+    research_bonus, _hex_divisor, windfall_qty = effect
     mods = {"research_production": research_bonus}
-    magic_bonus = hazardous_hexes // hex_divisor
-    if magic_bonus:
-        mods["magic_production"] = magic_bonus
     if windfall_qty:
         mods["resource_windfall_on_tech_researched"] = windfall_qty
     return mods
+
+
+def collect_flaming_ravager_terrain_modifiers(target, effective_territory_types):
+    """Magic-from-hazardous-terrain half of collect_flaming_ravager_modifiers.
+    Must be called with the SAME corrected terrain-count dict used elsewhere for
+    terrain-derived bonuses (target["_calc_cache"]["effective_territory_types"]
+    after it's computed in calculate_all_fields) — the raw territory_types field
+    on the nation document does not account for admin range / proximity overrides
+    and can be stale relative to the nation's actual owned tiles.
+    """
+    effect = _flaming_ravager_effect(target)
+    if not effect:
+        return {}
+    _research_bonus, hex_divisor, _windfall_qty = effect
+    territory_types = effective_territory_types or {}
+    hazardous_hexes = territory_types.get("hazardous_land", 0) + territory_types.get("hazardous_water", 0)
+    magic_bonus = hazardous_hexes // hex_divisor
+    return {"magic_production": magic_bonus} if magic_bonus else {}
 
 def check_job_requirements(target, job_details, overall_total_modifiers, region_name=None, def_keys=None):
     requirements = job_details.get("requirements", {})
@@ -2291,7 +2313,10 @@ def _build_unit_tagged_sources(target, schema, district_details, district_contri
             tier = "Hopeful"
         tagged.append({"label": f"Prosperity: {role} ({tier})", "modifiers": prosperity_mods})
 
-    # Flaming Ravager (Frigid Caps one-off) modifiers
+    # Flaming Ravager (Frigid Caps one-off) modifiers — flat research/windfall part
+    # only. The Magic-from-terrain part is added in _build_computed_contributions,
+    # which runs later and has guaranteed-fresh effective_territory_types; adding
+    # it here too would double-count it (this tagged list predates that data).
     flaming_ravager_mods = collect_flaming_ravager_modifiers(target)
     if flaming_ravager_mods:
         tagged.append({"label": "Flaming Ravager (Frigid Caps)", "modifiers": flaming_ravager_mods})
@@ -3840,6 +3865,17 @@ def _build_computed_contributions(
                     source_type="terrain",
                     modifiers={extra_res + "_production": extra_prod},
                 ))
+
+    # Flaming Ravager (Frigid Caps one-off): Magic from hazardous terrain.
+    # Uses _eff_tt (same corrected terrain counts as the Terrain rows above) so
+    # the displayed value always matches what was actually added to the totals.
+    _flaming_magic_mods = collect_flaming_ravager_terrain_modifiers(target, _eff_tt)
+    if _flaming_magic_mods:
+        contribs.append(SourceContribution(
+            label="Flaming Ravager (Frigid Caps)",
+            source_type="computed",
+            modifiers=_flaming_magic_mods,
+        ))
 
     # ── Node production ───────────────────────────────────────────────────────
     for resource in all_res:
