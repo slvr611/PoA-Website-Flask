@@ -18,17 +18,22 @@ trade_route_routes = Blueprint("trade_route_routes", __name__)
 # ---------------------------------------------------------------------------
 
 def _player_owns_nation(nation_name):
-    """True if the current user owns the named nation via a ruling character."""
+    """True if the current user owns the named nation, either via a ruling
+    character (ruling_nation_org) or direct attribution (nation.players) —
+    same two ownership paths get_viewer_nation checks elsewhere in the app."""
     if not g.user:
         return False
     user = mongo.db.players.find_one({"id": g.user.get("id")})
     if not user:
         return False
-    nation = mongo.db.nations.find_one({"name": nation_name}, {"_id": 1})
+    nation = mongo.db.nations.find_one({"name": nation_name}, {"_id": 1, "players": 1})
     if not nation:
         return False
+    player_id = str(user["_id"])
+    if player_id in (nation.get("players") or []):
+        return True
     return bool(mongo.db.characters.find_one({
-        "player": str(user["_id"]),
+        "player": player_id,
         "ruling_nation_org": str(nation["_id"]),
     }))
 
