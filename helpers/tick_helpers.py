@@ -400,6 +400,9 @@ def tick(form_data):
         snap_message = snapshot_current_map(current_session)
         full_tick_summary += f"\n\n{snap_message}"
 
+    if "run_Region Renaissance Check" in form_data:
+        full_tick_summary += region_renaissance_tick()
+
     if "run_Give Tick Summary" in form_data:
         give_tick_summary(player_tick_summary, full_tick_summary)
 
@@ -1142,6 +1145,45 @@ def nation_income_tick(old_nation, new_nation, schema):
         lines.append("  Resources: " + ", ".join(notable))
     return "\n".join(lines) + "\n"
 
+def _grant_resource_windfall(old_nation, new_nation, rolls, event_label):
+    """Grant `rolls` units of random non-research general resources (one roll
+    = one unit of one randomly chosen resource, so the same resource can be
+    hit more than once), added directly to storage.
+
+    Deliberately NOT capped at nation_resource_capacity: windfalls are meant
+    to give the nation a chance to spend an overflow before the cap gets
+    reapplied by Nation Income Tick at the START of next session. Capping here
+    would silently destroy the whole point of a windfall for a nation already
+    near capacity.
+
+    Shared by the tick-driven "resource windfall on X" modifiers (tech
+    researched, stability loss, expansion) — mirrors era_formal_storage_bonus_tick's
+    grant pattern. Returns a log line, or "" if rolls <= 0.
+
+    Must run reading/writing new_nation["resource_storage"] (not old_nation's)
+    since Nation Income Tick already rebuilds it earlier in NATION_TICK_FUNCTIONS.
+    """
+    if rolls <= 0:
+        return ""
+    resource_pool = [r["key"] for r in json_data.get("general_resources", []) if r["key"] != "research"]
+    if not resource_pool:
+        return ""
+
+    gained = {}
+    for _ in range(int(rolls)):
+        resource = random.choice(resource_pool)
+        gained[resource] = gained.get(resource, 0) + 1
+
+    storage = new_nation.get("resource_storage") or {}
+    for resource, amount in gained.items():
+        storage[resource] = storage.get(resource, 0) + amount
+    new_nation["resource_storage"] = storage
+
+    gained_str = ", ".join(f"{v} {k}" for k, v in gained.items())
+    name = old_nation.get("name", "Unknown")
+    return f"{name} gained {gained_str} from a resource windfall ({event_label}).\n"
+
+
 def nation_tech_tick(old_nation, new_nation, schema):
     new_nation["research_production_at_tick"] = old_nation.get("resource_production", {}).get("research", 0)
     new_nation["research_consumption_at_tick"] = old_nation.get("resource_consumption", {}).get("research", 0)
@@ -1162,6 +1204,14 @@ def nation_tech_tick(old_nation, new_nation, schema):
                 value["researched"] = True
                 display = json_tech_data.get(tech, {}).get("display_name", tech)
                 result += f"{name} has researched {display}.\n"
+                windfall_rolls = old_nation.get("resource_windfall_on_tech_researched", 0)
+                # Percentage-of-base-cost variant: rolls scale with how expensive
+                # the tech was (its BASE cost, unmodified by the nation's own
+                # cost reductions), so a 50% modifier on a 20-cost tech grants 10.
+                base_cost = _tech_def.get("cost", 0)
+                pct = old_nation.get("resource_windfall_pct_of_tech_cost", 0)
+                windfall_rolls += round(base_cost * pct)
+                result += _grant_resource_windfall(old_nation, new_nation, windfall_rolls, f"researched {display}")
         new_nation["technologies"][tech] = value
     return result
 
@@ -1474,10 +1524,12 @@ def nation_passive_expansion_tick(old_nation, new_nation, schema):
 
     # For each successful roll, select and claim tiles
     claimed = []
+    expansion_events = 0  # rounds that actually claimed tiles, not just rolled a success
     for _ in range(successes):
         to_claim = select_passive_expansion_tiles(old_nation, all_tiles)
         if not to_claim:
             break
+        expansion_events += 1
         for (q, r) in to_claim:
             mongo.db.hex_map_tiles.update_one(
                 {"q": q, "r": r},
@@ -1501,6 +1553,8 @@ def nation_passive_expansion_tick(old_nation, new_nation, schema):
             {"$set": {"territory_types": counts}}
         )
         result += f"{nation_name} expanded into {len(claimed)} tile(s).\n"
+        windfall_rolls = old_nation.get("resource_windfall_on_expansion", 0) * expansion_events
+        result += _grant_resource_windfall(old_nation, new_nation, windfall_rolls, "expanded territory")
         from helpers.hex_map_helpers import bump_tile_version
         bump_tile_version()
 
@@ -1788,6 +1842,10 @@ def district_duration_tick(old_nation, new_nation, schema):
         for m in modifiers:
             if m.get("field") == field_key:
                 m["value"] = m.get("value", 0) + 1
+                # Backfill modifier_type/district_key on legacy entries so the
+                # edit page's modifier dropdown can match them (previously blank).
+                m.setdefault("modifier_type", "district_session_count")
+                m.setdefault("district_key", dk)
                 found = True
                 result += f"{old_nation.get('name', '?')}: {display_name} session count -> {m['value']}\n"
                 break
@@ -1799,7 +1857,10 @@ def district_duration_tick(old_nation, new_nation, schema):
                     result += f"{old_nation.get('name', '?')}: {display_name} session count -> {m['value']} (legacy)\n"
                     break
         if not found:
-            modifiers.append({"field": field_key, "value": 1, "duration": -1, "source": source})
+            modifiers.append({
+                "field": field_key, "value": 1, "duration": -1, "source": source,
+                "modifier_type": "district_session_count", "district_key": dk,
+            })
             result += f"{old_nation.get('name', '?')}: {display_name} session count -> 1 (new)\n"
 
     stale = []
@@ -2157,6 +2218,33 @@ def era_character_aging_tick():
     return result
 
 
+def region_renaissance_tick():
+    """One-off regional flavor mechanic (see collect_flaming_ravager_modifiers in
+    calculations/field_calculations.py): if the Frigid Caps region remains at
+    Hopeful prosperity for 3 consecutive sessions, flag that Prosperity has
+    ended there. No automatic mechanical lockout — the game master applies any
+    narrative consequences (e.g. for Flaming Ravagers) manually when it fires.
+    """
+    from calculations.field_calculations import FLAMING_RAVAGER_REGION
+
+    region = mongo.db.regions.find_one({"name": FLAMING_RAVAGER_REGION})
+    if not region or region.get("renaissance_triggered"):
+        return ""
+
+    count = region.get("hopeful_session_count", 0) + 1 if region.get("prosperity") == "Hopeful" else 0
+    updates = {"hopeful_session_count": count}
+    result = ""
+    if count >= 3:
+        updates["renaissance_triggered"] = True
+        result = (
+            f"{FLAMING_RAVAGER_REGION} has remained at Hopeful prosperity for 3 consecutive "
+            f"sessions — a Renaissance event has occurred! Prosperity has ended for this region. "
+            f"(Apply any narrative consequences for Flaming Ravagers manually.)\n"
+        )
+    mongo.db.regions.update_one({"_id": region["_id"]}, {"$set": updates})
+    return result
+
+
 ###########################################################
 # Tick Function Constants
 ###########################################################
@@ -2166,6 +2254,7 @@ GENERAL_TICK_FUNCTIONS = {
     "Give Tick Summary": give_tick_summary,
     "Tick Session Number": tick_session_number,
     "Snapshot Hex Map": None,   # handled directly in tick() after session number is committed
+    "Region Renaissance Check": region_renaissance_tick,
 }
 
 CHARACTER_TICK_FUNCTIONS = {
@@ -2412,6 +2501,9 @@ def adjust_stability(old_nation, new_nation, schema, amounts=[-1], reasons=[""])
         stability_index += amounts[i]
         gain_or_loss = "gained" if amounts[i] > 0 else "lost"
         result += f"{old_nation.get('name', 'Unknown')} has {gain_or_loss} {abs(amounts[i])} level(s) of stability due to {reasons[i]}.\n"
+        if amounts[i] < 0:
+            windfall_rolls = old_nation.get("resource_windfall_on_stability_loss", 0) * abs(amounts[i])
+            result += _grant_resource_windfall(old_nation, new_nation, windfall_rolls, f"lost stability from {reasons[i]}")
     if stability_index < 0:
         civil_war_chance = 0.5
         civil_war_roll = random.random()

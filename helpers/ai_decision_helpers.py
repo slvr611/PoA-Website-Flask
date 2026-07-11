@@ -310,11 +310,15 @@ def evaluate_nation_state(old_nation):
     base_production  = dict(old_nation.get("resource_production", {}))
     base_consumption = dict(old_nation.get("resource_consumption", {}))
     base_excess = dict(old_nation.get("resource_excess", {}))
-    jobs_map = json_data.get("jobs", {})
+    # Strip using the calculated per-nation job_details when available — the
+    # game applies job production/upkeep WITH modifiers (e.g. a sawmill's
+    # harvester wood bonus), so the strip must remove the same boosted amounts.
+    calculated_job_details = old_nation.get("job_details") or {}
+    raw_jobs_map = json_data.get("jobs", {})
     for jk, count in old_nation.get("jobs", {}).items():
         if count <= 0 or jk in persistent_job_keys:
             continue
-        jdata = jobs_map.get(jk, {})
+        jdata = calculated_job_details.get(jk) or raw_jobs_map.get(jk, {})
         for r, amt in jdata.get("production", {}).items():
             if not isinstance(amt, (int, float)):
                 continue
@@ -390,15 +394,25 @@ def evaluate_nation_state(old_nation):
     # entirely so the AI never assigns idle pops to them.
     persistent = {"undead", "partial_vampire", "full_vampire", "revolutionary"}
 
-    jobs_data = json_data.get("jobs", {})
+    # Prefer the calculated per-nation job_details: they carry the boosted
+    # production/upkeep from districts/laws/techs (e.g. sawmill's harvester
+    # wood bonus) and are already filtered by requirements and locks. Without
+    # them the AI scores jobs on raw base values and can pass on a job the
+    # nation just built a district to improve.
     available_jobs = {}
-    for jk, jdata in jobs_data.items():
-        if jk in persistent:
-            continue
-        if old_nation.get(f"locks_{jk}", 0):
-            continue
-        if check_job_requirements(old_nation, jdata, {}, region_name=region_name, def_keys=def_keys):
-            available_jobs[jk] = jdata
+    if calculated_job_details:
+        for jk, jdata in calculated_job_details.items():
+            if jk not in persistent:
+                available_jobs[jk] = jdata
+    else:
+        jobs_data = json_data.get("jobs", {})
+        for jk, jdata in jobs_data.items():
+            if jk in persistent:
+                continue
+            if old_nation.get(f"locks_{jk}", 0):
+                continue
+            if check_job_requirements(old_nation, jdata, {}, region_name=region_name, def_keys=def_keys):
+                available_jobs[jk] = jdata
 
     # Persistent jobs that survive cleanup and shouldn't be re-assigned
     persistent_assigned = sum(
@@ -473,7 +487,7 @@ def evaluate_nation_state(old_nation):
 # Need weights
 # ---------------------------------------------------------------------------
 
-def _weights_from_net(net_production, stockpiles, prices, money_income, resource_capacity=None, active_resources=None):
+def _weights_from_net(net_production, stockpiles, prices, money_income, resource_capacity=None, active_resources=None, money_stock=None):
     """
     Core weight computation from a net-production snapshot.
     Called by compute_need_weights and by assign_ai_jobs after each pop assignment.
@@ -550,7 +564,20 @@ def _weights_from_net(net_production, stockpiles, prices, money_income, resource
 
         weights[r] = w
 
-    weights["money"] = 1.2 if money_income >= 0 else 2.5
+    # Money urgency mirrors the resource tiers: a negative income with the
+    # treasury about to run dry is as critical as a resource hitting zero.
+    if money_income >= 0:
+        weights["money"] = 1.2
+    elif money_stock is not None:
+        money_sessions = money_stock / -money_income if money_stock > 0 else 0.0
+        if money_sessions < 2:
+            weights["money"] = 6.0
+        elif money_sessions < 4:
+            weights["money"] = 4.0
+        else:
+            weights["money"] = 2.5
+    else:
+        weights["money"] = 2.5
     return weights
 
 
@@ -566,7 +593,7 @@ def compute_need_weights(state, prices=None):
         prices if prices is not None else _base_prices(),
         state["money_income"],
         state.get("resource_capacity"),
-        active_resources=state.get("active_resources"),
+        active_resources=state.get("active_resources"), money_stock=state.get("money"),
     )
 
 
@@ -668,7 +695,7 @@ def assign_ai_jobs(state, need_weights, prices=None):
     while pops_remaining > 0:
         curr_weights = _weights_from_net(
             projected_net, state["stockpiles"], prices, state["money_income"],
-            active_resources=state.get("active_resources"),
+            active_resources=state.get("active_resources"), money_stock=state.get("money"),
         )
         job_scores = score_jobs(state, curr_weights, prices)
         positive   = {k: v for k, v in job_scores.items() if v > 0.05}
@@ -765,7 +792,7 @@ def compute_upkeep_floor(state, prices=None):
         deficit_resources = {r for r, net in projected_net.items() if net < 0}
         curr_weights = _weights_from_net(
             projected_net, state["stockpiles"], prices, state["money_income"],
-            active_resources=state.get("active_resources"),
+            active_resources=state.get("active_resources"), money_stock=state.get("money"),
         )
         job_scores = score_jobs(state, curr_weights, prices)
         positive = {}
@@ -907,6 +934,13 @@ def select_strategic_goal(old_nation, state, personality, upkeep_ratio, prices=N
     deficit_count = sum(1 for r, net in state["net_production"].items() if net < 0)
     non_critical_deficit = deficit_count - critical_count
 
+    # Money crisis: negative income with the treasury running dry soon
+    if state["money_income"] < 0:
+        money_sessions = state["money"] / -state["money_income"] if state["money"] > 0 else 0.0
+    else:
+        money_sessions = float("inf")
+    money_crisis = money_sessions < 4
+
     # Count surplus resources
     surplus_count = sum(
         1 for r, s in state["sessions_until_empty"].items()
@@ -926,7 +960,7 @@ def select_strategic_goal(old_nation, state, personality, upkeep_ratio, prices=N
 
         # --- Situation modifiers per goal ---
         if goal_type == "stabilize_economy":
-            if deficit_count == 0:
+            if deficit_count == 0 and not money_crisis:
                 candidates.append({
                     "type": goal_type, "score": 0,
                     "display_name": goal_def["display_name"],
@@ -934,7 +968,12 @@ def select_strategic_goal(old_nation, state, personality, upkeep_ratio, prices=N
                 })
                 continue
             situation += critical_count * 20 + non_critical_deficit * 15
-            rationale_parts.append(f"{critical_count} critical, {non_critical_deficit} other deficits")
+            if deficit_count:
+                rationale_parts.append(f"{critical_count} critical, {non_critical_deficit} other deficits")
+            if money_crisis:
+                money_boost = 40 if money_sessions < 2 else 25
+                situation += money_boost
+                rationale_parts.append(f"money crisis ({money_sessions:.1f} sessions of gold left, +{money_boost})")
             if upkeep_ratio > 0.4:
                 situation += 25
                 rationale_parts.append(f"upkeep ratio {upkeep_ratio:.0%} (inefficient)")
@@ -1067,6 +1106,12 @@ def select_strategic_goal(old_nation, state, personality, upkeep_ratio, prices=N
             if surplus_count > 0:
                 situation += surplus_count * 5
                 rationale_parts.append(f"{surplus_count} surplus resources (+{surplus_count * 5})")
+            if money_crisis:
+                # Selling resources for cash is the fastest fix for a treasury
+                # bleeding out — this goal also boosts commerce districts.
+                money_boost = 60 if money_sessions < 2 else 35
+                situation += money_boost
+                rationale_parts.append(f"money crisis ({money_sessions:.1f} sessions of gold left, +{money_boost})")
 
         elif goal_type == "build_wonder":
             if not has_archaic or deficit_count > 0 or surplus_count < 3:
@@ -1377,10 +1422,16 @@ def _district_modifier_value(modifiers_list, need_weights, prices, territory_typ
             contrib = weight * value * scale
             matched = True
         elif field in PRODUCTION_FIELD_MAP:
+            # Use the live need weight for the mapped stockpile when available
+            # (mirrors score_jobs) — so e.g. money_income modifiers scale with
+            # money urgency instead of a flat base weight.
             stockpile_key, base_w = PRODUCTION_FIELD_MAP[field]
-            weight = base_w
+            if stockpile_key and stockpile_key in need_weights:
+                weight = need_weights[stockpile_key]
+            else:
+                weight = base_w
             scale = _price_scale(stockpile_key, prices) if stockpile_key else 1.0
-            contrib = base_w * value * scale
+            contrib = weight * value * scale
             matched = True
         elif field.endswith("_production"):
             resource_key = field[: -len("_production")]
@@ -2407,7 +2458,7 @@ def _select_best_city(old_nation, state, exclude_types=None):
         prices = _base_prices()
         baseline_w = _weights_from_net(
             state["net_production"], state["stockpiles"], prices, state["money_income"],
-            active_resources=state.get("active_resources"),
+            active_resources=state.get("active_resources"), money_stock=state.get("money"),
         )
 
         best = city_scores[0]
@@ -2592,7 +2643,7 @@ def sync_nation_cities(nation, dry_run=True, tiles_with_city=None, owned_tiles=N
         state = evaluate_nation_state(nation)
         baseline_w = _weights_from_net(
             state["net_production"], state["stockpiles"], prices, state["money_income"],
-            active_resources=state.get("active_resources"),
+            active_resources=state.get("active_resources"), money_stock=state.get("money"),
         )
         has_city_on_map = bool(tile_city_ids)
 
@@ -3001,7 +3052,7 @@ def evaluate_goal_district(old_nation, new_nation, state, goal, need_weights, pr
                 nw_updated = _weights_from_net(
                     upkeep_projected, state["stockpiles"], prices, state["money_income"],
                     state.get("resource_capacity"),
-                    active_resources=state.get("active_resources"),
+                    active_resources=state.get("active_resources"), money_stock=state.get("money"),
                 )
                 nw_updated = _goal_adjusted_need_weights(nw_updated, goal.get("type", ""), state)
                 scored = score_buildable_districts(old_nation, state, nw_updated, prices, upkeep_assignments)
@@ -3041,7 +3092,7 @@ def evaluate_goal_district(old_nation, new_nation, state, goal, need_weights, pr
             if money_ok and res_ok:
                 import uuid
                 district_id = uuid.uuid4().hex[:8]
-                coord, node_key = None, ""
+                coord, node_key, dd = None, "", None
                 if c_source == "db" and not is_nomadic:
                     dd = mongo.db.district_defs.find_one({"key": c_key})
                     if dd:
@@ -3100,6 +3151,33 @@ def evaluate_goal_district(old_nation, new_nation, state, goal, need_weights, pr
                             continue
                         if check_job_requirements(merged_nation, jdata, {}):
                             state["available_jobs"][jk] = jdata
+
+                # Apply the new district's job production/upkeep modifiers to
+                # the AI's job view immediately (e.g. sawmill's +1 harvester
+                # wood). job_details on the doc only refreshes on the next
+                # recalc, so without this the AI scores the boosted job at its
+                # old value in the same session it built the booster.
+                if c_source == "db":
+                    if dd is None:
+                        dd = mongo.db.district_defs.find_one({"key": c_key}) or {}
+                    for m in dd.get("modifiers", []):
+                        m_type = m.get("modifier_type", "")
+                        m_job = m.get("job", "")
+                        m_res = m.get("resource", "")
+                        m_val = m.get("value", 0)
+                        if (m_type not in ("job_resource_production", "job_resource_upkeep")
+                                or not m_job or not m_res
+                                or not isinstance(m_val, (int, float))
+                                or m_job not in state["available_jobs"]):
+                            continue
+                        patched = deepcopy(state["available_jobs"][m_job])
+                        if m_type == "job_resource_production":
+                            prod = patched.setdefault("production", {})
+                            prod[m_res] = max(0, prod.get(m_res, 0) + m_val)
+                        else:
+                            upk = patched.setdefault("upkeep", {})
+                            upk[m_res] = max(0, upk.get(m_res, 0) + m_val)
+                        state["available_jobs"][m_job] = patched
 
                 # Re-evaluate upkeep and goal
                 upkeep_assignments, _, _, _, upkeep_ratio, _ = compute_upkeep_floor(state, prices)
@@ -3245,7 +3323,7 @@ def assign_goal_jobs(state, goal, remaining_pops, projected_net, district_plan, 
         base_weights = _weights_from_net(
             projected_net, state["stockpiles"], prices, state["money_income"],
             resource_capacity,
-            active_resources=state.get("active_resources"),
+            active_resources=state.get("active_resources"), money_stock=state.get("money"),
         )
 
         # Apply goal resource boosts
@@ -3481,6 +3559,13 @@ def generate_goal_trade_desires(state, goal, personality, district_plan, project
     projected_money = state["money"] + state["money_income"]
     money_ratio = projected_money / money_cap if money_cap > 0 else 0.5
 
+    # Money crisis: negative income with the treasury running dry soon.
+    if state["money_income"] < 0:
+        money_sessions = state["money"] / -state["money_income"] if state["money"] > 0 else 0.0
+    else:
+        money_sessions = float("inf")
+    money_crisis = money_sessions < 4
+
     for r in common + luxury:
         # Use projected_net (post-job-assignment) to determine actual deficits
         net = projected_net.get(r, state["net_production"].get(r, 0))
@@ -3568,19 +3653,26 @@ def generate_goal_trade_desires(state, goal, personality, district_plan, project
         # --- Sell: surplus resources (based on post-assignment production) ---
         # Sell thresholds loosen as money drops — a nation low on money should
         # sell off resources it's not actively using to maintain a cash reserve.
-        if not is_luxury and r not in goal_resources and sessions == float("inf") and net >= 0:
+        # In a money crisis, positive production FLOW is sellable no matter how
+        # thin the stockpile is (producing +7/session and selling 5 of it is
+        # sustainable), and a dire crisis (< 2 sessions of gold) overrides even
+        # district-plan cost protection — cash first, construction later.
+        goal_protected = r in goal_resources and not (money_crisis and money_sessions < 2)
+        if not is_luxury and not goal_protected and sessions == float("inf") and net >= 0:
             # Stockpile threshold scales with money health:
             # money_ratio >= 0.75: sell only when stockpile > 20 (comfortable)
             # money_ratio ~0.50: sell when stockpile > 10
             # money_ratio ~0.25: sell when stockpile > 5 (desperate for cash)
-            sell_threshold = max(3, int(20 * min(1.0, money_ratio / 0.75)))
-            surplus_threshold = max(3, int(6 * min(1.0, money_ratio / 0.75)))
+            health = max(0.0, money_ratio)
+            sell_threshold = max(3, int(20 * min(1.0, health / 0.75)))
+            surplus_threshold = max(3, int(6 * min(1.0, health / 0.75)))
+            crisis_flow_sell = money_crisis and net > 0
 
-            if stockpile > sell_threshold:
+            if stockpile > sell_threshold or crisis_flow_sell:
                 surplus_sessions = stockpile / max(net, 0.01) if net > 0 else 100
-                if surplus_sessions > surplus_threshold:
+                if surplus_sessions > surplus_threshold or crisis_flow_sell:
                     # Price discount increases when money is low (more eager to sell)
-                    desperation = max(0.0, 1.0 - money_ratio / 0.5)
+                    desperation = max(0.0, 1.0 - health / 0.5)
                     sell_mult = (0.90 - desperation * 0.15) * sell_bias
                     if goal_type == "expand_trade":
                         sell_mult = (0.85 - desperation * 0.10) * sell_bias
@@ -3591,6 +3683,10 @@ def generate_goal_trade_desires(state, goal, personality, district_plan, project
                     sell_urgency = surplus_sessions + (15 if money_ratio < 0.25 else 5 if money_ratio < 0.5 else 0)
                     ttype = "Need to Sell" if money_ratio < 0.25 or surplus_sessions > 12 else "Desire to Sell"
                     source = "goal" if goal_type == "expand_trade" else "opportunistic"
+                    if money_crisis:
+                        sell_urgency += 25
+                        ttype = "Need to Sell"
+                        source = "survival"
                     sell_candidates.append({
                         "resource": r, "trade_type": ttype, "price": sell_price,
                         "quantity": qty, "_urgency": sell_urgency, "_source": source,
@@ -3603,6 +3699,14 @@ def generate_goal_trade_desires(state, goal, personality, district_plan, project
         if r not in seen_buys or entry["_urgency"] > seen_buys[r]["_urgency"]:
             seen_buys[r] = entry
     buy_candidates = sorted(seen_buys.values(), key=lambda x: x["_urgency"], reverse=True)
+
+    # Deduplicate sell candidates per resource (keep highest urgency)
+    seen_sells = {}
+    for entry in sell_candidates:
+        r = entry["resource"]
+        if r not in seen_sells or entry["_urgency"] > seen_sells[r]["_urgency"]:
+            seen_sells[r] = entry
+    sell_candidates = list(seen_sells.values())
     sell_candidates.sort(key=lambda x: x["_urgency"], reverse=True)
 
     # Cap quantities to slot capacity (each slot carries 4 resources of one type)
@@ -3703,7 +3807,7 @@ def ai_decision_tick(old_nation, new_nation, schema):
         # iteration recalculates weights with the updated projected_net.
         need_weights = _weights_from_net(
             projected_net, state["stockpiles"], market_prices, state["money_income"],
-            active_resources=state.get("active_resources"),
+            active_resources=state.get("active_resources"), money_stock=state.get("money"),
         )
         job_scores = score_jobs(state, need_weights, market_prices)
 

@@ -9,7 +9,8 @@
       "Bash(.venv/Scripts/python.exe -c \"from PIL import Image; print\\('Pillow available'\\)\")",
       "Bash(.venv/Scripts/pip.exe install *)",
       "Bash(.venv/Scripts/python.exe -c ' *)",
-      "Bash(node --check static/js/hex-map.js)"
+      "Bash(node --check static/js/hex-map.js)",
+      "Bash(node -e ' *)"
     ]
   }
 }

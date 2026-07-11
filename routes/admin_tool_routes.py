@@ -1620,7 +1620,7 @@ def ai_goals_preview():
         # cap is enforced dynamically during job assignment loops)
         need_weights = _weights_from_net(
             projected_net, state["stockpiles"], market_prices, state["money_income"],
-            active_resources=state.get("active_resources"),
+            active_resources=state.get("active_resources"), money_stock=state.get("money"),
         )
         job_scores = score_jobs(state, need_weights, market_prices)
 

@@ -324,6 +324,7 @@ class ModifierForm(Form):
     target_type = StringField("Target Type")
     target_value = StringField("Target Value")
     unit_name = StringField("Unit Name")
+    district_key = StringField("District Key")
     value = FloatField("Value", default=1)
     max_value = FloatField("Max Value", validators=[Optional()])
     duration = IntegerField("Duration", validators=[NumberRange()], default=-1)

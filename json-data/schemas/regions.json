@@ -25,6 +25,18 @@
         "enum": ["Wretched", "Despairing", "Struggling", "Hopeful"],
         "default": "Hopeful"
       },
+      "hopeful_session_count": {
+        "bsonType": "number",
+        "label": "Consecutive Sessions At Hopeful",
+        "description": "Tracks how many sessions in a row this region has been at Hopeful prosperity. Reset to 0 whenever prosperity is not Hopeful. Used by the Region Renaissance Check tick.",
+        "default": 0
+      },
+      "renaissance_triggered": {
+        "bsonType": "boolean",
+        "label": "Renaissance Triggered",
+        "description": "Set once this region has spent 3 consecutive sessions at Hopeful prosperity. Marks that Prosperity has ended here — the game master should apply any narrative consequences (e.g. for Flaming Ravagers) manually.",
+        "default": false
+      },
       "nations": {
         "bsonType": "array",
         "label": "Nations",

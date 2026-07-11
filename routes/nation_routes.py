@@ -574,6 +574,8 @@ def nation_edit_request(item_ref):
         view_access_level=g.view_access_level,
         is_non_player_admin=g.is_non_player_admin,
     )
+    if g.user and g.user.get("is_admin"):
+        visibility_level = 4
 
     form = form_generator.get_form("nations", schema, formdata=request.form)
 

@@ -188,7 +188,7 @@
                   {% endif %}
                 </div>
               {% endfor %}
-              {% for fkey in ['resource', 'resource_from', 'resource_to', 'job', 'attribute', 'unit_category', 'unit_stat', 'tier', 'tech_category', 'terrain', 'target_type', 'target_value', 'unit_name'] %}
+              {% for fkey in ['resource', 'resource_from', 'resource_to', 'job', 'attribute', 'unit_category', 'unit_stat', 'tier', 'tech_category', 'terrain', 'target_type', 'target_value', 'unit_name', 'district_key'] %}
                 {% if fkey not in used_keys %}
                   <input type="hidden" name="{{ field_name }}-{{ idx }}-{{ fkey }}" id="{{ field_name }}-{{ idx }}-{{ fkey }}" value="">
                 {% endif %}
@@ -439,7 +439,7 @@
                   {% endif %}
                 </div>
               {% endfor %}
-              {% for fkey in ['resource', 'resource_from', 'resource_to', 'job', 'attribute', 'unit_category', 'unit_stat', 'tier', 'tech_category', 'terrain', 'target_type', 'target_value', 'unit_name'] %}
+              {% for fkey in ['resource', 'resource_from', 'resource_to', 'job', 'attribute', 'unit_category', 'unit_stat', 'tier', 'tech_category', 'terrain', 'target_type', 'target_value', 'unit_name', 'district_key'] %}
                 {% if fkey not in used_keys %}
                 <input type="hidden" name="{{ modifier_field.form[fkey].name }}" value="">
                 {% endif %}

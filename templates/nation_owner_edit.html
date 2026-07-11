@@ -522,7 +522,7 @@
                                 <th colspan="2" class="resources-header">Government & Laws</th>
                             </tr>
                             {% for law in schema.laws %}
-                                {% if law != "stability" and law != "vassal_type" and law in form._fields.keys() %}
+                                {% if law != "stability" and law != "vassal_type" and law != "compliance" and law in form._fields.keys() %}
                                     <tr>
                                         <th>{{ form[law].label.text }}:</th>
                                         <td>{{ form[law](class="form-control") }}</td>
@@ -1568,7 +1568,7 @@
             function buildExtraFieldsHTML(fieldName, index, modifierType, currentData) {
                 const typeDef = MODIFIER_TYPES[modifierType] || {};
                 const extraFields = typeDef.extra_fields || [];
-                const ALL_EXTRA_KEYS = ['resource', 'resource_from', 'resource_to', 'job', 'attribute', 'unit_category', 'unit_stat', 'tier', 'tech_category', 'terrain', 'node_resource', 'terrain_as', 'target_type', 'target_value', 'unit_name'];
+                const ALL_EXTRA_KEYS = ['resource', 'resource_from', 'resource_to', 'job', 'attribute', 'unit_category', 'unit_stat', 'tier', 'tech_category', 'terrain', 'node_resource', 'terrain_as', 'target_type', 'target_value', 'unit_name', 'district_key'];
                 const renderedKeys = new Set();
                 let html = '';
                 for (const extra of extraFields) {

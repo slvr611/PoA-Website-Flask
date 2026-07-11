@@ -829,6 +829,31 @@
         "calculated": true,
         "format": "percentage"
       },
+      "resource_windfall_on_tech_researched": {
+        "bsonType": "number",
+        "label": "Resource Windfall on Tech Researched",
+        "description": "How many random non-research general resources the nation gains (1 unit each) each time it finishes researching a technology",
+        "calculated": true
+      },
+      "resource_windfall_pct_of_tech_cost": {
+        "bsonType": "number",
+        "label": "Resource Windfall % of Tech Cost",
+        "description": "Grants this percentage of a researched technology's BASE cost as random non-research general resources (1 unit per roll, rounded) each time the nation finishes researching it",
+        "calculated": true,
+        "format": "percentage"
+      },
+      "resource_windfall_on_stability_loss": {
+        "bsonType": "number",
+        "label": "Resource Windfall on Stability Loss",
+        "description": "How many random non-research general resources the nation gains (1 unit each) each time it loses a level of stability",
+        "calculated": true
+      },
+      "resource_windfall_on_expansion": {
+        "bsonType": "number",
+        "label": "Resource Windfall on Expansion",
+        "description": "How many random non-research general resources the nation gains (1 unit each) each time it successfully expands its territory",
+        "calculated": true
+      },
       "pop_flee_chance": {
         "bsonType": "number",
         "label": "Pop Flee Chance",
@@ -897,7 +922,8 @@
             "_modifiers": [
               { "modifier_type": "administration", "value": 1, "scope": "nation_self", "scaling": "per_x_district_category", "scaling_x": 1, "scaling_extra": "education"},
               { "modifier_type": "effective_territory", "value": -10, "scope": "nation_self", "scaling": "per_x_administration", "scaling_x": 1 },
-              { "modifier_type": "tech_cost_modifier", "value": -1, "scope": "nation_self", "scaling": "per_x_administration", "scaling_x": 5 }
+              { "modifier_type": "tech_cost_modifier", "value": -1, "scope": "nation_self", "scaling": "per_x_administration", "scaling_x": 5 },
+              { "modifier_type": "resource_windfall_pct_of_tech_cost", "value": 0.5, "scope": "nation_self" }
             ]
           },
           "Chaotic Throng": {

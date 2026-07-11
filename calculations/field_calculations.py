@@ -248,6 +248,9 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
         prosperity_mods = collect_prosperity_modifiers(target)
         for k, v in prosperity_mods.items():
             external_modifiers_total[k] = external_modifiers_total.get(k, 0) + v
+        flaming_ravager_mods = collect_flaming_ravager_modifiers(target)
+        for k, v in flaming_ravager_mods.items():
+            external_modifiers_total[k] = external_modifiers_total.get(k, 0) + v
     record_timing("sum_external_modifiers_ms", phase_start)
 
     phase_start = perf_counter()
@@ -1393,6 +1396,18 @@ _PROSPERITY_EFFECTS = {
     },
 }
 
+# One-off regional flavor mechanic: Ravagers whose nation sits in the Frigid Caps
+# region use the Flaming Ravager effects (below) INSTEAD OF the generic Ravager
+# row in _PROSPERITY_EFFECTS above — collect_prosperity_modifiers skips them.
+# (research_production bonus, hazardous-hex-per-Magic-Point divisor, tech windfall qty)
+FLAMING_RAVAGER_REGION = "Frigid Caps"
+_FLAMING_RAVAGER_EFFECTS = {
+    "Wretched":   (4, 6, 4),
+    "Despairing": (3, 8, 2),
+    "Struggling": (2, 10, 0),
+    "Hopeful":    (1, 12, 0),
+}
+
 def collect_prosperity_modifiers(target):
     role = target.get("prosperity_role", "None")
     if not role or role == "None":
@@ -1402,12 +1417,57 @@ def collect_prosperity_modifiers(target):
         return {}
     try:
         region_doc = category_data["regions"]["database"].find_one(
-            {"_id": ObjectId(region_id)}, {"prosperity": 1}
+            {"_id": ObjectId(region_id)}, {"name": 1, "prosperity": 1}
         )
         tier = region_doc.get("prosperity", "Hopeful") if region_doc else "Hopeful"
     except Exception:
         return {}
+    # Frigid Caps Ravagers use collect_flaming_ravager_modifiers instead.
+    if role == "Ravager" and region_doc and region_doc.get("name") == FLAMING_RAVAGER_REGION:
+        return {}
     return dict(_PROSPERITY_EFFECTS.get((tier, role), {}))
+
+
+def collect_flaming_ravager_modifiers(target):
+    """One-off regional bonus REPLACING collect_prosperity_modifiers' generic
+    Ravager effects for nations in the Frigid Caps region: extra research
+    production, Magic from hazardous terrain, and (at the worse tiers) a
+    resource windfall each time they finish researching a technology.
+
+    The "increased volcano success chance" flavor for this mechanic is
+    narrative/GM-adjudicated and not modeled here. The "Renaissance ends
+    Prosperity" trigger's session counter lives in region_renaissance_tick
+    (helpers/tick_helpers.py); this function only reads the region's current
+    prosperity tier.
+    """
+    if target.get("prosperity_role") != "Ravager":
+        return {}
+    region_id = target.get("region", "")
+    if not region_id:
+        return {}
+    try:
+        region_doc = category_data["regions"]["database"].find_one(
+            {"_id": ObjectId(region_id)}, {"name": 1, "prosperity": 1}
+        )
+    except Exception:
+        return {}
+    if not region_doc or region_doc.get("name") != FLAMING_RAVAGER_REGION:
+        return {}
+    effect = _FLAMING_RAVAGER_EFFECTS.get(region_doc.get("prosperity", "Hopeful"))
+    if not effect:
+        return {}
+    research_bonus, hex_divisor, windfall_qty = effect
+
+    territory_types = target.get("territory_types") or {}
+    hazardous_hexes = territory_types.get("hazardous_land", 0) + territory_types.get("hazardous_water", 0)
+
+    mods = {"research_production": research_bonus}
+    magic_bonus = hazardous_hexes // hex_divisor
+    if magic_bonus:
+        mods["magic_production"] = magic_bonus
+    if windfall_qty:
+        mods["resource_windfall_on_tech_researched"] = windfall_qty
+    return mods
 
 def check_job_requirements(target, job_details, overall_total_modifiers, region_name=None, def_keys=None):
     requirements = job_details.get("requirements", {})
@@ -2230,6 +2290,11 @@ def _build_unit_tagged_sources(target, schema, district_details, district_contri
         except Exception:
             tier = "Hopeful"
         tagged.append({"label": f"Prosperity: {role} ({tier})", "modifiers": prosperity_mods})
+
+    # Flaming Ravager (Frigid Caps one-off) modifiers
+    flaming_ravager_mods = collect_flaming_ravager_modifiers(target)
+    if flaming_ravager_mods:
+        tagged.append({"label": "Flaming Ravager (Frigid Caps)", "modifiers": flaming_ravager_mods})
 
     # All remaining external sources (global mods, religion, wonders, region,
     # overlord/vassal stances, markets) — labeled automatically.

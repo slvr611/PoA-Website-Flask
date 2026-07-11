@@ -7,6 +7,16 @@
         "is_district_duration": true,
         "applicable_to": ["nation"]
     },
+    "district_session_count": {
+        "name": "District Session Count (Auto)",
+        "description": "Auto-managed by the tick — counts how many sessions a district (identified by def_key) has been active, for the 'Per X District Sessions' scaling method. Value is incremented automatically each session; do not add this manually.",
+        "value_format": "number",
+        "field_template": "district_sessions_{district_key}",
+        "extra_fields": [
+            {"key": "district_key", "label": "District Key (def_key)"}
+        ],
+        "applicable_to": ["nation"]
+    },
     "administration": {
         "name": "Administration",
         "value_format": "number",
@@ -57,6 +67,34 @@
         "name": "Civil War Chance",
         "value_format": "percentage",
         "field_template": "civil_war_chance",
+        "applicable_to": ["nation"]
+    },
+    "resource_windfall_on_tech_researched": {
+        "name": "Resource Windfall on Tech Researched",
+        "description": "Each time the nation finishes researching a technology, it gains this many random non-research general resources (1 unit each, possibly repeating the same resource).",
+        "value_format": "number",
+        "field_template": "resource_windfall_on_tech_researched",
+        "applicable_to": ["nation"]
+    },
+    "resource_windfall_pct_of_tech_cost": {
+        "name": "Resource Windfall % of Tech Cost",
+        "description": "Each time the nation finishes researching a technology, it gains random non-research general resources (1 unit per roll) equal to this percentage of the tech's BASE research cost, rounded to the nearest whole roll. Stacks additively with 'Resource Windfall on Tech Researched'.",
+        "value_format": "percentage",
+        "field_template": "resource_windfall_pct_of_tech_cost",
+        "applicable_to": ["nation"]
+    },
+    "resource_windfall_on_stability_loss": {
+        "name": "Resource Windfall on Stability Loss",
+        "description": "Each time the nation loses a level of stability, it gains this many random non-research general resources (1 unit each, possibly repeating the same resource).",
+        "value_format": "number",
+        "field_template": "resource_windfall_on_stability_loss",
+        "applicable_to": ["nation"]
+    },
+    "resource_windfall_on_expansion": {
+        "name": "Resource Windfall on Expansion",
+        "description": "Each time the nation successfully expands its territory, it gains this many random non-research general resources (1 unit each, possibly repeating the same resource).",
+        "value_format": "number",
+        "field_template": "resource_windfall_on_expansion",
         "applicable_to": ["nation"]
     },
     "compliance_gain_chance": {
