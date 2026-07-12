@@ -1,0 +1,106 @@
+{% extends "layout.html" %}
+{% from "macros/pagination.html" import render_changes_table %}
+
+{% block title %}Archived Change Search{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1>Archived Change Search</h1>
+    <p class="text-muted">
+        Changes older than ~20 sessions are exported to S3 and removed from the database
+        (see Database Management for raw backups). Search the database for recent archived
+        changes still in MongoDB, or the S3 archive for older ones — S3 archive files can be
+        very large, so that search runs in the background and this page will update automatically.
+    </p>
+
+    <form method="post" action="/archived_changes_search/start">
+        <table class="info-table">
+            <tr>
+                <th>Source</th>
+                <td>
+                    <label><input type="radio" name="source" value="database" {% if source != "s3" %}checked{% endif %}> Database (recent, still in MongoDB)</label>
+                    <label style="margin-left:1.5em;"><input type="radio" name="source" value="s3" {% if source == "s3" %}checked{% endif %}> S3 Archive (older, exported)</label>
+                </td>
+            </tr>
+            <tr>
+                <th><label for="start_date">Start date</label></th>
+                <td><input type="date" id="start_date" name="start_date" value="{{ start_date }}"></td>
+            </tr>
+            <tr>
+                <th><label for="end_date">End date</label></th>
+                <td><input type="date" id="end_date" name="end_date" value="{{ end_date }}"></td>
+            </tr>
+            <tr>
+                <th><label for="requester">Created by</label></th>
+                <td>
+                    <select id="requester" name="requester">
+                        <option value="">— Any —</option>
+                        {% for player in players %}
+                            <option value="{{ player._id }}" {% if requester_id == player._id|string %}selected{% endif %}>{{ player.name }}</option>
+                        {% endfor %}
+                    </select>
+                </td>
+            </tr>
+            <tr>
+                <th><label for="approver">Approved by</label></th>
+                <td>
+                    <select id="approver" name="approver">
+                        <option value="">— Any —</option>
+                        {% for player in players %}
+                            <option value="{{ player._id }}" {% if approver_id == player._id|string %}selected{% endif %}>{{ player.name }}</option>
+                        {% endfor %}
+                    </select>
+                </td>
+            </tr>
+            <tr>
+                <th><label for="target_collection">Collection</label></th>
+                <td>
+                    <select id="target_collection" name="target_collection">
+                        <option value="">— Any —</option>
+                        {% for collection in target_collections %}
+                            <option value="{{ collection }}" {% if target_collection == collection %}selected{% endif %}>{{ collection }}</option>
+                        {% endfor %}
+                    </select>
+                </td>
+            </tr>
+            <tr>
+                <th><label for="target_name">Object name</label></th>
+                <td>
+                    <input type="text" id="target_name" name="target_name" value="{{ target_name }}" placeholder="e.g. a nation or character name (requires a Collection above)">
+                </td>
+            </tr>
+        </table>
+        <div class="button-container">
+            <button type="submit" class="submit-button">Search</button>
+        </div>
+    </form>
+
+    {% if job_id and not job %}
+        <hr>
+        <p style="color:#e03030;">This search has expired or was never started. Please search again.</p>
+
+    {% elif job and job.status == "running" %}
+        <meta http-equiv="refresh" content="3">
+        <hr>
+        <p>Searching archived changes… this page will refresh automatically.</p>
+
+    {% elif job and job.status == "error" %}
+        <hr>
+        <p style="color:#e03030;"><strong>Error:</strong> {{ job.error }}</p>
+
+    {% elif job and job.status == "done" %}
+        <hr>
+        <p class="text-muted">
+            {% if job.source == "s3" %}Scanned {{ job.files_scanned }} S3 archive file(s) — {% else %}Database search — {% endif %}
+            {{ job.total_count }} matching change(s) found
+            {% if job.total_count > results_cap %}(showing the first {{ results_cap }}, narrow your filters to see more){% endif %}.
+        </p>
+
+        {% if job.results %}
+        <div class="table-wrapper">
+            {{ render_changes_table(job.results, job.preview_references, job.target_schemas, 20, show_actions=false) }}
+        </div>
+        {% endif %}
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,9 +1,13 @@
+import os
+import sys
+import datetime
 from copy import deepcopy
 from typing import Dict, Any, Tuple, List
 
 from dotenv import load_dotenv
+from bson import ObjectId
 
-from app_core import json_data, category_data
+from app_core import json_data, category_data, mongo
 from calculations.field_calculations import calculate_all_fields
 from calculate_infrastructure_score import compute_infrastructure_average
 
@@ -19,6 +23,44 @@ PRICES = {
     "iron": 150,
 }
 
+def get_nation_prices(nation: Dict[str, Any]) -> Dict[str, float]:
+    """
+    Resource prices to use for valuing this nation's production: overlays the
+    dynamic resource_prices of any market(s) the nation belongs to on top of
+    the PRICES baseline above. Only overrides resources this script actually
+    prices (PRICES' keys) — market data for other resources is ignored. A
+    nation in multiple markets uses the highest price found for each resource.
+    Nations not in any market (or with no market price for a resource) fall
+    back to the static PRICES values unchanged.
+    """
+    prices = dict(PRICES)
+    nation_id = str(nation.get("_id", "") or "")
+    if not nation_id:
+        return prices
+    try:
+        market_links_db = category_data["market_links"]["database"]
+        my_links = list(market_links_db.find({"member": nation_id}, {"market": 1}))
+        market_prices: Dict[str, float] = {}
+        for link in my_links:
+            market_id = link.get("market")
+            if not market_id:
+                continue
+            market_doc = mongo.db.markets.find_one(
+                {"_id": ObjectId(market_id)}, {"resource_prices": 1}
+            )
+            if not market_doc:
+                continue
+            for resource, price in (market_doc.get("resource_prices") or {}).items():
+                # Multiple market memberships: take the highest price found
+                # across those markets for the same resource.
+                if resource in PRICES and price > 0:
+                    market_prices[resource] = max(market_prices.get(resource, 0), price)
+        prices.update(market_prices)
+    except Exception:
+        pass
+    return prices
+
+
 NON_RESEARCH_RESOURCE_VALUES = [
     value for key, value in PRICES.items() if key != "research"
 ]
@@ -32,6 +74,7 @@ def value_and_update_stock(
     resources: Dict[str, float],
     stock: Dict[str, float],
     capacity: Dict[str, float],
+    prices: Dict[str, float] = PRICES,
 ) -> float:
     """
     Convert resource changes into money value, applying reduced value (50%)
@@ -39,15 +82,13 @@ def value_and_update_stock(
     """
     total = 0.0
     for resource, amount in resources.items():
-        if resource not in PRICES or amount == 0:
+        if resource not in prices or amount == 0:
             continue
-        price = PRICES[resource]
+        price = prices[resource]
         current = float(stock.get(resource, 0) or 0)
         cap = float(capacity.get(resource, float("inf")) or float("inf"))
         if resource == "research":
             cap = 10
-        if resource == "money":
-            cap = float("inf")
 
         if amount > 0:
             usable = max(min(cap - current, amount), 0)
@@ -65,19 +106,18 @@ def value_and_update_stock_with_breakdown(
     resources: Dict[str, float],
     stock: Dict[str, float],
     capacity: Dict[str, float],
+    prices: Dict[str, float] = PRICES,
 ) -> Tuple[float, Dict[str, float]]:
     total = 0.0
     breakdown: Dict[str, float] = {}
     for resource, amount in resources.items():
-        if resource not in PRICES or amount == 0:
+        if resource not in prices or amount == 0:
             continue
-        price = PRICES[resource]
+        price = prices[resource]
         current = float(stock.get(resource, 0) or 0)
         cap = float(capacity.get(resource, float("inf")) or float("inf"))
         if resource == "research":
             cap = 10
-        if resource == "money":
-            cap = float("inf")
 
         if amount > 0:
             usable = max(min(cap - current, amount), 0)
@@ -93,7 +133,7 @@ def value_and_update_stock_with_breakdown(
 
 
 def compute_base_net_value(
-    nation: Dict[str, Any]
+    nation: Dict[str, Any], prices: Dict[str, float] = PRICES
 ) -> Tuple[
     float,
     int,
@@ -154,10 +194,15 @@ def compute_base_net_value(
     money_income = float(calculated.get("money_income", 0) or 0)
 
     stock = deepcopy(calculated.get("resource_storage", {}) or {})
+    # "money" is a plain (non-calculated) field, so it never appears in `calculated`
+    # (calculate_all_fields' return value only carries computed fields) — read the
+    # real current amount from nation_copy, which still has it from the original doc.
+    stock["money"] = float(nation_copy.get("money", 0) or 0)
     capacity = deepcopy(calculated.get("nation_resource_capacity", {}) or {})
+    capacity["money"] = float(calculated.get("money_capacity", 0) or 0)
 
     base_resource_value, base_resource_breakdown = value_and_update_stock_with_breakdown(
-        resource_excess, stock, capacity
+        resource_excess, stock, capacity, prices
     )
     base_value = money_income + base_resource_value
 
@@ -195,9 +240,7 @@ def evaluate_job_marginal_value(
     job_details: Dict[str, Any],
     stock: Dict[str, float],
     capacity: Dict[str, float],
-    vassal_rate_total: int,
-    assignments: Dict[str, int],
-    base_administration: int,
+    prices: Dict[str, float] = PRICES,
 ) -> Tuple[float, Dict[str, float]]:
     """
     Evaluate the marginal money value of assigning one pop to the job,
@@ -207,21 +250,15 @@ def evaluate_job_marginal_value(
     if not details:
         return float("-inf"), stock
 
-    production = {k: v for k, v in (details.get("production", {}) or {}).items() if k in PRICES}
-    upkeep = {k: v for k, v in (details.get("upkeep", {}) or {}).items() if k in PRICES}
+    production = {k: v for k, v in (details.get("production", {}) or {}).items() if k in prices}
+    upkeep = {k: v for k, v in (details.get("upkeep", {}) or {}).items() if k in prices}
 
     temp_stock = deepcopy(stock)
     value = 0.0
-    value += value_and_update_stock(production, temp_stock, capacity)
+    value += value_and_update_stock(production, temp_stock, capacity, prices)
     if upkeep:
         negative_upkeep = {k: -v for k, v in upkeep.items()}
-        value += value_and_update_stock(negative_upkeep, temp_stock, capacity)
-    if job_key == "bureaucrat" and vassal_rate_total:
-        current_count = assignments.get("bureaucrat", 0)
-        current_total = base_administration + current_count
-        current_effective = apply_admin_diminishing_returns(current_total)
-        next_effective = apply_admin_diminishing_returns(current_total + 1)
-        value += (next_effective - current_effective) * vassal_rate_total
+        value += value_and_update_stock(negative_upkeep, temp_stock, capacity, prices)
 
     return value, temp_stock
 
@@ -231,9 +268,8 @@ def simulate_optimal_assignments(
     job_details: Dict[str, Any],
     capacity: Dict[str, float],
     stock: Dict[str, float],
-    vassal_rate_total: int,
-    base_administration: int,
     locked_job_count: int = 0,
+    prices: Dict[str, float] = PRICES,
 ) -> Tuple[float, Dict[str, int]]:
     """
     Greedy simulation: repeatedly pick the best job given current stock/capacity,
@@ -264,9 +300,7 @@ def simulate_optimal_assignments(
                 job_details,
                 current_stock,
                 capacity,
-                vassal_rate_total,
-                assignments,
-                base_administration,
+                prices,
             )
             if value > best_value:
                 best_value = value
@@ -292,23 +326,6 @@ def count_vassals(nation: Dict[str, Any]) -> int:
     if not overlord_id:
         return 0
     return db.count_documents({"overlord": overlord_id})
-
-
-def sum_vassal_type_rates(nation: Dict[str, Any]) -> int:
-    vassal_type_rates = {
-        "Martial": 0,
-        "Mercantile": 100,
-        "Protectorate": 0,
-        "Provincial": 125,
-        "Tributary": 125,
-        "Enclave": 0,
-    }
-    db = category_data["nations"]["database"]
-    overlord_id = str(nation.get("_id", "") or "")
-    if not overlord_id:
-        return 0
-    vassals = db.find({"overlord": overlord_id}, {"vassal_type": 1})
-    return sum(vassal_type_rates.get(vassal.get("vassal_type", ""), 0) for vassal in vassals)
 
 
 def sum_vassal_military_bonus(nation: Dict[str, Any]) -> int:
@@ -355,12 +372,6 @@ def sum_vassal_concessions_cost(nation: Dict[str, Any]) -> float:
     return total
 
 
-def apply_admin_diminishing_returns(administration: int) -> float:
-    if administration <= 10:
-        return float(administration)
-    return 10 + (administration - 10) * 0.5
-
-
 def count_wonders(nation: Dict[str, Any]) -> int:
     db = category_data["wonders"]["database"]
     nation_id = nation.get("_id")
@@ -368,7 +379,22 @@ def count_wonders(nation: Dict[str, Any]) -> int:
     return db.count_documents({"owner_nation": {"$in": [nation_id, nation_id_str]}})
 
 
-def main():
+class _Tee:
+    """Minimal stdout-like object that writes to multiple streams at once,
+    so script output goes to the console and a saved report simultaneously."""
+    def __init__(self, *streams):
+        self._streams = streams
+
+    def write(self, data):
+        for stream in self._streams:
+            stream.write(data)
+
+    def flush(self):
+        for stream in self._streams:
+            stream.flush()
+
+
+def _run():
     load_dotenv(override=True)
 
     nations = list(category_data["nations"]["database"].find({}).sort("name", 1))
@@ -378,13 +404,12 @@ def main():
         name = nation.get("name", "<Unnamed>")
         temperament = nation.get("temperament", "Unknown")
 
-        if temperament != "Player":
-            continue
         print(f"Calculating {name}")
+        prices = get_nation_prices(nation)
         (
             base_value,
             pop_count,
-            administration,
+            _administration,
             job_details,
             locked_job_count,
             capacity,
@@ -395,28 +420,23 @@ def main():
             land_attack,
             land_defense,
             land_unit_capacity,
-        ) = compute_base_net_value(nation)
-        vassal_rate_total = sum_vassal_type_rates(nation)
+        ) = compute_base_net_value(nation, prices)
         marginal_value, _assignments = simulate_optimal_assignments(
             pop_count,
             job_details,
             capacity,
             job_stock,
-            vassal_rate_total,
-            administration,
             locked_job_count,
+            prices,
         )
 
         ndp = base_value + marginal_value
         vassal_count = count_vassals(nation)
-        effective_admin = apply_admin_diminishing_returns(administration)
-        admin_bonus = effective_admin * vassal_rate_total
-        ndp += admin_bonus
         vassal_concessions_cost = sum_vassal_concessions_cost(nation)
         ndp -= vassal_concessions_cost
         print(
             f"Breakdown {name}: base={base_value:.2f}, marginal={marginal_value:.2f}, "
-            f"admin_bonus={admin_bonus:.2f}, vassal_concessions={vassal_concessions_cost:.2f}, "
+            f"vassal_concessions={vassal_concessions_cost:.2f}, "
             f"total={ndp:.2f}"
         )
         if base_resource_breakdown:
@@ -456,11 +476,29 @@ def main():
         military_score,
         temperament,
     ) in results:
-        if temperament == "Player":
-            print(
-                f"{name}, {ndp:.2f}, {pop_count}, {vassal_count}, {wonder_count}, "
-                f"{infrastructure_score:.2f}, {military_score:.2f}"
-            )
+        print(
+            f"{name}, {ndp:.2f}, {pop_count}, {vassal_count}, {wonder_count}, "
+            f"{infrastructure_score:.2f}, {military_score:.2f}, {temperament}"
+        )
+
+
+def main():
+    """Run the NDP calculation, writing all console output to a timestamped
+    report file (in addition to printing it) under ndp_reports/."""
+    output_dir = os.path.join(os.getcwd(), "ndp_reports")
+    os.makedirs(output_dir, exist_ok=True)
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_path = os.path.join(output_dir, f"ndp_report_{timestamp}.txt")
+
+    original_stdout = sys.stdout
+    with open(output_path, "w", encoding="utf-8") as report_file:
+        sys.stdout = _Tee(original_stdout, report_file)
+        try:
+            _run()
+        finally:
+            sys.stdout = original_stdout
+
+    print(f"Report written to {output_path}")
 
 
 if __name__ == "__main__":

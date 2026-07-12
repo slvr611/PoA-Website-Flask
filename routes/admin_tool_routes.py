@@ -2039,3 +2039,326 @@ def clear_job_counts_apply():
 
     flash(f"Cleared {len(selected_jobs)} job type(s) across {result.modified_count} nation(s).", "success")
     return redirect(url_for("admin_tool_routes.clear_job_counts"))
+
+
+# ---------------------------------------------------------------------------
+# Archived Change Search
+#
+# Changes older than ~20 sessions are exported to S3 as JSON files and
+# deleted from MongoDB (see helpers/archive_helpers.py). This tool scans
+# those exported files directly since they're no longer queryable in the DB.
+# ---------------------------------------------------------------------------
+
+def _parse_change_dt(value):
+    """Return a timezone-aware datetime from either a datetime object or an
+    ISO-format string (changes store their timestamp fields as strings)."""
+    if isinstance(value, datetime.datetime):
+        return value if value.tzinfo else value.replace(tzinfo=datetime.timezone.utc)
+    if isinstance(value, str):
+        normalized = value.rstrip("Z")
+        try:
+            dt = datetime.datetime.fromisoformat(normalized)
+        except ValueError:
+            return None
+        return dt if dt.tzinfo else dt.replace(tzinfo=datetime.timezone.utc)
+    return None
+
+
+def _change_relevant_date(doc):
+    """Pick the most meaningful date field for a change based on its status
+    (mirrors the same status->field preference used when originally deciding
+    what's old enough to archive)."""
+    status = doc.get("status")
+    field = {
+        "Approved": "time_implemented",
+        "Denied": "time_denied",
+        "Reverted": "time_reverted",
+    }.get(status, "last_modified_time")
+    return _parse_change_dt(doc.get(field)) or _parse_change_dt(doc.get("last_modified_time"))
+
+
+def _resolve_target_ids_by_name(target_collection, target_name):
+    """Return a set of string _ids in target_collection whose name matches
+    target_name (case-insensitive substring), or None if target_name/collection
+    is missing (meaning: don't restrict by target object)."""
+    if not target_collection or not target_name or target_collection not in category_data:
+        return None
+    import re as _re
+    try:
+        db_ = category_data[target_collection]["database"]
+        docs = db_.find(
+            {"name": {"$regex": _re.escape(target_name), "$options": "i"}}, {"_id": 1}
+        )
+        return {str(d["_id"]) for d in docs}
+    except Exception:
+        return set()
+
+
+def _search_archived_changes(start_date, end_date, requester_id, approver_id,
+                              target_collection="", target_name=""):
+    """Scan every changes_archive_*.json file in the S3 backups/ folder and
+    return (matches, files_scanned). Filters are all optional/AND'd together."""
+    import boto3
+    from bson import json_util
+
+    s3_bucket = os.getenv("S3_BUCKET_NAME")
+    aws_access_key = os.getenv("AWS_ACCESS_KEY_ID")
+    aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+    if not (s3_bucket and aws_access_key and aws_secret_key):
+        raise RuntimeError("S3 is not configured (missing bucket/credentials).")
+
+    s3_client = boto3.client(
+        "s3",
+        aws_access_key_id=aws_access_key,
+        aws_secret_access_key=aws_secret_key,
+    )
+
+    start_dt = None
+    end_dt = None
+    if start_date:
+        start_dt = datetime.datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=datetime.timezone.utc)
+    if end_date:
+        end_dt = datetime.datetime.strptime(end_date, "%Y-%m-%d").replace(
+            hour=23, minute=59, second=59, tzinfo=datetime.timezone.utc
+        )
+
+    # Compare IDs as plain hex strings rather than ObjectId instances: archived
+    # documents inconsistently store requester/approver as either a raw ObjectId
+    # or a plain string depending on when the change was originally created, and
+    # str(ObjectId(...)) always matches the hex string form either way.
+    requester_id = requester_id or None
+    approver_id = approver_id or None
+    target_collection = target_collection or None
+    target_ids = _resolve_target_ids_by_name(target_collection, target_name)
+
+    keys = []
+    paginator = s3_client.get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=s3_bucket, Prefix="backups/"):
+        for obj in page.get("Contents", []):
+            key = obj["Key"]
+            if "changes_archive" in key and key.endswith(".json"):
+                keys.append(key)
+
+    matches = []
+    for key in keys:
+        try:
+            obj = s3_client.get_object(Bucket=s3_bucket, Key=key)
+            docs = json_util.loads(obj["Body"].read().decode("utf-8"))
+        except Exception:
+            continue
+        for doc in docs:
+            if requester_id and str(doc.get("requester", "")) != requester_id:
+                continue
+            if approver_id and str(doc.get("approver", "")) != approver_id:
+                continue
+            if target_collection and doc.get("target_collection") != target_collection:
+                continue
+            if target_ids is not None and str(doc.get("target", "")) not in target_ids:
+                continue
+            change_dt = _change_relevant_date(doc)
+            if start_dt and (change_dt is None or change_dt < start_dt):
+                continue
+            if end_dt and (change_dt is None or change_dt > end_dt):
+                continue
+            doc["_archive_file"] = key
+            doc["_display_date"] = change_dt
+            matches.append(doc)
+
+    matches.sort(key=lambda d: d.get("_display_date") or datetime.datetime.min.replace(tzinfo=datetime.timezone.utc), reverse=True)
+    return matches, len(keys)
+
+
+def _search_db_archived_changes(start_date, end_date, requester_id, approver_id,
+                                 target_collection="", target_name=""):
+    """Search non-pending changes still resident in MongoDB — i.e. changes
+    recent enough (within ~20 sessions) that archive_helpers.py hasn't yet
+    exported them to S3 and deleted them from the DB. A live query, so this
+    is fast enough to run synchronously (no background job needed)."""
+    query = {"status": {"$ne": "Pending"}}
+    # Defensive $in on both ObjectId and raw string form: some legacy changes
+    # store requester/approver as a plain string rather than an ObjectId.
+    if requester_id:
+        try:
+            query["requester"] = {"$in": [ObjectId(requester_id), requester_id]}
+        except Exception:
+            query["requester"] = requester_id
+    if approver_id:
+        try:
+            query["approver"] = {"$in": [ObjectId(approver_id), approver_id]}
+        except Exception:
+            query["approver"] = approver_id
+    if target_collection:
+        query["target_collection"] = target_collection
+
+    target_ids = _resolve_target_ids_by_name(target_collection, target_name)
+
+    start_dt = None
+    end_dt = None
+    if start_date:
+        start_dt = datetime.datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=datetime.timezone.utc)
+    if end_date:
+        end_dt = datetime.datetime.strptime(end_date, "%Y-%m-%d").replace(
+            hour=23, minute=59, second=59, tzinfo=datetime.timezone.utc
+        )
+
+    matches = []
+    for doc in mongo.db.changes.find(query):
+        if target_ids is not None and str(doc.get("target", "")) not in target_ids:
+            continue
+        change_dt = _change_relevant_date(doc)
+        if start_dt and (change_dt is None or change_dt < start_dt):
+            continue
+        if end_dt and (change_dt is None or change_dt > end_dt):
+            continue
+        doc["_display_date"] = change_dt
+        matches.append(doc)
+
+    matches.sort(key=lambda d: d.get("_display_date") or datetime.datetime.min.replace(tzinfo=datetime.timezone.utc), reverse=True)
+    return matches
+
+
+# Archive files can be very large (one existing export is 300+ MB, taking 40-50s
+# just to download), which exceeds typical platform request timeouts (e.g. Heroku's
+# hard 30s router limit). The search runs in a background thread; the page polls
+# a small in-memory job store until it's done. Single-process Flask app (app.run),
+# so a plain module-level dict is safely shared across all requests.
+_ARCHIVE_SEARCH_JOBS = {}
+_ARCHIVE_SEARCH_JOBS_MAX = 20
+_ARCHIVE_SEARCH_RESULTS_CAP = 500
+
+
+def _build_change_display_context(results):
+    """Build target_schemas + preview_references so results can be rendered
+    with the exact same render_changes_table macro used by the live
+    Pending/Archived Changes list pages (resolves target/requester/etc. links
+    and drives the before/after diff view)."""
+    from routes.change_routes import get_preview_references
+
+    changes_schema = category_data["changes"]["schema"]
+    target_schemas = {name: data["schema"] for name, data in category_data.items()}
+
+    collections_to_preview = {}
+    for preview_item in changes_schema.get("preview", []):
+        collection_names = changes_schema.get("properties", {}).get(preview_item, {}).get("collections")
+        if collection_names:
+            for collection_name in collection_names:
+                collections_to_preview[preview_item] = collection_name
+
+    for doc in results:
+        tc = doc.get("target_collection")
+        if tc in category_data:
+            collections_to_preview[tc] = tc
+            for field_schema in target_schemas.get(tc, {}).get("properties", {}).values():
+                if field_schema.get("bsonType") == "linked_object" and field_schema.get("collections"):
+                    for linked_collection in field_schema["collections"]:
+                        collections_to_preview[linked_collection] = linked_collection
+
+    preview_references = get_preview_references(changes_schema, collections_to_preview)
+    return target_schemas, preview_references
+
+
+def _run_archive_search_job(job_id, start_date, end_date, requester_id, approver_id,
+                             target_collection, target_name):
+    try:
+        results, files_scanned = _search_archived_changes(
+            start_date, end_date, requester_id, approver_id, target_collection, target_name
+        )
+        capped = results[:_ARCHIVE_SEARCH_RESULTS_CAP]
+        target_schemas, preview_references = _build_change_display_context(capped)
+        _ARCHIVE_SEARCH_JOBS[job_id] = {
+            "status": "done",
+            "source": "s3",
+            "results": capped,
+            "target_schemas": target_schemas,
+            "preview_references": preview_references,
+            "total_count": len(results),
+            "files_scanned": files_scanned,
+        }
+    except Exception as e:
+        _ARCHIVE_SEARCH_JOBS[job_id] = {"status": "error", "error": str(e)}
+
+
+@admin_tool_routes.route("/archived_changes_search")
+@admin_required
+def archived_changes_search():
+    players = list(mongo.db.players.find({}, {"name": 1}).sort("name", ASCENDING))
+    target_collections = sorted(mongo.db.changes.distinct("target_collection"))
+
+    job_id = request.args.get("job", "").strip()
+    job = _ARCHIVE_SEARCH_JOBS.get(job_id) if job_id else None
+
+    source = (job.get("source") if job else None) or request.args.get("source", "database")
+
+    return render_template(
+        "archived_changes_search.html",
+        players=players,
+        target_collections=target_collections,
+        start_date=request.args.get("start_date", ""),
+        end_date=request.args.get("end_date", ""),
+        requester_id=request.args.get("requester", ""),
+        approver_id=request.args.get("approver", ""),
+        target_collection=request.args.get("target_collection", ""),
+        target_name=request.args.get("target_name", ""),
+        source=source,
+        job_id=job_id,
+        job=job,
+        results_cap=_ARCHIVE_SEARCH_RESULTS_CAP,
+    )
+
+
+@admin_tool_routes.route("/archived_changes_search/start", methods=["POST"])
+@admin_required
+def archived_changes_search_start():
+    import uuid
+    from threading import Thread
+
+    source = request.form.get("source", "database").strip()
+    start_date = request.form.get("start_date", "").strip()
+    end_date = request.form.get("end_date", "").strip()
+    requester_id = request.form.get("requester", "").strip()
+    approver_id = request.form.get("approver", "").strip()
+    target_collection = request.form.get("target_collection", "").strip()
+    target_name = request.form.get("target_name", "").strip()
+
+    job_id = uuid.uuid4().hex
+
+    # Bound memory: drop the oldest job(s) once we exceed the cap.
+    if len(_ARCHIVE_SEARCH_JOBS) > _ARCHIVE_SEARCH_JOBS_MAX:
+        for old_id in list(_ARCHIVE_SEARCH_JOBS.keys())[: len(_ARCHIVE_SEARCH_JOBS) - _ARCHIVE_SEARCH_JOBS_MAX]:
+            _ARCHIVE_SEARCH_JOBS.pop(old_id, None)
+
+    if source == "s3":
+        _ARCHIVE_SEARCH_JOBS[job_id] = {"status": "running", "source": "s3"}
+        thread = Thread(
+            target=_run_archive_search_job,
+            args=(job_id, start_date, end_date, requester_id, approver_id,
+                  target_collection, target_name),
+        )
+        thread.daemon = True
+        thread.start()
+    else:
+        # Database search is a live query — fast enough to run synchronously
+        # and store as an already-"done" job, reusing the same results view.
+        try:
+            results = _search_db_archived_changes(
+                start_date, end_date, requester_id, approver_id, target_collection, target_name
+            )
+            capped = results[:_ARCHIVE_SEARCH_RESULTS_CAP]
+            target_schemas, preview_references = _build_change_display_context(capped)
+            _ARCHIVE_SEARCH_JOBS[job_id] = {
+                "status": "done",
+                "source": "database",
+                "results": capped,
+                "target_schemas": target_schemas,
+                "preview_references": preview_references,
+                "total_count": len(results),
+            }
+        except Exception as e:
+            _ARCHIVE_SEARCH_JOBS[job_id] = {"status": "error", "error": str(e)}
+
+    return redirect(url_for(
+        "admin_tool_routes.archived_changes_search",
+        job=job_id, start_date=start_date, end_date=end_date,
+        requester=requester_id, approver=approver_id, source=source,
+        target_collection=target_collection, target_name=target_name,
+    ))

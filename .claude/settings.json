@@ -10,7 +10,8 @@
       "Bash(.venv/Scripts/pip.exe install *)",
       "Bash(.venv/Scripts/python.exe -c ' *)",
       "Bash(node --check static/js/hex-map.js)",
-      "Bash(node -e ' *)"
+      "Bash(node -e ' *)",
+      "Bash(PYTHONPATH='c:/Programming/Projects/PoA-Website-Flask;c:/Programming/Projects/PoA-Website-Flask/scripts' python -c ' *)"
     ]
   }
 }
