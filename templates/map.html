@@ -832,6 +832,22 @@ document.addEventListener('DOMContentLoaded', function () {
 
 
     // ================================================================
+    // Historical sessions are read-only: hide the Edit Map button and force-
+    // exit edit mode if it's active, so edits can never be silently applied
+    // to the live map while viewing a past session's snapshot. Looks up the
+    // button fresh each call (rather than closing over the `editModeBtn`
+    // const declared later in this script) since showSession runs once
+    // during initial page load, before that const is initialized.
+    // ================================================================
+    function _updateHistoricalEditLock(isHistorical) {
+        if (isHistorical && hexViewer && hexViewer._editMode) {
+            hexViewer.cancelEditMode();  // fires hexmap:editmodechange -> resets the toolbar UI too
+        }
+        const btn = document.getElementById('edit-mode-btn');
+        if (btn) btn.style.display = isHistorical ? 'none' : '';
+    }
+
+    // ================================================================
     // showSession — the single entry point for all session changes
     // ================================================================
     async function showSession(sessionNum) {
@@ -857,6 +873,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
             // Use live tiles for the most current session, snapshot for historical
             const tileSession = (sessionNum === maxSession) ? null : sessionNum;
+            _updateHistoricalEditLock(tileSession !== null);
             loadHexBackground(sessionNum);
             await hexViewer.loadTiles(tileSession);
             await hexViewer.loadRegions();

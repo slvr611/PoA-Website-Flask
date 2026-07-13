@@ -2364,6 +2364,7 @@ def generate_all_ai_rulers_tick():
 
 ERA_GENERAL_TICK_FUNCTIONS = {
     "Backup Database": None,   # handled directly in era_tick() before nation processing
+    "Snapshot Hex Map": None,  # handled directly in era_tick() after nation processing
     "Era Give Tick Summary": None,  # handled directly in era_tick() after all processing
     "Era Relations Decay to Neutral": era_relations_decay_tick,
     "Era Pop Growth (All Nations)": era_pop_growth_tick,
@@ -2478,6 +2479,13 @@ def era_tick(form_data):
         if f"run_{label}" in form_data:
             print(label)
             full_tick_summary += fn()
+
+    if "run_Snapshot Hex Map" in form_data:
+        from helpers.hex_map_helpers import snapshot_current_map
+        global_modifiers = mongo.db["global_modifiers"].find_one({"name": "global_modifiers"})
+        current_session = global_modifiers.get("session_counter", 0) if global_modifiers else 0
+        snap_message = snapshot_current_map(current_session)
+        full_tick_summary += f"\n\n{snap_message}"
 
     if "run_Era Give Tick Summary" in form_data:
         give_tick_summary(full_tick_summary, full_tick_summary)

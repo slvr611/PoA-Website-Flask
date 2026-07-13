@@ -11,7 +11,12 @@
       "Bash(.venv/Scripts/python.exe -c ' *)",
       "Bash(node --check static/js/hex-map.js)",
       "Bash(node -e ' *)",
-      "Bash(PYTHONPATH='c:/Programming/Projects/PoA-Website-Flask;c:/Programming/Projects/PoA-Website-Flask/scripts' python -c ' *)"
+      "Bash(PYTHONPATH='c:/Programming/Projects/PoA-Website-Flask;c:/Programming/Projects/PoA-Website-Flask/scripts' python -c ' *)",
+      "Bash(node --check _tmp_map_check.js)",
+      "Bash(rm _tmp_map_check.js)",
+      "Bash(.venv/Scripts/python.exe -m pytest tests/test_hex_map_helpers.py -v)",
+      "Bash(.venv/Scripts/python.exe -m pytest tests/ -q)",
+      "Bash(.venv/Scripts/python.exe -m pytest tests/test_change_helpers.py -k \"TestHandleNationRename or TestNationRenamePropagationIntegration\" -v)"
     ]
   }
 }

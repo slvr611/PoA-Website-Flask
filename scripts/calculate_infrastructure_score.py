@@ -11,20 +11,19 @@ from app_core import json_data, category_data
 # -----------------------------
 # Guideline constants (change if needed)
 EMPTY_SLOT_SCORE = 0
-ANCIENT_DISTRICT_WITHOUT_NODE_SCORE = 5
-CLASSICAL_DISTRICT_WITHOUT_NODE_SCORE = 6
-NODE_SCORE = 1
-SYNERGY_SCORE = 1
+DISTRICT_WITHOUT_NODE_SCORE = 6
+NODE_SCORE = 2
+SYNERGY_SCORE = 2
 GENERIC_CITY_SCORE = 6
-SPECIALIZED_CITY_SCORE = 7
-WONDER_SCORE = 7
+SPECIALIZED_CITY_SCORE = 8
+WONDER_SCORE = 8
 
 def score_districts(nation: Dict[str, Any]) -> Tuple[int, int]:
     """
     Scores district slots.
 
     - Empty district slots => 0 (EMPTY_SLOT_SCORE)
-    - District object with no node => 5 (DISTRICT_WITHOUT_NODE_SCORE)
+    - District object with no node => 6 (DISTRICT_WITHOUT_NODE_SCORE)
     - District object with a node => 10 (DISTRICT_WITH_NODE_SCORE)
 
     Returns (total_score, total_items_counted)
@@ -46,9 +45,9 @@ def score_districts(nation: Dict[str, Any]) -> Tuple[int, int]:
         if not def_key:
             score_total += EMPTY_SLOT_SCORE
         elif node:
-            score_total += CLASSICAL_DISTRICT_WITHOUT_NODE_SCORE + NODE_SCORE
+            score_total += DISTRICT_WITHOUT_NODE_SCORE + NODE_SCORE
         else:
-            score_total += CLASSICAL_DISTRICT_WITHOUT_NODE_SCORE
+            score_total += DISTRICT_WITHOUT_NODE_SCORE
         counted += 1
 
     # Add empty slots up to district_slots

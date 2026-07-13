@@ -12,7 +12,8 @@ _NATURAL_KEY_FIELDS = ['name', 'quest_name', 'source', 'modifier_type', 'scope',
 
 def _handle_nation_rename(nation_id, old_name, new_name):
     """When a nation is renamed: update all hex_map_tiles owner and route.owner
-    references, and record the old name in previous_names so old links can redirect."""
+    references, all trade_routes nation_a/nation_b references, and record the
+    old name in previous_names so old links can redirect."""
     if not old_name or not new_name or old_name == new_name:
         return
     mongo.db.hex_map_tiles.update_many(
@@ -22,6 +23,19 @@ def _handle_nation_rename(nation_id, old_name, new_name):
     mongo.db.hex_map_tiles.update_many(
         {"route.owner": old_name},
         {"$set": {"route.owner": new_name}}
+    )
+    mongo.db.trade_routes.update_many(
+        {"nation_a": old_name},
+        {"$set": {"nation_a": new_name}}
+    )
+    mongo.db.trade_routes.update_many(
+        {"nation_b": old_name},
+        {"$set": {"nation_b": new_name}}
+    )
+    # proposer records who requested the route; keep it consistent too.
+    mongo.db.trade_routes.update_many(
+        {"proposer": old_name},
+        {"$set": {"proposer": new_name}}
     )
     mongo.db.nations.update_one(
         {"_id": nation_id},
@@ -538,6 +552,8 @@ def force_approve_change(change_id):
         merged = deep_merge(existing, after_data)
         merged = _calculate_and_attach_fields(change["target_collection"], merged)
         target_collection.update_one({"_id": change["target"]}, {"$set": merged})
+        if change["target_collection"] == "nations":
+            _handle_nation_rename(change["target"], existing.get("name", ""), merged.get("name", ""))
     elif change["change_type"] == "Add":
         after_data = _calculate_and_attach_fields(change["target_collection"], after_data)
         change["target"] = target_collection.insert_one(after_data).inserted_id
@@ -586,6 +602,8 @@ def system_force_approve_change(change_id):
         merged = deep_merge(existing, after_data)
         merged = _calculate_and_attach_fields(change["target_collection"], merged)
         target_collection.update_one({"_id": change["target"]}, {"$set": merged})
+        if change["target_collection"] == "nations":
+            _handle_nation_rename(change["target"], existing.get("name", ""), merged.get("name", ""))
     elif change["change_type"] == "Add":
         after_data = _calculate_and_attach_fields(change["target_collection"], after_data)
         change["target"] = target_collection.insert_one(after_data).inserted_id
@@ -731,6 +749,8 @@ def revert_change(change_id):
         restored = deep_merge(existing, before_data)
         restored = _calculate_and_attach_fields(change["target_collection"], restored)
         target_collection.update_one({"_id": change["target"]}, {"$set": restored})
+        if change["target_collection"] == "nations":
+            _handle_nation_rename(change["target"], existing.get("name", ""), restored.get("name", ""))
         changes_collection.update_one({"_id": change_id}, {"$set": {
             "status": "Reverted",
             "time_reverted": now,

@@ -1235,3 +1235,186 @@ class TestIdsAutoAssignedOnRequest:
         new_item = next(m for m in after_mods if m.get("field") == "mp")
         assert "_id" in new_item
         assert len(new_item["_id"]) == 8
+
+
+# ============================================================================
+# Section 3 — Nation rename propagation
+#
+# Regression coverage for an incident where a nation was renamed but its
+# hex_map_tiles (owner / route.owner) and trade_routes (nation_a / nation_b /
+# proposer) references were left pointing at the old name — because
+# _handle_nation_rename() existed but (a) never touched trade_routes at all,
+# and (b) wasn't called from force_approve_change, system_force_approve_change,
+# or revert_change, only from approve_change / system_approve_change.
+# ============================================================================
+
+@pytest.fixture
+def patch_helpers_with_hexmap(mock_mongo, fake_category_data):
+    """Same as patch_helpers, but also patches hex_map_helpers.mongo.
+
+    _handle_nation_rename calls helpers.hex_map_helpers.bump_tile_version(),
+    which reads its own module-level ``mongo`` — that must be redirected to
+    the same in-memory database too, or these tests would silently write a
+    tile_version bump to the real production database on every run.
+    """
+    with patch("helpers.change_helpers.mongo", mock_mongo), \
+         patch("helpers.change_helpers.category_data", fake_category_data), \
+         patch("helpers.change_helpers._calculate_and_attach_fields",
+               side_effect=lambda data_type, obj: obj), \
+         patch("helpers.change_helpers.propagate_updates", return_value=None), \
+         patch("helpers.hex_map_helpers.mongo", mock_mongo):
+        yield
+
+
+class TestHandleNationRename:
+    """helpers.change_helpers._handle_nation_rename — direct unit tests."""
+
+    def test_updates_tile_territory_owner(self, test_db, patch_helpers_with_hexmap):
+        test_db["hex_map_tiles"].insert_many([
+            {"q": 0, "r": 0, "owner": "OldName"},
+            {"q": 1, "r": 0, "owner": "OtherNation"},
+        ])
+        ch._handle_nation_rename(ObjectId(), "OldName", "NewName")
+
+        assert test_db["hex_map_tiles"].find_one({"q": 0, "r": 0})["owner"] == "NewName"
+        assert test_db["hex_map_tiles"].find_one({"q": 1, "r": 0})["owner"] == "OtherNation"
+
+    def test_updates_tile_route_owner(self, test_db, patch_helpers_with_hexmap):
+        test_db["hex_map_tiles"].insert_one({"q": 2, "r": 2, "route": {"owner": "OldName", "tier": 2}})
+        ch._handle_nation_rename(ObjectId(), "OldName", "NewName")
+
+        tile = test_db["hex_map_tiles"].find_one({"q": 2, "r": 2})
+        assert tile["route"]["owner"] == "NewName"
+        assert tile["route"]["tier"] == 2  # untouched sibling field
+
+    def test_updates_trade_route_nation_a_and_b(self, test_db, patch_helpers_with_hexmap):
+        test_db["trade_routes"].insert_many([
+            {"nation_a": "OldName", "nation_b": "ThirdParty"},
+            {"nation_a": "ThirdParty", "nation_b": "OldName"},
+        ])
+        ch._handle_nation_rename(ObjectId(), "OldName", "NewName")
+
+        assert test_db["trade_routes"].find_one({"nation_a": "ThirdParty"})["nation_b"] == "NewName"
+        assert test_db["trade_routes"].find_one({"nation_b": "ThirdParty"})["nation_a"] == "NewName"
+
+    def test_updates_trade_route_proposer(self, test_db, patch_helpers_with_hexmap):
+        test_db["trade_routes"].insert_one({
+            "nation_a": "OldName", "nation_b": "ThirdParty", "proposer": "OldName",
+        })
+        ch._handle_nation_rename(ObjectId(), "OldName", "NewName")
+
+        assert test_db["trade_routes"].find_one({})["proposer"] == "NewName"
+
+    def test_records_previous_name_on_the_nation(self, test_db, patch_helpers_with_hexmap):
+        nation_id = test_db["nations"].insert_one({"name": "NewName"}).inserted_id
+        ch._handle_nation_rename(nation_id, "OldName", "NewName")
+
+        nation = test_db["nations"].find_one({"_id": nation_id})
+        assert "OldName" in nation["previous_names"]
+
+    def test_renaming_twice_keeps_all_previous_names(self, test_db, patch_helpers_with_hexmap):
+        nation_id = test_db["nations"].insert_one({"name": "ThirdName"}).inserted_id
+        ch._handle_nation_rename(nation_id, "FirstName", "SecondName")
+        ch._handle_nation_rename(nation_id, "SecondName", "ThirdName")
+
+        nation = test_db["nations"].find_one({"_id": nation_id})
+        assert set(nation["previous_names"]) == {"FirstName", "SecondName"}
+
+    def test_noop_when_names_are_identical(self, test_db, patch_helpers_with_hexmap):
+        test_db["hex_map_tiles"].insert_one({"q": 0, "r": 0, "owner": "SameName"})
+        ch._handle_nation_rename(ObjectId(), "SameName", "SameName")
+
+        assert test_db["hex_map_tiles"].find_one({"q": 0, "r": 0})["owner"] == "SameName"
+
+    def test_noop_when_old_name_missing(self, test_db, patch_helpers_with_hexmap):
+        # Should not raise even with no old_name (e.g. brand-new nation)
+        ch._handle_nation_rename(ObjectId(), "", "NewName")
+        ch._handle_nation_rename(ObjectId(), None, "NewName")
+
+    def test_unrelated_nations_not_touched(self, test_db, patch_helpers_with_hexmap):
+        test_db["hex_map_tiles"].insert_one({"q": 0, "r": 0, "owner": "Unrelated"})
+        test_db["trade_routes"].insert_one({"nation_a": "Unrelated", "nation_b": "AlsoUnrelated"})
+        ch._handle_nation_rename(ObjectId(), "OldName", "NewName")
+
+        assert test_db["hex_map_tiles"].find_one({"q": 0, "r": 0})["owner"] == "Unrelated"
+        route = test_db["trade_routes"].find_one({})
+        assert route["nation_a"] == "Unrelated"
+        assert route["nation_b"] == "AlsoUnrelated"
+
+
+class TestNationRenamePropagationIntegration:
+    """Verify every approval/revert path that can rename a nation actually
+    triggers _handle_nation_rename — the exact set of gaps (force_approve_change,
+    system_force_approve_change, revert_change never called it) that let a
+    rename slip through with stale hex_map_tiles/trade_routes references."""
+
+    def test_approve_change_propagates_rename(self, db_with_players, nation_id,
+                                               patch_helpers_with_hexmap, flask_app):
+        db_with_players["hex_map_tiles"].insert_one({"q": 0, "r": 0, "owner": "TestNation"})
+        change_id = _insert_pending_change(
+            db_with_players, "Update", nation_id,
+            before={"name": "TestNation"}, after={"name": "RenamedNation"},
+        )
+        with flask_app.test_request_context("/"):
+            from flask import g
+            g.user = {"id": _ADMIN_DISCORD_ID}
+            assert ch.approve_change(change_id) is True
+
+        tile = db_with_players["hex_map_tiles"].find_one({"q": 0, "r": 0})
+        assert tile["owner"] == "RenamedNation"
+
+    def test_force_approve_change_propagates_rename(self, db_with_players, nation_id,
+                                                      patch_helpers_with_hexmap, flask_app):
+        db_with_players["hex_map_tiles"].insert_one({"q": 0, "r": 0, "owner": "TestNation"})
+        db_with_players["trade_routes"].insert_one({"nation_a": "TestNation", "nation_b": "Other"})
+        change_id = _insert_pending_change(
+            db_with_players, "Update", nation_id,
+            before={"name": "TestNation"}, after={"name": "RenamedNation"},
+        )
+        with flask_app.test_request_context("/"):
+            from flask import g
+            g.user = {"id": _ADMIN_DISCORD_ID}
+            assert ch.force_approve_change(change_id) is True
+
+        tile = db_with_players["hex_map_tiles"].find_one({"q": 0, "r": 0})
+        assert tile["owner"] == "RenamedNation"
+        route = db_with_players["trade_routes"].find_one({})
+        assert route["nation_a"] == "RenamedNation"
+
+    def test_system_force_approve_change_propagates_rename(self, db_with_players, nation_id,
+                                                             patch_helpers_with_hexmap):
+        db_with_players["hex_map_tiles"].insert_one({"q": 0, "r": 0, "owner": "TestNation"})
+        change_id = _insert_pending_change(
+            db_with_players, "Update", nation_id,
+            before={"name": "TestNation"}, after={"name": "RenamedNation"},
+        )
+        assert ch.system_force_approve_change(change_id) is True
+
+        tile = db_with_players["hex_map_tiles"].find_one({"q": 0, "r": 0})
+        assert tile["owner"] == "RenamedNation"
+
+    def test_revert_change_propagates_rename_back(self, db_with_players, nation_id,
+                                                   patch_helpers_with_hexmap, flask_app):
+        # Nation currently named "RenamedNation"; the approved change recorded
+        # that it used to be "TestNation" — reverting should restore that name
+        # and sync tiles back to it.
+        db_with_players["nations"].update_one({"_id": nation_id}, {"$set": {"name": "RenamedNation"}})
+        db_with_players["hex_map_tiles"].insert_one({"q": 0, "r": 0, "owner": "RenamedNation"})
+        now = datetime.now(timezone.utc)
+        change_id = db_with_players["changes"].insert_one({
+            "target_collection": "nations",
+            "target": nation_id,
+            "change_type": "Update",
+            "status": "Approved",
+            "before_implemented_data": {"name": "TestNation"},
+            "after_implemented_data": {"name": "RenamedNation"},
+            "last_modified_time": now,
+        }).inserted_id
+
+        with flask_app.test_request_context("/"):
+            from flask import g
+            g.user = {"id": _ADMIN_DISCORD_ID}
+            assert ch.revert_change(change_id) is True
+
+        tile = db_with_players["hex_map_tiles"].find_one({"q": 0, "r": 0})
+        assert tile["owner"] == "TestNation"
