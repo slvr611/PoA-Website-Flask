@@ -12,6 +12,9 @@
         {% endif %}
         &nbsp;|&nbsp; <a href="/api/war-session-data/{{ war_id }}" target="_blank">API JSON</a>
         &nbsp;|&nbsp; <button id="copy-declaration-btn" class="war-copy-btn" onclick="copyDeclaration()">📋 Copy Declaration</button>
+        {% if war.session_ended is not none and war.victor and war.victor != "None" %}
+        &nbsp;|&nbsp; <button id="copy-peace-deal-btn" class="war-copy-btn" onclick="copyPeaceDeal()">🕊 Copy Peace Deal</button>
+        {% endif %}
     </div>
 
     <h1>{{ war.name }}</h1>
@@ -25,7 +28,29 @@
         {% else %}
             <strong style="color:#90d090;">Ongoing</strong>
         {% endif %}
+        {% if war.session_ended is not none and war.victor and war.victor != "None" %}
+            &nbsp;|&nbsp; Victor: <strong>{{ war.victor }}</strong>
+        {% endif %}
     </p>
+
+    {% if g.user and g.user.get("is_admin") %}
+        {% if war.session_ended is none %}
+            <form method="POST" action="/wars/item/{{ war_id }}/archive" class="war-archive-form"
+                  onsubmit="return confirm('Archive this war? This sets it as ended at the current session.');">
+                <select name="victor" required>
+                    <option value="">— Choose victor to archive —</option>
+                    <option value="Aggressor">Aggressor Victory</option>
+                    <option value="Defender">Defender Victory</option>
+                </select>
+                <button type="submit" class="btn btn-deny">Archive War</button>
+            </form>
+        {% else %}
+            <form method="POST" action="/wars/item/{{ war_id }}/reopen" class="war-archive-form"
+                  onsubmit="return confirm('Reopen this war? This clears its ended session and victor.');">
+                <button type="submit" class="btn btn-approve">Reopen War</button>
+            </form>
+        {% endif %}
+    {% endif %}
 
     {% if war_type_data %}
     <div class="war-type-panel">
@@ -371,6 +396,7 @@ const WAR_DECL = {
     slots:      {{ (war_type_data.slots or {}) | tojson }},
     infamy:     {{ war_type_data.infamy | default(0) | tojson }},
     warGoals:   {{ (war.war_goals or []) | tojson }},
+    victor:     {{ (war.victor or "") | tojson }},
     attackers: [
         {% for entry in attackers %}
         {
@@ -414,6 +440,83 @@ function _goalDisplayName(wg) {
     return def.display_name || wg.goal_key;
 }
 
+function _formatGoalLines(warGoals) {
+    let goalLines = "";
+    (warGoals || []).forEach((wg, i) => {
+        const name   = _goalDisplayName(wg);
+        const tier   = wg.slot_tier ? `[${wg.slot_tier}] ` : "";
+        const atker  = wg.attacker  ? ` — Attacker: ${wg.attacker}` : "";
+        const tgt    = wg.target    ? ` — Target: ${wg.target}` : "";
+        const notes  = wg.notes     ? ` (${wg.notes})` : "";
+        goalLines += `\nWar Goal ${i + 1}: ${tier}${name}${atker}${tgt}${notes}`;
+    });
+    if (!warGoals || !warGoals.length) {
+        goalLines = "\n*(No war goals declared)*";
+    }
+    return goalLines;
+}
+
+function _copyToClipboard(text, btnId, defaultLabel) {
+    const revert = () => {
+        const btn = document.getElementById(btnId);
+        if (btn) btn.textContent = defaultLabel;
+    };
+    navigator.clipboard.writeText(text).then(() => {
+        const btn = document.getElementById(btnId);
+        if (btn) {
+            btn.textContent = "✓ Copied!";
+            btn.classList.add("copied");
+        }
+        setTimeout(() => {
+            revert();
+            if (btn) btn.classList.remove("copied");
+        }, 2500);
+    }).catch(() => {
+        // Fallback for browsers that block clipboard
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+        const btn = document.getElementById(btnId);
+        if (btn) btn.textContent = "✓ Copied!";
+        setTimeout(revert, 2500);
+    });
+}
+
+function copyPeaceDeal() {
+    const d = WAR_DECL;
+
+    const primaryAggressor = d.attackers.find(p => p.role === "primary");
+    const primaryDefender  = d.defenders.find(p => p.role === "primary");
+
+    // The side that did NOT win is the one surrendering.
+    const losingSide = d.victor === "Aggressor" ? d.defenders : d.attackers;
+    const losingPrimary = d.victor === "Aggressor" ? primaryDefender : primaryAggressor;
+    const losingOthers = losingSide.filter(p => p !== losingPrimary && p.role !== "primary");
+
+    const surrenderingNation = losingPrimary
+        ? losingPrimary.name + (losingOthers.length ? ", " + losingOthers.map(p => p.name).join(", ") : "")
+        : "—";
+
+    const goalLines = _formatGoalLines(d.warGoals);
+
+    const text =
+`# Peace Deal Format
+**War Name:** ${d.name}
+**Surrendering Nation:** ${surrenderingNation}
+
+**Type of Surrender:** Unconditional
+**Details:**${goalLines}
+
+**Roleplay (if applicable):**`;
+
+    _copyToClipboard(text, "copy-peace-deal-btn", "🕊 Copy Peace Deal");
+}
+
 function copyDeclaration() {
     const d = WAR_DECL;
 
@@ -443,18 +546,7 @@ function copyDeclaration() {
     const slotStr = slotLines.join(", ") || "None";
 
     // War goals
-    let goalLines = "";
-    (d.warGoals || []).forEach((wg, i) => {
-        const name   = _goalDisplayName(wg);
-        const tier   = wg.slot_tier ? `[${wg.slot_tier}] ` : "";
-        const atker  = wg.attacker  ? ` — Attacker: ${wg.attacker}` : "";
-        const tgt    = wg.target    ? ` — Target: ${wg.target}` : "";
-        const notes  = wg.notes     ? ` (${wg.notes})` : "";
-        goalLines += `\nWar Goal ${i + 1}: ${tier}${name}${atker}${tgt}${notes}`;
-    });
-    if (!d.warGoals || !d.warGoals.length) {
-        goalLines = "\n*(No war goals declared yet)*";
-    }
+    const goalLines = _formatGoalLines(d.warGoals);
 
     const text =
 `**Name of War:** ${d.name}
@@ -472,28 +564,7 @@ ${goalLines}
 
 *[Flavor text here]*`;
 
-    navigator.clipboard.writeText(text).then(() => {
-        const btn = document.getElementById("copy-declaration-btn");
-        btn.textContent = "✓ Copied!";
-        btn.classList.add("copied");
-        setTimeout(() => {
-            btn.textContent = "📋 Copy Declaration";
-            btn.classList.remove("copied");
-        }, 2500);
-    }).catch(() => {
-        // Fallback for browsers that block clipboard
-        const ta = document.createElement("textarea");
-        ta.value = text;
-        ta.style.position = "fixed";
-        ta.style.opacity = "0";
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand("copy");
-        document.body.removeChild(ta);
-        const btn = document.getElementById("copy-declaration-btn");
-        btn.textContent = "✓ Copied!";
-        setTimeout(() => { btn.textContent = "📋 Copy Declaration"; }, 2500);
-    });
+    _copyToClipboard(text, "copy-declaration-btn", "📋 Copy Declaration");
 }
 </script>
 {% endblock %}

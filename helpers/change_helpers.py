@@ -392,6 +392,16 @@ def approve_change(change_id):
                     flash("Cannot add nation to market: that nation has 50 or more infamy.")
                     return False
 
+        if change["target_collection"] == "trade_routes" and after_data.get("status") == "pending":
+            # Trade routes proposed to/from an AI nation go through moderator
+            # approval instead of the normal accept/reject flow, since the AI
+            # side has no player to click "accept". Moderator approval IS the
+            # AI's acceptance, so the route must go live immediately rather
+            # than being inserted as "pending" (which no automated process
+            # ever advances — it would silently never become active).
+            after_data["status"] = "active"
+            after_data["accepted_session"] = session_number
+
         after_data = _calculate_and_attach_fields(change["target_collection"], after_data)
         inserted_item_id = target_collection.insert_one(after_data).inserted_id
         changes_collection.update_one({"_id": change_id}, {"$set": {

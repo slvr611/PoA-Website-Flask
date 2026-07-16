@@ -994,24 +994,6 @@ class HexMapViewer {
             ctx.restore();
         }
 
-        // ── Portal ovals ─────────────────────────────────────────────────────
-        if (this.layers.buildings) {
-            const lw  = Math.max(2, 3.5 / this.zoom);
-            const rx  = inner * 0.48;
-            const ry  = inner * 0.24;
-            const rot = Math.PI / 8 + Math.PI / 2;   // ~112.5° (22.5° + 90°)
-            for (const color in portalBuckets) {
-                const pts = portalBuckets[color];
-                ctx.strokeStyle = color;
-                ctx.lineWidth   = lw;
-                for (let i = 0; i < pts.length; i += 2) {
-                    ctx.beginPath();
-                    ctx.ellipse(pts[i], pts[i+1], rx, ry, rot, 0, Math.PI * 2);
-                    ctx.stroke();
-                }
-            }
-        }
-
         // ── Grid outlines ─────────────────────────────────────────────────────
         // When many hexes are visible, use the pre-built Path2D: ctx.stroke(path) costs
         // no JS loop regardless of hex count. When few hexes are visible, viewport-culled
@@ -1118,6 +1100,24 @@ class HexMapViewer {
             for (let i = 0; i < allX.length; i++) {
                 const tile = allTile[i];
                 if (tile) this._drawBuildings(ctx, allX[i], allY[i], tile);
+            }
+        }
+
+        // ── Portal ovals (drawn after buildings so they render above cities) ──
+        if (this.layers.buildings) {
+            const lw  = Math.max(2, 3.5 / this.zoom);
+            const rx  = inner * 0.60;   // 25% larger than the previous 0.48
+            const ry  = inner * 0.30;   // 25% larger than the previous 0.24
+            const rot = Math.PI / 8 + Math.PI / 2;   // ~112.5° (22.5° + 90°)
+            for (const color in portalBuckets) {
+                const pts = portalBuckets[color];
+                ctx.strokeStyle = color;
+                ctx.lineWidth   = lw;
+                for (let i = 0; i < pts.length; i += 2) {
+                    ctx.beginPath();
+                    ctx.ellipse(pts[i], pts[i+1], rx, ry, rot, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
             }
         }
 

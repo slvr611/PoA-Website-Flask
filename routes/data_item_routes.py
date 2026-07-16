@@ -275,6 +275,37 @@ def data_list(data_type):
             visibility_bypassed=visibility_bypassed,
         )
 
+    if data_type == "wars":
+        all_wars = list(mongo.db.wars.find(
+            {}, {"name": 1, "war_type": 1, "primary_aggressor": 1, "primary_defender": 1,
+                 "session_declared": 1, "session_ended": 1, "victor": 1}
+        ).sort("name", ASCENDING))
+
+        nation_ids = set()
+        for w in all_wars:
+            for field in ("primary_aggressor", "primary_defender"):
+                if w.get(field):
+                    nation_ids.add(w[field])
+        nation_names = {}
+        for nid in nation_ids:
+            try:
+                n = mongo.db.nations.find_one({"_id": ObjectId(nid)}, {"name": 1})
+            except Exception:
+                n = None
+            nation_names[nid] = n.get("name", "Unknown") if n else "Unknown"
+        for w in all_wars:
+            w["aggressor_name"] = nation_names.get(w.get("primary_aggressor", ""), "Unknown")
+            w["defender_name"] = nation_names.get(w.get("primary_defender", ""), "Unknown")
+
+        active_wars = [w for w in all_wars if w.get("session_ended") is None]
+        archived_wars = [w for w in all_wars if w.get("session_ended") is not None]
+        return render_template(
+            "war_list.html",
+            title=category_data["wars"]["pluralName"],
+            active_wars=active_wars,
+            archived_wars=archived_wars,
+        )
+
     return render_template(
         "dataList.html",
         title=category_data[data_type]["pluralName"],

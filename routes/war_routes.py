@@ -908,6 +908,10 @@ def save_war(item_ref):
         except ValueError:
             pass
 
+    new_victor = request.form.get("victor", "").strip()
+    if new_victor in ("None", "Aggressor", "Defender"):
+        updates["victor"] = new_victor
+
     new_war_type = request.form.get("war_type", "").strip()
     if new_war_type:
         updates["war_type"] = new_war_type
@@ -996,6 +1000,45 @@ def save_war(item_ref):
     display_name = new_name or war.get("name", war_id_str)
     flash(f"War '{display_name}' updated.")
     return redirect(f"/wars/item/{_url_quote(display_name)}")
+
+
+# ---------------------------------------------------------------------------
+# War archive / reopen
+# ---------------------------------------------------------------------------
+
+@war_routes.route("/wars/item/<item_ref>/archive", methods=["POST"])
+@admin_required
+def archive_war(item_ref):
+    """Quickly end a war: records the victor and sets session_ended to the
+    current session, so it moves out of the active wars list."""
+    war, war_id_str = _fetch_war(item_ref)
+
+    victor = request.form.get("victor", "").strip()
+    if victor not in ("Aggressor", "Defender"):
+        flash("You must choose Aggressor or Defender victory to archive a war.")
+        return redirect(request.referrer or f"/wars/item/{item_ref}")
+
+    mongo.db.wars.update_one(
+        {"_id": war["_id"]},
+        {"$set": {"session_ended": _current_session(), "victor": victor}},
+    )
+    flash(f"War '{war.get('name', war_id_str)}' archived — {victor} victory.")
+    return redirect(request.referrer or f"/wars/item/{item_ref}")
+
+
+@war_routes.route("/wars/item/<item_ref>/reopen", methods=["POST"])
+@admin_required
+def reopen_war(item_ref):
+    """Undo an archive: clears session_ended and victor, moving the war back
+    to the active list."""
+    war, war_id_str = _fetch_war(item_ref)
+
+    mongo.db.wars.update_one(
+        {"_id": war["_id"]},
+        {"$set": {"session_ended": None, "victor": "None"}},
+    )
+    flash(f"War '{war.get('name', war_id_str)}' reopened.")
+    return redirect(request.referrer or f"/wars/item/{item_ref}")
 
 
 # ---------------------------------------------------------------------------

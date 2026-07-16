@@ -23,6 +23,25 @@
         "label": "Primary Defender",
         "description": "The nation ID of the primary defending nation"
       },
+      "session_declared": {
+        "bsonType": "number",
+        "label": "Session Declared",
+        "description": "The session this war was declared in"
+      },
+      "session_ended": {
+        "bsonType": "number",
+        "label": "Session Ended",
+        "description": "The session this war was archived/ended in. None means the war is still ongoing.",
+        "noneResult": "Ongoing"
+      },
+      "victor": {
+        "bsonType": "enum",
+        "label": "Victor",
+        "description": "Which side won the war, set when the war is archived",
+        "enum": ["None", "Aggressor", "Defender"],
+        "default": "None",
+        "noneResult": "None"
+      },
       "war_goals": {
         "bsonType": "array",
         "label": "War Goals",

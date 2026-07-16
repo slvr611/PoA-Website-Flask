@@ -254,6 +254,7 @@ def compress_and_upload_image_to_s3(base64_data_uri, s3_key, quality=65, max_wid
 
         return upload_bytes_to_s3(out.read(), s3_key, content_type="image/jpeg")
     except Exception as e:
+        print(f"[compress_and_upload_image_to_s3] {s3_key}: {e}")
         return False, f"Image compression/upload failed: {str(e)}"
 
 
@@ -283,6 +284,7 @@ def upload_bytes_to_s3(file_bytes, s3_key, content_type="image/jpeg"):
         )
         return True, f"/api/s3-image/{s3_key}"
     except Exception as e:
+        print(f"[upload_bytes_to_s3] {s3_key}: {e}")
         return False, f"S3 upload failed: {str(e)}"
 
 

@@ -35,6 +35,16 @@
                 </td>
             </tr>
             <tr>
+                <th><label for="victor">Victor</label></th>
+                <td>
+                    <select id="victor" name="victor" class="form-control" style="min-width:120px;">
+                        <option value="None" {% if not war.victor or war.victor == "None" %}selected{% endif %}>— None —</option>
+                        <option value="Aggressor" {% if war.victor == "Aggressor" %}selected{% endif %}>Aggressor</option>
+                        <option value="Defender" {% if war.victor == "Defender" %}selected{% endif %}>Defender</option>
+                    </select>
+                </td>
+            </tr>
+            <tr>
                 <th><label for="war_type">War Type</label></th>
                 <td>
                     <select id="war_type" name="war_type" class="form-control" onchange="onWarTypeChange()">

@@ -1,0 +1,89 @@
+{% extends "layout.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container">
+    {% if g.user %}
+        <a href="/wars/create">Create New War</a>
+    {% endif %}
+
+    <h1>Active Wars ({{ active_wars|length }})</h1>
+    <div class="table-wrapper">
+        <table class="info-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Type</th>
+                    <th>Aggressor</th>
+                    <th>Defender</th>
+                    <th>Session Declared</th>
+                    {% if g.user and g.user.get("is_admin") %}
+                        <th>Archive</th>
+                    {% endif %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for war in active_wars %}
+                <tr>
+                    <td><a href="/wars/item/{{ war.name }}">{{ war.name }}</a></td>
+                    <td>{{ war.war_type }}</td>
+                    <td>{{ war.aggressor_name }}</td>
+                    <td>{{ war.defender_name }}</td>
+                    <td>{{ war.session_declared if war.session_declared is not none else "—" }}</td>
+                    {% if g.user and g.user.get("is_admin") %}
+                    <td>
+                        <form method="POST" action="/wars/item/{{ war._id }}/archive" class="war-archive-form-inline"
+                              onsubmit="return confirm('Archive {{ war.name }}? This sets it as ended at the current session.');">
+                            <select name="victor" required>
+                                <option value="">— Victor —</option>
+                                <option value="Aggressor">Aggressor</option>
+                                <option value="Defender">Defender</option>
+                            </select>
+                            <button type="submit" class="btn btn-sm btn-deny">Archive</button>
+                        </form>
+                    </td>
+                    {% endif %}
+                </tr>
+                {% endfor %}
+                {% if not active_wars %}
+                <tr><td colspan="6">No active wars.</td></tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+
+    <h2>Archived Wars ({{ archived_wars|length }})</h2>
+    <div class="table-wrapper">
+        <table class="info-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Type</th>
+                    <th>Aggressor</th>
+                    <th>Defender</th>
+                    <th>Session Declared</th>
+                    <th>Session Ended</th>
+                    <th>Victor</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for war in archived_wars %}
+                <tr>
+                    <td><a href="/wars/item/{{ war.name }}">{{ war.name }}</a></td>
+                    <td>{{ war.war_type }}</td>
+                    <td>{{ war.aggressor_name }}</td>
+                    <td>{{ war.defender_name }}</td>
+                    <td>{{ war.session_declared if war.session_declared is not none else "—" }}</td>
+                    <td>{{ war.session_ended }}</td>
+                    <td>{{ war.victor if war.victor and war.victor != "None" else "—" }}</td>
+                </tr>
+                {% endfor %}
+                {% if not archived_wars %}
+                <tr><td colspan="7">No archived wars.</td></tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

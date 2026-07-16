@@ -8,3 +8,4 @@ Flask-WTF==1.2.2
 boto3==1.34.0
 botocore==1.34.0
 email-validator==2.1.0
+Pillow==10.4.0
