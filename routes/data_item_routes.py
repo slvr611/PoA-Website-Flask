@@ -293,9 +293,11 @@ def data_list(data_type):
             except Exception:
                 n = None
             nation_names[nid] = n.get("name", "Unknown") if n else "Unknown"
+        war_types = json_data.get("war_types", {})
         for w in all_wars:
             w["aggressor_name"] = nation_names.get(w.get("primary_aggressor", ""), "Unknown")
             w["defender_name"] = nation_names.get(w.get("primary_defender", ""), "Unknown")
+            w["war_type_display"] = war_types.get(w.get("war_type", ""), {}).get("display_name", w.get("war_type", ""))
 
         active_wars = [w for w in all_wars if w.get("session_ended") is None]
         archived_wars = [w for w in all_wars if w.get("session_ended") is not None]

@@ -27,7 +27,7 @@
                 {% for war in active_wars %}
                 <tr>
                     <td><a href="/wars/item/{{ war.name }}">{{ war.name }}</a></td>
-                    <td>{{ war.war_type }}</td>
+                    <td>{{ war.war_type_display }}</td>
                     <td>{{ war.aggressor_name }}</td>
                     <td>{{ war.defender_name }}</td>
                     <td>{{ war.session_declared if war.session_declared is not none else "—" }}</td>
@@ -71,7 +71,7 @@
                 {% for war in archived_wars %}
                 <tr>
                     <td><a href="/wars/item/{{ war.name }}">{{ war.name }}</a></td>
-                    <td>{{ war.war_type }}</td>
+                    <td>{{ war.war_type_display }}</td>
                     <td>{{ war.aggressor_name }}</td>
                     <td>{{ war.defender_name }}</td>
                     <td>{{ war.session_declared if war.session_declared is not none else "—" }}</td>

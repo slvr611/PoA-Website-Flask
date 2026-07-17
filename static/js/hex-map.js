@@ -3124,6 +3124,80 @@ class HexMapViewer {
         return true;
     }
 
+    // Render just the terrain fill layer — no satellite/DZI background, no political
+    // colors, nodes, buildings, regions, or roads — and trigger a PNG download.
+    async downloadTerrainImage(targetWidth = 6000) {
+        if (!this.tiles.size) return false;
+
+        const pad = this.hexSize * 1.5;
+        let wxMin = Infinity, wxMax = -Infinity, wyMin = Infinity, wyMax = -Infinity;
+        for (const key of this.tiles.keys()) {
+            const [q, r] = key.split(',').map(Number);
+            const p = this._axialToPixel(q, r);
+            if (p.x < wxMin) wxMin = p.x; if (p.x > wxMax) wxMax = p.x;
+            if (p.y < wyMin) wyMin = p.y; if (p.y > wyMax) wyMax = p.y;
+        }
+        wxMin -= pad; wxMax += pad; wyMin -= pad; wyMax += pad;
+        const ww = wxMax - wxMin, wh = wyMax - wyMin;
+        const aspect = wh / (ww || 1);
+
+        const MAX_DIM = 7000;
+        let captureW = Math.min(targetWidth, MAX_DIM);
+        let captureH = Math.round(captureW * aspect);
+        if (captureH > MAX_DIM) { captureH = MAX_DIM; captureW = Math.round(captureH / aspect); }
+
+        const offCanvas  = document.createElement('canvas');
+        offCanvas.width  = captureW;
+        offCanvas.height = captureH;
+
+        // Save state
+        const mainCanvas  = this.canvas, mainCtx = this.ctx;
+        const savedPanX   = this.panX, savedPanY = this.panY, savedZoom = this.zoom;
+        const savedLayers = { ...this.layers };
+        const savedBgImage = this.bgImage;
+
+        // Terrain-only layer set, and no background image of any kind.
+        for (const k of Object.keys(this.layers)) this.layers[k] = false;
+        this.layers.terrain = true;
+        this.bgImage = null;
+
+        this.canvas = offCanvas;
+        this.ctx    = offCanvas.getContext('2d');
+        this._capturingImage    = true;
+        this._capturePublicView = true;
+
+        let dataUrl = null;
+        try {
+            this.zoom = Math.min(captureW / ww, captureH / wh);
+            this.panX = captureW / 2 - ((wxMin + wxMax) / 2) * this.zoom;
+            this.panY = captureH / 2 - ((wyMin + wyMax) / 2) * this.zoom;
+
+            this._buildTerrainPaths();
+            this.render();
+            await this._waitTwoFrames();
+
+            dataUrl = offCanvas.toDataURL('image/png');
+        } finally {
+            // Restore state
+            this._capturingImage    = false;
+            this._capturePublicView = false;
+            this.layers  = savedLayers;
+            this.bgImage = savedBgImage;
+            this.canvas  = mainCanvas;
+            this.ctx     = mainCtx;
+            this.panX = savedPanX; this.panY = savedPanY; this.zoom = savedZoom;
+            this._buildTerrainPaths();
+            this.render();
+        }
+
+        if (!dataUrl) return false;
+        const link = document.createElement('a');
+        link.href = dataUrl;
+        link.download = `poa-terrain-${new Date().toISOString().slice(0, 10)}.png`;
+        link.click();
+        return true;
+    }
+
     // Assemble the DZI background directly onto a canvas by fetching every tile of
     // the appropriate pyramid level through the same-origin proxy. Deterministic —
     // unlike an OSD viewer, which can silently skip tiles under load. Tiles are

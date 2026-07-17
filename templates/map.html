@@ -113,6 +113,7 @@
                     <button id="hex-purge-oob-btn" class="map-tools-item" title="Delete tiles outside configured grid bounds (removes stale tiles from old coordinate systems)">Purge OOB Tiles</button>
                     <button id="hex-normalize-coords-btn" class="map-tools-item" title="Convert any tiles with float q/r coordinates to integers (fixes tiles that revert after saving)">Fix Tile Coords</button>
                     <button id="hex-download-map-btn" class="map-tools-item" title="Download a high-resolution image of the full map (political, nodes, luxury, buildings — public view, no districts)">Download Map Image</button>
+                    <button id="hex-download-terrain-btn" class="map-tools-item" title="Download a high-resolution image of just the terrain layer — no background, no political colors, nodes, or buildings">Download Terrain Image</button>
                     <a href="/admin/grid-calibration" class="map-tools-item" target="_blank">Grid Calibration ↗</a>
                 </div>
             </div>
@@ -738,6 +739,23 @@ document.addEventListener('DOMContentLoaded', function () {
             }
             downloadMapBtn.disabled = false;
             setTimeout(() => { downloadMapBtn.textContent = 'Download Map Image'; }, 4000);
+        });
+    }
+
+    const downloadTerrainBtn = document.getElementById('hex-download-terrain-btn');
+    if (downloadTerrainBtn) {
+        downloadTerrainBtn.addEventListener('click', async () => {
+            if (!hexViewer) return;
+            downloadTerrainBtn.textContent = 'Rendering…';
+            downloadTerrainBtn.disabled = true;
+            try {
+                const ok = await hexViewer.downloadTerrainImage();
+                downloadTerrainBtn.textContent = ok ? 'Downloaded!' : 'Error';
+            } catch (e) {
+                downloadTerrainBtn.textContent = 'Error';
+            }
+            downloadTerrainBtn.disabled = false;
+            setTimeout(() => { downloadTerrainBtn.textContent = 'Download Terrain Image'; }, 4000);
         });
     }
 

@@ -23,7 +23,9 @@
       "Bash(heroku run *)",
       "PowerShell(heroku run --app path-of-ages-production \"python -c `\"import PIL; print\\('PIL OK', PIL.__version__\\)`\"\" 2>&1)",
       "PowerShell(heroku run --app path-of-ages-production python -c \"import PIL\" 2>&1)",
-      "PowerShell(heroku run --app path-of-ages-production -- python -c \"import PIL\" 2>&1)"
+      "PowerShell(heroku run --app path-of-ages-production -- python -c \"import PIL\" 2>&1)",
+      "Bash(pip index *)",
+      "Bash(git fetch *)"
     ]
   }
 }
