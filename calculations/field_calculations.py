@@ -2347,12 +2347,20 @@ def _apply_unit_stat_modifiers(base_stats, unit_type_str, is_support, is_magical
 
     if is_support:
         bare_strength_keys = {"strength", "support_strength"}
+        bare_attack_key = None
+        bare_defense_key = None
     elif unit_type_str == "Land":
         bare_strength_keys = {"strength", "land_strength"}
+        bare_attack_key = "land_attack"
+        bare_defense_key = "land_defense"
     elif unit_type_str == "Naval":
         bare_strength_keys = {"strength", "naval_strength"}
+        bare_attack_key = "naval_attack"
+        bare_defense_key = "naval_defense"
     else:
         bare_strength_keys = {"strength"}
+        bare_attack_key = None
+        bare_defense_key = None
 
     def _add_strength(val, label):
         if effective.get("attack") is not None:
@@ -2362,6 +2370,11 @@ def _apply_unit_stat_modifiers(base_stats, unit_type_str, is_support, is_magical
             effective["defense"] = (effective["defense"] or 0) + val
             breakdown["defense"].append({"label": label, "value": val})
 
+    def _add_single(stat, val, label):
+        if effective.get(stat) is not None:
+            effective[stat] = (effective[stat] or 0) + val
+            breakdown[stat].append({"label": label, "value": val})
+
     for source in tagged_sources:
         label = source["label"]
         for modifier, value in source["modifiers"].items():
@@ -2369,6 +2382,16 @@ def _apply_unit_stat_modifiers(base_stats, unit_type_str, is_support, is_magical
                 continue
             if modifier in bare_strength_keys:
                 _add_strength(value, label)
+                continue
+            # land_attack/land_defense/naval_attack/naval_defense also feed the
+            # nation-wide aggregate stats (compute_land_attack etc.) — applying
+            # them here too keeps individual unit rows (e.g. prosperity role
+            # bonuses/penalties) consistent with that aggregate.
+            if bare_attack_key and modifier == bare_attack_key:
+                _add_single("attack", value, label)
+                continue
+            if bare_defense_key and modifier == bare_defense_key:
+                _add_single("defense", value, label)
                 continue
             for prefix in prefixes:
                 if modifier == f"{prefix}_strength":
@@ -3709,20 +3732,26 @@ _TRIBUTE_RESOURCES = ["food", "wood", "stone"]
 
 
 def _calc_tribute(pop_count, vassal_type, overall_total_modifiers):
-    """Return the per-resource tribute amount for a vassal.
+    """Return {resource: tribute_amount} for a vassal, one entry per _TRIBUTE_RESOURCES.
 
     Base: max(1, pops // 10).  Tributary doubles base and minimum.
-    Modifiers: vassal_tribute_flat (added before multiplier),
-               vassal_tribute_multiplier (fractional bonus, e.g. 0.5 = +50%).
+    Modifiers: vassal_tribute_flat / vassal_tribute_multiplier apply to all tribute
+               resources; vassal_tribute_flat_{resource} / vassal_tribute_multiplier_{resource}
+               apply to that resource only, stacking additively with the all-resource ones.
     """
     base = max(1, pop_count // 10)
     if vassal_type == "Tributary":
         amount = max(2, base * 2)
     else:
         amount = base
-    flat   = overall_total_modifiers.get("vassal_tribute_flat", 0)
-    mult   = 1 + overall_total_modifiers.get("vassal_tribute_multiplier", 0)
-    return max(0, int(round((amount + flat) * mult)))
+    global_flat = overall_total_modifiers.get("vassal_tribute_flat", 0)
+    global_mult = overall_total_modifiers.get("vassal_tribute_multiplier", 0)
+    result = {}
+    for resource in _TRIBUTE_RESOURCES:
+        flat = global_flat + overall_total_modifiers.get(f"vassal_tribute_flat_{resource}", 0)
+        mult = 1 + global_mult + overall_total_modifiers.get(f"vassal_tribute_multiplier_{resource}", 0)
+        result[resource] = max(0, int(round((amount + flat) * mult)))
+    return result
 
 
 def _apply_vassal_tribute_modifiers(target, overall_total_modifiers):
@@ -3737,8 +3766,8 @@ def _apply_vassal_tribute_modifiers(target, overall_total_modifiers):
     if overlord_id:
         pop_count  = target.get("pop_count", 0)
         vassal_type = target.get("vassal_type", "None")
-        tribute = _calc_tribute(pop_count, vassal_type, overall_total_modifiers)
-        for resource in _TRIBUTE_RESOURCES:
+        tribute_by_resource = _calc_tribute(pop_count, vassal_type, overall_total_modifiers)
+        for resource, tribute in tribute_by_resource.items():
             overall_total_modifiers[f"{resource}_consumption"] = (
                 overall_total_modifiers.get(f"{resource}_consumption", 0) + tribute
             )
@@ -3779,8 +3808,13 @@ def _apply_vassal_tribute_modifiers(target, overall_total_modifiers):
                 + v_own_totals.get("vassal_tribute_multiplier", 0)
             ),
         }
-        v_tribute = _calc_tribute(v_pop, v_type, v_combined_modifiers)
         for resource in _TRIBUTE_RESOURCES:
+            for key in (f"vassal_tribute_flat_{resource}", f"vassal_tribute_multiplier_{resource}"):
+                v_combined_modifiers[key] = (
+                    overall_total_modifiers.get(key, 0) + v_own_totals.get(key, 0)
+                )
+        v_tribute_by_resource = _calc_tribute(v_pop, v_type, v_combined_modifiers)
+        for resource, v_tribute in v_tribute_by_resource.items():
             overall_total_modifiers[f"{resource}_production"] = (
                 overall_total_modifiers.get(f"{resource}_production", 0) + v_tribute
             )
@@ -4322,20 +4356,20 @@ def _build_computed_contributions(
             v_name    = vassal.get("name", "Unknown Vassal")
             v_pop     = vassal.get("pop_count", 0)
             v_type    = vassal.get("vassal_type", "None")
-            v_tribute = _calc_tribute(v_pop, v_type, {})
-            if v_tribute:
+            v_tribute_by_resource = _calc_tribute(v_pop, v_type, {})
+            if any(v_tribute_by_resource.values()):
                 contribs.append(SourceContribution(
                     label=f"Vassal: {v_name}",
                     source_type="computed",
-                    modifiers={res + "_production": v_tribute for res in _TRIBUTE_RESOURCES},
+                    modifiers={res + "_production": amt for res, amt in v_tribute_by_resource.items()},
                 ))
 
     overlord_id = str(target.get("overlord") or "")
     if overlord_id:
         v_pop_count   = target.get("pop_count", 0)
         v_vassal_type = target.get("vassal_type", "None")
-        tribute = _calc_tribute(v_pop_count, v_vassal_type, overall_totals)
-        if tribute:
+        tribute_by_resource = _calc_tribute(v_pop_count, v_vassal_type, overall_totals)
+        if any(tribute_by_resource.values()):
             try:
                 overlord = mongo.db.nations.find_one({"_id": ObjectId(overlord_id)}, {"name": 1})
                 overlord_name = overlord.get("name", "Overlord") if overlord else "Overlord"
@@ -4344,7 +4378,7 @@ def _build_computed_contributions(
             contribs.append(SourceContribution(
                 label=f"Tribute to {overlord_name}",
                 source_type="computed",
-                modifiers={res + "_consumption": tribute for res in _TRIBUTE_RESOURCES},
+                modifiers={res + "_consumption": amt for res, amt in tribute_by_resource.items()},
             ))
 
     return contribs

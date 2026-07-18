@@ -288,41 +288,6 @@
 				<div class="table-wrapper">
 					<table class="info-table">
 						<tr class="resources-header-row">
-							<th colspan="2" class="resources-header">Income</th>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.money.label }}:</th>
-							<td>{{ pf(nation.money, pn.get("money")) }} / {{ pf(nation.money_capacity, pn.get("money_capacity")) }}</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.money_income.label }}:</th>
-							<td>
-								{{ pfbd(
-									nation.money_income,
-									pn.get("money_income"),
-									breakdowns["money_income"],
-									pbd.get("money_income", []),
-									"Money Income"
-								) }}
-							</td>
-						</tr>
-						<tr>
-							<th>Import Slots:</th>
-							<td>{{ pfbd(nation.remaining_import_slots, pn.get("remaining_import_slots"), breakdowns.get("remaining_import_slots", []), pbd.get("remaining_import_slots", []), "Remaining Import Slots") }} / {{ pfbd(nation.import_slots, pn.get("import_slots"), breakdowns.get("import_slots", []), pbd.get("import_slots", []), "Import Slots") }}</td>
-						</tr>
-						<tr>
-							<th>Export Slots:</th>
-							<td>{{ pfbd(nation.remaining_export_slots, pn.get("remaining_export_slots"), breakdowns.get("remaining_export_slots", []), pbd.get("remaining_export_slots", []), "Remaining Export Slots") }} / {{ pfbd(nation.export_slots, pn.get("export_slots"), breakdowns.get("export_slots", []), pbd.get("export_slots", []), "Export Slots") }}</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.trade_speed.label }}:</th>
-							<td>{{ pfbd(nation.trade_speed, pn.get("trade_speed"), breakdowns.get("trade_speed", []), pbd.get("trade_speed", []), "Trade Speed") }}</td>
-						</tr>
-					</table>
-				</div>
-				<div class="table-wrapper">
-					<table class="info-table">
-						<tr class="resources-header-row">
 							<th colspan="2" class="resources-header">Miscellaneous</th>
 						</tr>
 						<tr>
@@ -883,10 +848,46 @@
 
 		<div class="expandable-section" id="trade-routes-section">
 			<div class="section-header" onclick="toggleSection(this)">
-				<h2>Trade Routes</h2>
+				<h2>Trade</h2>
 				<span class="toggle-icon">▼</span>
 			</div>
 			<div class="section-content">
+			<div class="table-wrapper">
+				<table class="info-table">
+					<tr class="resources-header-row">
+						<th colspan="2" class="resources-header">Trade</th>
+					</tr>
+					<tr>
+						<th>{{ schema.properties.money.label }}:</th>
+						<td>{{ pf(nation.money, pn.get("money")) }} / {{ pf(nation.money_capacity, pn.get("money_capacity")) }}</td>
+					</tr>
+					<tr>
+						<th>{{ schema.properties.money_income.label }}:</th>
+						<td>
+							{{ pfbd(
+								nation.money_income,
+								pn.get("money_income"),
+								breakdowns["money_income"],
+								pbd.get("money_income", []),
+								"Money Income"
+							) }}
+						</td>
+					</tr>
+					<tr>
+						<th>Import Slots:</th>
+						<td>{{ pfbd(nation.remaining_import_slots, pn.get("remaining_import_slots"), breakdowns.get("remaining_import_slots", []), pbd.get("remaining_import_slots", []), "Remaining Import Slots") }} / {{ pfbd(nation.import_slots, pn.get("import_slots"), breakdowns.get("import_slots", []), pbd.get("import_slots", []), "Import Slots") }}</td>
+					</tr>
+					<tr>
+						<th>Export Slots:</th>
+						<td>{{ pfbd(nation.remaining_export_slots, pn.get("remaining_export_slots"), breakdowns.get("remaining_export_slots", []), pbd.get("remaining_export_slots", []), "Remaining Export Slots") }} / {{ pfbd(nation.export_slots, pn.get("export_slots"), breakdowns.get("export_slots", []), pbd.get("export_slots", []), "Export Slots") }}</td>
+					</tr>
+					<tr>
+						<th>{{ schema.properties.trade_speed.label }}:</th>
+						<td>{{ pfbd(nation.trade_speed, pn.get("trade_speed"), breakdowns.get("trade_speed", []), pbd.get("trade_speed", []), "Trade Speed") }}</td>
+					</tr>
+				</table>
+			</div>
+			<h2>Ongoing Trade Deals</h2>
 			{% include "trade_routes_section.html" with context %}
 			</div>
 		</div>
@@ -990,6 +991,29 @@
 			<div class="section-content">
 			{% if visibility_level >= 4 %}
 				<h2>Resources</h2>
+				<div class="table-wrapper">
+					<table class="info-table">
+						<tr class="resources-header-row">
+							<th colspan="2" class="resources-header">Income</th>
+						</tr>
+						<tr>
+							<th>{{ schema.properties.money.label }}:</th>
+							<td>{{ pf(nation.money, pn.get("money")) }} / {{ pf(nation.money_capacity, pn.get("money_capacity")) }}</td>
+						</tr>
+						<tr>
+							<th>{{ schema.properties.money_income.label }}:</th>
+							<td>
+								{{ pfbd(
+									nation.money_income,
+									pn.get("money_income"),
+									breakdowns["money_income"],
+									pbd.get("money_income", []),
+									"Money Income"
+								) }}
+							</td>
+						</tr>
+					</table>
+				</div>
 				<div class="table-wrapper">
 					<table class="resources-table">
 						<thead>

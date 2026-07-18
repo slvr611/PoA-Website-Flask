@@ -114,34 +114,6 @@
                         <div class="table-wrapper">
                             <table class="info-table">
                                 <tr class="resources-header-row">
-                                    <th colspan="2" class="resources-header">Income</th>
-                                </tr>
-                                <tr>
-                                    <th>{{ form.money.label.text }}:</th>
-                                    <td>{{ form.money(class="form-control") }} / {{ nation.money_capacity }}</td>
-                                </tr>
-                                <tr>
-                                    <th>{{ schema.properties.money_income.label }}:</th>
-                                    <td>{{ nation.money_income }}</td>
-                                </tr>
-                                <tr>
-                                    <th>{{ schema.properties.remaining_import_slots.label }}:</th>
-                                    <td>{{ nation.remaining_import_slots }}</td>
-                                </tr>
-                                <tr>
-                                    <th>{{ schema.properties.remaining_export_slots.label }}:</th>
-                                    <td>{{ nation.remaining_export_slots }}</td>
-                                </tr>
-                                <tr>
-                                    <th>{{ schema.properties.trade_speed.label }}:</th>
-                                    <td>{{ nation.trade_speed }}</td>
-                                </tr>
-                            </table>
-                        </div>
-
-                        <div class="table-wrapper">
-                            <table class="info-table">
-                                <tr class="resources-header-row">
                                     <th colspan="2" class="resources-header">Miscellaneous</th>
                                 </tr>
                                 <tr>
@@ -673,10 +645,38 @@
 
             <div class="expandable-section" id="trade-routes-section">
                 <div class="section-header" onclick="toggleSection(this)">
-                    <h2>Trade Routes</h2>
+                    <h2>Trade</h2>
                     <span class="toggle-icon">▼</span>
                 </div>
                 <div class="section-content">
+                <div class="table-wrapper">
+                    <table class="info-table">
+                        <tr class="resources-header-row">
+                            <th colspan="2" class="resources-header">Trade</th>
+                        </tr>
+                        <tr>
+                            <th>{{ form.money.label.text }}:</th>
+                            <td>{{ form.money(class="form-control") }} / {{ nation.money_capacity }}</td>
+                        </tr>
+                        <tr>
+                            <th>{{ schema.properties.money_income.label }}:</th>
+                            <td>{{ nation.money_income }}</td>
+                        </tr>
+                        <tr>
+                            <th>{{ schema.properties.remaining_import_slots.label }}:</th>
+                            <td>{{ nation.remaining_import_slots }}</td>
+                        </tr>
+                        <tr>
+                            <th>{{ schema.properties.remaining_export_slots.label }}:</th>
+                            <td>{{ nation.remaining_export_slots }}</td>
+                        </tr>
+                        <tr>
+                            <th>{{ schema.properties.trade_speed.label }}:</th>
+                            <td>{{ nation.trade_speed }}</td>
+                        </tr>
+                    </table>
+                </div>
+                <h2>Ongoing Trade Deals</h2>
                 {% with editable = True %}
                 {% include "trade_routes_section.html" with context %}
                 {% endwith %}
@@ -783,6 +783,21 @@
                 </div>
                 <div class="section-content">
                     <h2>Resources</h2>
+                    <div class="table-wrapper">
+                        <table class="info-table">
+                            <tr class="resources-header-row">
+                                <th colspan="2" class="resources-header">Income</th>
+                            </tr>
+                            <tr>
+                                <th>{{ form.money.label.text }}:</th>
+                                <td>{{ nation.money }} / {{ nation.money_capacity }}</td>
+                            </tr>
+                            <tr>
+                                <th>{{ schema.properties.money_income.label }}:</th>
+                                <td>{{ nation.money_income }}</td>
+                            </tr>
+                        </table>
+                    </div>
                     <div class="table-wrapper">
                         <table class="resources-table">
                             <thead>

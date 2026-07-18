@@ -1,4 +1,12 @@
 {
+    "stasis": {
+        "name": "Stasis",
+        "description": "While active, no tick functions run on this nation/character — except its own modifier decay, so this modifier's duration still counts down and it can expire on its own. Nation market demands are wiped each tick while in stasis, and existing trade routes involving the nation stay active but stop delivering resources until it ends. The value field is ignored — duration controls how many sessions stasis lasts.",
+        "value_format": "number",
+        "field_template": "_stasis_flag",
+        "is_stasis": true,
+        "applicable_to": ["nation", "character"]
+    },
     "district_duration": {
         "name": "District Duration Scaling",
         "description": "Tracks how many sessions this district has been active. The value field is ignored — place this on a district to enable session tracking. Other modifiers on the district can then use the 'Per X District Sessions' scaling method.",
@@ -594,6 +602,26 @@
         "description": "Fractional bonus applied to a vassal's tribute amount (e.g. 0.5 = +50%). On the vassal, this raises their consumption of tribute resources; on the overlord, it raises their production by the same amount per vassal.",
         "value_format": "percentage",
         "field_template": "vassal_tribute_multiplier",
+        "applicable_to": ["nation"]
+    },
+    "vassal_tribute_flat_resource": {
+        "name": "Vassal Tribute (Flat, Single Resource)",
+        "description": "Same as Vassal Tribute (Flat), but only affects tribute for the chosen resource (food/wood/stone) instead of all three. Stacks additively with Vassal Tribute (Flat).",
+        "value_format": "number",
+        "field_template": "vassal_tribute_flat_{resource}",
+        "extra_fields": [
+            {"key": "resource", "label": "Resource", "source": "all_resources"}
+        ],
+        "applicable_to": ["nation"]
+    },
+    "vassal_tribute_multiplier_resource": {
+        "name": "Vassal Tribute Multiplier (Single Resource)",
+        "description": "Same as Vassal Tribute Multiplier, but only affects tribute for the chosen resource (food/wood/stone) instead of all three. Stacks additively with Vassal Tribute Multiplier.",
+        "value_format": "percentage",
+        "field_template": "vassal_tribute_multiplier_{resource}",
+        "extra_fields": [
+            {"key": "resource", "label": "Resource", "source": "all_resources"}
+        ],
         "applicable_to": ["nation"]
     },
     "territory_node_proximity_limit": {

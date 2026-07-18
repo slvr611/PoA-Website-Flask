@@ -184,9 +184,9 @@ def compute_all_visibilities(viewer_nation: dict) -> dict:
             bonus += 1
 
         if str(target.get("overlord") or "") == viewer_id:
-            bonus += 1
+            bonus += 2
         elif str(viewer_nation.get("overlord") or "") == target_id:
-            bonus += 1
+            bonus += 2
 
         if viewer_markets & markets_by_member.get(target_id, set()):
             bonus += 1
@@ -251,9 +251,9 @@ def compute_visibility(viewer_nation: dict, target_nation_id: str) -> int:
 
     # Vassal / Overlord (either direction)
     if str(target.get("overlord") or "") == viewer_id:
-        bonus += 1
+        bonus += 2
     elif str(viewer_nation.get("overlord") or "") == target_nation_id:
-        bonus += 1
+        bonus += 2
 
     # Shared market
     viewer_markets = {

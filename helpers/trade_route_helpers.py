@@ -322,6 +322,21 @@ def is_delivering(route, session):
     return True
 
 
+def _nations_in_stasis(names):
+    """Return the subset of `names` currently carrying a stasis modifier.
+
+    A route with either side in stasis stays active (not ended) but is treated
+    as non-delivering — goods stop flowing without disturbing its lifecycle timing."""
+    names = [n for n in names if n]
+    if not names:
+        return set()
+    docs = mongo.db.nations.find(
+        {"name": {"$in": names}, "modifiers.modifier_type": "stasis"},
+        {"name": 1},
+    )
+    return {d["name"] for d in docs}
+
+
 # ---------------------------------------------------------------------------
 # Resource net for production/consumption calculations
 # ---------------------------------------------------------------------------
@@ -352,10 +367,16 @@ def get_trade_route_resource_net(nation_name, routes, session=None):
     if session is None:
         session = _current_session()
 
+    stasis_names = _nations_in_stasis(
+        {r.get("nation_a") for r in routes} | {r.get("nation_b") for r in routes}
+    )
+
     net = {}
     for route in routes:
         if not is_delivering(route, session):
             continue
+        if route.get("nation_a") in stasis_names or route.get("nation_b") in stasis_names:
+            continue  # route stays active but paused while either side is in stasis
         if route.get("nation_a") == nation_name:
             for entry in route.get("resources_a_to_b", []):
                 r, q = entry["resource"], entry["quantity"]
@@ -389,10 +410,16 @@ def get_trade_route_source_contributions(nation_name, routes, session=None):
     if session is None:
         session = _current_session()
 
+    stasis_names = _nations_in_stasis(
+        {r.get("nation_a") for r in routes} | {r.get("nation_b") for r in routes}
+    )
+
     contribs = []
     for route in routes:
         if not is_delivering(route, session):
             continue
+        if route.get("nation_a") in stasis_names or route.get("nation_b") in stasis_names:
+            continue  # route stays active but paused while either side is in stasis
 
         if route.get("nation_a") == nation_name:
             partner = route.get("nation_b", "?")

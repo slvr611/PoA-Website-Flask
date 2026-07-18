@@ -62,6 +62,10 @@ def tick(form_data):
             if run_key in form_data:
                 print(tick_function_label)
                 for i in range(len(old_characters)):
+                    # Stasis blocks every tick function except modifier decay, so a
+                    # stasis modifier's own duration still counts down and can expire.
+                    if tick_function is not modifier_decay_tick and _in_stasis(old_characters[i]):
+                        continue
                     result = tick_function(old_characters[i], new_characters[i], character_schema)
                     if old_characters[i].get("player", None) is not None:
                         player_tick_summary += result
@@ -246,7 +250,14 @@ def tick(form_data):
             if nation:
                 nation.update(calculate_all_fields(nation, nation_schema, "nation"))
                 new_nations.append(deepcopy(nation))
-        
+
+        # Nations in stasis have their market demands wiped completely for the
+        # duration of the tick (existing trade routes stay but pause instead —
+        # handled separately in get_trade_route_resource_net).
+        for i in range(len(old_nations)):
+            if _in_stasis(old_nations[i]):
+                new_nations[i]["resource_desires"] = []
+
         for tick_function_label, tick_function in NATION_TICK_FUNCTIONS.items():
             run_key = f"run_{tick_function_label}"
             if run_key in form_data:
@@ -259,6 +270,10 @@ def tick(form_data):
                     _load_district_defs_cache()
                 try:
                     for i in range(len(old_nations)):
+                        # Stasis blocks every tick function except modifier decay, so
+                        # a stasis modifier's own duration still counts down and expires.
+                        if tick_function is not modifier_decay_tick and _in_stasis(old_nations[i]):
+                            continue
                         result = tick_function(old_nations[i], new_nations[i], nation_schema)
                         if old_nations[i].get("temperament", "None") == "Player":
                             player_tick_summary += result
@@ -473,6 +488,14 @@ def give_tick_summary(player_tick_summary, full_tick_summary):
         upload_to_s3(full_summary_path, f"tick_summaries/{full_summary_filename}")
     
     return full_summary_path
+
+def _in_stasis(entity):
+    """True if `entity` (a nation or character dict) currently carries a stasis modifier.
+
+    Checked against the pre-tick (old) copy so a modifier that decays to 0 duration
+    THIS tick still blocks everything else from running during the same pass."""
+    return any(m.get("modifier_type") == "stasis" for m in (entity or {}).get("modifiers", []))
+
 
 def modifier_decay_tick(old_target, new_target, schema):
     new_modifiers = []
@@ -2089,6 +2112,8 @@ def _era_pop_growth_tick_impl(skip_infertile=False):
     count = 0
 
     for nation in nations:
+        if _in_stasis(nation):
+            continue
         if skip_infertile:
             race_id = nation.get("primary_race")
             if race_id:
@@ -2133,6 +2158,8 @@ def era_artifact_loss_tick():
 
     for character in characters:
         if character.get("health_status", "Healthy") == "Dead":
+            continue
+        if _in_stasis(character):
             continue
 
         character.update(calculate_all_fields(character, character_schema, "character"))
@@ -2186,6 +2213,8 @@ def era_character_aging_tick():
 
     for character in characters:
         if character.get("health_status", "Healthy") == "Dead":
+            continue
+        if _in_stasis(character):
             continue
 
         character.update(calculate_all_fields(character, character_schema, "character"))
@@ -2356,6 +2385,8 @@ def generate_all_ai_rulers_tick():
         except Exception:
             continue
         for org in org_db.find():
+            if _in_stasis(org):
+                continue
             if str(org["_id"]) not in living_ruler_org_ids and not org.get("players"):
                 result += generate_ai_character(org, org_schema, character_schema)
 
@@ -2428,6 +2459,8 @@ def era_tick(form_data):
             if f"run_{label}" in form_data:
                 print(label)
                 for i in range(len(old_nations)):
+                    if _in_stasis(old_nations[i]):
+                        continue
                     result = fn(old_nations[i], new_nations[i], nation_schema)
                     full_tick_summary += result
 
@@ -2459,6 +2492,8 @@ def era_tick(form_data):
             if f"run_{label}" in form_data:
                 print(label)
                 for i in range(len(old_characters)):
+                    if _in_stasis(old_characters[i]):
+                        continue
                     result = fn(old_characters[i], new_characters[i], character_schema)
                     full_tick_summary += result
 
