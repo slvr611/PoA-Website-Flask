@@ -77,20 +77,24 @@ def _get_trade_source_wonder_ids():
 
 
 def _load_trade_tiles(nation_names_list):
-    """Fetch all tiles relevant to trade-distance computation: owned + roads + portals."""
+    """Fetch all tiles relevant to trade-distance computation: owned + roads + portals + cities/trade wonders."""
     return list(mongo.db.hex_map_tiles.find(
         {"$or": [
             {"owner": {"$in": nation_names_list}},
             {"route": {"$exists": True, "$ne": None}},
             {"portal": {"$exists": True, "$ne": None}},
+            {"city": {"$exists": True, "$ne": None}},
+            {"wonder": {"$exists": True, "$ne": None}},
         ]},
         {"q": 1, "r": 1, "owner": 1, "route": 1, "portal": 1, "terrain": 1, "city": 1, "wonder": 1, "_id": 0},
     ))
 
 
-def _tile_step_cost(tile_data, move_costs):
-    """Cost to enter a tile. Road tiles always cost 1 (roads make traversal easy)."""
-    if tile_data.get("route"):
+def _tile_step_cost(tile_data, move_costs, trade_wonder_ids=None):
+    """Cost to enter a tile. Road tiles and cities always cost 1 (both make traversal easy),
+    regardless of which nation owns them — a city's internal infrastructure connects out to
+    the road network same as a road tile would."""
+    if tile_data.get("route") or _is_trade_city(tile_data, trade_wonder_ids or set()):
         return 1
     terrain = tile_data.get("terrain", "plains")
     cost = move_costs.get(terrain, 1)
@@ -146,6 +150,7 @@ def _dijkstra_from_cities(source_nation, target_nations, tiles_raw, portal_map, 
     traversable = {
         pos for pos, t in tile_map.items()
         if t.get("owner", "") in target_set or t.get("route") or t.get("portal")
+        or _is_trade_city(t, trade_wonder_ids)
     }
 
     dist = {}
@@ -181,7 +186,7 @@ def _dijkstra_from_cities(source_nation, target_nations, tiles_raw, portal_map, 
             nb_data = tile_map.get(nb)
             if nb_data is None:
                 continue
-            step = _tile_step_cost(nb_data, move_costs)
+            step = _tile_step_cost(nb_data, move_costs, trade_wonder_ids)
             if step is None:
                 continue
             new_cost = cur_cost + step
