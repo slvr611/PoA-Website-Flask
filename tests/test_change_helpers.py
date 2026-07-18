@@ -1418,3 +1418,192 @@ class TestNationRenamePropagationIntegration:
 
         tile = db_with_players["hex_map_tiles"].find_one({"q": 0, "r": 0})
         assert tile["owner"] == "TestNation"
+
+
+# ============================================================================
+# Section 4 — City edit propagation to hex_map_tiles
+#
+# When a nation edits a city's name/type (or deletes one), any live tile whose
+# denormalized `city` snapshot ({id, name, type}) references that city's _id
+# should be kept in sync. hex_map_history snapshots from past sessions are
+# separate, already-copied documents — they must NOT be touched, so a session
+# from before the edit keeps showing whatever city was there at the time.
+# ============================================================================
+
+class TestHandleCityChanges:
+    """helpers.change_helpers._handle_city_changes — direct unit tests."""
+
+    def test_renamed_city_updates_matching_tile(self, test_db, patch_helpers_with_hexmap):
+        test_db["hex_map_tiles"].insert_one(
+            {"q": 0, "r": 0, "city": {"id": "city1", "name": "OldTown", "type": "generic"}}
+        )
+        ch._handle_city_changes(
+            old_cities=[{"_id": "city1", "name": "OldTown", "type": "generic"}],
+            new_cities=[{"_id": "city1", "name": "NewTown", "type": "heritage"}],
+        )
+        tile = test_db["hex_map_tiles"].find_one({"q": 0, "r": 0})
+        assert tile["city"] == {"id": "city1", "name": "NewTown", "type": "heritage"}
+
+    def test_deleted_city_clears_tile(self, test_db, patch_helpers_with_hexmap):
+        test_db["hex_map_tiles"].insert_one(
+            {"q": 0, "r": 0, "city": {"id": "city1", "name": "GoneTown", "type": "generic"}}
+        )
+        ch._handle_city_changes(
+            old_cities=[{"_id": "city1", "name": "GoneTown", "type": "generic"}],
+            new_cities=[],
+        )
+        tile = test_db["hex_map_tiles"].find_one({"q": 0, "r": 0})
+        assert tile["city"] is None
+
+    def test_unrelated_tile_not_touched(self, test_db, patch_helpers_with_hexmap):
+        test_db["hex_map_tiles"].insert_one(
+            {"q": 1, "r": 1, "city": {"id": "other_city", "name": "Untouched", "type": "generic"}}
+        )
+        ch._handle_city_changes(
+            old_cities=[{"_id": "city1", "name": "OldTown", "type": "generic"}],
+            new_cities=[{"_id": "city1", "name": "NewTown", "type": "generic"}],
+        )
+        tile = test_db["hex_map_tiles"].find_one({"q": 1, "r": 1})
+        assert tile["city"]["name"] == "Untouched"
+
+    def test_newly_created_city_is_a_noop(self, test_db, patch_helpers_with_hexmap):
+        # A city with no matching entry in old_cities is brand new — no tile
+        # references it yet, so there's nothing to sync.
+        ch._handle_city_changes(
+            old_cities=[],
+            new_cities=[{"_id": "brand_new", "name": "Founded", "type": "generic"}],
+        )
+        assert test_db["hex_map_tiles"].count_documents({}) == 0
+
+    def test_unchanged_city_does_not_rewrite_tile(self, test_db, patch_helpers_with_hexmap):
+        ch._handle_city_changes(
+            old_cities=[{"_id": "city1", "name": "SameTown", "type": "generic"}],
+            new_cities=[{"_id": "city1", "name": "SameTown", "type": "generic"}],
+        )
+        # No tiles at all — just confirms no exception/DB error on a no-op diff.
+        assert test_db["hex_map_tiles"].count_documents({}) == 0
+
+    def test_noop_when_both_lists_empty(self, test_db, patch_helpers_with_hexmap):
+        ch._handle_city_changes(old_cities=[], new_cities=[])
+        assert test_db["hex_map_tiles"].count_documents({}) == 0
+
+    def test_past_session_snapshot_is_never_touched(self, test_db, patch_helpers_with_hexmap):
+        """The core guarantee the user asked for: renaming/deleting a city must
+        never mutate hex_map_history — a past session keeps whatever city data
+        was on its tiles at snapshot time."""
+        frozen_tiles = [{"q": 0, "r": 0, "city": {"id": "city1", "name": "OldTown", "type": "generic"}}]
+        test_db["hex_map_history"].insert_one({"session": 5, "tiles": frozen_tiles})
+        test_db["hex_map_tiles"].insert_one(
+            {"q": 0, "r": 0, "city": {"id": "city1", "name": "OldTown", "type": "generic"}}
+        )
+
+        ch._handle_city_changes(
+            old_cities=[{"_id": "city1", "name": "OldTown", "type": "generic"}],
+            new_cities=[{"_id": "city1", "name": "NewTown", "type": "heritage"}],
+        )
+
+        # Live tile updated...
+        live_tile = test_db["hex_map_tiles"].find_one({"q": 0, "r": 0})
+        assert live_tile["city"]["name"] == "NewTown"
+        # ...but the frozen historical snapshot is byte-for-byte unchanged.
+        snapshot = test_db["hex_map_history"].find_one({"session": 5})
+        assert snapshot["tiles"] == frozen_tiles
+        assert snapshot["tiles"][0]["city"]["name"] == "OldTown"
+
+
+class TestCityChangePropagationIntegration:
+    """Verify the nation-edit approval/revert paths actually call
+    _handle_city_changes, mirroring the nation-rename propagation gaps found
+    earlier — force_approve_change, system_force_approve_change, and
+    revert_change must all trigger it, not just approve_change."""
+
+    def test_approve_change_propagates_city_edit(self, db_with_players, nation_id,
+                                                   patch_helpers_with_hexmap, flask_app):
+        db_with_players["nations"].update_one(
+            {"_id": nation_id},
+            {"$set": {"cities": [{"_id": "city1", "name": "OldTown", "type": "generic"}]}},
+        )
+        db_with_players["hex_map_tiles"].insert_one(
+            {"q": 0, "r": 0, "city": {"id": "city1", "name": "OldTown", "type": "generic"}}
+        )
+        change_id = _insert_pending_change(
+            db_with_players, "Update", nation_id,
+            before={"cities": [{"_id": "city1", "name": "OldTown", "type": "generic"}]},
+            after={"cities": [{"_id": "city1", "name": "NewTown", "type": "heritage"}]},
+        )
+        with flask_app.test_request_context("/"):
+            from flask import g
+            g.user = {"id": _ADMIN_DISCORD_ID}
+            assert ch.approve_change(change_id) is True
+
+        tile = db_with_players["hex_map_tiles"].find_one({"q": 0, "r": 0})
+        assert tile["city"]["name"] == "NewTown"
+
+    def test_force_approve_change_propagates_city_edit(self, db_with_players, nation_id,
+                                                          patch_helpers_with_hexmap, flask_app):
+        db_with_players["nations"].update_one(
+            {"_id": nation_id},
+            {"$set": {"cities": [{"_id": "city1", "name": "OldTown", "type": "generic"}]}},
+        )
+        db_with_players["hex_map_tiles"].insert_one(
+            {"q": 0, "r": 0, "city": {"id": "city1", "name": "OldTown", "type": "generic"}}
+        )
+        change_id = _insert_pending_change(
+            db_with_players, "Update", nation_id,
+            before={"cities": [{"_id": "city1", "name": "OldTown", "type": "generic"}]},
+            after={"cities": [{"_id": "city1", "name": "NewTown", "type": "heritage"}]},
+        )
+        with flask_app.test_request_context("/"):
+            from flask import g
+            g.user = {"id": _ADMIN_DISCORD_ID}
+            assert ch.force_approve_change(change_id) is True
+
+        tile = db_with_players["hex_map_tiles"].find_one({"q": 0, "r": 0})
+        assert tile["city"]["name"] == "NewTown"
+
+    def test_system_force_approve_change_propagates_city_edit(self, db_with_players, nation_id,
+                                                                 patch_helpers_with_hexmap):
+        db_with_players["nations"].update_one(
+            {"_id": nation_id},
+            {"$set": {"cities": [{"_id": "city1", "name": "OldTown", "type": "generic"}]}},
+        )
+        db_with_players["hex_map_tiles"].insert_one(
+            {"q": 0, "r": 0, "city": {"id": "city1", "name": "OldTown", "type": "generic"}}
+        )
+        change_id = _insert_pending_change(
+            db_with_players, "Update", nation_id,
+            before={"cities": [{"_id": "city1", "name": "OldTown", "type": "generic"}]},
+            after={"cities": [{"_id": "city1", "name": "NewTown", "type": "heritage"}]},
+        )
+        assert ch.system_force_approve_change(change_id) is True
+
+        tile = db_with_players["hex_map_tiles"].find_one({"q": 0, "r": 0})
+        assert tile["city"]["name"] == "NewTown"
+
+    def test_revert_change_propagates_city_edit_back(self, db_with_players, nation_id,
+                                                       patch_helpers_with_hexmap, flask_app):
+        db_with_players["nations"].update_one(
+            {"_id": nation_id},
+            {"$set": {"cities": [{"_id": "city1", "name": "NewTown", "type": "heritage"}]}},
+        )
+        db_with_players["hex_map_tiles"].insert_one(
+            {"q": 0, "r": 0, "city": {"id": "city1", "name": "NewTown", "type": "heritage"}}
+        )
+        now = datetime.now(timezone.utc)
+        change_id = db_with_players["changes"].insert_one({
+            "target_collection": "nations",
+            "target": nation_id,
+            "change_type": "Update",
+            "status": "Approved",
+            "before_implemented_data": {"cities": [{"_id": "city1", "name": "OldTown", "type": "generic"}]},
+            "after_implemented_data": {"cities": [{"_id": "city1", "name": "NewTown", "type": "heritage"}]},
+            "last_modified_time": now,
+        }).inserted_id
+
+        with flask_app.test_request_context("/"):
+            from flask import g
+            g.user = {"id": _ADMIN_DISCORD_ID}
+            assert ch.revert_change(change_id) is True
+
+        tile = db_with_players["hex_map_tiles"].find_one({"q": 0, "r": 0})
+        assert tile["city"]["name"] == "OldTown"

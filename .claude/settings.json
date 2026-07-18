@@ -26,7 +26,8 @@
       "PowerShell(heroku run --app path-of-ages-production -- python -c \"import PIL\" 2>&1)",
       "Bash(pip index *)",
       "Bash(git fetch *)",
-      "Bash(grep -n \"\\\\\"applicable_to\\\\\": \\\\\\\\[\\\\\"character\\\\\"\\\\\\\\]\" -B6 \"c:\\\\Programming\\\\Projects\\\\PoA-Website-Flask\\\\json-data\\\\modifier_types.json\")"
+      "Bash(grep -n \"\\\\\"applicable_to\\\\\": \\\\\\\\[\\\\\"character\\\\\"\\\\\\\\]\" -B6 \"c:\\\\Programming\\\\Projects\\\\PoA-Website-Flask\\\\json-data\\\\modifier_types.json\")",
+      "Bash(grep -n \"_live_upgrades_by_id\\\\|District \\\\`upgrades\\\\` are purchased\" routes/nation_routes.py)"
     ]
   }
 }

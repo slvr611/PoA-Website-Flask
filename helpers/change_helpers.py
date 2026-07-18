@@ -45,6 +45,51 @@ def _handle_nation_rename(nation_id, old_name, new_name):
     bump_tile_version()
 
 
+def _handle_city_changes(old_cities, new_cities):
+    """When a nation's cities are edited: sync any live hex_map_tiles.city
+    snapshot (matched by city _id) with the new name/type, and clear tiles
+    whose city was deleted from the nation.
+
+    Only touches the live hex_map_tiles collection — hex_map_history snapshots
+    from past sessions are separate, already-copied documents and are left
+    untouched, so they keep whatever city data existed on that session
+    (same guarantee _handle_nation_rename relies on for tile owners)."""
+    old_by_id = {c.get("_id"): c for c in (old_cities or []) if isinstance(c, dict) and c.get("_id")}
+    new_by_id = {c.get("_id"): c for c in (new_cities or []) if isinstance(c, dict) and c.get("_id")}
+    if not old_by_id and not new_by_id:
+        return
+
+    changed = False
+    for city_id, new_city in new_by_id.items():
+        old_city = old_by_id.get(city_id)
+        if old_city is None:
+            continue  # newly created city — no tile references it yet
+        new_name = new_city.get("name", "")
+        new_type = new_city.get("type", "")
+        if old_city.get("name", "") == new_name and old_city.get("type", "") == new_type:
+            continue
+        result = mongo.db.hex_map_tiles.update_many(
+            {"city.id": city_id},
+            {"$set": {"city": {"id": city_id, "name": new_name, "type": new_type}}}
+        )
+        if result.modified_count:
+            changed = True
+
+    for city_id in old_by_id:
+        if city_id in new_by_id:
+            continue
+        result = mongo.db.hex_map_tiles.update_many(
+            {"city.id": city_id},
+            {"$set": {"city": None}}
+        )
+        if result.modified_count:
+            changed = True
+
+    if changed:
+        from helpers.hex_map_helpers import bump_tile_version
+        bump_tile_version()
+
+
 def _get_natural_key(item):
     """Return the first non-empty value from a priority list of identifying fields."""
     for field in _NATURAL_KEY_FIELDS:
@@ -180,7 +225,9 @@ def _update_tech_costs(nation):
     """Re-evaluate tech costs based on the nation's current cost modifier.
 
     Skips techs where cost_manually_set is True so player edits are preserved.
-    Minimum cost is floor(base_cost / 2).
+    Minimum cost is ceil(base_cost / 2), matching the floor used everywhere
+    else this is checked (_validate_tech_costs in nation_routes.py,
+    nation_tech_cost_reduction_tick in tick_helpers.py, forms.py).
     """
     tech_json = json_data.get("tech", {})
     cost_modifier = nation.get("technology_cost_modifier", 0)
@@ -197,7 +244,7 @@ def _update_tech_costs(nation):
         base_cost = tech_def.get("cost", 0)
         category = (tech_def.get("type") or "").lower()
         cat_modifier = category_modifiers.get(category, 0)
-        min_cost = base_cost // 2
+        min_cost = (base_cost + 1) // 2
         tech_data["cost"] = max(base_cost + cost_modifier + cat_modifier, min_cost)
 
 
@@ -437,6 +484,7 @@ def approve_change(change_id):
 
                 if change["target_collection"] == "nations":
                     _handle_nation_rename(change["target"], existing.get("name", ""), merged.get("name", ""))
+                    _handle_city_changes(existing.get("cities", []), merged.get("cities", []))
             else:
                 target_collection.delete_one({"_id": change["target"]})
 
@@ -506,6 +554,7 @@ def system_approve_change(change_id):
                 target_collection.update_one({"_id": change["target"]}, {"$set": merged})
                 if change["target_collection"] == "nations":
                     _handle_nation_rename(change["target"], existing.get("name", ""), merged.get("name", ""))
+                    _handle_city_changes(existing.get("cities", []), merged.get("cities", []))
             else:
                 target_collection.delete_one({"_id": change["target"]})
 
@@ -564,6 +613,7 @@ def force_approve_change(change_id):
         target_collection.update_one({"_id": change["target"]}, {"$set": merged})
         if change["target_collection"] == "nations":
             _handle_nation_rename(change["target"], existing.get("name", ""), merged.get("name", ""))
+            _handle_city_changes(existing.get("cities", []), merged.get("cities", []))
     elif change["change_type"] == "Add":
         after_data = _calculate_and_attach_fields(change["target_collection"], after_data)
         change["target"] = target_collection.insert_one(after_data).inserted_id
@@ -614,6 +664,7 @@ def system_force_approve_change(change_id):
         target_collection.update_one({"_id": change["target"]}, {"$set": merged})
         if change["target_collection"] == "nations":
             _handle_nation_rename(change["target"], existing.get("name", ""), merged.get("name", ""))
+            _handle_city_changes(existing.get("cities", []), merged.get("cities", []))
     elif change["change_type"] == "Add":
         after_data = _calculate_and_attach_fields(change["target_collection"], after_data)
         change["target"] = target_collection.insert_one(after_data).inserted_id
@@ -761,6 +812,7 @@ def revert_change(change_id):
         target_collection.update_one({"_id": change["target"]}, {"$set": restored})
         if change["target_collection"] == "nations":
             _handle_nation_rename(change["target"], existing.get("name", ""), restored.get("name", ""))
+            _handle_city_changes(existing.get("cities", []), restored.get("cities", []))
         changes_collection.update_one({"_id": change_id}, {"$set": {
             "status": "Reverted",
             "time_reverted": now,

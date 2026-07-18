@@ -25,22 +25,22 @@
         "laws": {
           "None": {},
           "Exploit": {
-            "nation_money_income_per_market_tier": 30,
+            "nation_money_income_per_market_tier": 40,
             "market_trade_risk": 0.1
           },
           "Abuse": {
-            "nation_money_income_per_market_tier": 15,
+            "nation_money_income_per_market_tier": 20,
             "market_trade_risk": 0.05
           },
           "Ignore": {
             "market_trade_risk": 0.01
           },
           "Protect": {
-            "nation_money_income_per_market_tier": -75,
+            "nation_money_income_per_market_tier": -100,
             "market_trade_risk": -0.05
           },
           "Preserve": {
-            "nation_money_income_per_market_tier": -150,
+            "nation_money_income_per_market_tier": -200,
             "market_trade_risk": -0.08
           }
         }

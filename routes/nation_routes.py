@@ -48,6 +48,32 @@ def _get_district_defs():
     return defs_full, defs_map, categories
 
 
+def _restore_live_district_upgrades(form_data, nation):
+    """Overwrite each submitted district's `upgrades` with the live DB value.
+
+    District upgrades are purchased via a dedicated route that writes directly
+    to Mongo ($push), bypassing the change-request system entirely. The edit
+    form only ever knows whatever `upgrades` looked like when the page was
+    rendered, so an unrelated edit submitted from a stale-loaded page would
+    otherwise silently revert any upgrades purchased since — treat `upgrades`
+    as server-managed, not form-owned, same as territory_types.
+
+    Must run BEFORE _normalize_item_ids (called inside request_change) renames
+    the raw form's `item_id` field to `_id` — at this point in the route,
+    submitted district dicts still use WTForms' `item_id` key (DistrictDict
+    uses `item_id = HiddenField('_id')` since WTForms can't register
+    underscore-prefixed field names), while the live `nation` doc uses `_id`.
+    """
+    live_upgrades_by_id = {
+        d.get("_id"): d.get("upgrades", [])
+        for d in nation.get("districts", []) if isinstance(d, dict)
+    }
+    for dist in form_data.get("districts", []):
+        dist_id = dist.get("item_id") or dist.get("_id")
+        if dist_id in live_upgrades_by_id:
+            dist["upgrades"] = live_upgrades_by_id[dist_id]
+
+
 def _apply_paid_concessions(form_data, nation):
     """If the edit form's Reset Concessions button was used, add the cleared
     concession amounts to the nation's resource stockpile (capped to capacity).
@@ -625,6 +651,8 @@ def nation_edit_request(item_ref):
             except (json.JSONDecodeError, TypeError):
                 dist['upgrades'] = []
 
+    _restore_live_district_upgrades(form_data, nation)
+
     # Validate only the stripped fields (partial update — skip required-field check).
     valid, error = validate_form_with_jsonschema(form, schema, data=form_data, partial=True)
     if not valid:
@@ -711,6 +739,8 @@ def nation_edit_approve(item_ref):
                 dist['upgrades'] = json.loads(dist['upgrades'])
             except (json.JSONDecodeError, TypeError):
                 dist['upgrades'] = []
+
+    _restore_live_district_upgrades(form_data, nation)
 
     valid, error = validate_form_with_jsonschema(form, schema, data=form_data, partial=is_partial)
     if not valid:

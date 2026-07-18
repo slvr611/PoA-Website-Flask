@@ -855,30 +855,13 @@ class BaseSchemaForm(FlaskForm):
             except Exception:
                 pass
         
-        elif field_name == "support_units":
-            units_list = list(category_data["units"]["database"].find(
-                {"unit_type": "Land", "support": True, "unit_class": {"$ne": "Ruler Unit"}},
-                {"name": 1, "era": 1}
-            ).sort("name", 1))
-            name_eras = {}
-            for u in units_list:
-                n = u.get("name", "")
-                if n:
-                    name_eras.setdefault(n, set()).add(u.get("era", ""))
-            multi_era_names = {n for n, eras in name_eras.items() if len(eras) > 1}
-            for u in units_list:
-                n = u.get("name", "")
-                if not n:
-                    continue
-                era = u.get("era", "")
-                key = f"{era} {n}" if n in multi_era_names and era else n
-                choices.append((key, key))
-
         elif field_name == "land_units" or field_name == "naval_units":
+            # Support units are unit_type "Land"/"Naval" with a support:True
+            # sub-flag, not a distinct category — they're listed alongside
+            # regular units in the same dropdown, not filtered out.
             unit_type = "Land" if field_name == "land_units" else "Naval"
-            extra_filter = {"support": {"$ne": True}} if field_name == "land_units" else {}
             units_list = list(category_data["units"]["database"].find(
-                {"unit_type": unit_type, "unit_class": {"$ne": "Ruler Unit"}, **extra_filter},
+                {"unit_type": unit_type, "unit_class": {"$ne": "Ruler Unit"}},
                 {"name": 1, "era": 1}
             ).sort("name", 1))
             name_eras = {}
