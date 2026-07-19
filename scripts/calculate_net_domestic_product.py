@@ -154,7 +154,7 @@ def compute_base_net_value(
     Returns (base_value, pop_count, job_details, capacity, stock).
     """
     nation_copy = deepcopy(nation)
-    locked_jobs = {"partial_undead", "undead", "partial_vampire", "revolutionary"}
+    locked_jobs = {"revolutionary"}
     nation_jobs = nation_copy.get("jobs", {}) or {}
     nation_copy["jobs"] = {
         job: count for job, count in nation_jobs.items() if job in locked_jobs
@@ -285,7 +285,7 @@ def simulate_optimal_assignments(
         pop_count = max(pop_count - locked_job_count, 0)
         print(
             f"Locked jobs preserved: {locked_job_count} pops "
-            f"(undead/partial_vampire/revolutionary). "
+            f"(revolutionary). "
             f"Remaining pops to assign: {pop_count} (was {original_pop_count})."
         )
 

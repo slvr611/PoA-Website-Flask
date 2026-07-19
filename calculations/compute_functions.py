@@ -531,7 +531,7 @@ def compute_resource_production(field, target, base_value, field_schema, overall
 
         production_dict[resource["key"]] = int(specific_resource_production)
 
-    # Luxury resources: 1 per active node, no building required, no modifiers
+    # Luxury resources: 1 per active node (built, or any node for nomadic nations), no modifiers
     for resource in json_data["luxury_resources"]:
         key = resource["key"]
         production_dict[key] = overall_total_modifiers.get(key + "_nodes", 0)
@@ -1061,8 +1061,35 @@ def compute_progress_per_session(field, target, base_value, field_schema, overal
         
         # Store the calculated value in the quest
         quest["total_progress_per_tick"] = min(max(int(total_progress), 0), 5)
-    
+
     return progress_quests
+
+def compute_shared_quest_progress(field, target, base_value, field_schema, overall_total_modifiers):
+    """Calculate progress per session for each shared (disease cure) quest.
+
+    Mirrors compute_progress_per_session: slot progress + bonus, clamped 0-5,
+    stored as total_progress_per_tick on each entry for the cure tick to read.
+    """
+    from app_core import json_data
+
+    shared_quests = target.get("shared_quests", [])
+
+    for quest in shared_quests:
+        if not isinstance(quest, dict):
+            continue
+        slot = quest.get("slot", "no_slot")
+        bonus_progress = quest.get("bonus_progress_per_tick", 0)
+
+        slot_progress = json_data.get("slot_types", {}).get(slot, {}).get("progress_per_tick", 0)
+
+        if slot != "no_slot":
+            total_progress = slot_progress + bonus_progress
+        else:
+            total_progress = 0
+
+        quest["total_progress_per_tick"] = min(max(int(total_progress), 0), 5)
+
+    return shared_quests
 
 def compute_era_resource_stockpile_kept(field, target, base_value, field_schema, overall_total_modifiers):
     result = {}
@@ -1154,6 +1181,7 @@ CUSTOM_COMPUTE_FUNCTIONS = {
     "naval_budget_spent": compute_budget_spent,
     "hiring_cost": compute_hiring_cost,
     "progress_quests": compute_progress_per_session,
+    "shared_quests": compute_shared_quest_progress,
     "progress_per_session": compute_progress_per_session,
     "era_resource_stockpile_kept": compute_era_resource_stockpile_kept,
     "diplomatic_range": lambda field, target, base_value, field_schema, otm:

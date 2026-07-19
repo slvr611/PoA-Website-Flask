@@ -336,20 +336,6 @@
         "calculated": true,
         "format": "percentage"
       },
-      "vampirism_chance": {
-        "bsonType": "number",
-        "label": "Vampirism Chance",
-        "description": "The nation's percentage chance of a vampire rising each tick",
-        "calculated": true,
-        "format": "percentage"
-      },
-      "undead_chance": {
-        "bsonType": "number",
-        "label": "Undead Chance",
-        "description": "The nation's percentage chance of an undead rising each tick",
-        "calculated": true,
-        "format": "percentage"
-      },
       "pop_loss_chance": {
         "bsonType": "number",
         "label": "Pop Loss Chance",
@@ -2153,6 +2139,55 @@
             }
           }
         }
+      },
+      "shared_quests": {
+        "bsonType": "array",
+        "label": "Shared Cure Quests",
+        "description": "Shared progress quests (disease cures) this nation contributes to. All contributors' progress sums into the disease's total each tick",
+        "items": {
+          "bsonType": "object",
+          "properties": {
+            "_id": {
+              "bsonType": "string",
+              "label": "Item ID",
+              "description": "Stable identifier for change tracking across reorders"
+            },
+            "disease": {
+              "bsonType": "string",
+              "label": "Disease",
+              "description": "The disease this contribution targets"
+            },
+            "slot": {
+              "bsonType": "string",
+              "label": "Slot",
+              "description": "The progress slot assigned to this contribution"
+            },
+            "bonus_progress_per_tick": {
+              "bsonType": "number",
+              "label": "Bonus Progress Per Tick",
+              "description": "Additional progress contributed each tick on top of the slot's progress"
+            },
+            "link": {
+              "bsonType": "string",
+              "label": "Link",
+              "description": "Link to the relevant RP"
+            }
+          }
+        }
+      },
+      "disease_stages": {
+        "bsonType": "object",
+        "label": "Disease Stages",
+        "description": "Tick-managed bookkeeping of the highest disease stage each disease has reached in this nation",
+        "hidden": true,
+        "view_access_level": 10
+      },
+      "disease_spread_rolls": {
+        "bsonType": "object",
+        "label": "Disease Spread Rolls",
+        "description": "Tick-managed record of the last disease spread rolls",
+        "hidden": true,
+        "view_access_level": 10
       },
       "modifiers": {
         "bsonType": "array",

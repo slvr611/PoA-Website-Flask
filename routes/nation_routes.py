@@ -7,7 +7,7 @@ from helpers.render_helpers import get_linked_objects
 from helpers.change_helpers import request_change, approve_change, system_approve_change, deep_merge
 from helpers.form_helpers import validate_form_with_jsonschema
 from helpers.auth_helpers import owner_required
-from app_core import category_data, mongo, json_data, find_dict_in_list, upload_bytes_to_s3
+from app_core import category_data, mongo, json_data, find_dict_in_list, upload_bytes_to_s3, app
 from helpers.auth_helpers import admin_required
 from pymongo import ASCENDING
 from forms import form_generator, wtform_to_json
@@ -15,7 +15,14 @@ import json
 from time import perf_counter
 from calculations.field_calculations import calculate_all_fields, _resolve_def, check_upgrade_requirements
 from bson import ObjectId
-from helpers.visibility_helpers import get_item_visibility, log_visibility_bypass, strip_form_data_to_tier
+from helpers.visibility_helpers import get_item_visibility, log_visibility_bypass, strip_form_data_to_tier, nation_field_tier
+
+# Exposed so templates can hide a district upgrade toggle until its
+# requirements (e.g. a researched technology) are actually met.
+app.jinja_env.globals.update(check_upgrade_requirements=check_upgrade_requirements)
+# Exposed so nation_owner.html can gate individual fields/rows by their own
+# required visibility tier instead of an entire section sharing one tier.
+app.jinja_env.globals.update(nation_field_tier=nation_field_tier)
 
 nation_routes = Blueprint("nation_routes", __name__)
 
@@ -149,7 +156,7 @@ def _fetch_nation_pops_page(nation_id, page, page_size, pops_schema):
     sort_tuples = [(field, ASCENDING) for field in sort_by] if isinstance(sort_by, list) else [(sort_by, ASCENDING)]
 
     pops = list(
-        mongo.db.pops.find(pop_query, {"_id": 1, "race": 1, "culture": 1, "religion": 1, "slave": 1})
+        mongo.db.pops.find(pop_query, {"_id": 1, "race": 1, "culture": 1, "religion": 1, "slave": 1, "disease": 1})
         .sort(sort_tuples)
         .skip(skip)
         .limit(page_size)
@@ -375,6 +382,55 @@ def nation_item(item_ref):
             except Exception:
                 nation_players = []
 
+    # ── Disease info: active infections (derived from pops) + shared cure quests ──
+    from helpers.disease_helpers import (
+        get_nation_infection_counts, get_global_infection_counts, resolve_diseases,
+        active_stage_index, get_stage, get_difficulty_settings,
+    )
+    _infection_counts = get_nation_infection_counts(str(nation["_id"]))
+    _shared_qs = [q for q in (nation.get("shared_quests") or []) if isinstance(q, dict)]
+    _disease_ids = set(_infection_counts) | {str(q.get("disease", "")) for q in _shared_qs if q.get("disease")}
+    _disease_docs = resolve_diseases(_disease_ids)
+    _global_counts = get_global_infection_counts() if _disease_ids else {}
+    disease_name_map = {did: d.get("name", "") for did, d in _disease_docs.items()}
+
+    nation_disease_rows = []
+    for _did, _count in _infection_counts.items():
+        _d = _disease_docs.get(_did)
+        if not _d:
+            continue
+        _stage = get_stage(_d, active_stage_index(_d, _count, nation.get("pop_count", 0)))
+        _diff = get_difficulty_settings(_d)
+        nation_disease_rows.append({
+            "name": _d.get("name", ""),
+            "rating": _d.get("rating", ""),
+            "infected": _count,
+            "stage_name": (_stage or {}).get("stage_name", ""),
+            "cure_progress": _d.get("cure_progress", 0),
+            "required_progress": _diff.get("required_progress", 0),
+            "cured": bool(_d.get("cured")),
+        })
+
+    shared_quest_rows = []
+    for _q in _shared_qs:
+        _d = _disease_docs.get(str(_q.get("disease", "")))
+        if not _d:
+            continue
+        _diff = get_difficulty_settings(_d)
+        _total_infected = _global_counts.get(str(_q.get("disease")), 0)
+        shared_quest_rows.append({
+            "disease_name": _d.get("name", ""),
+            "slot": _q.get("slot", "no_slot"),
+            "total_progress_per_tick": _q.get("total_progress_per_tick", 0),
+            "cure_progress": _d.get("cure_progress", 0),
+            "required_progress": _diff.get("required_progress", 0),
+            "min_infected_pops": _diff.get("min_infected_pops", 0),
+            "total_infected": _total_infected,
+            "gated": _total_infected < _diff.get("min_infected_pops", 0),
+            "link": _q.get("link", ""),
+            "cured": bool(_d.get("cured")),
+        })
+
     phase_start = perf_counter()
     rendered = render_template(
         "nation_owner.html",
@@ -401,6 +457,9 @@ def nation_item(item_ref):
         all_players=all_players,
         nation_players=nation_players,
         tile_node_map=tile_node_map,
+        nation_disease_rows=nation_disease_rows,
+        shared_quest_rows=shared_quest_rows,
+        disease_name_map=disease_name_map,
     )
     timings["render_template_ms"] = round((perf_counter() - phase_start) * 1000, 2)
     timings["total_request_ms"] = round((perf_counter() - request_start) * 1000, 2)
@@ -545,6 +604,12 @@ def _render_nation_edit(item_ref, form=None):
         )
     _r9 = perf_counter()
 
+    disease_options = [
+        {"id": str(d["_id"]), "name": d.get("name", "")}
+        for d in mongo.db.diseases.find({}, {"name": 1}).sort("name", ASCENDING)
+    ]
+    disease_name_map = {d["id"]: d["name"] for d in disease_options}
+
     rendered = render_template(
         "nation_owner_edit.html",
         form=form,
@@ -566,6 +631,8 @@ def _render_nation_edit(item_ref, form=None):
         connectable_nations=connectable_nations,
         visibility_level=visibility_level,
         visibility_bypassed=visibility_bypassed,
+        disease_options=disease_options,
+        disease_name_map=disease_name_map,
     )
     _r10 = perf_counter()
 

@@ -1622,7 +1622,10 @@ def ai_goals_preview():
             projected_net, state["stockpiles"], market_prices, state["money_income"],
             active_resources=state.get("active_resources"), money_stock=state.get("money"),
         )
-        job_scores = score_jobs(state, need_weights, market_prices)
+        job_scores = score_jobs(
+            state, need_weights, market_prices,
+            stability_headroom=state.get("stability_chance_headroom_remaining"),
+        )
 
         # Step 2: Strategic goal
         strategic_goal, goal_candidates = select_strategic_goal(
@@ -1708,6 +1711,7 @@ def ai_goals_preview():
             "secondary_goal": secondary_goal,
             "future_utility": future_utility,
             "production_clamp_absorbed": state.get("production_clamp_absorbed", {}),
+            "stability_chance_headroom": state.get("stability_chance_headroom", {}),
             "upkeep_ratio": round(upkeep_ratio, 2),
             "upkeep_assignments": upkeep_assignments,
             "goal_assignments": goal_assignments,
@@ -1921,91 +1925,6 @@ def bulk_modifiers_apply():
     return jsonify({"ok": True, "updated": updated})
 
 
-# ---------------------------------------------------------------------------
-# Vampiric Race Converter
-# ---------------------------------------------------------------------------
-
-@admin_tool_routes.route("/admin/vampiric_races", methods=["GET"])
-@admin_required
-def vampiric_races():
-    schema, db = get_data_on_category("nations")
-    nations = list(db.find({}, {"name": 1, "_id": 1}).sort("name", ASCENDING))
-    return render_template("admin/vampiric_races.html", nations=nations)
-
-
-@admin_tool_routes.route("/admin/vampiric_races/apply", methods=["POST"])
-@admin_required
-def vampiric_races_apply():
-    """Convert every pop in the selected nation to a 'Vampiric <race>' variant
-    of its current race, creating that race (Undying / Bloodthirsty, same
-    preferred terrain) the first time it's needed."""
-    nation_id = request.form.get("nation_id", "").strip()
-    if not nation_id:
-        flash("No nation selected.", "error")
-        return redirect(url_for("admin_tool_routes.vampiric_races"))
-
-    try:
-        nation = mongo.db.nations.find_one({"_id": ObjectId(nation_id)})
-    except Exception:
-        nation = None
-    if not nation:
-        flash("Nation not found.", "error")
-        return redirect(url_for("admin_tool_routes.vampiric_races"))
-
-    pops = list(mongo.db.pops.find({"nation": nation_id}, {"_id": 1, "race": 1}))
-    if not pops:
-        flash(f"{nation.get('name', nation_id)} has no pops.", "info")
-        return redirect(url_for("admin_tool_routes.vampiric_races"))
-
-    pops_by_race = {}
-    for pop in pops:
-        race_id = pop.get("race", "")
-        if race_id:
-            pops_by_race.setdefault(race_id, []).append(pop["_id"])
-
-    try:
-        race_oids = [ObjectId(rid) for rid in pops_by_race]
-    except Exception:
-        race_oids = []
-    races_by_id = {str(r["_id"]): r for r in mongo.db.races.find({"_id": {"$in": race_oids}})}
-
-    converted_pops = 0
-    created_races = 0
-    skipped_pops = 0
-
-    for race_id, pop_ids in pops_by_race.items():
-        race = races_by_id.get(race_id)
-        race_name = race.get("name", "") if race else ""
-        if not race_name or race_name.startswith("Vampiric "):
-            skipped_pops += len(pop_ids)
-            continue
-
-        target_name = f"Vampiric {race_name}"
-        vampiric_race = mongo.db.races.find_one({"name": target_name})
-        if not vampiric_race:
-            new_id = mongo.db.races.insert_one({
-                "name": target_name,
-                "founding_nation": "",
-                "positive_trait": "Undying",
-                "negative_trait": "Bloodthirsty",
-                "preferred_terrain": race.get("preferred_terrain", "None"),
-            }).inserted_id
-            vampiric_race = {"_id": new_id}
-            created_races += 1
-
-        mongo.db.pops.update_many(
-            {"_id": {"$in": pop_ids}},
-            {"$set": {"race": str(vampiric_race["_id"])}}
-        )
-        converted_pops += len(pop_ids)
-
-    msg = f"Converted {converted_pops} pop(s) to vampiric races for {nation.get('name', nation_id)}."
-    if created_races:
-        msg += f" Created {created_races} new race(s)."
-    if skipped_pops:
-        msg += f" Skipped {skipped_pops} pop(s) already vampiric or with an unrecognized race."
-    flash(msg, "success")
-    return redirect(url_for("admin_tool_routes.vampiric_races"))
 
 
 # ---------------------------------------------------------------------------

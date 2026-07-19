@@ -27,7 +27,19 @@
       "Bash(pip index *)",
       "Bash(git fetch *)",
       "Bash(grep -n \"\\\\\"applicable_to\\\\\": \\\\\\\\[\\\\\"character\\\\\"\\\\\\\\]\" -B6 \"c:\\\\Programming\\\\Projects\\\\PoA-Website-Flask\\\\json-data\\\\modifier_types.json\")",
-      "Bash(grep -n \"_live_upgrades_by_id\\\\|District \\\\`upgrades\\\\` are purchased\" routes/nation_routes.py)"
+      "Bash(grep -n \"_live_upgrades_by_id\\\\|District \\\\`upgrades\\\\` are purchased\" routes/nation_routes.py)",
+      "Bash(awk 'NR==1,NR==75' calculations/field_calculations.py)",
+      "Bash(awk -F: '{print $1}')",
+      "Bash(sed -i 's/locked_jobs = {\"partial_undead\", \"undead\", \"partial_vampire\", \"revolutionary\"}/locked_jobs = {\"revolutionary\"}/' scripts/calculate_net_domestic_product.py)",
+      "Bash(sed -i 's|\\(undead/partial_vampire/revolutionary\\)|\\(revolutionary\\)|' scripts/calculate_net_domestic_product.py)",
+      "Bash(awk 'NR==239,NR==360' templates/nation_owner.html)",
+      "Bash(awk 'NR==365,NR==418' templates/nation_owner.html)",
+      "Bash(awk 'NR==510,NR==605' templates/nation_owner_edit.html)",
+      "Bash(awk 'NR==511,NR==605' templates/nation_owner_edit.html)",
+      "Bash(grep -n \"expandable-section\\\\|section-content\\\\|^\\\\s*</div>\\\\s*$\")",
+      "Bash(awk 'NR==607,NR==676' templates/nation_owner_edit.html)",
+      "Bash(awk 'NR==511,NR==610' templates/nation_owner_edit.html)",
+      "Bash(awk 'NR==742,NR==1019' templates/nation_owner_edit.html)"
     ]
   }
 }

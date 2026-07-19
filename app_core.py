@@ -91,12 +91,14 @@ category_data = {
     "trade_routes": {"pluralName": "Trade Routes", "singularName": "Trade Route", "database": mongo.db.trade_routes},
     "titles": {"pluralName": "Titles", "singularName": "Title", "database": mongo.db.titles},
     "hex_map": {"pluralName": "Map Changes", "singularName": "Map Change", "database": mongo.db.hex_map_tiles},
+    "diseases": {"pluralName": "Diseases", "singularName": "Disease", "database": mongo.db.diseases},
 }
 
 def ensure_mongo_indexes():
     index_specs = {
         "nations": [[("name", ASCENDING)]],
-        "pops": [[("nation", ASCENDING)]],
+        "pops": [[("nation", ASCENDING)], [("disease", ASCENDING)]],
+        "diseases": [[("name", ASCENDING)]],
         "characters": [[("ruling_nation_org", ASCENDING)], [("player", ASCENDING)]],
         "diplo_relations": [[("nation_1", ASCENDING)], [("nation_2", ASCENDING)]],
         "wonders":       [[("owner_nation", ASCENDING)]],

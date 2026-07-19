@@ -517,7 +517,38 @@ def data_item(data_type, item_ref):
             trait_order = {name: i for i, name in enumerate(trait_names)}
             unit_traits.sort(key=lambda t: trait_order.get(t.get("name"), 999))
 
+    disease_extras = {}
+    if data_type == "diseases":
+        from helpers.disease_helpers import get_infectivity_settings, get_difficulty_settings
+        infected_rows = []
+        total_infected = 0
+        nation_ids = []
+        counts_by_nation = {}
+        for doc in mongo.db.pops.aggregate([
+            {"$match": {"disease": str(item["_id"])}},
+            {"$group": {"_id": "$nation", "count": {"$sum": 1}}},
+        ]):
+            counts_by_nation[str(doc["_id"])] = doc["count"]
+            total_infected += doc["count"]
+            try:
+                nation_ids.append(ObjectId(str(doc["_id"])))
+            except Exception:
+                pass
+        nation_names = {str(n["_id"]): n.get("name", "") for n in
+                        mongo.db.nations.find({"_id": {"$in": nation_ids}}, {"name": 1})}
+        for nid, count in sorted(counts_by_nation.items(), key=lambda kv: -kv[1]):
+            infected_rows.append({"nation": nation_names.get(nid, nid), "count": count})
+        disease_extras = {
+            "infectivity_settings": get_infectivity_settings(item),
+            "difficulty_settings": get_difficulty_settings(item),
+            "infected_rows": infected_rows,
+            "total_infected": total_infected,
+            "all_nations": list(mongo.db.nations.find({}, {"name": 1}).sort("name", ASCENDING)),
+        }
+
     template_name = "units_item.html" if data_type == "units" else "dataItem.html"
+    if data_type == "diseases":
+        template_name = "diseases_item.html"
 
     schema_props = schema.get("properties", {})
     breakdowns = {}
@@ -558,6 +589,7 @@ def data_item(data_type, item_ref):
         visibility_bypassed=visibility_bypassed,
         field_tiers=field_tiers,
         primary_nations=primary_nations,
+        **disease_extras,
     )
 
 @data_item_routes.route("/<data_type>/edit")
@@ -621,6 +653,15 @@ def data_item_new(data_type):
             item=None,
             dropdown_options=dropdown_options,
             **extras
+        )
+
+    if data_type == "diseases":
+        return render_template(
+            "diseases_edit.html",
+            title="New Disease",
+            schema=schema,
+            form=form,
+            item=None,
         )
 
     SOURCE_TYPE_MAP = {
@@ -794,6 +835,15 @@ def data_item_edit(data_type, item_ref):
             item=item,
             dropdown_options=dropdown_options,
             **extras
+        )
+
+    if data_type == "diseases":
+        return render_template(
+            "diseases_edit.html",
+            title=f"Edit {item_ref}",
+            schema=schema,
+            form=form,
+            item=item,
         )
 
     SOURCE_TYPE_MAP = {

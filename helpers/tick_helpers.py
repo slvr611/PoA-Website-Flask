@@ -1584,40 +1584,14 @@ def nation_passive_expansion_tick(old_nation, new_nation, schema):
     return result
 
 def nation_job_cleanup_tick(old_nation, new_nation, schema):
+    # Vampire/undead counts migrated to per-pop disease infections; the only
+    # remaining static job set by other systems is revolutionary.
     new_jobs = {}
     for job in old_nation.get("jobs", {}).keys():
-        if job != "undead" and job != "partial_vampire" and job != "revolutionary":
+        if job != "revolutionary":
             new_jobs[job] = 0
     new_nation["jobs"] = new_jobs
     return ""
-
-def vampirism_tick(old_nation, new_nation, schema):
-    if old_nation.get("vampirism_chance", 0) <= 0:
-        return ""
-    result = ""
-    vampirism_roll = random.random()
-    new_nation["vampirism_roll"] = vampirism_roll
-    new_nation["vampirism_chance_at_tick"] = old_nation.get("vampirism_chance", 0)
-    if vampirism_roll <= old_nation.get("vampirism_chance", 0):
-        new_nation["jobs"]["partial_vampire"] = old_nation.get("jobs", {}).get("partial_vampire", 0) + 1
-        result += f"{old_nation.get('name', 'Unknown')} has gained a vampire.\n"
-    return result
-
-def undead_tick(old_nation, new_nation, schema):
-    if old_nation.get("undead_chance", 0) <= 0:
-        return ""
-    result = ""
-    undead_roll = random.random()
-    new_nation["undead_roll"] = undead_roll
-    new_nation["undead_chance_at_tick"] = old_nation.get("undead_chance", 0)
-    if undead_roll <= old_nation.get("undead_chance", 0):
-        new_nation["jobs"]["partial_undead"] = old_nation.get("jobs", {}).get("partial_undead", 0) + 1
-        result += f"{old_nation.get('name', 'Unknown')} has gained an undead.\n"
-        double_undead_roll = random.random()
-        new_nation["double_undead_roll"] = double_undead_roll
-        if double_undead_roll <= 0.25:
-            result += f"{old_nation.get('name', 'Unknown')} spread an undead to a nearby nation.\n"
-    return result
 
 def pop_loss_tick(old_nation, new_nation, schema):
     result = ""
@@ -1628,6 +1602,289 @@ def pop_loss_tick(old_nation, new_nation, schema):
     new_nation["pop_loss_chance_at_tick"] = old_nation.get("pop_loss_chance", 0)
     if pop_loss_roll <= old_nation.get("pop_loss_chance", 0):
         result += f"{old_nation.get('name', 'Unknown')} has lost a pop.\n"
+    return result
+
+def nation_disease_spread_tick(old_nation, new_nation, schema):
+    """Per-nation disease spread + stage escalation.
+
+    For each active (non-cured) disease among the nation's pops: roll the
+    infectivity chance (base + per-infected), infect one random uninfected pop
+    on success (capped at the infectivity's max share of pops), then check for
+    stage escalation — newly reached stages can trigger an automatic civil war
+    that splits the infected pops into a breakaway nation.
+    """
+    from helpers.disease_helpers import (
+        get_nation_infection_counts, resolve_diseases, get_infectivity_settings,
+        active_stage_index, get_stage, infect_random_pops, execute_disease_civil_war,
+    )
+
+    nation_id = str(old_nation.get("_id", ""))
+    nation_name = old_nation.get("name", "Unknown")
+    counts = get_nation_infection_counts(nation_id)
+    if not counts:
+        return ""
+
+    result = ""
+    diseases = resolve_diseases(counts.keys())
+    pop_count = old_nation.get("pop_count", 0)
+    spread_rolls = {}
+    disease_stages = dict(old_nation.get("disease_stages", {}) or {})
+
+    from helpers.disease_helpers import nation_accepts_disease
+    for disease_id, infected in counts.items():
+        disease = diseases.get(disease_id)
+        if not disease or disease.get("cured"):
+            continue
+        # Accepted nations (primary race = the disease's derived race) are not
+        # outbreak sites — conversions there are voluntary, via the accepted
+        # spread tick, never the disease mechanics.
+        if nation_accepts_disease(old_nation, disease):
+            continue
+        disease_name = disease.get("name", disease_id)
+
+        prev_stage = disease_stages.get(disease_id, -1)
+        cur_stage_idx = active_stage_index(disease, infected, pop_count)
+        cur_stage = get_stage(disease, cur_stage_idx)
+
+        # ── Spread roll ────────────────────────────────────────────────────
+        settings = get_infectivity_settings(disease)
+        cap = math.floor(settings.get("max_infected_pct", 0) * pop_count)
+        halted = bool(cur_stage and cur_stage.get("halts_spread"))
+        if not halted and infected < cap and infected < pop_count:
+            chance = min(
+                settings.get("base_chance", 0)
+                + settings.get("chance_per_infected", 0) * infected,
+                1.0,
+            )
+            roll = random.random()
+            spread_rolls[disease_name] = {"roll": roll, "chance_at_tick": chance}
+            if roll <= chance:
+                newly_infected = infect_random_pops(nation_id, disease, 1)
+                if newly_infected:
+                    infected += newly_infected
+                    result += f"{disease_name} has spread to another pop in {nation_name} ({infected}/{pop_count} infected).\n"
+                    cur_stage_idx = active_stage_index(disease, infected, pop_count)
+
+        # ── Stage escalation (one-shot on entry) ───────────────────────────
+        if cur_stage_idx > prev_stage:
+            disease_stages[disease_id] = cur_stage_idx
+            stages = disease.get("stages") or []
+            for idx in range(prev_stage + 1, cur_stage_idx + 1):
+                stage = stages[idx] if idx < len(stages) and isinstance(stages[idx], dict) else None
+                if not stage:
+                    continue
+                stage_label = stage.get("stage_name") or f"stage {idx + 1}"
+                result += f"{disease_name} in {nation_name} has escalated to {stage_label}.\n"
+                if stage.get("trigger_civil_war"):
+                    if infected >= pop_count:
+                        # No healthy pops to leave behind — nothing to split from.
+                        # The nation has fully succumbed; it IS the disease nation
+                        # now. For race-changing diseases that means ACCEPTANCE:
+                        # primary race becomes the derived race, pops keep their
+                        # derived races and stop being "sick".
+                        result += (
+                            f"{nation_name} has fully succumbed to {disease_name} — "
+                            f"no civil war, the nation itself is now theirs.\n"
+                        )
+                        if disease.get("changes_race") and disease.get("race_prefix"):
+                            from helpers.disease_helpers import get_or_create_derived_race
+                            base_race = None
+                            try:
+                                base_race = mongo.db.races.find_one(
+                                    {"_id": ObjectId(str(old_nation.get("primary_race", "")))})
+                            except Exception:
+                                pass
+                            derived_id = get_or_create_derived_race(
+                                base_race, disease.get("race_prefix", ""),
+                                disease.get("race_positive_trait", ""),
+                                disease.get("race_negative_trait", ""))
+                            if derived_id:
+                                new_nation["primary_race"] = derived_id
+                            mongo.db.pops.update_many(
+                                {"nation": nation_id, "disease": disease_id},
+                                {"$unset": {"disease": "", "pre_disease_race": ""}})
+                            disease_stages.pop(disease_id, None)
+                            result += (
+                                f"{nation_name} has accepted {disease_name}: its people "
+                                f"now embrace their new nature.\n"
+                            )
+                        continue
+                    new_name, moved = execute_disease_civil_war(old_nation, disease, infected)
+                    if new_name:
+                        new_nation["stability"] = "Unsettled"
+                        result += (
+                            f"CIVIL WAR: the {disease_name} infected of {nation_name} have split off, "
+                            f"forming {new_name} with {moved} pop(s).\n"
+                        )
+                        # The infected pops are gone from this nation — reset
+                        # the stage bookkeeping so a fresh outbreak re-escalates.
+                        disease_stages.pop(disease_id, None)
+                    else:
+                        result += f"{disease_name} civil war in {nation_name} failed to form a breakaway nation.\n"
+                    break
+
+    new_nation["disease_spread_rolls"] = spread_rolls
+    new_nation["disease_stages"] = disease_stages
+    return result
+
+def nation_accepted_spread_tick(old_nation, new_nation, schema):
+    """Voluntary spread from ACCEPTED nations (e.g. vampire nations).
+
+    A nation whose primary race carries a race-changing disease's derived-race
+    prefix has accepted it. Pops it assigns to the disease's accepted-spread
+    jobs (e.g. full_vampire) each add the disease's accepted_spread_chance per
+    tick. On success, 50/50:
+      - internal: one of the nation's own pops is converted to the derived
+        race (permanent, no disease state), or
+      - external: a pop of a nation within 5 hexes of the border is INFECTED
+        with the disease (trade-route / road-connected nations twice as
+        likely to be hit).
+    Falls through to the other target type when the chosen one has no
+    valid victims.
+    """
+    from helpers.disease_helpers import (
+        nation_accepts_disease, convert_random_own_pop,
+        pick_external_spread_target, infect_random_pops,
+    )
+
+    try:
+        diseases = list(mongo.db.diseases.find({
+            "changes_race": True,
+            "cured": {"$ne": True},
+            "accepted_spread_jobs.0": {"$exists": True},
+        }))
+    except Exception:
+        return ""
+    if not diseases:
+        return ""
+
+    result = ""
+    nation_name = old_nation.get("name", "Unknown")
+    jobs_assigned = old_nation.get("jobs", {}) or {}
+
+    for disease in diseases:
+        if not nation_accepts_disease(old_nation, disease):
+            continue
+        disease_name = disease.get("name", "")
+        chance_per = disease.get("accepted_spread_chance", 0) or 0
+        spreaders = sum(jobs_assigned.get(j, 0) or 0
+                        for j in disease.get("accepted_spread_jobs", []))
+        if chance_per <= 0 or spreaders <= 0:
+            continue
+
+        chance = min(chance_per * spreaders, 1.0)
+        roll = random.random()
+        rolls = new_nation.setdefault("disease_spread_rolls", {})
+        rolls[f"{disease_name} (accepted)"] = {"roll": roll, "chance_at_tick": chance}
+        if roll > chance:
+            continue
+
+        internal_first = random.random() < 0.5
+        spread_done = False
+        for target_type in (("internal", "external") if internal_first else ("external", "internal")):
+            if target_type == "internal":
+                pop = convert_random_own_pop(old_nation, disease)
+                if pop is not None:
+                    result += (
+                        f"A pop of {nation_name} has embraced {disease_name}, "
+                        f"joining the {disease.get('race_prefix', '')} majority.\n"
+                    )
+                    spread_done = True
+                    break
+            else:
+                target = pick_external_spread_target(old_nation, disease)
+                if target is not None and infect_random_pops(str(target["_id"]), disease, 1):
+                    result += (
+                        f"{disease_name} has spread from {nation_name} to "
+                        f"{target.get('name', 'a nearby nation')}!\n"
+                    )
+                    spread_done = True
+                    break
+        if not spread_done:
+            result += (
+                f"{disease_name} stirred in {nation_name} but found no one "
+                f"left to claim.\n"
+            )
+
+    return result
+
+def disease_cure_cross_tick(old_nations, new_nations, schema):
+    """Cross-nation tick: sum shared-quest contributions into each disease's
+    cure progress; on completion mark the disease cured and heal every
+    infected pop (restoring pre-disease races)."""
+    from helpers.disease_helpers import (
+        get_global_infection_counts, get_difficulty_settings, cure_disease_pops,
+    )
+
+    result = ""
+    try:
+        diseases = list(mongo.db.diseases.find({"cured": {"$ne": True}}))
+    except Exception:
+        return ""
+    if not diseases:
+        return ""
+
+    global_counts = get_global_infection_counts()
+    nation_names = {str(n.get("_id", "")): n.get("name", "Unknown") for n in old_nations}
+
+    for disease in diseases:
+        disease_id = str(disease["_id"])
+        disease_name = disease.get("name", disease_id)
+        difficulty = get_difficulty_settings(disease)
+        required = difficulty.get("required_progress", 0)
+        total_infected = global_counts.get(disease_id, 0)
+
+        # Sum every nation's shared-quest contribution for this disease.
+        contribution = 0
+        contributors = 0
+        for nation in old_nations:
+            for quest in nation.get("shared_quests", []) or []:
+                if isinstance(quest, dict) and str(quest.get("disease", "")) == disease_id:
+                    per_tick = quest.get("total_progress_per_tick", 0) or 0
+                    if per_tick > 0:
+                        contribution += per_tick
+                        contributors += 1
+
+        if contribution <= 0:
+            continue
+
+        if total_infected < difficulty.get("min_infected_pops", 0):
+            result += (
+                f"Cure research for {disease_name} is gated — {total_infected} infected pop(s), "
+                f"needs {difficulty.get('min_infected_pops', 0)}.\n"
+            )
+            continue
+
+        new_progress = min(disease.get("cure_progress", 0) + contribution, required)
+        after_data = {**disease, "cure_progress": new_progress}
+        completed = new_progress >= required
+        if completed:
+            after_data["cured"] = True
+
+        change_id = system_request_change(
+            data_type="diseases",
+            item_id=disease["_id"],
+            change_type="Update",
+            before_data=deepcopy(disease),
+            after_data=after_data,
+            reason=f"Disease cure tick: +{contribution} progress from {contributors} nation(s)",
+        )
+        if change_id is not None:
+            system_approve_change(change_id)
+
+        result += f"{disease_name} cure progress: +{contribution} ({new_progress}/{required}).\n"
+
+        if completed:
+            result += f"{disease_name} HAS BEEN CURED!\n"
+            cured_by_nation = cure_disease_pops(disease_id)
+            for nation_id, cured in cured_by_nation.items():
+                result += f"  {cured} pop(s) in {nation_names.get(nation_id, nation_id)} recovered.\n"
+            # Clear stage bookkeeping on every nation carrying it.
+            for new_nation in new_nations:
+                stages = new_nation.get("disease_stages")
+                if isinstance(stages, dict) and disease_id in stages:
+                    stages.pop(disease_id, None)
+
     return result
 
 def pop_flee_tick(old_nation, new_nation, schema):
@@ -2343,8 +2600,8 @@ NATION_TICK_FUNCTIONS = {
     "Nation Progress Quests Tick": progress_quests_tick,
     "Nation Job Cleanup Tick": nation_job_cleanup_tick,
     "AI Decision Tick": ai_decision_tick,
-    "Nation Vampirism Tick": vampirism_tick,
-    "Nation Undead Tick": undead_tick,
+    "Nation Disease Spread Tick": nation_disease_spread_tick,
+    "Nation Accepted Disease Spread Tick": nation_accepted_spread_tick,
     "Nation Pop Loss Tick": pop_loss_tick,
     "Nation Pop Flee Tick": pop_flee_tick,
     "Nation Temperament Tick": temperament_tick,
@@ -2363,6 +2620,7 @@ NATION_CROSS_TICK_FUNCTIONS = {
     "Ongoing Trade Route Tick": ongoing_trade_route_tick,
     "AI Market Matching Tick": ai_market_matching_tick,
     "Market Price Tick": market_price_tick,
+    "Disease Cure Tick": disease_cure_cross_tick,
 }
 
 def generate_all_ai_rulers_tick():

@@ -66,7 +66,7 @@ NATION_EDIT_FIELD_TIERS = {
     "vassal_type": 2, "justice_stance": 2,
     # Tier 3 — districts / modifiers / tech
     "districts": 3, "cities": 3, "technologies": 3, "modifiers": 3,
-    "progress_quests": 3, "territory_types": 3, "nodes": 3,
+    "progress_quests": 3, "shared_quests": 3, "territory_types": 3, "nodes": 3,
     "current_territory": 3, "road_usage": 3,
     "overlord": 3, "compliance": 3, "concessions": 3,
     # Tier 4 — military / resources
@@ -108,7 +108,7 @@ ITEM_VIEW_FIELD_TIERS = {
         # Tier 0 — public info
         "name": 0, "rarity": 0,
         # Tier 1
-        "creator": 1, 
+        "creator": 1,
         # Tier 2
         "owner": 2,
         # Tier 3
@@ -116,6 +116,78 @@ ITEM_VIEW_FIELD_TIERS = {
         "equipped": 3, "artifact_slot_usage": 3,
     },
 }
+
+
+# Maps nation field name -> minimum visibility tier required to VIEW it on
+# templates/nation_owner.html (and the mirrored edit form). Consumed via
+# nation_field_tier() below, exposed to templates as a Jinja global so each
+# field/row can gate itself individually instead of an entire section sharing
+# one tier. Fields absent from this dict default to tier 0 (always visible) —
+# that default is deliberate for purely cosmetic fields (name, flags, banner,
+# accent color) which were never part of the old section-based gating either.
+#
+# This replaces the old scheme where e.g. the whole "Resources & Jobs" section
+# was tier 4 (money bundled in with production/jobs/units) and the "Trade"
+# section had no gate at all (money/income fully public). Money is now the
+# most-restricted field on the page; trade logistics (import/export slots,
+# trade speed, ongoing deals) are deliberately low-tier per design intent —
+# knowing a nation trades doesn't reveal much, but its treasury does.
+NATION_VIEW_FIELD_TIERS = {
+    # Tier 1 — demographics, pacts/vassalage, trade logistics (low-sensitivity)
+    "primary_race": 1, "primary_culture": 1, "primary_religion": 1,
+    "pops": 1, "unique_minority_count": 1,
+    "overlord": 1, "vassal_type": 1, "compliance": 1, "disobey_chance": 1,
+    "rebellion_chance": 1, "compliance_gain_chance": 1, "compliance_loss_chance": 1,
+    "concessions_chance": 1, "concessions_qty": 1, "concessions": 1,
+    "vassal_slots": 1, "vassals": 1,
+    "military_alliance_slots": 1, "defensive_pact_slots": 1,
+    "non_aggression_pact_slots": 1, "diplomatic_relations": 1,
+    "remaining_import_slots": 1, "import_slots": 1,
+    "remaining_export_slots": 1, "export_slots": 1, "trade_speed": 1,
+    "trade_routes": 1,
+    "diseases": 1,
+
+    # Tier 2 — stability / internal laws & stances
+    "stability": 2, "stability_gain_chance": 2, "stability_loss_chance": 2,
+    "stability_loss_chance_on_leader_death": 2,
+    "infamy": 2, "prosperity_role": 2, "karma": 2, "rolling_karma": 2,
+    "temporary_karma": 2, "diplomatic_range": 2, "migration_distance": 2,
+    "stationary_delay": 2, "pop_loss_chance": 2, "origin": 2, "temperament": 2,
+    "government_type": 2, "succession_type": 2, "nomad_camp_type": 2,
+    "conscription_type": 2, "military_funding": 2, "magic_stance": 2,
+    "centralization_law": 2, "citizenship_stance": 2, "foreign_acceptance": 2,
+    "subject_stance": 2, "land_doctrine": 2, "naval_doctrine": 2,
+    "diplomatic_stance": 2, "scientific_stance": 2, "economy_type": 2,
+    "expansion_stance": 2, "mercenary_law": 2, "consumption_stance": 2,
+    "tax_stance": 2, "slavery_stance": 2,
+
+    # Tier 3 — territory / districts / tech / quests / modifiers
+    "administration": 3, "passive_expansion_chance": 3, "effective_territory": 3,
+    "current_territory": 3, "road_usage": 3, "route_capacity": 3,
+    "effective_territory_types": 3, "territory_types": 3, "nodes": 3,
+    "effective_pop_capacity": 3,
+    "districts": 3, "district_slots": 3, "imperial_district": 3,
+    "city_slots": 3, "cities": 3, "wonders": 3,
+    "technologies": 3, "technology_cost_modifier": 3,
+    "technology_cost_minimum": 3, "technology_category_cost_modifiers": 3,
+    "progress_quests": 3, "progress_slots": 3,
+    "shared_quests": 3, "modifiers": 3,
+
+    # Tier 4 — military strength and detailed economy (most sensitive)
+    "money": 4, "money_capacity": 4, "money_income": 4,
+    "land_unit_count": 4, "land_unit_capacity": 4, "land_units": 4, "land_unit_details": 4,
+    "naval_unit_count": 4, "naval_unit_capacity": 4, "naval_units": 4, "naval_unit_details": 4,
+    "support_unit_count": 4, "support_unit_capacity": 4, "support_units": 4, "support_unit_details": 4,
+    "resource_production": 4, "resource_consumption": 4, "resource_excess": 4,
+    "resource_storage": 4, "nation_resource_capacity": 4,
+    "working_pop_count": 4, "jobs": 4, "job_details": 4,
+    "ai_state": 4,
+}
+
+
+def nation_field_tier(field_name, default=0):
+    """Minimum visibility tier required to view `field_name` on a nation page."""
+    return NATION_VIEW_FIELD_TIERS.get(field_name, default)
 
 
 # ---------------------------------------------------------------------------

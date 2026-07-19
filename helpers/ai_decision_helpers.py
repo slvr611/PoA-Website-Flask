@@ -306,7 +306,7 @@ def evaluate_nation_state(old_nation):
     # (hunter 2 food, savior -1 → production 1; strip 2 → -1, but the true
     # no-jobs production is max(0-1, 0) = 0) — and the AI would pin a pop to
     # "fix" a deficit that doesn't exist without the job.
-    persistent_job_keys = {"undead", "partial_vampire", "full_vampire", "revolutionary"}
+    persistent_job_keys = {"revolutionary"}
     base_production  = dict(old_nation.get("resource_production", {}))
     base_consumption = dict(old_nation.get("resource_consumption", {}))
     base_excess = dict(old_nation.get("resource_excess", {}))
@@ -389,10 +389,12 @@ def evaluate_nation_state(old_nation):
             region_name = ""
     def_keys = [d.get("def_key", "") for d in old_nation.get("districts", []) if d.get("def_key")]
 
-    # Persistent jobs (vampirism, undead, revolution) are granted by other game
-    # mechanics, not chosen by the player/AI — exclude them from available_jobs
-    # entirely so the AI never assigns idle pops to them.
-    persistent = {"undead", "partial_vampire", "full_vampire", "revolutionary"}
+    # Persistent jobs (revolution) are granted by other game mechanics, not
+    # chosen by the player/AI — exclude them from available_jobs entirely so
+    # the AI never assigns idle pops to them. (Disease jobs are virtual and
+    # never appear in jobs.json; infected pops are excluded via the infection
+    # counts added to persistent_assigned below.)
+    persistent = {"revolutionary"}
 
     # Prefer the calculated per-nation job_details: they carry the boosted
     # production/upkeep from districts/laws/techs (e.g. sawmill's harvester
@@ -418,6 +420,16 @@ def evaluate_nation_state(old_nation):
     persistent_assigned = sum(
         old_nation.get("jobs", {}).get(j, 0) for j in persistent
     )
+    # Infected pops are force-assigned to virtual disease jobs (per-pop
+    # disease field, never stored in nation["jobs"]) — treat them as
+    # already-assigned so the AI doesn't double-book them.
+    try:
+        from helpers.disease_helpers import get_nation_infection_counts
+        persistent_assigned += sum(
+            get_nation_infection_counts(str(old_nation.get("_id", ""))).values()
+        )
+    except Exception:
+        pass
     total_pops = old_nation.get("pop_count", 0)
     idle_pops  = max(0, total_pops - persistent_assigned)
 
@@ -458,6 +470,19 @@ def evaluate_nation_state(old_nation):
         if net != 0:
             active_resources.add(r)
 
+    # Headroom before job production of stability_gain_chance / stability_loss_chance
+    # stops having any real effect. stability_gain_chance is clamped at
+    # stability_gain_chance_cap (jobs push it UP toward the cap); stability_loss_chance
+    # is clamped at a 0 floor (jobs like guard push it DOWN via negative production).
+    # Only resources/fields with genuinely limited headroom are included — a field
+    # missing from this dict is treated as unlimited by _consume_headroom/score_jobs.
+    stability_chance_headroom = {}
+    gain_cap = old_nation.get("stability_gain_chance_cap", 1.0)
+    gain_now = old_nation.get("stability_gain_chance", 0.0)
+    stability_chance_headroom["stability_gain_chance"] = max(0.0, gain_cap - gain_now)
+    loss_now = old_nation.get("stability_loss_chance", 0.0)
+    stability_chance_headroom["stability_loss_chance"] = max(0.0, loss_now)
+
     return {
         "stockpiles":            stockpiles,
         "net_production":        net_production,
@@ -480,6 +505,7 @@ def evaluate_nation_state(old_nation):
         "resource_capacity":     old_nation.get("nation_resource_capacity", {}),
         "active_resources":      active_resources,
         "production_clamp_absorbed": production_clamp_absorbed,
+        "stability_chance_headroom": stability_chance_headroom,
     }
 
 
@@ -617,7 +643,32 @@ def _consume_clamp_absorbed(absorbed, r, amount):
     return amount
 
 
-def score_jobs(state, need_weights, prices=None, clamp_absorbed=None):
+def _consume_headroom(headroom, field, amount):
+    """Cap `amount` (a job's stability_gain_chance/stability_loss_chance
+    production, which can be positive or negative) at the remaining headroom
+    for `field` and decrement headroom by however much was actually used.
+    Mutates `headroom`. Returns the effective (possibly reduced-magnitude)
+    amount, sign preserved.
+
+    stability_gain_chance headroom = distance up to stability_gain_chance_cap
+    (jobs push the value UP; once at the cap, more gain-chance production is
+    wasted). stability_loss_chance headroom = distance down to the 0 floor
+    (jobs like guard push the value DOWN via negative production; once at 0,
+    more reduction is wasted). Fields with no tracked headroom (not in the
+    dict at all) are treated as unlimited and pass through unchanged — but a
+    field that HAS reached exactly 0 headroom stays in the dict at 0 rather
+    than being deleted, so it keeps clipping to nothing instead of reverting
+    to "unlimited" once fully exhausted.
+    """
+    if not headroom or field not in headroom or amount == 0:
+        return amount
+    available = headroom[field]
+    used = min(available, abs(amount))
+    headroom[field] = available - used
+    return used if amount > 0 else -used
+
+
+def score_jobs(state, need_weights, prices=None, clamp_absorbed=None, stability_headroom=None):
     """
     Compute efficiency score for each available job.
     Factors in: resource need weights, market price normalisation, district bonus.
@@ -626,6 +677,14 @@ def score_jobs(state, need_weights, prices=None, clamp_absorbed=None):
     absorbed by the per-resource clamp at 0. The NEXT pop's production of such
     a resource is reduced by that amount (read-only here — callers consume it
     when they actually assign the pop).
+
+    stability_headroom: optional {field: amount} of remaining room before
+    stability_gain_chance/stability_loss_chance production stops having any
+    real effect (gain is capped from above at stability_gain_chance_cap; loss
+    is capped from below at 0). Read-only here, same convention as
+    clamp_absorbed — callers consume it via _consume_headroom when a pop is
+    actually assigned. Without this, a nation already at its stability cap
+    keeps scoring brewers/guards as if every unit of production still helps.
     """
     prices = prices if prices is not None else _base_prices()
     nation_districts = state["existing_def_keys"] | state["existing_types"]
@@ -638,6 +697,8 @@ def score_jobs(state, need_weights, prices=None, clamp_absorbed=None):
         for field, amount in job.get("production", {}).items():
             if clamp_absorbed and isinstance(amount, (int, float)) and clamp_absorbed.get(field, 0) > 0:
                 amount = max(0, amount - clamp_absorbed[field])
+            if stability_headroom and isinstance(amount, (int, float)) and field in stability_headroom:
+                amount = _consume_headroom(dict(stability_headroom), field, amount)
             if field in need_weights:
                 prod_value += need_weights[field] * amount * _price_scale(field, prices)
             elif field in PRODUCTION_FIELD_MAP:
@@ -660,6 +721,8 @@ def score_jobs(state, need_weights, prices=None, clamp_absorbed=None):
             primary_weight = 0.0
             best_prod_val  = 0.0
             for field, amount in job.get("production", {}).items():
+                if stability_headroom and isinstance(amount, (int, float)) and field in stability_headroom:
+                    amount = _consume_headroom(dict(stability_headroom), field, amount)
                 if field in need_weights and isinstance(amount, (int, float)) and amount > 0:
                     pv = need_weights[field] * amount * _price_scale(field, prices)
                     if pv > best_prod_val:
@@ -756,6 +819,7 @@ def compute_upkeep_floor(state, prices=None):
         state["unresolved_deficits"] = unresolved
         state["upkeep_burden"] = {}
         state["production_clamp_absorbed_remaining"] = dict(state.get("production_clamp_absorbed") or {})
+        state["stability_chance_headroom_remaining"] = dict(state.get("stability_chance_headroom") or {})
         return {}, 0, dict(state["net_production"]), [], 0.0, unresolved
 
     prices = prices if prices is not None else _base_prices()
@@ -771,6 +835,13 @@ def compute_upkeep_floor(state, prices=None):
     # second pop to overcome the malus still gets tried) but the projection is
     # exact — the loop keeps assigning until the deficit is REALLY fixed.
     clamp_absorbed = dict(state.get("production_clamp_absorbed") or {})
+
+    # Headroom before stability_gain_chance/stability_loss_chance production
+    # stops mattering (cap/floor already reached) — see evaluate_nation_state.
+    # Upkeep jobs are only ever picked for producing a resource in deficit, so
+    # this rarely changes which job wins here, but it keeps scores accurate
+    # for jobs that also happen to touch stability as a side effect.
+    stability_headroom = dict(state.get("stability_chance_headroom") or {})
 
     while pops_remaining > 0:
         # Find the most critical deficit
@@ -792,9 +863,10 @@ def compute_upkeep_floor(state, prices=None):
         deficit_resources = {r for r, net in projected_net.items() if net < 0}
         curr_weights = _weights_from_net(
             projected_net, state["stockpiles"], prices, state["money_income"],
+            state.get("resource_capacity"),
             active_resources=state.get("active_resources"), money_stock=state.get("money"),
         )
-        job_scores = score_jobs(state, curr_weights, prices)
+        job_scores = score_jobs(state, curr_weights, prices, stability_headroom=stability_headroom)
         positive = {}
         for k, v in job_scores.items():
             if v <= 0.05:
@@ -818,6 +890,8 @@ def compute_upkeep_floor(state, prices=None):
         for r, amt in job.get("production", {}).items():
             if isinstance(amt, (int, float)) and r in projected_net:
                 projected_net[r] = projected_net.get(r, 0) + _consume_clamp_absorbed(clamp_absorbed, r, amt)
+            elif isinstance(amt, (int, float)) and r in stability_headroom:
+                _consume_headroom(stability_headroom, r, amt)
         for r, amt in job.get("upkeep", {}).items():
             if isinstance(amt, (int, float)) and r in projected_net:
                 projected_net[r] = projected_net.get(r, 0) - amt
@@ -863,6 +937,10 @@ def compute_upkeep_floor(state, prices=None):
     # Clamp-absorbed malus not yet overcome by upkeep jobs — goal job
     # assignment continues consuming from here.
     state["production_clamp_absorbed_remaining"] = clamp_absorbed
+
+    # Stability chance headroom not yet used up by upkeep jobs — goal job
+    # assignment continues consuming from here (mirrors clamp_absorbed above).
+    state["stability_chance_headroom_remaining"] = stability_headroom
 
     return (
         {k: v for k, v in assignments.items() if v > 0},
@@ -3313,6 +3391,17 @@ def assign_goal_jobs(state, goal, remaining_pops, projected_net, district_plan, 
                   state.get("production_clamp_absorbed")) or {}
     )
 
+    # Stability chance headroom still left after upkeep jobs — once exhausted,
+    # more stability_gain_chance/stability_loss_chance production (from
+    # brewers, guards, etc.) is wasted because the value is already at its
+    # cap/floor. This is exactly what stops the "stabilize_nation" goal's
+    # heavy +60/-45 weight boost below from stacking pops onto a stat that
+    # can't move any further.
+    stability_headroom = dict(
+        state.get("stability_chance_headroom_remaining",
+                  state.get("stability_chance_headroom")) or {}
+    )
+
     while pops_left > 0:
         # Recompute goal boosts each iteration using projected stockpiles
         # so shortfall detection accounts for production from already-assigned pops
@@ -3354,7 +3443,10 @@ def assign_goal_jobs(state, goal, remaining_pops, projected_net, district_plan, 
                 if cap > 0 and state["stockpiles"].get(r, 0) + net_r >= cap:
                     goal_weights[r] = min(goal_weights[r], max(1.0, goal_weights[r] * 0.2))
 
-        job_scores = score_jobs(state, goal_weights, prices, clamp_absorbed=clamp_absorbed)
+        job_scores = score_jobs(
+            state, goal_weights, prices,
+            clamp_absorbed=clamp_absorbed, stability_headroom=stability_headroom,
+        )
         positive = {k: v for k, v in job_scores.items() if v > 0.05}
         if not positive:
             break
@@ -3402,6 +3494,8 @@ def assign_goal_jobs(state, goal, remaining_pops, projected_net, district_plan, 
         for r, amt in job.get("production", {}).items():
             if isinstance(amt, (int, float)) and r in projected_net:
                 projected_net[r] = projected_net.get(r, 0) + _consume_clamp_absorbed(clamp_absorbed, r, amt)
+            elif isinstance(amt, (int, float)) and r in stability_headroom:
+                _consume_headroom(stability_headroom, r, amt)
         for r, amt in job.get("upkeep", {}).items():
             if isinstance(amt, (int, float)) and r in projected_net:
                 projected_net[r] = projected_net.get(r, 0) - amt
@@ -3809,7 +3903,10 @@ def ai_decision_tick(old_nation, new_nation, schema):
             projected_net, state["stockpiles"], market_prices, state["money_income"],
             active_resources=state.get("active_resources"), money_stock=state.get("money"),
         )
-        job_scores = score_jobs(state, need_weights, market_prices)
+        job_scores = score_jobs(
+            state, need_weights, market_prices,
+            stability_headroom=state.get("stability_chance_headroom_remaining"),
+        )
 
         # --- Step 2: Strategic goal ---
         goal, goal_candidates = select_strategic_goal(
@@ -3853,8 +3950,8 @@ def ai_decision_tick(old_nation, new_nation, schema):
         # Reset all non-static jobs to 0 before writing new assignments so that
         # running AI Decision Tick standalone (without Nation Job Cleanup Tick)
         # doesn't accumulate duplicate assignments.  Static jobs (defined in
-        # jobs.json with "static": true) — e.g. revolutionary, partial_vampire,
-        # partial_undead — are set by other tick functions and must be preserved.
+        # jobs.json with "static": true) — e.g. revolutionary — are set by
+        # other tick functions and must be preserved.
         jobs_data = json_data.get("jobs", {})
         static_job_keys = {k for k, v in jobs_data.items() if v.get("static")}
         reset_jobs = {
@@ -3942,6 +4039,7 @@ def ai_decision_tick(old_nation, new_nation, schema):
             "secondary_goal": secondary_goal,
             "future_utility": state.get("future_utility", {}),
             "production_clamp_absorbed": state.get("production_clamp_absorbed", {}),
+            "stability_chance_headroom": state.get("stability_chance_headroom", {}),
             "goal_candidates": goal_candidates,
             "upkeep_ratio": round(upkeep_ratio, 2),
             "upkeep_assignments": upkeep_assignments,

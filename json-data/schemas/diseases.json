@@ -1,0 +1,259 @@
+{
+  "$jsonSchema": {
+    "title": "Diseases",
+    "bsonType": "object",
+    "required": ["name", "rating", "job_type", "infectivity", "difficulty"],
+    "preview": ["rating", "infectivity", "difficulty", "cured"],
+    "properties": {
+      "name": {
+        "bsonType": "string",
+        "label": "Name",
+        "description": "The name of the disease"
+      },
+      "description": {
+        "bsonType": "string",
+        "label": "Description",
+        "description": "Additional details about the disease",
+        "long_text": true
+      },
+      "rating": {
+        "bsonType": "enum",
+        "label": "Rating",
+        "description": "Cosmetic severity rating",
+        "enum": ["Mild", "Intense", "Terrible", "Apocalyptic"],
+        "default": "Mild"
+      },
+      "job_type": {
+        "bsonType": "string",
+        "label": "Job Type",
+        "description": "Custom job name that infected pops are forced into (e.g. Vampire, Plague Bearer)"
+      },
+      "job_production": {
+        "bsonType": "array",
+        "label": "Job Production",
+        "description": "Per-infected-pop production of the forced job. Keys are resource keys (food, wood, money...) or modifier keys (stability_loss_chance...)",
+        "items": {
+          "bsonType": "object",
+          "properties": {
+            "_id": {
+              "bsonType": "string",
+              "label": "Item ID",
+              "description": "Stable identifier for change tracking"
+            },
+            "key": {
+              "bsonType": "string",
+              "label": "Resource / Modifier Key"
+            },
+            "value": {
+              "bsonType": "number",
+              "label": "Per-Pop Amount"
+            }
+          }
+        }
+      },
+      "job_upkeep": {
+        "bsonType": "array",
+        "label": "Job Upkeep",
+        "description": "Per-infected-pop resource upkeep of the forced job",
+        "items": {
+          "bsonType": "object",
+          "properties": {
+            "_id": {
+              "bsonType": "string",
+              "label": "Item ID",
+              "description": "Stable identifier for change tracking"
+            },
+            "key": {
+              "bsonType": "string",
+              "label": "Resource Key"
+            },
+            "value": {
+              "bsonType": "number",
+              "label": "Per-Pop Amount"
+            }
+          }
+        }
+      },
+      "infectivity": {
+        "bsonType": "enum",
+        "label": "Infectivity",
+        "description": "How quickly the disease spreads and the maximum share of a nation's pops it can infect",
+        "enum": ["Low", "Moderate", "Highly", "Extremely"],
+        "default": "Low",
+        "settings": {
+          "Low": {
+            "base_chance": 0.10,
+            "chance_per_infected": 0.02,
+            "max_infected_pct": 0.25
+          },
+          "Moderate": {
+            "base_chance": 0.15,
+            "chance_per_infected": 0.04,
+            "max_infected_pct": 0.40
+          },
+          "Highly": {
+            "base_chance": 0.25,
+            "chance_per_infected": 0.08,
+            "max_infected_pct": 0.65
+          },
+          "Extremely": {
+            "base_chance": 0.40,
+            "chance_per_infected": 0.10,
+            "max_infected_pct": 0.80
+          }
+        }
+      },
+      "difficulty": {
+        "bsonType": "enum",
+        "label": "Cure Difficulty",
+        "description": "How hard the disease is to cure",
+        "enum": ["Simple", "Difficult", "Complicated", "Impossible"],
+        "default": "Simple",
+        "settings": {
+          "Simple": {
+            "required_progress": 100,
+            "dc_change": -5,
+            "min_infected_pops": 5
+          },
+          "Difficult": {
+            "required_progress": 200,
+            "dc_change": 0,
+            "min_infected_pops": 10
+          },
+          "Complicated": {
+            "required_progress": 350,
+            "dc_change": 5,
+            "min_infected_pops": 15
+          },
+          "Impossible": {
+            "required_progress": 600,
+            "dc_change": 10,
+            "min_infected_pops": 20
+          }
+        }
+      },
+      "cure_progress": {
+        "bsonType": "number",
+        "label": "Cure Progress",
+        "description": "Accumulated shared progress toward the cure",
+        "default": 0
+      },
+      "cured": {
+        "bsonType": "boolean",
+        "label": "Cured",
+        "description": "Whether the disease has been cured. Cured diseases stop spreading and their infected pops are released"
+      },
+      "changes_race": {
+        "bsonType": "boolean",
+        "label": "Changes Race",
+        "description": "Whether infected pops have their race changed to a derived race (restored on cure)"
+      },
+      "accepted_spread_jobs": {
+        "bsonType": "array",
+        "label": "Accepted Spread Jobs",
+        "description": "Job keys (from jobs.json) that spread this disease when worked in an ACCEPTED nation (primary race carries the derived-race prefix). Each assigned pop adds the spread chance below",
+        "items": {
+          "bsonType": "string"
+        }
+      },
+      "accepted_spread_chance": {
+        "bsonType": "number",
+        "label": "Accepted Spread Chance",
+        "description": "Per-tick spread chance contributed by each pop working an accepted-spread job (e.g. 0.1 = 10% per pop). On success: 50/50 between converting a pop of the accepted nation and infecting a pop of a nation within 5 hexes (double weight for trade/road-connected nations)"
+      },
+      "race_prefix": {
+        "bsonType": "string",
+        "label": "Derived Race Prefix",
+        "description": "Prefix for the derived race name, e.g. 'Vampiric' turns 'Human' into 'Vampiric Human'"
+      },
+      "race_positive_trait": {
+        "bsonType": "string",
+        "label": "Derived Race Positive Trait",
+        "description": "Positive trait given to the derived race"
+      },
+      "race_negative_trait": {
+        "bsonType": "string",
+        "label": "Derived Race Negative Trait",
+        "description": "Negative trait given to the derived race"
+      },
+      "stages": {
+        "bsonType": "array",
+        "label": "Stages",
+        "description": "Ordered escalation stages. The active stage is the highest whose infected-percentage threshold has been reached",
+        "items": {
+          "bsonType": "object",
+          "properties": {
+            "_id": {
+              "bsonType": "string",
+              "label": "Item ID",
+              "description": "Stable identifier for change tracking"
+            },
+            "stage_name": {
+              "bsonType": "string",
+              "label": "Stage Name"
+            },
+            "threshold_pct": {
+              "bsonType": "number",
+              "label": "Infected % Threshold",
+              "description": "Percentage (0-100) of a nation's pops that must be infected for this stage to activate"
+            },
+            "job_type_override": {
+              "bsonType": "string",
+              "label": "Job Override Name",
+              "description": "Replaces the disease's job name while this stage is active"
+            },
+            "job_production_override": {
+              "bsonType": "array",
+              "label": "Job Production Override",
+              "description": "Replaces the base job production while this stage is active (leave empty to keep base)",
+              "items": {
+                "bsonType": "object",
+                "properties": {
+                  "_id": {"bsonType": "string", "label": "Item ID"},
+                  "key": {"bsonType": "string", "label": "Resource / Modifier Key"},
+                  "value": {"bsonType": "number", "label": "Per-Pop Amount"}
+                }
+              }
+            },
+            "job_upkeep_override": {
+              "bsonType": "array",
+              "label": "Job Upkeep Override",
+              "description": "Replaces the base job upkeep while this stage is active (leave empty to keep base)",
+              "items": {
+                "bsonType": "object",
+                "properties": {
+                  "_id": {"bsonType": "string", "label": "Item ID"},
+                  "key": {"bsonType": "string", "label": "Resource Key"},
+                  "value": {"bsonType": "number", "label": "Per-Pop Amount"}
+                }
+              }
+            },
+            "nation_modifiers": {
+              "bsonType": "array",
+              "label": "Nation Modifiers",
+              "description": "Flat nation-wide modifier totals applied while this stage is active (not scaled by infected count)",
+              "items": {
+                "bsonType": "object",
+                "properties": {
+                  "_id": {"bsonType": "string", "label": "Item ID"},
+                  "key": {"bsonType": "string", "label": "Modifier Key"},
+                  "value": {"bsonType": "number", "label": "Value"}
+                }
+              }
+            },
+            "trigger_civil_war": {
+              "bsonType": "boolean",
+              "label": "Trigger Civil War on Entry",
+              "description": "When a nation first reaches this stage, a civil war splits the infected pops into a breakaway nation"
+            },
+            "halts_spread": {
+              "bsonType": "boolean",
+              "label": "Halts Normal Spread",
+              "description": "While this stage is active, the disease stops its normal per-tick spread in the nation"
+            }
+          }
+        }
+      }
+    }
+  }
+}

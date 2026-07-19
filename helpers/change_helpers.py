@@ -7,7 +7,7 @@ from calculations.field_calculations import calculate_all_fields, purge_invalid_
 from copy import deepcopy
 from bson import ObjectId
 
-_NATURAL_KEY_FIELDS = ['name', 'quest_name', 'source', 'modifier_type', 'scope', 'attribute', 'resource_from', 'resource_to', 'field', 'key', 'unit_category', 'unit_stat', 'tier', 'tech_category', 'def_key']
+_NATURAL_KEY_FIELDS = ['name', 'quest_name', 'source', 'modifier_type', 'scope', 'attribute', 'resource_from', 'resource_to', 'field', 'key', 'unit_category', 'unit_stat', 'tier', 'tech_category', 'def_key', 'disease', 'stage_name']
 
 
 def _handle_nation_rename(nation_id, old_name, new_name):

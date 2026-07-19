@@ -25,8 +25,12 @@
                 <tbody>
                     {% for job, details in nation.job_details.items() %}
                         <tr>
-                            <td>{{ details.display_name }}</td>
-                            <td>{{ form.jobs[job] }}</td>
+                            <td>{{ details.display_name }}{% if details.get("disease") %} <span style="color:#c66;">({{ details.get("disease_name") }})</span>{% endif %}</td>
+                            {% if details.get("disease") %}
+                                <td>{{ details.get("forced_count", 0) }} <span style="color:#888;">(forced — infected pops)</span></td>
+                            {% else %}
+                                <td>{{ form.jobs[job] }}</td>
+                            {% endif %}
                             <td>
                             {% if details.upkeep is defined %}
                                 {% for resource, cost in details.upkeep.items() %}

@@ -1,0 +1,157 @@
+{% extends "layout.html" %}
+
+{% block title %}{{ item.name }}{% endblock %}
+
+{% block content %}
+<div class="container">
+    {% if g.user is not none %}
+        <a href="{{ request.path.replace('item', 'edit') }}">Edit</a>
+    {% endif %}
+    <div class="action-links">
+        <a href="{{ request.path }}/changes/pending">View Pending Changes</a>
+        <a href="{{ request.path }}/changes/archived">View Change History</a>
+    </div>
+    <div class="content">
+        <h1>{{ item.name }}{% if item.get("cured") %} <span style="color:#6c6; font-size:0.6em;">(CURED)</span>{% endif %}</h1>
+
+        <div class="table-wrapper">
+            <table class="info-table">
+                <tr class="resources-header-row"><th colspan="2" class="resources-header">Overview</th></tr>
+                <tr><th>Rating:</th><td>{{ item.get("rating", "") }}</td></tr>
+                {% if item.get("description") %}
+                <tr><th>Description:</th><td><div class="multiline-text">{{ item.get("description") }}</div></td></tr>
+                {% endif %}
+                <tr><th>Infectivity:</th>
+                    <td>{{ item.get("infectivity", "") }} —
+                        {{ (infectivity_settings.base_chance * 100)|int }}% base,
+                        +{{ (infectivity_settings.chance_per_infected * 100)|int }}% per infected pop,
+                        max {{ (infectivity_settings.max_infected_pct * 100)|int }}% of pops
+                    </td></tr>
+                <tr><th>Cure Difficulty:</th>
+                    <td>{{ item.get("difficulty", "") }} —
+                        {{ difficulty_settings.required_progress }} progress required,
+                        {% if difficulty_settings.dc_change > 0 %}+{% endif %}{{ difficulty_settings.dc_change }} DC,
+                        {{ difficulty_settings.min_infected_pops }} total infected pops before cure work can begin
+                    </td></tr>
+                <tr><th>Cure Progress:</th>
+                    <td class="{{ 'completed-quest' if item.get('cure_progress', 0) >= difficulty_settings.required_progress else '' }}">
+                        {{ item.get("cure_progress", 0) }} / {{ difficulty_settings.required_progress }}
+                    </td></tr>
+                <tr><th>Total Infected Pops:</th>
+                    <td>{{ total_infected }}
+                        {% if total_infected < difficulty_settings.min_infected_pops and not item.get("cured") %}
+                            <span style="color:#fa8;">(cure research gated — needs {{ difficulty_settings.min_infected_pops }})</span>
+                        {% endif %}
+                    </td></tr>
+            </table>
+        </div>
+
+        <div class="table-wrapper">
+            <table class="info-table">
+                <tr class="resources-header-row"><th colspan="2" class="resources-header">Forced Job: {{ item.get("job_type", "") }}</th></tr>
+                <tr><th>Production (per infected pop):</th>
+                    <td>
+                        {% for kv in item.get("job_production", []) %}
+                            {{ kv.key }}: {{ kv.value }}<br>
+                        {% else %}—{% endfor %}
+                    </td></tr>
+                <tr><th>Upkeep (per infected pop):</th>
+                    <td>
+                        {% for kv in item.get("job_upkeep", []) %}
+                            {{ kv.key }}: {{ kv.value }}<br>
+                        {% else %}—{% endfor %}
+                    </td></tr>
+                {% if item.get("changes_race") %}
+                <tr><th>Race Change:</th>
+                    <td>Infected pops become "{{ item.get("race_prefix", "") }} &lt;Race&gt;"
+                        ({{ item.get("race_positive_trait") or "no positive trait" }} / {{ item.get("race_negative_trait") or "no negative trait" }});
+                        restored on cure</td></tr>
+                {% endif %}
+            </table>
+        </div>
+
+        {% if item.get("stages") %}
+        <div class="table-wrapper">
+            <table class="info-table">
+                <tr class="resources-header-row"><th colspan="6" class="resources-header">Stages</th></tr>
+                <tr>
+                    <th>Stage</th>
+                    <th>Threshold</th>
+                    <th>Job Override</th>
+                    <th>Nation Modifiers</th>
+                    <th>Civil War</th>
+                    <th>Halts Spread</th>
+                </tr>
+                {% for stage in item.get("stages", []) %}
+                <tr>
+                    <td>{{ stage.get("stage_name", "Stage " ~ loop.index) }}</td>
+                    <td>{{ stage.get("threshold_pct", 0) }}% infected</td>
+                    <td>
+                        {{ stage.get("job_type_override") or "—" }}
+                        {% for kv in stage.get("job_production_override", []) %}<br>{{ kv.key }}: {{ kv.value }}{% endfor %}
+                    </td>
+                    <td>
+                        {% for kv in stage.get("nation_modifiers", []) %}
+                            {{ kv.key }}: {{ kv.value }}<br>
+                        {% else %}—{% endfor %}
+                    </td>
+                    <td>{{ "Yes" if stage.get("trigger_civil_war") else "No" }}</td>
+                    <td>{{ "Yes" if stage.get("halts_spread") else "No" }}</td>
+                </tr>
+                {% endfor %}
+            </table>
+        </div>
+        {% endif %}
+
+        <div class="table-wrapper">
+            <table class="info-table">
+                <tr class="resources-header-row"><th colspan="2" class="resources-header">Infected Nations</th></tr>
+                {% for row in infected_rows %}
+                <tr>
+                    <th><a href="/nations/item/{{ row.nation }}">{{ row.nation }}</a></th>
+                    <td>{{ row.count }} infected pop{{ "s" if row.count != 1 else "" }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="2" style="color:#888;">No infected pops anywhere.</td></tr>
+                {% endfor %}
+            </table>
+        </div>
+
+        {% if g.user and g.user.is_admin %}
+        <div class="table-wrapper">
+            <table class="info-table">
+                <tr class="resources-header-row"><th colspan="2" class="resources-header">Admin Tools</th></tr>
+                <tr>
+                    <th>Infect Pops:</th>
+                    <td>
+                        <form method="POST" action="{{ request.path }}/infect" style="display:flex; gap:8px; align-items:center;">
+                            <select name="nation_id" class="form-control" style="max-width:220px;">
+                                {% for n in all_nations %}
+                                <option value="{{ n._id }}">{{ n.name }}</option>
+                                {% endfor %}
+                            </select>
+                            <input type="number" name="count" value="1" min="1" class="form-control" style="width:80px;">
+                            <button type="submit" class="btn btn-primary">Infect Random Pops</button>
+                        </form>
+                    </td>
+                </tr>
+                <tr>
+                    <th>Cure a Nation:</th>
+                    <td>
+                        <form method="POST" action="{{ request.path }}/cure_nation" style="display:flex; gap:8px; align-items:center;"
+                              onsubmit="return confirm('Cure all of this nation\'s pops of {{ item.name }}?')">
+                            <select name="nation_id" class="form-control" style="max-width:220px;">
+                                {% for row in infected_rows %}
+                                <option value="{{ row.nation }}">{{ row.nation }} ({{ row.count }})</option>
+                                {% endfor %}
+                            </select>
+                            <button type="submit" class="btn btn-danger">Cure Nation's Pops</button>
+                        </form>
+                    </td>
+                </tr>
+            </table>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

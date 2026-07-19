@@ -63,6 +63,15 @@
 .dc-unlocked-upg { font-size:0.74rem; color:#8f8; margin-top:0.1rem; }
 .dc-dim { opacity: 0.45; }
 .visibility-locked { color: #888; font-style: italic; padding: 0.75rem 1rem; }
+.visibility-locked-inline {
+    color: #777;
+    font-style: italic;
+    font-size: 0.85em;
+    border: 1px solid #444;
+    border-radius: 3px;
+    padding: 0 5px;
+    white-space: nowrap;
+}
 </style>
 
 {# ── Pending-change display macros ─────────────────────────────────────────── #}
@@ -102,6 +111,19 @@
   {%- set pcap = (pending_cap * 100)|int -%}
   <span class="pending-value context-tooltip" data-tooltip-title="Pending: {{ title }}" data-breakdown='{{ pending_bd|tojson }}'>→ {{ pc }}% / {{ pcap }}%</span>
 {%- endif %}
+{%- endmacro %}
+
+{# gate: renders `content` only if visibility_level meets field_name's required
+   tier (nation_field_tier); otherwise shows a compact "Tier N+" lock badge.
+   Wraps an already-evaluated value (e.g. the result of pf()/pfbd()) so no
+   call site needs to duplicate the tier-lookup/if-else boilerplate. #}
+{% macro gate(field_name, content) -%}
+{%- set _t = nation_field_tier(field_name) -%}
+{%- if visibility_level >= _t -%}
+{{ content }}
+{%- else -%}
+<span class="visibility-locked-inline" title="Requires Tier {{ _t }} visibility to view">Tier {{ _t }}+</span>
+{%- endif -%}
 {%- endmacro %}
 
 {% set pn  = pending_nation or {} %}
@@ -146,7 +168,7 @@
 					None
 				{% endif %}
 			</span>
-			<span>{{ schema.properties.pop_count.label }}: {{ pf(nation.pop_count, pn.get("pop_count")) }}{% if visibility_level >= 3 %} / {{ pfbd(nation.effective_pop_capacity, pn.get("effective_pop_capacity"), breakdowns.get("effective_pop_capacity", []), pbd.get("effective_pop_capacity", []), "Effective Pop Capacity") }}{% endif %}</span>
+			<span>{{ schema.properties.pop_count.label }}: {{ pf(nation.pop_count, pn.get("pop_count")) }}{% if visibility_level >= nation_field_tier("effective_pop_capacity") %} / {{ pfbd(nation.effective_pop_capacity, pn.get("effective_pop_capacity"), breakdowns.get("effective_pop_capacity", []), pbd.get("effective_pop_capacity", []), "Effective Pop Capacity") }}{% endif %}</span>
 			{% if (nation.slave_capacity | default(0)) > 0 %}
 			<span>Slaves: {{ pf(nation.slave_count | default(0), pn.get("slave_count")) }} / {{ pfbd(nation.slave_capacity | default(0), pn.get("slave_capacity"), breakdowns.get("slave_capacity", []), pbd.get("slave_capacity", []), "Slave Capacity") }}</span>
 			{% endif %}
@@ -180,6 +202,33 @@
 	</div>
 	{% endif %}
 
+	{% if (visibility_level >= nation_field_tier("ai_state") or visibility_bypassed) and nation.get('temperament', 'Player') != 'Player' %}
+	{% set ai_goal = (nation.get('ai_state') or {}).get('strategic_goal') or {} %}
+	{% set ai_plan = (nation.get('ai_state') or {}).get('planned_district') or {} %}
+	{% if ai_goal.get('display_name') or ai_plan.get('display_name') %}
+	<div style="background:#1a1f2a;border:1px solid #3a4a6a;border-radius:6px;padding:1rem;margin-bottom:1rem;">
+		<div style="display:flex;align-items:baseline;gap:0.75rem;margin-bottom:0.5rem;">
+			<strong style="color:#7ea8e8;">National Ambitions</strong>
+			<span style="font-size:0.8rem;color:var(--text-muted,#888);">Requires Tier {{ nation_field_tier("ai_state") }} visibility</span>
+		</div>
+		{% if ai_goal.get('display_name') %}
+			<p style="margin:0 0 0.35rem 0;">Current focus: <strong>{{ ai_goal.display_name }}</strong></p>
+		{% endif %}
+		{% if ai_plan.get('display_name') %}
+			<p style="margin:0;">
+				{% if ai_plan.get('sessions_saving') %}
+					Saving up to build: <strong>{{ ai_plan.display_name }}</strong> ({{ ai_plan.sessions_saving }} session{{ 's' if ai_plan.sessions_saving != 1 else '' }})
+				{% else %}
+					Planning to build: <strong>{{ ai_plan.display_name }}</strong>
+				{% endif %}
+			</p>
+		{% else %}
+			<p style="margin:0;color:var(--text-muted,#888);font-style:italic;">No construction currently planned.</p>
+		{% endif %}
+	</div>
+	{% endif %}
+	{% endif %}
+
 	<div class="expandable-sections">
 		<div class="expandable-section"  id="general-info-section">
 			<div class="section-header" onclick="toggleSection(this)">
@@ -187,7 +236,8 @@
 				<span class="toggle-icon">▼</span>
 			</div>
 			<div class="section-content">
-			{% if visibility_level >= 2 %}
+			{% set _tier = nation_field_tier("stability") %}
+			{% if visibility_level >= _tier %}
 				<div class="table-wrapper">
 					<table class="info-table">
 						<tr class="resources-header-row">
@@ -271,12 +321,6 @@
 								<td>{{ pf(nation.stationary_delay, pn.get("stationary_delay")) }}</td>
 							</tr>
 						{% endif %}
-						{% if nation.vampirism_chance > 0 %}
-							<tr>
-								<th>{{ schema.properties.vampirism_chance.label }}:</th>
-								<td>{{ pf_pct(nation.vampirism_chance, pn.get("vampirism_chance")) }}</td>
-							</tr>
-						{% endif %}
 						{% if nation.pop_loss_chance > 0 %}
 							<tr>
 								<th>{{ schema.properties.pop_loss_chance.label }}:</th>
@@ -307,7 +351,7 @@
 					{{ nation.notes }}
 				</div>
 			{% else %}
-				<p class="visibility-locked">Requires Tier 2 visibility.</p>
+				<p class="visibility-locked">Requires Tier {{ _tier }} visibility.</p>
 			{% endif %}
 			</div>
 		</div>
@@ -318,7 +362,8 @@
 				<span class="toggle-icon">▼</span>
 			</div>
 			<div class="section-content">
-			{% if visibility_level >= 3 %}
+			{% set _tier = nation_field_tier("administration") %}
+			{% if visibility_level >= _tier %}
 				<div class="table-wrapper">
 					<table class="info-table">
 						<tr class="resources-header-row">
@@ -368,7 +413,7 @@
 					{% endif %}
 				</div>
 			{% else %}
-				<p class="visibility-locked">Requires Tier 3 visibility.</p>
+				<p class="visibility-locked">Requires Tier {{ _tier }} visibility.</p>
 			{% endif %}
 			</div>
 		</div>
@@ -380,6 +425,8 @@
 				<span class="toggle-icon">▼</span>
 			</div>
 			<div class="section-content">
+				{% set _tier = nation_field_tier("primary_race") %}
+				{% if visibility_level >= _tier %}
 				<div class="table-wrapper">
 					<table class="info-table">
 						<tr class="resources-header-row">
@@ -409,14 +456,11 @@
 								None
 							{% endif %}
 						</tr>
-						{% if visibility_level >= 1 %}
 						<tr>
 							<th>{{ schema.properties.unique_minority_count.label }}:</th>
 							<td>{{ pf(nation.unique_minority_count, pn.get("unique_minority_count")) }}</td>
 						</tr>
-						{% endif %}
 					</table>
-					{% if visibility_level >= 1 %}
 					<table class="info-table">
 						<thead>
 							<tr class="resources-header-row">
@@ -461,7 +505,10 @@
 										None
 									{% endif %}
 									</td>
-									<td>{% if pop.get("slave") %}<span class="slave-badge">Slave</span>{% endif %}</td>
+									<td>
+										{% if pop.get("slave") %}<span class="slave-badge">Slave</span>{% endif %}
+										{% if pop.get("disease") %}<span style="color:#c66;">{{ disease_name_map.get(pop.get("disease")|string, "Diseased") }}</span>{% endif %}
+									</td>
 								</tr>
 							{% endfor %}
 						</tbody>
@@ -477,8 +524,10 @@
 							<a href="{{ url_for('nation_routes.nation_item', item_ref=nation.name, pop_page=pop_pagination.next_page) }}">Next</a>
 						{% endif %}
 					</div>
-					{% endif %}{# visibility >= 1 pops table #}
 				</div>
+				{% else %}
+				<p class="visibility-locked">Requires Tier {{ _tier }} visibility.</p>
+				{% endif %}
 			</div>
 		</div>
 
@@ -488,7 +537,8 @@
 				<span class="toggle-icon">▼</span>
 			</div>
 			<div class="section-content">
-			{% if visibility_level >= 2 %}
+			{% set _tier = nation_field_tier("government_type") %}
+			{% if visibility_level >= _tier %}
 				<div class="table-wrapper">
 					<table class="info-table">
 						<tr class="resources-header-row">
@@ -579,7 +629,7 @@
 					</table>
 				</div>
 			{% else %}
-				<p class="visibility-locked">Requires Tier 2 visibility.</p>
+				<p class="visibility-locked">Requires Tier {{ _tier }} visibility.</p>
 			{% endif %}
 			</div>
 		</div>
@@ -591,7 +641,8 @@
 					<span class="toggle-icon">▼</span>
 				</div>
 				<div class="section-content">
-			{% if visibility_level >= 1 %}
+			{% set _tier = nation_field_tier("overlord") %}
+			{% if visibility_level >= _tier %}
 					<div class="table-wrapper">
 						<table class="info-table">
 							<tr class="resources-header-row">
@@ -652,7 +703,7 @@
 						</table>
 					</div>
 				{% else %}
-				<p class="visibility-locked">Requires Tier 1 visibility.</p>
+				<p class="visibility-locked">Requires Tier {{ _tier }} visibility.</p>
 			{% endif %}
 			</div>
 			</div>
@@ -664,7 +715,8 @@
 					<span class="toggle-icon">▼</span>
 				</div>
 				<div class="section-content">
-			{% if visibility_level >= 1 %}
+			{% set _tier = nation_field_tier("vassal_slots") %}
+			{% if visibility_level >= _tier %}
 					<div class="table-wrapper">
 						<table class="info-table">
 							<tr>
@@ -729,7 +781,7 @@
 						</table>
 					</div>
 				{% else %}
-				<p class="visibility-locked">Requires Tier 1 visibility.</p>
+				<p class="visibility-locked">Requires Tier {{ _tier }} visibility.</p>
 			{% endif %}
 			</div>
 			</div>
@@ -741,7 +793,8 @@
 				<span class="toggle-icon">▼</span>
 			</div>
 			<div class="section-content">
-			{% if visibility_level >= 1 %}
+			{% set _tier = nation_field_tier("military_alliance_slots") %}
+			{% if visibility_level >= _tier %}
 				<div class="table-wrapper">
 					<table class="info-table">
 						<tr class="resources-header-row">
@@ -841,7 +894,7 @@
 					</table>
 				</div>
 			{% else %}
-				<p class="visibility-locked">Requires Tier 1 visibility.</p>
+				<p class="visibility-locked">Requires Tier {{ _tier }} visibility.</p>
 			{% endif %}
 			</div>
 		</div>
@@ -852,6 +905,8 @@
 				<span class="toggle-icon">▼</span>
 			</div>
 			<div class="section-content">
+			{% set _tier = nation_field_tier("trade_routes") %}
+			{% if visibility_level >= _tier %}
 			<div class="table-wrapper">
 				<table class="info-table">
 					<tr class="resources-header-row">
@@ -859,18 +914,18 @@
 					</tr>
 					<tr>
 						<th>{{ schema.properties.money.label }}:</th>
-						<td>{{ pf(nation.money, pn.get("money")) }} / {{ pf(nation.money_capacity, pn.get("money_capacity")) }}</td>
+						<td>{{ gate("money", pf(nation.money, pn.get("money")) ~ " / " ~ pf(nation.money_capacity, pn.get("money_capacity"))) }}</td>
 					</tr>
 					<tr>
 						<th>{{ schema.properties.money_income.label }}:</th>
 						<td>
-							{{ pfbd(
+							{{ gate("money_income", pfbd(
 								nation.money_income,
 								pn.get("money_income"),
 								breakdowns["money_income"],
 								pbd.get("money_income", []),
 								"Money Income"
-							) }}
+							)) }}
 						</td>
 					</tr>
 					<tr>
@@ -889,6 +944,9 @@
 			</div>
 			<h2>Ongoing Trade Deals</h2>
 			{% include "trade_routes_section.html" with context %}
+			{% else %}
+			<p class="visibility-locked">Requires Tier {{ _tier }} visibility.</p>
+			{% endif %}
 			</div>
 		</div>
 
@@ -898,7 +956,8 @@
 				<span class="toggle-icon">▼</span>
 			</div>
 			<div class="section-content">
-			{% if visibility_level >= 4 %}
+			{% set _tier = nation_field_tier("land_units") %}
+			{% if visibility_level >= _tier %}
 				<div class="table-wrapper">
 					{%- macro stat_cell(eff, base, stat, breakdown) -%}
 					{%- set ev = eff.get(stat) -%}
@@ -978,7 +1037,7 @@
 					{{ unit_table(nation.get("naval_unit_details", {}), nation.get("naval_units", {})) }}
 				</div>
 			{% else %}
-				<p class="visibility-locked">Requires Tier 4 visibility.</p>
+				<p class="visibility-locked">Requires Tier {{ _tier }} visibility.</p>
 			{% endif %}
 			</div>
 		</div>
@@ -989,7 +1048,8 @@
 				<span class="toggle-icon">▼</span>
 			</div>
 			<div class="section-content">
-			{% if visibility_level >= 4 %}
+			{% set _tier = nation_field_tier("resource_production") %}
+			{% if visibility_level >= _tier %}
 				<h2>Resources</h2>
 				<div class="table-wrapper">
 					<table class="info-table">
@@ -1257,8 +1317,12 @@
 							{% for job_key, job in nation.job_details.items() %}
 								{% set pjob = pending_job_details.get(job_key, {}) %}
 								<tr>
-									<td>{{ job.display_name }}</td>
-									<td>{{ pf(nation.jobs.get(job_key, 0), pn.get("jobs", {}).get(job_key)) }}</td>
+									<td>{{ job.display_name }}{% if job.get("disease") %} <span style="color:#c66;">(disease)</span>{% endif %}</td>
+									{% if job.get("disease") %}
+										<td>{{ job.get("forced_count", 0) }} <span style="color:#888;">(forced)</span></td>
+									{% else %}
+										<td>{{ pf(nation.jobs.get(job_key, 0), pn.get("jobs", {}).get(job_key)) }}</td>
+									{% endif %}
 									<td>
 										{% if "upkeep" in job %}
 											{% for resource, cost in job.upkeep.items() %}
@@ -1292,7 +1356,7 @@
 					<a href="{{ request.path.replace('item', 'edit_jobs') }}">Edit Jobs</a>
 				{% endif %}
 			{% else %}
-				<p class="visibility-locked">Requires Tier 4 visibility.</p>
+				<p class="visibility-locked">Requires Tier {{ _tier }} visibility.</p>
 			{% endif %}
 			</div>
 		</div>
@@ -1303,7 +1367,8 @@
 				<span class="toggle-icon">▼</span>
 			</div>
 			<div class="section-content">
-			{% if visibility_level >= 3 %}
+			{% set _tier = nation_field_tier("districts") %}
+			{% if visibility_level >= _tier %}
 				{% set has_pending = pending_nation is not none %}
 				{% set pending_districts = pn.get("districts") or [] %}
 				{% set pending_cities = pn.get("cities") or [] %}
@@ -1329,7 +1394,7 @@
 							{% set dd = district_defs_map.get(cur_def_key, {}) %}
 							{% set pend_node = pd.get("node", "") if pd is not none else cur_node %}
 							{% set node_changed = pd is not none and pend_node != cur_node %}
-							{{ district_card(dd, cur_node, cur_upgrades, pend_node=pend_node if node_changed else none) }}
+							{{ district_card(dd, cur_node, cur_upgrades, pend_node=pend_node if node_changed else none, nation=nation) }}
 
 						{% elif cur_type %}
 							{# ── Legacy district (inactive) ── #}
@@ -1545,7 +1610,7 @@
 					</div>
 				{% endif %}
 			{% else %}
-				<p class="visibility-locked">Requires Tier 3 visibility.</p>
+				<p class="visibility-locked">Requires Tier {{ _tier }} visibility.</p>
 			{% endif %}
 			</div>
 		</div>
@@ -1556,10 +1621,11 @@
 			<span class="toggle-icon">▼</span>
 		</div>
 		<div class="section-content">
-			{% if visibility_level >= 3 %}
+			{% set _tier = nation_field_tier("technologies") %}
+			{% if visibility_level >= _tier %}
 			{{ render_tech_tree(nation.get("technologies", {"political_philosophy": {"researched": true}}), nation.get("technology_cost_modifier", 0), nation.get("technology_cost_minimum", 2), json_data, tech_category_cost_modifiers=nation.get("technology_category_cost_modifiers", {})) }}
 		{% else %}
-				<p class="visibility-locked">Requires Tier 3 visibility.</p>
+				<p class="visibility-locked">Requires Tier {{ _tier }} visibility.</p>
 			{% endif %}
 			</div>
 	</div>
@@ -1570,7 +1636,8 @@
 			<span class="toggle-icon">▼</span>
 		</div>
 		<div class="section-content">
-			{% if visibility_level >= 3 %}
+			{% set _tier = nation_field_tier("progress_quests") %}
+			{% if visibility_level >= _tier %}
 			<div class="table-wrapper">
 				<h3>Progress Slots</h3>
 				<table class="info-table">
@@ -1650,10 +1717,92 @@
 				</table>
 			</div>
 		{% else %}
-				<p class="visibility-locked">Requires Tier 3 visibility.</p>
+				<p class="visibility-locked">Requires Tier {{ _tier }} visibility.</p>
 			{% endif %}
 			</div>
 	</div>
+
+	{% if nation_disease_rows or shared_quest_rows %}
+	<div class="expandable-section" id="diseases-section">
+		<div class="section-header" onclick="toggleSection(this)">
+			<h2>Diseases</h2>
+			<span class="toggle-icon">▼</span>
+		</div>
+		<div class="section-content">
+			{% set _tier = nation_field_tier("diseases") %}
+			{% if visibility_level >= _tier %}
+			{% if nation_disease_rows %}
+			<div class="table-wrapper">
+				<table class="info-table">
+					<thead>
+						<tr>
+							<th>Disease</th>
+							<th>Rating</th>
+							<th>Infected Pops</th>
+							<th>Stage</th>
+							<th>Cure Progress</th>
+						</tr>
+					</thead>
+					<tbody>
+						{% for row in nation_disease_rows %}
+							<tr>
+								<td><a href="/diseases/item/{{ row.name }}">{{ row.name }}</a>{% if row.cured %} <span style="color:#6c6;">(Cured)</span>{% endif %}</td>
+								<td>{{ row.rating }}</td>
+								<td>{{ row.infected }} / {{ nation.pop_count }}</td>
+								<td>{{ row.stage_name or "—" }}</td>
+								<td>{{ row.cure_progress }} / {{ row.required_progress }}</td>
+							</tr>
+						{% endfor %}
+					</tbody>
+				</table>
+			</div>
+			{% else %}
+				<p style="color:#888;">No infected pops.</p>
+			{% endif %}
+			{% set _shared_tier = nation_field_tier("shared_quests") %}
+			{% if visibility_level >= _shared_tier and shared_quest_rows %}
+			<h3>Shared Cure Quests</h3>
+			<div class="table-wrapper">
+				<table class="info-table">
+					<thead>
+						<tr>
+							<th>Disease</th>
+							<th>Slot</th>
+							<th>Contribution / Tick</th>
+							<th>Total Cure Progress</th>
+							<th>Status</th>
+							<th>Link</th>
+						</tr>
+					</thead>
+					<tbody>
+						{% for row in shared_quest_rows %}
+							<tr>
+								<td><a href="/diseases/item/{{ row.disease_name }}">{{ row.disease_name }}</a></td>
+								<td>{{ json_data["slot_types"].get(row.slot, {"name": "Unknown Slot"})["name"] }}</td>
+								<td>{{ row.total_progress_per_tick }}</td>
+								<td class="{{ 'completed-quest' if row.cure_progress >= row.required_progress else '' }}">{{ row.cure_progress }} / {{ row.required_progress }}</td>
+								<td>
+									{% if row.cured %}
+										<span style="color:#6c6;">Cured</span>
+									{% elif row.gated %}
+										<span style="color:#fa8;">Gated — needs {{ row.min_infected_pops }} total infected pops ({{ row.total_infected }} now)</span>
+									{% else %}
+										<span style="color:#6c6;">Research active</span>
+									{% endif %}
+								</td>
+								<td>{% if row.link %}{{ row.link|format_discord_link|safe }}{% endif %}</td>
+							</tr>
+						{% endfor %}
+					</tbody>
+				</table>
+			</div>
+			{% endif %}
+			{% else %}
+				<p class="visibility-locked">Requires Tier {{ _tier }} visibility.</p>
+			{% endif %}
+		</div>
+	</div>
+	{% endif %}
 
 	<div class="expandable-section" id="modifiers-section">
 		<div class="section-header" onclick="toggleSection(this)">
@@ -1661,7 +1810,8 @@
 			<span class="toggle-icon">▼</span>
 		</div>
 		<div class="section-content">
-			{% if visibility_level >= 3 %}
+			{% set _tier = nation_field_tier("modifiers") %}
+			{% if visibility_level >= _tier %}
 			<div class="table-wrapper">
 				<table class="info-table">
 					<thead>
@@ -1807,7 +1957,7 @@
 				{% endif %}
 			{% endif %}
 		{% else %}
-				<p class="visibility-locked">Requires Tier 3 visibility.</p>
+				<p class="visibility-locked">Requires Tier {{ _tier }} visibility.</p>
 			{% endif %}
 			</div>
 	</div>

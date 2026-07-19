@@ -560,12 +560,6 @@
         "field_template": "turns_with_library",
         "applicable_to": ["nation"]
     },
-    "undead_chance": {
-        "name": "Undead Chance",
-        "value_format": "percentage",
-        "field_template": "undead_chance",
-        "applicable_to": ["nation"]
-    },
     "unit_hp": {
         "name": "Unit HP",
         "value_format": "number",
@@ -577,12 +571,6 @@
         "value_format": "number",
         "field_template": "unit_morale",
         "applicable_to": ["nation", "unit"]
-    },
-    "vampirism_chance": {
-        "name": "Vampirism Chance",
-        "value_format": "percentage",
-        "field_template": "vampirism_chance",
-        "applicable_to": ["character"]
     },
     "vassal_slots": {
         "name": "Vassal Slots",

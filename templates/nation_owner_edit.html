@@ -6,6 +6,28 @@
 {% block title %}Edit Nation: {{ nation.name }}{% endblock %}
 
 {% block content %}
+<style>
+.visibility-locked { color: #888; font-style: italic; padding: 0.75rem 1rem; }
+.visibility-locked-inline {
+    color: #777;
+    font-style: italic;
+    font-size: 0.85em;
+    border: 1px solid #444;
+    border-radius: 3px;
+    padding: 0 5px;
+    white-space: nowrap;
+}
+</style>
+{# gate: renders `content` only if visibility_level meets field_name's required
+   tier (nation_field_tier); otherwise shows a compact "Tier N+" lock badge. #}
+{% macro gate(field_name, content) -%}
+{%- set _t = nation_field_tier(field_name) -%}
+{%- if visibility_level >= _t -%}
+{{ content }}
+{%- else -%}
+<span class="visibility-locked-inline" title="Requires Tier {{ _t }} visibility to view">Tier {{ _t }}+</span>
+{%- endif -%}
+{%- endmacro %}
 <div class="nation-page-container">
     <div class="header-bar">
         <h1>Edit Nation: {{ nation.name }}</h1>
@@ -42,6 +64,8 @@
                     <span class="toggle-icon">▼</span>
                 </div>
                 <div class="section-content">
+                {% set _tier = nation_field_tier("stability") %}
+                {% if visibility_level >= _tier %}
                     <div class="main-columns">
                         <div class="table-wrapper">
                             <table class="info-table">
@@ -96,12 +120,6 @@
                                         <td>{{ nation.stationary_delay }}</td>
                                     </tr>
                                 {% endif %}
-                                {% if nation.vampirism_chance > 0 %}
-                                    <tr>
-                                        <th>{{ schema.properties.vampirism_chance.label }}:</th>
-                                        <td>{{ (nation.vampirism_chance * 100)|int }}%</td>
-                                    </tr>
-                                {% endif %}
                                 {% if nation.pop_loss_chance > 0 %}
                                     <tr>
                                         <th>{{ schema.properties.pop_loss_chance.label }}:</th>
@@ -144,10 +162,13 @@
                         {{ form.rp_mod_notes(class="form-control", rows=4) }}
                     </div>
                     {% endif %}
+                {% else %}
+                <p class="visibility-locked">Requires Tier {{ _tier }} visibility.</p>
+                {% endif %}
                 </div>
             </div>
 
-            {% if visibility_level >= 3 %}
+            {% set _tier = nation_field_tier("administration") %}
             <!-- Administration & Holdings Section -->
             <div class="expandable-section" id="administration-section">
                 <div class="section-header" onclick="toggleSection(this)">
@@ -155,6 +176,7 @@
                     <span class="toggle-icon">▼</span>
                 </div>
                 <div class="section-content">
+                {% if visibility_level >= _tier %}
                     <div class="table-wrapper">
                         <table class="info-table">
                             <tr class="resources-header-row">
@@ -202,9 +224,11 @@
                             </table>
                         {% endif %}
                     </div>
+                {% else %}
+                <p class="visibility-locked">Requires Tier {{ _tier }} visibility.</p>
+                {% endif %}
                 </div>
             </div>
-            {% endif %}
 
 
 
@@ -215,6 +239,8 @@
                     <span class="toggle-icon">▼</span>
                 </div>
                 <div class="section-content">
+				{% set _tier = nation_field_tier("primary_race") %}
+				{% if visibility_level >= _tier %}
                     <div class="table-wrapper">
                         <table class="info-table">
                             <tr class="resources-header-row">
@@ -241,7 +267,7 @@
                         <table class="info-table" id="pop-edit-table">
                             <thead>
                                 <tr class="resources-header-row">
-                                    <th colspan="{{ 8 if g.user.is_admin else 7 }}" class="resources-header">Population Details</th>
+                                    <th colspan="{{ 9 if g.user.is_admin else 8 }}" class="resources-header">Population Details</th>
                                 </tr>
                                 <tr>
                                     <th><input type="checkbox" id="select-all-pops" title="Select all"></th>
@@ -249,6 +275,7 @@
                                     <th>Race</th>
                                     <th>Culture</th>
                                     <th>Religion</th>
+                                    <th>Disease</th>
                                     <th>Reason</th>
                                     {% if g.user.is_admin %}
                                         <th>Clone Now</th>
@@ -285,6 +312,9 @@
                                         {% else %}
                                             None
                                         {% endif %}
+                                        </td>
+                                        <td>
+                                        {% if pop.get("disease") %}<span style="color:#c66;">{{ disease_name_map.get(pop.get("disease")|string, "Diseased") }}</span>{% endif %}
                                         </td>
                                         {# Clone controls associate with a stub form emitted after the main
                                            form via the HTML5 form attribute — a <form> nested here would
@@ -477,10 +507,14 @@
                         })();
                         </script>
                     </div>
+				{% else %}
+				<p class="visibility-locked">Requires Tier {{ _tier }} visibility.</p>
+				{% endif %}
                 </div>
             </div>
             
-            {% if visibility_level >= 2 %}
+            {% set _tier = nation_field_tier("government_type") %}
+            {% if visibility_level >= _tier %}
             <!-- Government & Laws Section -->
             <div class="expandable-section" id="government-laws-section">
                 <div class="section-header" onclick="toggleSection(this)">
@@ -573,9 +607,28 @@
                     </div>
                 </div>
             </div>
+            {% else %}
+            <div class="expandable-section" id="government-laws-section">
+                <div class="section-header" onclick="toggleSection(this)">
+                    <h2>Government &amp; Laws</h2>
+                    <span class="toggle-icon">▼</span>
+                </div>
+                <div class="section-content">
+                <p class="visibility-locked">Requires Tier {{ _tier }} visibility.</p>
+                </div>
+            </div>
+            <div class="expandable-section" id="vassalship-section">
+                <div class="section-header" onclick="toggleSection(this)">
+                    <h2>Vassalship</h2>
+                    <span class="toggle-icon">▼</span>
+                </div>
+                <div class="section-content">
+                <p class="visibility-locked">Requires Tier {{ _tier }} visibility.</p>
+                </div>
+            </div>
             {% endif %}
 
-            {% if visibility_level >= 1 %}
+            {% set _tier = nation_field_tier("military_alliance_slots") %}
             <!-- Diplomacy Section -->
             <div class="expandable-section" id="diplomacy-section">
                 <div class="section-header" onclick="toggleSection(this)">
@@ -583,6 +636,7 @@
                     <span class="toggle-icon">▼</span>
                 </div>
                 <div class="section-content">
+                {% if visibility_level >= _tier %}
                     <div class="table-wrapper">
                         <table class="info-table">
                             <tr class="resources-header-row">
@@ -639,9 +693,11 @@
                             </tbody>
                         </table>
                     </div>
+                {% else %}
+                <p class="visibility-locked">Requires Tier {{ _tier }} visibility.</p>
+                {% endif %}
                 </div>
             </div>
-            {% endif %}
 
             <div class="expandable-section" id="trade-routes-section">
                 <div class="section-header" onclick="toggleSection(this)">
@@ -649,6 +705,8 @@
                     <span class="toggle-icon">▼</span>
                 </div>
                 <div class="section-content">
+                {% set _tier = nation_field_tier("trade_routes") %}
+                {% if visibility_level >= _tier %}
                 <div class="table-wrapper">
                     <table class="info-table">
                         <tr class="resources-header-row">
@@ -656,11 +714,11 @@
                         </tr>
                         <tr>
                             <th>{{ form.money.label.text }}:</th>
-                            <td>{{ form.money(class="form-control") }} / {{ nation.money_capacity }}</td>
+                            <td>{{ gate("money", nation.money ~ " / " ~ nation.money_capacity) }}</td>
                         </tr>
                         <tr>
                             <th>{{ schema.properties.money_income.label }}:</th>
-                            <td>{{ nation.money_income }}</td>
+                            <td>{{ gate("money_income", nation.money_income) }}</td>
                         </tr>
                         <tr>
                             <th>{{ schema.properties.remaining_import_slots.label }}:</th>
@@ -680,10 +738,14 @@
                 {% with editable = True %}
                 {% include "trade_routes_section.html" with context %}
                 {% endwith %}
+                {% else %}
+                <p class="visibility-locked">Requires Tier {{ _tier }} visibility.</p>
+                {% endif %}
                 </div>
             </div>
 
-            {% if visibility_level >= 4 %}
+            {% set _tier = nation_field_tier("land_units") %}
+            {% if visibility_level >= _tier %}
             <div class="expandable-section" id="war-section">
                 <div class="section-header" onclick="toggleSection(this)">
                     <h2>War</h2>
@@ -790,7 +852,7 @@
                             </tr>
                             <tr>
                                 <th>{{ form.money.label.text }}:</th>
-                                <td>{{ nation.money }} / {{ nation.money_capacity }}</td>
+                                <td>{{ form.money(class="form-control") }} / {{ nation.money_capacity }}</td>
                             </tr>
                             <tr>
                                 <th>{{ schema.properties.money_income.label }}:</th>
@@ -957,9 +1019,28 @@
                     </section>
                 </div>
         </div>
+        {% else %}
+        <div class="expandable-section" id="war-section">
+            <div class="section-header" onclick="toggleSection(this)">
+                <h2>War</h2>
+                <span class="toggle-icon">▼</span>
+            </div>
+            <div class="section-content">
+            <p class="visibility-locked">Requires Tier {{ _tier }} visibility.</p>
+            </div>
+        </div>
+        <div class="expandable-section" id="resources-jobs-section">
+            <div class="section-header" onclick="toggleSection(this)">
+                <h2>Resources &amp; Jobs</h2>
+                <span class="toggle-icon">▼</span>
+            </div>
+            <div class="section-content">
+            <p class="visibility-locked">Requires Tier {{ _tier }} visibility.</p>
+            </div>
+        </div>
         {% endif %}
 
-        {% if visibility_level >= 3 %}
+        {% set _tier = nation_field_tier("districts") %}
         <!-- Districts Section -->
         <div class="expandable-section" id="districts-cities-wonders-section">
             <div class="section-header" onclick="toggleSection(this)">
@@ -967,6 +1048,7 @@
                 <span class="toggle-icon">▼</span>
             </div>
             <div class="section-content">
+            {% if visibility_level >= _tier %}
                 <h2>Districts</h2>
                 <p>{{ schema.properties.district_slots.label }}: {{ nation.district_slots }}</p>
                 <div class="districts-grid">
@@ -1014,7 +1096,7 @@
                              data-init-upgrades="{{ cur_upgrades_raw }}">
                             {% set dd_edit = district_defs_map.get(cur_def_key_edit, {}) %}
                             {% if dd_edit %}
-                            {{ district_card(dd_edit, cur_node_edit, cur_upgrades_edit, editable=True, idx=idx) }}
+                            {{ district_card(dd_edit, cur_node_edit, cur_upgrades_edit, editable=True, idx=idx, nation=nation) }}
                             {% endif %}
                         </div>
                     </div>
@@ -1095,6 +1177,9 @@
 						</table>
 					</div>
 				{% endif %}
+            {% else %}
+            <p class="visibility-locked">Requires Tier {{ _tier }} visibility.</p>
+            {% endif %}
             </div>
         </div>
 
@@ -1105,7 +1190,12 @@
                 <span class="toggle-icon">▼</span>
             </div>
             <div class="section-content">
+                {% set _tier = nation_field_tier("technologies") %}
+                {% if visibility_level >= _tier %}
                 {{ render_tech_tree(nation.get("technologies", {"political_philosophy": {"researched": true}}), nation.get("technology_cost_modifier", 0), nation.get("technology_cost_minimum", 2), json_data, editable=True, form=form, form_json=form_json["technologies"], tech_category_cost_modifiers=nation.get("technology_category_cost_modifiers", {})) }}
+                {% else %}
+                <p class="visibility-locked">Requires Tier {{ _tier }} visibility.</p>
+                {% endif %}
             </div>
         </div>
 
@@ -1115,6 +1205,8 @@
                 <span class="toggle-icon">▼</span>
             </div>
             <div class="section-content">
+                {% set _tier = nation_field_tier("progress_quests") %}
+                {% if visibility_level >= _tier %}
                 <div class="table-wrapper">
                     <h3>Progress Slots</h3>
                     <table class="info-table">
@@ -1196,6 +1288,42 @@
                     </table>
                 </div>
                 <button type="button" class="btn btn-primary" onclick="addToArray('progress_quests')">Add Quest</button>
+
+                <h2 style="margin-top: 18px;">Shared Cure Quests</h2>
+                <p style="color:#888; font-size:0.9em;">
+                    Contributions to shared disease-cure research. Every contributing nation's progress is
+                    added to the disease's total cure progress each tick.
+                </p>
+                <div class="table-wrapper">
+                    <table class="jobs-table">
+                        <thead>
+                            <tr>
+                                <th>Disease</th>
+                                <th>Slot</th>
+                                <th>Bonus Progress Per Tick</th>
+                                <th>Link</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="shared_quests-tbody">
+                            {% for sq_field in form.shared_quests %}
+                                <tr>
+                                    <td>{{ sq_field.item_id() }}{{ sq_field.disease(class="form-control") }}</td>
+                                    <td>{{ sq_field.slot(class="form-control") }}</td>
+                                    <td>{{ sq_field.bonus_progress_per_tick(class="form-control") }}</td>
+                                    <td>{{ sq_field.link(class="form-control") }}</td>
+                                    <td>
+                                        <button type="button" class="btn btn-danger" onclick="removeFromArray(this, 'shared_quests')">Remove</button>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <button type="button" class="btn btn-primary" onclick="addSharedQuest()">Add Shared Quest</button>
+                {% else %}
+                <p class="visibility-locked">Requires Tier {{ _tier }} visibility.</p>
+                {% endif %}
             </div>
         </div>
 
@@ -1206,11 +1334,15 @@
                 <span class="toggle-icon">▼</span>
             </div>
             <div class="section-content">
+                {% set _tier = nation_field_tier("modifiers") %}
+                {% if visibility_level >= _tier %}
                 {{ modifier_table(form.modifiers, scopes_by_source_type.get('nation', []),
                                   entity_source_type='nation', show_scaling=True, show_drag=True) }}
+                {% else %}
+                <p class="visibility-locked">Requires Tier {{ _tier }} visibility.</p>
+                {% endif %}
             </div>
         </div>
-        {% endif %}
 
         <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
         <script>
@@ -1301,6 +1433,7 @@
             const ALL_DISTRICT_CATEGORIES = {{ all_district_categories | tojson | safe }};
             const ALL_DISTRICT_DEFS = {{ all_district_defs | tojson | safe }};
             const DISTRICT_DEFS_MAP = {{ district_defs_map | tojson | safe }};
+            const NATION_TECHNOLOGIES = {{ nation.get("technologies", {}) | tojson | safe }};
             const ALL_NATIONS_LIST = {{ bulk_edit_options.nations | tojson | safe }};
             const VISIBILITY_TARGET_TYPES = [
                 {key: 'all_nations', name: 'All Nations'},
@@ -1468,8 +1601,15 @@
                     }
                 }
 
-                // Upgrades
-                const upgrades = dd.upgrades || [];
+                // Upgrades — hide any not-yet-unlocked upgrade whose required
+                // technology isn't researched (mirrors check_upgrade_requirements
+                // server-side; only the "technology" requirement type is checked
+                // here since that's all this live preview has data for).
+                const upgrades = (dd.upgrades || []).filter(function(upg) {
+                    if (curUpgrades.includes(upg.key)) return true;
+                    const techReqs = (upg.requirements || []).filter(r => r.type === 'technology');
+                    return techReqs.every(r => NATION_TECHNOLOGIES[r.value] && NATION_TECHNOLOGIES[r.value].researched);
+                });
                 if (upgrades.length) {
                     if (mods.length || syns.length) h += `<div class="dc-rule"></div>`;
                     h += `<div class="dc-upg-label">Upgrades</div>`;
@@ -1825,6 +1965,33 @@
                 }
             }
         
+            const DISEASE_OPTIONS = {{ disease_options | tojson | safe }};
+
+            function addSharedQuest() {
+                const tbody = document.getElementById('shared_quests-tbody');
+                const i = tbody.children.length;
+                const diseaseOpts = ['<option value="">None</option>']
+                    .concat(DISEASE_OPTIONS.map(d => `<option value="${d.id}">${d.name}</option>`))
+                    .join('');
+                const newRow = document.createElement('tr');
+                newRow.innerHTML = `
+                    <td><input type="hidden" name="shared_quests-${i}-item_id" id="shared_quests-${i}-item_id" value="">
+                        <select class="form-control" name="shared_quests-${i}-disease" id="shared_quests-${i}-disease">${diseaseOpts}</select></td>
+                    <td>
+                        <select class="form-control" name="shared_quests-${i}-slot" id="shared_quests-${i}-slot">
+                            <option value="no_slot">No Slot</option>
+                            <option value="tier_1_spell_slot">Tier 1 Spell Slot</option>
+                            <option value="tier_2_spell_slot">Tier 2 Spell Slot</option>
+                            <option value="tier_3_spell_slot">Tier 3 Spell Slot</option>
+                        </select>
+                    </td>
+                    <td><input type="number" class="form-control" name="shared_quests-${i}-bonus_progress_per_tick" id="shared_quests-${i}-bonus_progress_per_tick" value="0"></td>
+                    <td><input type="text" class="form-control" name="shared_quests-${i}-link" id="shared_quests-${i}-link" value=""></td>
+                    <td><button type="button" class="btn btn-danger" onclick="removeFromArray(this, 'shared_quests')">Remove</button></td>
+                `;
+                tbody.appendChild(newRow);
+            }
+
             function removeFromArray(button, categoryName) {
                 const row = button.closest('tr');
                 row.remove();

@@ -80,10 +80,7 @@
             "nation_diplomatic_range": 4
           },
           "Undying": {
-            "character_elderly_age": 3,
-            "nation_vampiric": 1,
-            "nation_locks_partial_vampire": 1,
-            "nation_vampirism_chance": -100
+            "character_elderly_age": 3
           },
           "Venerable": {
             "character_elderly_age": 1,

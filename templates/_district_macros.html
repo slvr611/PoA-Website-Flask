@@ -2,7 +2,7 @@
 {% from '_modifier_macros.html' import modifier_section, modifier_row with context %}
 
 {#
-  district_card(dd, cur_node, cur_upgrades, editable, form_district, idx, pend_node)
+  district_card(dd, cur_node, cur_upgrades, editable, form_district, idx, pend_node, nation)
     dd             – full district-def dict from district_defs_map
     cur_node       – current node key string (empty = none)
     cur_upgrades   – list of unlocked upgrade key strings
@@ -10,8 +10,11 @@
     form_district  – WTForms DistrictDict FormField (required when editable=True)
     idx            – district slot index used for unique element IDs (required when editable=True)
     pend_node      – pending node value (static mode only; show diff indicator when != cur_node)
+    nation         – nation dict, used to hide not-yet-unlocked upgrades whose requirements
+                     (e.g. a researched technology) aren't met. Already-unlocked upgrades
+                     always show regardless, so a toggle is never hidden out from under it.
 #}
-{% macro district_card(dd, cur_node, cur_upgrades, editable=False, form_district=none, idx=none, pend_node=none) %}
+{% macro district_card(dd, cur_node, cur_upgrades, editable=False, form_district=none, idx=none, pend_node=none, nation=none) %}
 {% if dd %}
 <div class="dc dc--t{{ dd.get('tier', 1) }}">
     <header>
@@ -69,6 +72,7 @@
         {% if editable %}
         {% for upg in dd.upgrades %}
         {% set unlocked = upg.key in cur_upgrades %}
+        {% if unlocked or not nation or check_upgrade_requirements(nation, upg) %}
         <div class="dc-upg-item">
             <label class="dc-upg-toggle">
                 <input type="checkbox" class="upg-checkbox"
@@ -85,10 +89,12 @@
             {% for mod in upg.get('modifiers', []) %}{{ modifier_row(mod, indent=True, label_color='#99a') }}{% endfor %}
             {% endif %}
         </div>
+        {% endif %}
         {% endfor %}
         {% else %}
         {% for upg in dd.upgrades %}
         {% set unlocked = upg.key in cur_upgrades %}
+        {% if unlocked or not nation or check_upgrade_requirements(nation, upg) %}
         <div class="dc-upg-item {% if not unlocked %}dc-dim{% endif %}">
             <span class="dc-upg-name">{% if unlocked %}✓ {% endif %}{{ upg.display_name or upg.key }}</span>
             {% if not unlocked and upg.get('requirements') %}
@@ -98,6 +104,7 @@
             {% for mod in upg.get('modifiers', []) %}{{ modifier_row(mod, indent=True, label_color='#99a') }}{% endfor %}
             {% endif %}
         </div>
+        {% endif %}
         {% endfor %}
         {% endif %}
         {% endif %}

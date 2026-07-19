@@ -32,6 +32,19 @@
         "bsonType": "boolean",
         "label": "Slave",
         "description": "Whether this pop is enslaved"
+      },
+      "disease": {
+        "bsonType": "linked_object",
+        "label": "Disease",
+        "description": "The disease this pop is infected with (empty = healthy)",
+        "noneResult": "Healthy",
+        "collections": ["diseases"]
+      },
+      "pre_disease_race": {
+        "bsonType": "string",
+        "label": "Pre-Disease Race",
+        "description": "Race id restored when this pop is cured of a race-changing disease",
+        "hidden": true
       }
     }
   }

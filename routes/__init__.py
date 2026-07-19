@@ -16,6 +16,7 @@ from .pops_routes import pops_routes
 from .hex_map_routes import hex_map_routes
 from .district_def_routes import district_def_routes
 from .trade_route_routes import trade_route_routes
+from .disease_routes import disease_routes
 
 def register_routes(app, mongo, discord):
     app.register_blueprint(base_routes)
@@ -34,6 +35,7 @@ def register_routes(app, mongo, discord):
     app.register_blueprint(hex_map_routes)
     app.register_blueprint(district_def_routes)
     app.register_blueprint(trade_route_routes)
+    app.register_blueprint(disease_routes)
 
 @app.context_processor
 def inject_navbar_data():

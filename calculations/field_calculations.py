@@ -20,7 +20,7 @@ def _build_nation_calc_cache(target):
     if not target_id:
         return {}
 
-    pops = list(category_data["pops"]["database"].find({"nation": target_id}, {"race": 1, "culture": 1, "religion": 1, "slave": 1}))
+    pops = list(category_data["pops"]["database"].find({"nation": target_id}, {"race": 1, "culture": 1, "religion": 1, "slave": 1, "disease": 1}))
     race_ids = list({pop.get("race", "") for pop in pops if pop.get("race")})
 
     race_object_ids = []
@@ -205,9 +205,22 @@ def _build_nation_calc_cache(target):
             if cha > highest_ruler_charisma:
                 highest_ruler_charisma = cha
 
+    from helpers.disease_helpers import infection_counts_from_pops
+
+    primary_race_name = ""
+    try:
+        _pr = category_data["races"]["database"].find_one(
+            {"_id": ObjectId(str(target.get("primary_race", "")))}, {"name": 1}
+        )
+        primary_race_name = (_pr or {}).get("name", "")
+    except Exception:
+        pass
+
     return {
         "pops": pops,
         "pop_count": len(pops) - slave_count,
+        "disease_infection_counts": infection_counts_from_pops(pops),
+        "primary_race_name": primary_race_name,
         "bloodthirsty_pop_count": bloodthirsty_pop_count,
         "primary_culture_pop_count": primary_culture_pop_count,
         "primary_religion_pop_count": primary_religion_pop_count,
@@ -313,6 +326,7 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
     territory_terrain_totals = {}
     job_details = {}
     job_totals = {}
+    disease_totals = {}
     land_unit_details = {}
     naval_unit_details = {}
     support_unit_details = {}
@@ -363,14 +377,16 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
         _oor_set = out_of_range
         territory_node_counts = {}
         active_node_counts = {}
-        _luxury_resource_keys = {r["key"] for r in json_data["luxury_resources"]}
         for _nt in _node_tiles:
             _coord = (_nt["q"], _nt["r"])
             if _coord in _oor_set:
                 continue
             _res = _nt["rt"]
             territory_node_counts[_res] = territory_node_counts.get(_res, 0) + 1
-            if _nt.get("has_building") or _res in _luxury_resource_keys:
+            # Luxury nodes now follow the same rule as every other resource:
+            # active only with a building on the tile, or unconditionally for
+            # nomadic nations (handled separately below via _is_nomadic).
+            if _nt.get("has_building"):
                 active_node_counts[_res] = active_node_counts.get(_res, 0) + 1
         _cache = target.setdefault("_calc_cache", {})
         _cache["out_of_range_tiles"] = out_of_range
@@ -392,6 +408,15 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
         _sub = perf_counter()
         jobs_assigned = collect_jobs_assigned(target)
         job_details = calculate_job_details(target, modifier_totals, district_totals, tech_totals, city_totals, law_totals, external_modifiers_total)
+        # Virtual forced disease jobs: injected from live disease docs so that
+        # disease edits propagate without touching nation["jobs"] (never mutate
+        # the stored jobs dict — merge into a copy).
+        from helpers.disease_helpers import collect_disease_effects
+        disease_job_details, disease_jobs_assigned, disease_totals = collect_disease_effects(target)
+        if disease_job_details:
+            job_details.update(disease_job_details)
+            jobs_assigned = dict(jobs_assigned)
+            jobs_assigned.update(disease_jobs_assigned)
         job_totals = sum_job_totals(target, jobs_assigned, job_details)
         record_timing("ts_jobs_ms", _sub)
 
@@ -419,6 +444,11 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
         calculate_karma_from_negative_stockpiles(target, modifier_totals)
     elif target_data_type == "nation_jobs":
         job_details = calculate_job_details(target, modifier_totals, district_totals, tech_totals, city_totals, law_totals, external_modifiers_total)
+        # Show forced disease jobs (read-only) on the jobs edit page too.
+        from helpers.disease_helpers import collect_disease_effects
+        disease_job_details, _, _ = collect_disease_effects(target)
+        if disease_job_details:
+            job_details.update(disease_job_details)
     elif target_data_type == "character":
         positive_title_modifiers = calculate_title_modifiers(target.get("positive_titles", []), target_data_type, schema_properties)
         negative_title_modifiers = calculate_title_modifiers(target.get("negative_titles", []), target_data_type, schema_properties)
@@ -450,6 +480,7 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
         ("external",   external_modifiers_total),
         ("modifiers",  modifier_totals),
         ("districts",  district_totals),
+        ("diseases",   disease_totals),
         ("tech",       tech_totals),
         ("loose_nodes",loose_node_totals),
         ("terrain",    territory_terrain_totals),
@@ -585,6 +616,12 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
             overall_total_modifiers
         )
         calculated_values["progress_quests"] = target["progress_quests"]
+    if "shared_quests" in target:
+        target["shared_quests"] = compute_field(
+            "shared_quests", target, 0, {},
+            overall_total_modifiers
+        )
+        calculated_values["shared_quests"] = target["shared_quests"]
     record_timing("progress_quest_calc_ms", phase_start)
         
     phase_start = perf_counter()
@@ -1531,7 +1568,14 @@ def check_job_requirements(target, job_details, overall_total_modifiers, region_
         elif requirement == "name":
             if target.get("name", "") not in value:
                 meets_requirements = False
-    
+        elif requirement == "accepted_disease":
+            # Job only available to nations that have "accepted" the named
+            # race-changing disease — i.e. their primary race carries the
+            # disease's derived-race prefix (e.g. "Vampiric ..." for Vampirism).
+            from helpers.disease_helpers import nation_accepts_disease_by_name
+            if not nation_accepts_disease_by_name(target, value):
+                meets_requirements = False
+
     return meets_requirements
 
 
@@ -3777,6 +3821,18 @@ def _apply_vassal_tribute_modifiers(target, overall_total_modifiers):
                 overall_total_modifiers["research_production"] = (
                     overall_total_modifiers.get("research_production", 0) - own_research
                 )
+        elif vassal_type == "Mercantile":
+            # Full transfer, not the 50%-lossy split Provincial uses for research:
+            # a Mercantile vassal's own luxury production is gained entirely by its
+            # overlord instead, so it's removed from the vassal's own totals here.
+            own_production = target.get("resource_production", {})
+            for _lux in json_data.get("luxury_resources", []):
+                _lux_key = _lux["key"]
+                own_amount = own_production.get(_lux_key, 0)
+                if own_amount > 0:
+                    overall_total_modifiers[f"{_lux_key}_production"] = (
+                        overall_total_modifiers.get(f"{_lux_key}_production", 0) - own_amount
+                    )
 
     # ── Overlord side (this nation receives tribute from vassals) ─────────
     if "_id" not in target:
@@ -3785,7 +3841,7 @@ def _apply_vassal_tribute_modifiers(target, overall_total_modifiers):
     try:
         vassals = list(mongo.db.nations.find(
             {"overlord": nation_id_str},
-            {"pop_count": 1, "vassal_type": 1, "modifiers": 1},
+            {"pop_count": 1, "vassal_type": 1, "modifiers": 1, "resource_production": 1},
         ))
     except Exception:
         return
@@ -3825,6 +3881,15 @@ def _apply_vassal_tribute_modifiers(target, overall_total_modifiers):
                 overall_total_modifiers["research_production"] = (
                     overall_total_modifiers.get("research_production", 0) + transfer
                 )
+        elif v_type == "Mercantile":
+            v_production = vassal.get("resource_production", {})
+            for _lux in json_data.get("luxury_resources", []):
+                _lux_key = _lux["key"]
+                v_amount = v_production.get(_lux_key, 0)
+                if v_amount > 0:
+                    overall_total_modifiers[f"{_lux_key}_production"] = (
+                        overall_total_modifiers.get(f"{_lux_key}_production", 0) + v_amount
+                    )
 
 
 

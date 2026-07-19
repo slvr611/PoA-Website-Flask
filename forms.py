@@ -37,6 +37,9 @@ class FormGenerator:
         elif data_type == "new_character":
             return NewCharacterForm.create_form(schema, item, formdata)
 
+        elif data_type == "diseases":
+            return DiseaseForm.create_form(schema, item, formdata)
+
         return DynamicSchemaForm.create_form(schema, item, formdata)
 
 class ResourceStorageDict(Form):
@@ -180,10 +183,15 @@ class JobAssignmentDict(Form):
 
     @classmethod
     def create_form_class(cls, job_details):
-        for job in job_details.keys():
+        for job, details in job_details.items():
+            # Forced disease jobs are display-only: never create an editable
+            # field for them, or their counts would be persisted into
+            # nation["jobs"] on save.
+            if isinstance(details, dict) and details.get("disease"):
+                continue
             field = IntegerField(job, validators=[NumberRange(min=0)], default=0)
             setattr(cls, job, field)
-        
+
         return cls
     
     def load_form_from_item(self, item, schema):
@@ -445,6 +453,47 @@ class ProgressQuestForm(Form):
         # names that start with '_', so we expose it as item_id instead).
         if '_id' in item:
             self._fields['item_id'].data = str(item['_id'])
+
+
+class KeyValueEffectForm(Form):
+    """A single key/value effect entry (resource or modifier key + amount)."""
+
+    item_id = HiddenField('_id')
+    key = StringField("Key")
+    value = FloatField("Value", validators=[Optional()], default=0)
+
+    class Meta:
+        csrf = False
+
+
+class DiseaseStageForm(Form):
+    """One escalation stage of a disease."""
+
+    item_id = HiddenField('_id')
+    stage_name = StringField("Stage Name")
+    threshold_pct = FloatField("Infected % Threshold", validators=[Optional()], default=0)
+    job_type_override = StringField("Job Override Name")
+    job_production_override = FieldList(FormField(KeyValueEffectForm), min_entries=0)
+    job_upkeep_override = FieldList(FormField(KeyValueEffectForm), min_entries=0)
+    nation_modifiers = FieldList(FormField(KeyValueEffectForm), min_entries=0)
+    trigger_civil_war = BooleanField("Trigger Civil War on Entry")
+    halts_spread = BooleanField("Halts Normal Spread")
+
+    class Meta:
+        csrf = False
+
+
+class SharedQuestForm(Form):
+    """A nation's opt-in contribution to a shared (disease cure) progress quest."""
+
+    item_id = HiddenField('_id')
+    disease = SelectField("Disease", choices=[])
+    slot = SelectField("Slot", choices=[], default="no_slot")
+    bonus_progress_per_tick = IntegerField("Bonus Progress Per Tick", validators=[NumberRange()], default=0)
+    link = StringField("Link", validators=[Optional()])
+
+    class Meta:
+        csrf = False
 
 
 class DistrictDict(Form):
@@ -1305,6 +1354,7 @@ class NationForm(BaseSchemaForm):
     temperament = SelectField("Temperament", choices=[], default="Neutral")
 
     progress_quests = FieldList(FormField(ProgressQuestForm), min_entries=0)
+    shared_quests = FieldList(FormField(SharedQuestForm), min_entries=0)
 
     notes = TextAreaField("Notes")
     rp_mod_notes = TextAreaField("RP Mod Notes")
@@ -1396,6 +1446,16 @@ class NationForm(BaseSchemaForm):
             for quest_field in self.progress_quests:
                 if hasattr(quest_field, 'slot'):
                     quest_field.slot.choices = available_slots
+            if hasattr(self, 'shared_quests'):
+                from app_core import mongo as _mongo
+                disease_choices = [("", "None")] + [
+                    (str(d["_id"]), d.get("name", str(d["_id"])))
+                    for d in _mongo.db.diseases.find({}, {"name": 1}).sort("name", 1)
+                ]
+                for sq_field in self.shared_quests:
+                    sq_field.disease.choices = disease_choices
+                    if hasattr(sq_field, 'slot'):
+                        sq_field.slot.choices = available_slots
         _t2 = _pc()
 
         district_choices = [("", "Empty Slot")]
@@ -1480,6 +1540,59 @@ class JobForm(BaseSchemaForm):
         for field_name, field_schema in schema.get("properties", {}).items():
             if field_schema.get("collections"):
                 self.populate_select_field(field_name, self[field_name], schema, dropdown_options)
+
+class DiseaseForm(BaseSchemaForm):
+    """Bespoke form for disease definitions — the generic DynamicSchemaForm
+    cannot render/round-trip the nested stage/effect object arrays."""
+
+    name = StringField("Name", validators=[DataRequired()])
+    description = TextAreaField("Description")
+    rating = SelectField("Rating", choices=[])
+    job_type = StringField("Job Type", validators=[DataRequired()])
+    job_production = FieldList(FormField(KeyValueEffectForm), min_entries=0)
+    job_upkeep = FieldList(FormField(KeyValueEffectForm), min_entries=0)
+    infectivity = SelectField("Infectivity", choices=[])
+    difficulty = SelectField("Cure Difficulty", choices=[])
+    cure_progress = IntegerField("Cure Progress", validators=[Optional()], default=0)
+    cured = BooleanField("Cured")
+    changes_race = BooleanField("Changes Race")
+    race_prefix = StringField("Derived Race Prefix")
+    race_positive_trait = StringField("Derived Race Positive Trait")
+    race_negative_trait = StringField("Derived Race Negative Trait")
+    accepted_spread_jobs = FieldList(StringField("Job Key"), min_entries=0)
+    accepted_spread_chance = FloatField("Accepted Spread Chance", validators=[Optional()], default=0)
+    stages = FieldList(FormField(DiseaseStageForm), min_entries=0)
+
+    @classmethod
+    def create_form(cls, schema, item=None, formdata=None):
+        if formdata:
+            form = cls(formdata=formdata, schema=schema)
+        elif item:
+            form = cls(schema=schema)
+            form.load_form_from_item(item, schema)
+        else:
+            form = cls(schema=schema)
+
+        props = schema.get("properties", {})
+        for enum_field in ("rating", "infectivity", "difficulty"):
+            getattr(form, enum_field).choices = [
+                (v, v) for v in props.get(enum_field, {}).get("enum", [])
+            ]
+        return form
+
+    def load_form_from_item(self, item, schema):
+        # The generic loader maps _id → item_id only on top-level array entries;
+        # pre-map ids on the stages' inner effect lists so they round-trip.
+        item = deepcopy(item)
+        for stage in item.get("stages", []) or []:
+            if not isinstance(stage, dict):
+                continue
+            for lst_key in ("job_production_override", "job_upkeep_override", "nation_modifiers"):
+                for entry in stage.get(lst_key, []) or []:
+                    if isinstance(entry, dict) and "_id" in entry:
+                        entry["item_id"] = str(entry["_id"])
+        super().load_form_from_item(item, schema)
+
 
 class NewCharacterForm(BaseSchemaForm):
     """Form for creating a new character"""

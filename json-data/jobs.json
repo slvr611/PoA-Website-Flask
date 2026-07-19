@@ -201,23 +201,10 @@
 			"stone": 5
 		}
 	},
-	"partial_vampire": {
-		"display_name": "Vampire",
-		"static": true,
-		"requirements":{
-			"region": ["Twilight Mire"]
-		},
-		"production": {
-			"vampirism_chance": 0.1,
-			"stability_loss_chance": 0.1,
-			"magic": 1,
-			"food": 1
-		}
-	},
 	"full_vampire": {
 		"display_name": "Vampire",
 		"requirements":{
-			"modifier": ["vampiric"]
+			"accepted_disease": "Vampirism"
 		},
 		"production": {
 			"stability_loss_chance": -0.2,
@@ -227,15 +214,13 @@
 			"food": 1
 		}
 	},
-	"partial_undead": {
+	"full_undead": {
 		"display_name": "Undead",
-		"static": true,
-		"production": {
-			"stability_loss_chance": 0.05,
-			"undead_chance": 0.05
+		"requirements":{
+			"accepted_disease": "Undead Plague"
 		},
-		"upkeep": {
-			"food": 1
+		"production": {
+			"stability_loss_chance": -0.1
 		}
 	}
 }
