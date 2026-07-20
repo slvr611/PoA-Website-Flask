@@ -205,7 +205,8 @@
 	{% if (visibility_level >= nation_field_tier("ai_state") or visibility_bypassed) and nation.get('temperament', 'Player') != 'Player' %}
 	{% set ai_goal = (nation.get('ai_state') or {}).get('strategic_goal') or {} %}
 	{% set ai_plan = (nation.get('ai_state') or {}).get('planned_district') or {} %}
-	{% if ai_goal.get('display_name') or ai_plan.get('display_name') %}
+	{% set ai_mech_rps = (nation.get('ai_state') or {}).get('mech_rps') or [] %}
+	{% if ai_goal.get('display_name') or ai_plan.get('display_name') or ai_mech_rps %}
 	<div style="background:#1a1f2a;border:1px solid #3a4a6a;border-radius:6px;padding:1rem;margin-bottom:1rem;">
 		<div style="display:flex;align-items:baseline;gap:0.75rem;margin-bottom:0.5rem;">
 			<strong style="color:#7ea8e8;">National Ambitions</strong>
@@ -224,6 +225,12 @@
 			</p>
 		{% else %}
 			<p style="margin:0;color:var(--text-muted,#888);font-style:italic;">No construction currently planned.</p>
+		{% endif %}
+		{% if ai_mech_rps %}
+			<p style="margin:0.35rem 0 0 0;">
+				This session's mech RPs:
+				{% for a in ai_mech_rps %}<strong>{{ a.display_name }}</strong> ({{ a.outcome_tier | replace("_", " ") }}){% if not loop.last %}, {% endif %}{% endfor %}
+			</p>
 		{% endif %}
 	</div>
 	{% endif %}
@@ -1301,7 +1308,12 @@
 					{% endif %}
 				</div>
 				<h2>Jobs</h2>
-				<p>Working Pops: {{ pf(nation.working_pop_count, pn.get("working_pop_count")) }}/{{ pf(nation.pop_count, pn.get("pop_count")) }}</p>
+				{% set ns = namespace(disease_forced=0) %}
+				{% for job in nation.job_details.values() %}
+					{% if job.get("disease") %}{% set ns.disease_forced = ns.disease_forced + job.get("forced_count", 0) %}{% endif %}
+				{% endfor %}
+				<p>Working Pops: {{ pf(nation.working_pop_count, pn.get("working_pop_count")) }}/{{ pf(nation.pop_count, pn.get("pop_count")) }}
+				{% if ns.disease_forced %} <span style="color:#888; font-size:0.85em;">({{ ns.disease_forced }} forced by disease)</span>{% endif %}</p>
 				<div class="table-wrapper">
 					<table class="jobs-table">
 						<thead>
@@ -1835,6 +1847,9 @@
 									{% if extra.source == 'all_resources' %}
 										{% set found = all_resources | selectattr('key', 'equalto', val) | first %}
 										{% set ns.parts = ns.parts + [(found.name if found else val)] %}
+									{% elif extra.source == 'mrp_defs' %}
+										{% set found = all_mrp_defs | selectattr('key', 'equalto', val) | first %}
+										{% set ns.parts = ns.parts + [(found.name if found else val)] %}
 									{% elif extra.source == 'jobs' %}
 										{% set found = all_jobs | selectattr('key', 'equalto', val) | first %}
 										{% set ns.parts = ns.parts + [(found.name if found else val)] %}
@@ -1907,6 +1922,9 @@
 							{% if val %}
 								{% if extra.source == 'all_resources' %}
 									{% set found = all_resources | selectattr('key', 'equalto', val) | first %}
+									{% set ns.parts = ns.parts + [(found.name if found else val)] %}
+								{% elif extra.source == 'mrp_defs' %}
+									{% set found = all_mrp_defs | selectattr('key', 'equalto', val) | first %}
 									{% set ns.parts = ns.parts + [(found.name if found else val)] %}
 								{% elif extra.source == 'jobs' %}
 									{% set found = all_jobs | selectattr('key', 'equalto', val) | first %}

@@ -1267,7 +1267,14 @@ class DynamicSchemaForm(BaseSchemaForm):
             elif items_type == "string":
                 # For simple string arrays
                 return FieldList(StringField("Value"), min_entries=0)
-            
+
+            elif items_type == "enum":
+                # For arrays of a fixed static enum (e.g. relevant_stats) —
+                # distinct from json_district_enum/json_unit_enum/db_unit_enum,
+                # which pull their choices from json_data/Mongo at request time.
+                subfield = SelectField("Value", choices=[(v, v) for v in items_schema.get("enum", [])])
+                return FieldList(subfield, min_entries=0)
+
             elif items_type == "json_district_enum":
                 subfield = SelectField("Value")
                 subfield.choices = [("", "None")] + [(key, data.get("display_name", key))
@@ -1551,10 +1558,11 @@ class DiseaseForm(BaseSchemaForm):
     job_type = StringField("Job Type", validators=[DataRequired()])
     job_production = FieldList(FormField(KeyValueEffectForm), min_entries=0)
     job_upkeep = FieldList(FormField(KeyValueEffectForm), min_entries=0)
+    natural_cure_chance = FloatField("Natural Cure Chance", validators=[Optional()], default=0)
     infectivity = SelectField("Infectivity", choices=[])
     difficulty = SelectField("Cure Difficulty", choices=[])
     cure_progress = IntegerField("Cure Progress", validators=[Optional()], default=0)
-    cured = BooleanField("Cured")
+    cured = BooleanField("Cure Discovered")
     changes_race = BooleanField("Changes Race")
     race_prefix = StringField("Derived Race Prefix")
     race_positive_trait = StringField("Derived Race Positive Trait")

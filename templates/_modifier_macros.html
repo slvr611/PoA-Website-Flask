@@ -121,6 +121,13 @@
                         <option value="{{ res.key }}" {% if res.key == ef_val %}selected{% endif %}>{{ res.name }}</option>
                       {% endfor %}
                     </select>
+                  {% elif extra.source == 'mrp_defs' %}
+                    <select class="form-control" name="{{ field_name }}-{{ idx }}-{{ extra.key }}" id="{{ field_name }}-{{ idx }}-{{ extra.key }}">
+                      <option value="">-- Select Mech RP --</option>
+                      {% for mrp in all_mrp_defs %}
+                        <option value="{{ mrp.key }}" {% if mrp.key == ef_val %}selected{% endif %}>{{ mrp.name }}</option>
+                      {% endfor %}
+                    </select>
                   {% elif extra.source == 'jobs' %}
                     <select class="form-control" name="{{ field_name }}-{{ idx }}-{{ extra.key }}" id="{{ field_name }}-{{ idx }}-{{ extra.key }}">
                       <option value="">-- Select Job --</option>
@@ -360,6 +367,14 @@
                       <option value="">-- Select Resource --</option>
                       {% for res in all_resources %}
                         <option value="{{ res.key }}" {% if res.key == cur %}selected{% endif %}>{{ res.name }}</option>
+                      {% endfor %}
+                    </select>
+                  {% elif extra.source == 'mrp_defs' %}
+                    {% set cur = ef.data or '' %}
+                    <select class="form-control" name="{{ ef.name }}" id="{{ ef.id }}">
+                      <option value="">-- Select Mech RP --</option>
+                      {% for mrp in all_mrp_defs %}
+                        <option value="{{ mrp.key }}" {% if mrp.key == cur %}selected{% endif %}>{{ mrp.name }}</option>
                       {% endfor %}
                     </select>
                   {% elif extra.source == 'jobs' %}
@@ -613,6 +628,13 @@ if(!window.onScalingChange){window.onScalingChange=function(s){var row=s.closest
               <option value="{{ res.key }}" {% if res.key == ef_val %}selected{% endif %}>{{ res.name }}</option>
               {% endfor %}
             </select>
+            {% elif ef.source == 'mrp_defs' %}
+            <select name="{{ prefix }}extra_{{ ef.key }}" class="form-control" style="font-size:0.8rem;">
+              <option value="">--</option>
+              {% for mrp in all_mrp_defs %}
+              <option value="{{ mrp.key }}" {% if mrp.key == ef_val %}selected{% endif %}>{{ mrp.name }}</option>
+              {% endfor %}
+            </select>
             {% else %}
             <input name="{{ prefix }}extra_{{ ef.key }}" class="form-control" value="{{ ef_val }}" style="font-size:0.8rem;">
             {% endif %}
@@ -690,6 +712,7 @@ if(!window.onScalingChange){window.onScalingChange=function(s){var row=s.closest
       {%- if ef_val -%}
         {%- set ns2 = namespace(found=ef_val | replace('_',' ') | title) -%}
         {%- if   ef.source == 'all_resources'  -%}{%- for x in all_resources     -%}{%- if x.key == ef_val -%}{%- set ns2.found = x.name -%}{%- endif -%}{%- endfor -%}
+        {%- elif ef.source == 'mrp_defs'        -%}{%- for x in all_mrp_defs      -%}{%- if x.key == ef_val -%}{%- set ns2.found = x.name -%}{%- endif -%}{%- endfor -%}
         {%- elif ef.source == 'terrains'        -%}{%- for x in all_terrains      -%}{%- if x.key == ef_val -%}{%- set ns2.found = x.name -%}{%- endif -%}{%- endfor -%}
         {%- elif ef.source == 'attributes'      -%}{%- for x in all_attributes    -%}{%- if x.key == ef_val -%}{%- set ns2.found = x.name -%}{%- endif -%}{%- endfor -%}
         {%- elif ef.source == 'jobs'            -%}{%- for x in all_jobs          -%}{%- if x.key == ef_val -%}{%- set ns2.found = x.name -%}{%- endif -%}{%- endfor -%}

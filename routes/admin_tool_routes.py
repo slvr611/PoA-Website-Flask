@@ -1603,6 +1603,8 @@ def ai_goals_preview():
     tech_target = None
     primary_resource_keys = []
     luxury_keys = []
+    mrp_attempts = []
+    mrp_log = []
 
     try:
         calculated = calculate_all_fields(nation, schema, "nation")
@@ -1673,6 +1675,19 @@ def ai_goals_preview():
             upkeep_projected_net=projected_net, unresolved_deficits=unresolved_deficits
         )
 
+        # Step 6: Mech RPs — dry_run=True so previewing never claims map tiles.
+        # old_nation needs this preview's freshly-computed planned_district
+        # (not the stale DB ai_state) for has_planned_district/target-resource
+        # requirement checks, so build a shallow view carrying it.
+        from helpers.mech_rp_helpers import select_mech_rps
+        nation_for_mrp = dict(nation)
+        nation_for_mrp["ai_state"] = {"planned_district": district_plan, "tech_target": tech_target}
+        mrp_dummy = deepcopy(nation)
+        mrp_attempts, mrp_log = select_mech_rps(
+            nation_for_mrp, mrp_dummy, state, strategic_goal, secondary_goal,
+            personality, schema, market_prices, dry_run=True,
+        )
+
         from app_core import json_data as jd
         general_keys = [r["key"] for r in jd.get("general_resources", [])]
         unique_keys = [r["key"] for r in jd.get("unique_resources", [])]
@@ -1734,6 +1749,7 @@ def ai_goals_preview():
             "district_log": district_log,
             "tech_target": tech_target,
             "desires": desires,
+            "mech_rps": mrp_attempts,
         }
         diagnostic_json = json.dumps(diag_data, indent=2, default=str)
 
@@ -1772,6 +1788,8 @@ def ai_goals_preview():
         diagnostic_json=diagnostic_json,
         primary_resource_keys=primary_resource_keys,
         luxury_resource_keys=luxury_keys,
+        mrp_attempts=mrp_attempts,
+        mrp_log=mrp_log,
         error=error,
     )
 
@@ -1805,6 +1823,9 @@ def ai_goals_history():
 
     nation = db.find_one({"name": selected})
     diagnostic = (nation.get("ai_state") or {}).get("diagnostic")
+    # Set directly by the separate "AI Mech RP Tick" (not nested in
+    # diagnostic, which is only built by "AI Decision Tick").
+    mrp_attempts = (nation.get("ai_state") or {}).get("mech_rps") or []
 
     primary_resource_keys = [r["key"] for r in json_data.get("general_resources", [])] + \
                              [r["key"] for r in json_data.get("unique_resources", [])]
@@ -1820,6 +1841,7 @@ def ai_goals_history():
         prev_name=prev_name,
         next_name=next_name,
         diagnostic=diagnostic,
+        mrp_attempts=mrp_attempts,
         diagnostic_json=diagnostic_json,
         primary_resource_keys=primary_resource_keys,
         luxury_resource_keys=luxury_resource_keys,

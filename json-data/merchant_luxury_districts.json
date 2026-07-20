@@ -1,51 +1,27 @@
 {
-	"narcotics_den": {
-		"display_name": "Narcotics Den",
+	"coveted_garden": {
+		"display_name": "Coveted Garden",
 		"cost": {
-			"money": 500
+			"money": 1000
 		},
 		"modifiers": {
-			"income": -100,
-			"narcotics": 1
+			"income": -150,
+			"medicinal_herbs_production": 1,
+			"cocoa_production": 1
 		},
 		"requirements": {
 			"reputation": ["Great", "Flawless"]
 		}
 	},
-	"spice_fields": {
-		"display_name": "Spice Fields",
+	"foreign_fields": {
+		"display_name": "Foreign Fields",
 		"cost": {
-			"money": 500
+			"money": 1000
 		},
 		"modifiers": {
-			"income": -100,
-			"spice": 1
-		},
-		"requirements": {
-			"reputation": ["Great", "Flawless"]
-		}
-	},
-	"herb_garden": {
-		"display_name": "Herb Garden",
-		"cost": {
-			"money": 500
-		},
-		"modifiers": {
-			"income": -100,
-			"medicinal_herbs": 1
-		},
-		"requirements": {
-			"reputation": ["Great", "Flawless"]
-		}
-	},
-	"dye_pottsman": {
-		"display_name": "Dye Pottsman",
-		"cost": {
-			"money": 500
-		},
-		"modifiers": {
-			"income": -100,
-			"dye": 1
+			"income": -150,
+			"spices_production": 1,
+			"tea_production": 1
 		},
 		"requirements": {
 			"reputation": ["Great", "Flawless"]
@@ -54,53 +30,43 @@
 	"crystal_caves": {
 		"display_name": "Crystal Caves",
 		"cost": {
-			"money": 500
+			"money": 1000
 		},
 		"modifiers": {
-			"income": -100,
-			"magic_crystals": 1
+			"income": -150,
+			"magical_crystals_production": 1,
+			"moonstone_production": 1
 		},
 		"requirements": {
 			"reputation": ["Great", "Flawless"]
 		}
 	},
-	"gold_mines": {
-		"display_name": "Gold Mines",
+	"alloy_mines": {
+		"display_name": "Alloy Mines",
 		"cost": {
-			"money": 500
+			"money": 1000
 		},
 		"modifiers": {
-			"income": -100,
-			"gold": 1
-		},
-		"requirements": {
-			"reputation": ["Great", "Flawless"]
-		}
-	},
-	"moonstone_craters": {
-		"display_name": "Moonstone Craters",
-		"cost": {
-			"money": 500
-		},
-		"modifiers": {
-			"income": -100,
-			"moonstone": 1
+			"income": -150,
+			"gold_production": 1,
+			"star_iron_production": 1
 		},
 		"requirements": {
 			"reputation": ["Great", "Flawless"]
 		}
 	},
 	"trappers_den": {
-		"display_name": "Trappers Den",
+		"display_name": "Trapper's Den",
 		"cost": {
 			"money": 1000
 		},
 		"modifiers": {
 			"income": -150,
-			"fur": 1
+			"furs_production": 1,
+			"dyes_production": 1
 		},
 		"requirements": {
-			"reputation": ["Flawless"]
+			"reputation": ["Great", "Flawless"]
 		}
 	},
 	"ichor_pits": {
@@ -110,10 +76,11 @@
 		},
 		"modifiers": {
 			"income": -150,
-			"quintessence": 1
+			"narcotics_production": 1,
+			"quintessence_production": 1
 		},
 		"requirements": {
-			"reputation": ["Flawless"]
+			"reputation": ["Great", "Flawless"]
 		}
 	}
 }

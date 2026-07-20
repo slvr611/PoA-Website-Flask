@@ -8,6 +8,7 @@ from helpers.ai_decision_helpers import (
     run_ai_market_matching_standalone,
     _load_district_defs_cache, _clear_district_defs_cache,
 )
+from helpers.mech_rp_helpers import ai_mech_rp_tick
 from helpers.trade_route_helpers import run_trade_route_lifecycle, _current_session as _tr_current_session
 from calculations.field_calculations import calculate_all_fields, collect_laws, sum_law_totals
 from pymongo import ASCENDING
@@ -900,16 +901,13 @@ def character_stat_gain_tick(old_character, new_character, schema):
     if old_character.get("health_status", "Healthy") == "Dead":
         return ""
 
+    # stat_gain_chance is fully computed by compute_stat_gain_chance (cunning
+    # scaling, immortal bonus, and any title/district/tech modifiers), already
+    # clamped to [0, 1] — trust it directly instead of re-deriving an AI-only
+    # bonus here, which used to double-count cunning and bypass the cap.
     effective_chance = old_character.get("stat_gain_chance", 0)
     is_ai = not old_character.get("player")
     name = old_character.get("name", "Unknown")
-
-    if is_ai:
-        cunning = old_character.get("cunning", 0)
-        is_immortal = old_character.get("elderly_age", 3) > 500
-        effective_chance += cunning * 0.1  # doubles the base cunning contribution
-        effective_chance += 0.25 if is_immortal else 0.5
-        # no cap for AI — effective_chance above 1.0 guarantees gains
 
     if effective_chance <= 0:
         return ""
@@ -922,7 +920,7 @@ def character_stat_gain_tick(old_character, new_character, schema):
         for stat in character_stats:
             if old_character.get(stat, 0) < old_character.get(stat + "_cap", 4):
                 if random.random() <= effective_chance:
-                    modifiers.append({"_id": uuid.uuid4().hex[:8], "field": stat, "value": 1, "duration": -1, "source": "Stat gain tick"})
+                    modifiers.append({"_id": uuid.uuid4().hex[:8], "modifier_type": "attribute", "attribute": stat, "value": 1, "duration": -1, "source": "Stat gain tick"})
                     result += f"{name} has gained a level of {stat}.\n"
     else:
         stat_gain_roll = random.random()
@@ -932,7 +930,7 @@ def character_stat_gain_tick(old_character, new_character, schema):
             if possible_stats:
                 stat = random.choice(possible_stats)
                 modifiers = new_character.get("modifiers", [])
-                modifiers.append({"_id": uuid.uuid4().hex[:8], "field": stat, "value": 1, "duration": -1, "source": "Stat gain tick"})
+                modifiers.append({"_id": uuid.uuid4().hex[:8], "modifier_type": "attribute", "attribute": stat, "value": 1, "duration": -1, "source": "Stat gain tick"})
                 new_character["modifiers"] = modifiers
                 result = f"{name} has gained a level of {stat}.\n"
 
@@ -994,9 +992,12 @@ def merchant_income_tick(old_merchant, new_merchant, schema):
     income = old_merchant.get("income", 0)
     new_merchant["treasury"] = int(old_merchant.get("treasury", 0)) + income
 
+    capacity = old_merchant.get("resource_capacity", {})
     new_merchant["resource_storage"] = {}
     for resource, amount in old_merchant.get("resource_production", {}).items():
-        new_merchant["resource_storage"][resource] = old_merchant.get("resource_storage", {}).get(resource, 0) + amount
+        stored = old_merchant.get("resource_storage", {}).get(resource, 0) + amount
+        stored = min(stored, capacity.get(resource, 0))
+        new_merchant["resource_storage"][resource] = max(int(stored), 0)
     name = old_merchant.get("name", "Unknown")
     return f"{name}: +{income} gold -> {new_merchant['treasury']} treasury\n"
 
@@ -1342,6 +1343,14 @@ def nation_stability_tick(old_nation, new_nation, schema):
 
     return result
 
+def _resource_storage_capacity(nation_doc):
+    """Best-effort {resource_key: capacity} for a nation, from whatever is
+    currently cached on its document (calculated field, refreshed whenever
+    the nation is recalculated). An empty/missing dict yields no unique
+    resources — only the caller's own base-storage general resources."""
+    return nation_doc.get("nation_resource_capacity") or {}
+
+
 def nation_concessions_tick(old_nation, new_nation, schema):
     if old_nation["overlord"] == "":
         return ""
@@ -1374,13 +1383,38 @@ def nation_concessions_tick(old_nation, new_nation, schema):
     new_nation["concessions_chance_at_tick"] = old_nation.get("concessions_chance", 0)
     if concessions_roll <= old_nation.get("concessions_chance", 0):
         concessions_qty = old_nation.get("concessions_qty", 0)
+
+        overlord = None
+        overlord_id = old_nation.get("overlord", "")
+        if overlord_id:
+            try:
+                overlord = mongo.db.nations.find_one(
+                    {"_id": ObjectId(overlord_id)}, {"nation_resource_capacity": 1}
+                )
+            except Exception:
+                overlord = None
+
+        # Only demand resources BOTH sides can actually hold — e.g. gunpowder
+        # (base storage 0) shouldn't come up unless both the vassal and the
+        # overlord have unlocked storage capacity for it. General resources
+        # (food/wood/stone/mounts/magic) have positive base storage for every
+        # nation, so this mainly filters unique resources like gunpowder.
+        vassal_capacity = _resource_storage_capacity(old_nation)
+        overlord_capacity = _resource_storage_capacity(overlord or {})
+
         resources = []
-        for resource in json_data["general_resources"]:
-            if resource["key"] != "research":
-                resources.append(resource["key"])
-        for resource in json_data["unique_resources"]:
-            resources.append(resource["key"])
-        
+        for resource in json_data["general_resources"] + json_data["unique_resources"]:
+            key = resource["key"]
+            if key == "research":
+                continue
+            if vassal_capacity.get(key, 0) > 0 and overlord_capacity.get(key, 0) > 0:
+                resources.append(key)
+
+        if len(resources) < 2:
+            # Not enough mutually-storable resources to demand a two-resource
+            # concession this tick.
+            return result
+
         first_resource = random.choice(resources)
         resources.remove(first_resource)
         second_resource = random.choice(resources)
@@ -1607,15 +1641,21 @@ def pop_loss_tick(old_nation, new_nation, schema):
 def nation_disease_spread_tick(old_nation, new_nation, schema):
     """Per-nation disease spread + stage escalation.
 
-    For each active (non-cured) disease among the nation's pops: roll the
-    infectivity chance (base + per-infected), infect one random uninfected pop
-    on success (capped at the infectivity's max share of pops), then check for
-    stage escalation — newly reached stages can trigger an automatic civil war
-    that splits the infected pops into a breakaway nation.
+    For each disease among the nation's pops (a discovered cure does NOT stop
+    this — see nation_disease_natural_cure_tick for what "cured" actually
+    does): roll the infectivity chance (base + per-infected). On success, the
+    new infection lands via the same 50/50 internal-vs-external targeting an
+    accepted nation's voluntary spread uses (see attempt_dual_spread /
+    nation_accepted_spread_tick): either another pop of this same nation, or
+    a pop of a nation within 5 hexes of the border (trade/road-connected
+    nations twice as likely). Capped at the infectivity's max share of pops.
+    Then checks for stage escalation — newly reached stages can trigger an
+    automatic civil war that splits the infected pops into a breakaway nation.
     """
     from helpers.disease_helpers import (
         get_nation_infection_counts, resolve_diseases, get_infectivity_settings,
         active_stage_index, get_stage, infect_random_pops, execute_disease_civil_war,
+        attempt_dual_spread,
     )
 
     nation_id = str(old_nation.get("_id", ""))
@@ -1633,7 +1673,9 @@ def nation_disease_spread_tick(old_nation, new_nation, schema):
     from helpers.disease_helpers import nation_accepts_disease
     for disease_id, infected in counts.items():
         disease = diseases.get(disease_id)
-        if not disease or disease.get("cured"):
+        # Note: a discovered cure ("cured") does NOT stop outbreak/spread — it
+        # only doubles natural_cure_chance (nation_disease_natural_cure_tick).
+        if not disease:
             continue
         # Accepted nations (primary race = the disease's derived race) are not
         # outbreak sites — conversions there are voluntary, via the accepted
@@ -1659,11 +1701,25 @@ def nation_disease_spread_tick(old_nation, new_nation, schema):
             roll = random.random()
             spread_rolls[disease_name] = {"roll": roll, "chance_at_tick": chance}
             if roll <= chance:
-                newly_infected = infect_random_pops(nation_id, disease, 1)
-                if newly_infected:
-                    infected += newly_infected
+                def _internal():
+                    nonlocal infected
+                    n = infect_random_pops(nation_id, disease, 1)
+                    if n:
+                        infected += n
+                        return True
+                    return False
+
+                succeeded, target_type, ext_target = attempt_dual_spread(old_nation, disease, _internal)
+                if succeeded and target_type == "internal":
                     result += f"{disease_name} has spread to another pop in {nation_name} ({infected}/{pop_count} infected).\n"
                     cur_stage_idx = active_stage_index(disease, infected, pop_count)
+                elif succeeded:
+                    result += (
+                        f"{disease_name} has spread from {nation_name} to "
+                        f"{ext_target.get('name', 'a nearby nation')}.\n"
+                    )
+                else:
+                    result += f"{disease_name} found no new host near {nation_name}.\n"
 
         # ── Stage escalation (one-shot on entry) ───────────────────────────
         if cur_stage_idx > prev_stage:
@@ -1727,6 +1783,51 @@ def nation_disease_spread_tick(old_nation, new_nation, schema):
     new_nation["disease_stages"] = disease_stages
     return result
 
+def nation_disease_natural_cure_tick(old_nation, new_nation, schema):
+    """Give every infected pop of this nation an individual per-tick chance of
+    natural recovery, independent of shared-quest cure research.
+
+    Each pop rolls separately against its disease's natural_cure_chance. Once
+    a disease's cure has been discovered (cured=True — set by
+    disease_cure_cross_tick when cure_progress reaches the difficulty's
+    required amount), that chance permanently doubles for every infected pop,
+    everywhere. Discovering the cure does not itself heal anyone or stop
+    spread — it only makes natural recovery twice as likely going forward.
+    """
+    from helpers.disease_helpers import resolve_diseases, cure_pop
+
+    nation_id = str(old_nation.get("_id", ""))
+    nation_name = old_nation.get("name", "Unknown")
+    try:
+        infected_pops = list(mongo.db.pops.find(
+            {"nation": nation_id, "disease": {"$nin": [None, ""]}}))
+    except Exception:
+        return ""
+    if not infected_pops:
+        return ""
+
+    disease_ids = {p.get("disease") for p in infected_pops if p.get("disease")}
+    diseases = resolve_diseases(disease_ids)
+
+    recovered_counts = {}
+    for pop in infected_pops:
+        disease = diseases.get(str(pop.get("disease", "")))
+        if not disease:
+            continue
+        base_chance = disease.get("natural_cure_chance", 0) or 0
+        if base_chance <= 0:
+            continue
+        chance = min(base_chance * (2 if disease.get("cured") else 1), 1.0)
+        if random.random() <= chance:
+            cure_pop(pop)
+            name = disease.get("name", "")
+            recovered_counts[name] = recovered_counts.get(name, 0) + 1
+
+    result = ""
+    for name, count in recovered_counts.items():
+        result += f"{count} pop(s) in {nation_name} naturally recovered from {name}.\n"
+    return result
+
 def nation_accepted_spread_tick(old_nation, new_nation, schema):
     """Voluntary spread from ACCEPTED nations (e.g. vampire nations).
 
@@ -1743,14 +1844,14 @@ def nation_accepted_spread_tick(old_nation, new_nation, schema):
     valid victims.
     """
     from helpers.disease_helpers import (
-        nation_accepts_disease, convert_random_own_pop,
-        pick_external_spread_target, infect_random_pops,
+        nation_accepts_disease, convert_random_own_pop, attempt_dual_spread,
     )
 
     try:
+        # Note: a discovered cure does not stop accepted-nation spread either —
+        # only nation_disease_natural_cure_tick reacts to it (doubled chance).
         diseases = list(mongo.db.diseases.find({
             "changes_race": True,
-            "cured": {"$ne": True},
             "accepted_spread_jobs.0": {"$exists": True},
         }))
     except Exception:
@@ -1779,28 +1880,21 @@ def nation_accepted_spread_tick(old_nation, new_nation, schema):
         if roll > chance:
             continue
 
-        internal_first = random.random() < 0.5
-        spread_done = False
-        for target_type in (("internal", "external") if internal_first else ("external", "internal")):
-            if target_type == "internal":
-                pop = convert_random_own_pop(old_nation, disease)
-                if pop is not None:
-                    result += (
-                        f"A pop of {nation_name} has embraced {disease_name}, "
-                        f"joining the {disease.get('race_prefix', '')} majority.\n"
-                    )
-                    spread_done = True
-                    break
-            else:
-                target = pick_external_spread_target(old_nation, disease)
-                if target is not None and infect_random_pops(str(target["_id"]), disease, 1):
-                    result += (
-                        f"{disease_name} has spread from {nation_name} to "
-                        f"{target.get('name', 'a nearby nation')}!\n"
-                    )
-                    spread_done = True
-                    break
-        if not spread_done:
+        def _internal():
+            return convert_random_own_pop(old_nation, disease) is not None
+
+        succeeded, target_type, ext_target = attempt_dual_spread(old_nation, disease, _internal)
+        if succeeded and target_type == "internal":
+            result += (
+                f"A pop of {nation_name} has embraced {disease_name}, "
+                f"joining the {disease.get('race_prefix', '')} majority.\n"
+            )
+        elif succeeded:
+            result += (
+                f"{disease_name} has spread from {nation_name} to "
+                f"{ext_target.get('name', 'a nearby nation')}!\n"
+            )
+        else:
             result += (
                 f"{disease_name} stirred in {nation_name} but found no one "
                 f"left to claim.\n"
@@ -1810,11 +1904,13 @@ def nation_accepted_spread_tick(old_nation, new_nation, schema):
 
 def disease_cure_cross_tick(old_nations, new_nations, schema):
     """Cross-nation tick: sum shared-quest contributions into each disease's
-    cure progress; on completion mark the disease cured and heal every
-    infected pop (restoring pre-disease races)."""
-    from helpers.disease_helpers import (
-        get_global_infection_counts, get_difficulty_settings, cure_disease_pops,
-    )
+    cure progress. Reaching the difficulty's required progress sets a
+    permanent "cure discovered" flag (cured=True) — it does NOT heal anyone
+    or stop the disease; it just doubles natural_cure_chance for every
+    infected pop from then on (see nation_disease_natural_cure_tick). Diseases
+    already marked cured are skipped — there's nothing further this tick does
+    for them."""
+    from helpers.disease_helpers import get_global_infection_counts, get_difficulty_settings
 
     result = ""
     try:
@@ -1825,7 +1921,6 @@ def disease_cure_cross_tick(old_nations, new_nations, schema):
         return ""
 
     global_counts = get_global_infection_counts()
-    nation_names = {str(n.get("_id", "")): n.get("name", "Unknown") for n in old_nations}
 
     for disease in diseases:
         disease_id = str(disease["_id"])
@@ -1875,15 +1970,11 @@ def disease_cure_cross_tick(old_nations, new_nations, schema):
         result += f"{disease_name} cure progress: +{contribution} ({new_progress}/{required}).\n"
 
         if completed:
-            result += f"{disease_name} HAS BEEN CURED!\n"
-            cured_by_nation = cure_disease_pops(disease_id)
-            for nation_id, cured in cured_by_nation.items():
-                result += f"  {cured} pop(s) in {nation_names.get(nation_id, nation_id)} recovered.\n"
-            # Clear stage bookkeeping on every nation carrying it.
-            for new_nation in new_nations:
-                stages = new_nation.get("disease_stages")
-                if isinstance(stages, dict) and disease_id in stages:
-                    stages.pop(disease_id, None)
+            result += (
+                f"{disease_name}'s CURE HAS BEEN DISCOVERED — natural recovery is now "
+                f"twice as likely for every infected pop, everywhere. The disease itself "
+                f"is not removed and keeps spreading/producing as before.\n"
+            )
 
     return result
 
@@ -2600,8 +2691,10 @@ NATION_TICK_FUNCTIONS = {
     "Nation Progress Quests Tick": progress_quests_tick,
     "Nation Job Cleanup Tick": nation_job_cleanup_tick,
     "AI Decision Tick": ai_decision_tick,
+    "AI Mech RP Tick": ai_mech_rp_tick,
     "Nation Disease Spread Tick": nation_disease_spread_tick,
     "Nation Accepted Disease Spread Tick": nation_accepted_spread_tick,
+    "Nation Disease Natural Cure Tick": nation_disease_natural_cure_tick,
     "Nation Pop Loss Tick": pop_loss_tick,
     "Nation Pop Flee Tick": pop_flee_tick,
     "Nation Temperament Tick": temperament_tick,

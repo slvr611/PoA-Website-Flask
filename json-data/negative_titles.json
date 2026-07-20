@@ -248,7 +248,7 @@
 		"type": "negative",
 		"modifiers": {
 			"nation_food_production": -1,
-			"merchant_resource_production": -1
+			"merchant_food_production": -1
 		}
 	},
 	"the_stranger": {
@@ -257,7 +257,7 @@
 		"type": "negative",
 		"modifiers": {
 			"nation_food_production": -2,
-			"merchant_resource_production": -2
+			"merchant_food_production": -2
 		}
 	},
 	"the_black_thumb": {
@@ -266,7 +266,7 @@
 		"type": "negative",
 		"modifiers": {
 			"nation_food_production": -4,
-			"merchant_resource_production": -4
+			"merchant_food_production": -4
 		}
 	},
 	"the_lazy": {

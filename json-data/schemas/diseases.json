@@ -74,6 +74,11 @@
           }
         }
       },
+      "natural_cure_chance": {
+        "bsonType": "number",
+        "label": "Natural Cure Chance",
+        "description": "Per-tick chance for EACH infected pop to naturally recover on its own, independent of shared-quest cure research. Doubles permanently once the disease's cure has been discovered (cure_progress reaches the difficulty's required amount) — discovering the cure does not remove the disease everywhere, it just makes natural recovery twice as likely."
+      },
       "infectivity": {
         "bsonType": "enum",
         "label": "Infectivity",
@@ -140,8 +145,8 @@
       },
       "cured": {
         "bsonType": "boolean",
-        "label": "Cured",
-        "description": "Whether the disease has been cured. Cured diseases stop spreading and their infected pops are released"
+        "label": "Cure Discovered",
+        "description": "Whether a cure has been discovered (cure_progress reached the difficulty's required amount). This does NOT remove the disease or heal anyone — it permanently doubles natural_cure_chance for every currently and future infected pop"
       },
       "changes_race": {
         "bsonType": "boolean",

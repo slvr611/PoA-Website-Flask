@@ -42,6 +42,7 @@
 				{% for field, properties in schema.properties.items() %}
 					{% if properties and not properties.hidden
 					and not (properties.hideIfNone is defined and (item.get(properties.hideIfNone) is none or item.get(properties.hideIfNone) == "" or not item.get(properties.hideIfNone)))
+					and not (field in ("resource_storage", "resource_capacity") and "resource_capacity" in schema.properties)
 					and (view_access_level >= properties.get("view_access_level", 0))
 					and (field_tiers is none or visibility_level is none or visibility_bypassed or visibility_level >= field_tiers.get(field, 0)) %}
 						<tr>
@@ -101,7 +102,33 @@
 								</td>
 							{% elif properties.bsonType == "object" %}
 								<td>
-									{% if properties.resource_storage or field == "resource_storage" or field == "resource_capacity" or field == "resource_production" or field == "resource_consumption" or field == "resource_excess" %}
+									{% if field == "resource_production" and "resource_capacity" in schema.properties %}
+										{% set res_prod = item.get("resource_production", {}) %}
+										{% set res_store = item.get("resource_storage", {}) %}
+										{% set res_cap = item.get("resource_capacity", {}) %}
+										{% set prod_bd = (breakdowns if breakdowns is defined else {}).get("resource_production", {}) %}
+										{% set cap_bd = (breakdowns if breakdowns is defined else {}).get("resource_capacity", {}) %}
+										<table class="compact-table resource-table">
+											<thead>
+												<tr><th>Resource</th><th>Production</th><th>Stockpile / Capacity</th></tr>
+											</thead>
+											<tbody>
+												{% for resource in json_data["general_resources"] + json_data["unique_resources"] + json_data["luxury_resources"] %}
+													{% set rkey = resource["key"] %}
+													{% set cap = res_cap.get(rkey, 0) %}
+													{% set prod = res_prod.get(rkey, 0) %}
+													{% set store = res_store.get(rkey, 0) %}
+													{% if cap != 0 or prod != 0 or store != 0 %}
+														<tr>
+															<th>{{ resource.name }}</th>
+															<td><span class="context-tooltip" data-tooltip-title="{{ resource.name }} Production" data-breakdown='{{ prod_bd.get(rkey, [])|tojson }}'>{{ prod }}</span></td>
+															<td>{{ store }} / <span class="context-tooltip" data-tooltip-title="{{ resource.name }} Capacity" data-breakdown='{{ cap_bd.get(rkey, [])|tojson }}'>{{ cap }}</span></td>
+														</tr>
+													{% endif %}
+												{% endfor %}
+											</tbody>
+										</table>
+									{% elif properties.resource_storage or field == "resource_storage" or field == "resource_capacity" or field == "resource_production" or field == "resource_consumption" or field == "resource_excess" %}
 										<table class="compact-table resource-table">
 											<tbody>
 												{% set res_cap = item.get("resource_capacity", {}) %}

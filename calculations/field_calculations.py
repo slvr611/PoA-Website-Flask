@@ -571,6 +571,16 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
             target[field] = calculated_values[field]
     record_timing("calculate_remaining_fields_ms", phase_start)
 
+    if target_data_type == "nation":
+        # compute_working_pop_count only reads target["jobs"] (the raw, persisted
+        # assignment dict), so it never sees the disease-forced virtual jobs
+        # merged into the local jobs_assigned copy above. Override with the
+        # disease-inclusive total so the "Working Pops" summary matches the
+        # jobs table, which already lists disease-forced rows.
+        _working_pop_count = sum(jobs_assigned.values())
+        calculated_values["working_pop_count"] = _working_pop_count
+        target["working_pop_count"] = _working_pop_count
+
     if target_data_type == "market":
         # compute_resource_production and compute_market_resource_storage_capacity
         # only iterate json_data general/unique resources. Market primary/secondary
@@ -601,6 +611,26 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
             calculated_values["market_resource_capacity"] = _cap
             target["resource_production"]      = _rp
             target["market_resource_capacity"] = _cap
+
+    if target_data_type == "merchant":
+        # Some resources (e.g. Research) are nation-only and must never be
+        # producible/storable by a merchant company, regardless of what a
+        # generic modifier (titles, districts, etc.) grants. Zero them out
+        # here as a structural backstop rather than trusting every modifier
+        # source to know which resources merchants are allowed to touch.
+        _ineligible = {
+            r["key"]
+            for r in json_data.get("general_resources", []) + json_data.get("unique_resources", [])
+            if r.get("merchant_ineligible")
+        }
+        if _ineligible:
+            for _field in ("resource_production", "resource_capacity"):
+                _d = dict(calculated_values.get(_field, {}) or {})
+                for _key in _ineligible:
+                    if _key in _d:
+                        _d[_key] = 0
+                calculated_values[_field] = _d
+                target[_field] = _d
 
     if target_data_type == "nation":
         _pfc = calculated_values.get("pop_flee_chance", 0)
@@ -665,7 +695,9 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
 
         if excess_food < 0:
             job_details = calculate_job_details(target, modifier_totals, district_totals, tech_totals, city_totals, law_totals, external_modifiers_total)
-            job_totals = sum_job_totals(target, target.get("jobs", {}), job_details)
+            if disease_job_details:
+                job_details.update(disease_job_details)
+            job_totals = sum_job_totals(target, jobs_assigned, job_details)
             calculated_values["job_details"] = job_details
 
             overall_total_modifiers = {}
@@ -4615,6 +4647,31 @@ def compute_nation_breakdowns(
         entries.append({"label": "Total", "value": total})
         return entries
 
+    # ── Per-resource storage capacity breakdown (merchant resource_capacity) ──
+    def _resource_capacity_bd(resource_key):
+        entries = []
+        _resource_def = next(
+            (r for r in json_data["general_resources"] + json_data["unique_resources"] + json_data["luxury_resources"]
+             if r["key"] == resource_key),
+            None,
+        )
+        base = _resource_def.get("base_storage", 0) if _resource_def else 0
+        if base:
+            entries.append({"label": "Base", "value": base})
+        specific_key = resource_key + "_storage_capacity"
+        for c in contributions:
+            v = c.modifiers.get(specific_key, 0)
+            if v:
+                entries.append({"label": c.label, "value": v})
+        if sum(e["value"] for e in entries) > 0:
+            for c in contributions:
+                v = c.modifiers.get("resource_storage_capacity", 0)
+                if v:
+                    entries.append({"label": c.label, "value": v})
+        total = calculated_values.get("resource_capacity", {}).get(resource_key, 0)
+        entries.append({"label": "Total", "value": total})
+        return entries
+
     # ── Build all breakdowns ──────────────────────────────────────────────────
     # Schema-driven: any calculated field with "show_breakdown": true gets a
     # generic _field_bd entry automatically. Special-case blocks below overwrite
@@ -4624,6 +4681,7 @@ def compute_nation_breakdowns(
         "karma": [],
         "resource_production": {},
         "resource_consumption": {},
+        "resource_capacity": {},
     }
     for _f, _fschema in schema_properties.items():
         if isinstance(_fschema, dict) and _fschema.get("calculated") and _fschema.get("show_breakdown"):
@@ -4783,6 +4841,7 @@ def compute_nation_breakdowns(
         key = resource["key"]
         breakdowns["resource_production"][key]  = _resource_bd(key, "production")
         breakdowns["resource_consumption"][key] = _resource_bd(key, "consumption")
+        breakdowns["resource_capacity"][key]    = _resource_capacity_bd(key)
 
     # Per-job production/upkeep breakdowns
     base_job_defs    = json_data.get("jobs", {})

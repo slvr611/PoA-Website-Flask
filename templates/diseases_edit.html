@@ -43,7 +43,10 @@
                         <small style="color:#888;">Simple: 100 prog, −5 DC, 5 pops · Difficult: 200, ±0, 10 · Complicated: 350, +5, 15 · Impossible: 600, +10, 20</small>
                     </td></tr>
                 <tr><th>{{ form.cure_progress.label }}</th><td>{{ form.cure_progress(class="form-control") }}</td></tr>
-                <tr><th>{{ form.cured.label }}</th><td>{{ form.cured() }}</td></tr>
+                <tr><th>{{ form.cured.label }}</th>
+                    <td>{{ form.cured() }}
+                        <small style="color:#888;">Does not heal anyone or stop spread — just doubles natural_cure_chance for every infected pop, forever.</small>
+                    </td></tr>
             </table>
         </div>
 
@@ -85,6 +88,10 @@
                             </tbody>
                         </table>
                         <button type="button" class="btn btn-primary" onclick="addKvRow(this.previousElementSibling.querySelector('tbody'))">Add Entry</button>
+                    </td></tr>
+                <tr><th>{{ form.natural_cure_chance.label }}</th>
+                    <td>{{ form.natural_cure_chance(class="form-control") }}
+                        <small style="color:#888;">Per tick, per infected pop, independent of shared-quest cure research (e.g. 0.03 = 3%). Doubles permanently once the cure is discovered below.</small>
                     </td></tr>
             </table>
         </div>

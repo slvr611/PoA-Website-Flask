@@ -531,10 +531,14 @@ def compute_resource_production(field, target, base_value, field_schema, overall
 
         production_dict[resource["key"]] = int(specific_resource_production)
 
-    # Luxury resources: 1 per active node (built, or any node for nomadic nations), no modifiers
+    # Luxury resources: 1 per active node (built, or any node for nomadic nations),
+    # plus any direct "{key}_production" modifier (e.g. merchant districts, which
+    # have no map nodes and so can only ever grant luxury resources this way).
     for resource in json_data["luxury_resources"]:
         key = resource["key"]
-        production_dict[key] = overall_total_modifiers.get(key + "_nodes", 0)
+        node_production = overall_total_modifiers.get(key + "_nodes", 0)
+        direct_production = overall_total_modifiers.get(key + "_production", 0)
+        production_dict[key] = node_production + direct_production
 
     # Trade route imports
     nation_name = target.get("name", "")
@@ -598,6 +602,20 @@ def compute_resource_consumption(field, target, base_value, field_schema, overal
 
     return {k: int(max(v, 0)) for k, v in consumption_dict.items()}
 
+def compute_mrp_bonuses(field, target, base_value, field_schema, overall_total_modifiers):
+    """Dynamic map of mrp_{key}_bonus / mrp_all_bonus -> summed value.
+    Unlike resource_windfall_on_X, individual mech RP keys are admin-defined
+    and open-ended (new ones can be created without a deploy), so they can't
+    be pre-declared as their own schema fields the way a fixed small set of
+    trigger types can. Instead this scans overall_total_modifiers (already
+    populated from laws/districts/wonders/traits/nation modifiers by the time
+    custom compute functions run) for any field matching the mrp_*_bonus
+    naming convention and captures it directly."""
+    return {
+        k: v for k, v in overall_total_modifiers.items()
+        if k.startswith("mrp_") and k.endswith("_bonus")
+    }
+
 def compute_resource_excess(field, target, base_value, field_schema, overall_total_modifiers):
     excess_dict = {}
     
@@ -617,6 +635,23 @@ def compute_nation_resource_storage_capacity(field, target, base_value, field_sc
     all_resources = json_data["general_resources"] + json_data["unique_resources"] + json_data["luxury_resources"]
 
     for resource in all_resources:
+        specific_resource_storage = resource["base_storage"]
+        specific_resource_storage += overall_total_modifiers.get(resource["key"] + "_storage_capacity", 0)
+        if specific_resource_storage > 0:
+            specific_resource_storage += overall_total_modifiers.get("resource_storage_capacity", 0)
+        storage_dict[resource["key"]] = int(specific_resource_storage)
+
+    return storage_dict
+
+def compute_merchant_resource_storage_capacity(field, target, base_value, field_schema, overall_total_modifiers):
+    storage_dict = {}
+
+    all_resources = json_data["general_resources"] + json_data["unique_resources"] + json_data["luxury_resources"]
+
+    for resource in all_resources:
+        if resource.get("merchant_ineligible"):
+            storage_dict[resource["key"]] = 0
+            continue
         specific_resource_storage = resource["base_storage"]
         specific_resource_storage += overall_total_modifiers.get(resource["key"] + "_storage_capacity", 0)
         if specific_resource_storage > 0:
@@ -1138,8 +1173,10 @@ CUSTOM_COMPUTE_FUNCTIONS = {
     "resource_production": compute_resource_production,
     "resource_consumption": compute_resource_consumption,
     "resource_excess": compute_resource_excess,
+    "mrp_bonuses": compute_mrp_bonuses,
     "nation_resource_capacity": compute_nation_resource_storage_capacity,
     "market_resource_capacity": compute_market_resource_storage_capacity,
+    "resource_capacity": compute_merchant_resource_storage_capacity,
     "export_slots": compute_export_slots,
     "import_slots": compute_import_slots,
     "remaining_export_slots": compute_remaining_export_slots,

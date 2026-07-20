@@ -1,0 +1,141 @@
+{
+  "$jsonSchema": {
+    "bsonType": "object",
+    "required": ["key", "display_name", "effect_type"],
+    "preview": ["effect_type", "base_difficulty"],
+    "sort": "display_name",
+    "properties": {
+      "key": {
+        "bsonType": "string",
+        "label": "Key",
+        "description": "Stable unique identifier for this mech RP (used by modifiers, cooldown tracking, and law-scoring). Do not change once other content references it."
+      },
+      "display_name": {
+        "bsonType": "string",
+        "label": "Display Name",
+        "description": "Human-readable name shown to admins and (on success/failure) to players"
+      },
+      "description": {
+        "bsonType": "string",
+        "label": "Description",
+        "description": "Flavor text describing what attempting this mech RP represents",
+        "long_text": true
+      },
+      "base_difficulty": {
+        "bsonType": "number",
+        "label": "Base Difficulty",
+        "description": "The DC for the roll. For Grant Resources mech RPs, this is only the fallback DC for a resource not listed in Resource Difficulty below."
+      },
+      "relevant_stats": {
+        "bsonType": "array",
+        "label": "Relevant Stats",
+        "description": "Which character stats this mech RP can use. At resolution time, one of these is picked at random (not the character's best) to represent the acting character's contribution.",
+        "items": {
+          "bsonType": "enum",
+          "enum": ["rulership", "cunning", "charisma", "prowess", "magic", "strategy"]
+        }
+      },
+      "goal_affinity": {
+        "bsonType": "array",
+        "label": "Goal Affinity",
+        "description": "How relevant this mech RP is to each AI strategic goal. The AI selection layer uses this as its primary signal for which mech RPs to attempt each session.",
+        "items": {
+          "bsonType": "object",
+          "properties": {
+            "goal_type": {
+              "bsonType": "enum",
+              "label": "Goal",
+              "enum": [
+                "stabilize_economy", "stabilize_nation", "grow_economy",
+                "prepare_war", "develop_technology", "grow_population",
+                "convert_population", "expand_trade", "build_wonder"
+              ]
+            },
+            "weight": {
+              "bsonType": "number",
+              "label": "Weight"
+            }
+          }
+        }
+      },
+      "requirements": {
+        "bsonType": "array",
+        "label": "Requirements",
+        "description": "All conditions that must hold for the AI to consider this mech RP a valid candidate this session.",
+        "items": {
+          "bsonType": "enum",
+          "enum": [
+            "open_district_slot", "has_planned_district", "not_nomadic",
+            "stability_not_maxed", "high_stability_loss_chance", "in_active_war",
+            "has_available_tech_target"
+          ]
+        }
+      },
+      "effect_type": {
+        "bsonType": "enum",
+        "label": "Effect Type",
+        "description": "Which code-side handler resolves this mech RP's outcome",
+        "enum": [
+          "grant_resources", "adjust_stability", "expand_territory",
+          "change_law", "gain_money", "grant_temp_modifier"
+        ]
+      },
+      "law_axis": {
+        "bsonType": "string",
+        "label": "Law Axis (Change Law only)",
+        "description": "Only used when Effect Type is Change Law. Must exactly match one of the nation schema's law-axis property names (e.g. 'diplomatic_stance', 'government_type', 'scientific_stance'). Ignored for all other effect types. Do NOT use 'stability' here — that field is an earned progress track (moved one level at a time by stability_gain_chance/stability_loss_chance rolls, via an Adjust Stability mech RP instead), not a freely-selectable policy choice like the other law axes; letting Change Law target it would let a single roll skip straight to the top level."
+      },
+      "resource_difficulty": {
+        "bsonType": "array",
+        "label": "Resource Difficulty (Grant Resources only)",
+        "description": "Only used when Effect Type is Grant Resources. Per-resource DC — the AI picks whichever listed resource it needs most and rolls against that resource's difficulty. A resource not listed here falls back to Base Difficulty.",
+        "items": {
+          "bsonType": "object",
+          "properties": {
+            "resource": {
+              "bsonType": "json_resource_enum",
+              "label": "Resource"
+            },
+            "difficulty": {
+              "bsonType": "number",
+              "label": "Difficulty"
+            }
+          }
+        }
+      },
+      "tier_magnitude_critical_success": {
+        "bsonType": "number",
+        "label": "Magnitude: Critical Success",
+        "description": "Effect magnitude on a Critical Success (e.g. tiles claimed, resource units, stability levels, money amount — meaning depends on Effect Type)"
+      },
+      "tier_magnitude_success": {
+        "bsonType": "number",
+        "label": "Magnitude: Success"
+      },
+      "tier_magnitude_partial_success": {
+        "bsonType": "number",
+        "label": "Magnitude: Partial Success"
+      },
+      "tier_magnitude_failure": {
+        "bsonType": "number",
+        "label": "Magnitude: Failure"
+      },
+      "tier_magnitude_critical_failure": {
+        "bsonType": "number",
+        "label": "Magnitude: Critical Failure"
+      },
+      "cooldown_sessions": {
+        "bsonType": "number",
+        "label": "Cooldown (Sessions)",
+        "description": "How many sessions must pass before this exact mech RP can be attempted again by the same nation. 0 = always repeatable.",
+        "default": 0
+      },
+      "active": {
+        "bsonType": "boolean",
+        "label": "Active",
+        "description": "Inactive mech RPs are never offered to the AI selection layer, but are kept for reference instead of being deleted",
+        "default": true
+      }
+    }
+  }
+}

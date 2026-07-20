@@ -436,6 +436,38 @@
         {% else %}<p class="text-muted" style="font-size:0.85rem;">No trade desires generated.</p>{% endif %}
     </div>
 
+    <!-- Row 5b: Mech RPs (actual results from the last real tick) -->
+    <div class="ai-panel">
+        <h3>Mech RPs</h3>
+        {% if mrp_attempts %}
+        <table class="dbg-table">
+            <thead>
+                <tr>
+                    <th>Mech RP</th><th>Character</th><th>Stat</th><th>Roll</th>
+                    <th>RP Bonus</th><th>Non-RP Bonus</th><th>DC</th><th>Target</th>
+                    <th>Outcome</th><th>Effect</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for a in mrp_attempts %}
+                <tr>
+                    <td>{{ a.display_name }}</td>
+                    <td>{{ a.character_name }}</td>
+                    <td>{{ a.stat_used }} ({{ a.stat_value }})</td>
+                    <td>{{ a.roll }}</td>
+                    <td>+{{ a.rp_bonus }}</td>
+                    <td>+{{ a.non_rp_bonus }}</td>
+                    <td>{{ a.difficulty }}</td>
+                    <td>{{ a.target_resource or "—" }}</td>
+                    <td style="color:{% if a.outcome_tier == 'critical_success' %}#8f8{% elif a.outcome_tier == 'success' %}#afc{% elif a.outcome_tier == 'partial_success' %}#fc8{% elif a.outcome_tier == 'failure' %}#f96{% else %}#f66{% endif %};">{{ a.outcome_tier | replace("_", " ") | title }}</td>
+                    <td style="font-size:0.8rem;">{{ a.effect_summary or "(none)" }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}<p class="text-muted" style="font-size:0.85rem;">No mech RPs attempted last session.</p>{% endif %}
+    </div>
+
     <!-- Full Decision Log -->
     {% if diagnostic.get("decision_log") %}
     <div class="ai-panel">

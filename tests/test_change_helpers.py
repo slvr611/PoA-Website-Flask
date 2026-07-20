@@ -809,6 +809,199 @@ class TestApproveChange:
 
 
 # ---------------------------------------------------------------------------
+# TestNameUniquenessAtApproval
+#
+# approve_change / system_approve_change / force_approve_change /
+# system_force_approve_change must all independently reject a Pending change
+# that would create a duplicate "name" in its target collection — this is the
+# gap identified where uniqueness was only checked at request time, leaving a
+# race window before a later, separate approval step.
+# ---------------------------------------------------------------------------
+
+class TestNameUniquenessAtApproval:
+    def test_approve_change_update_blocks_rename_collision(self, db_with_players, nation_id,
+                                                             patch_helpers, flask_app):
+        db_with_players["nations"].insert_one({"name": "TakenName"})
+        change_id = _insert_pending_change(
+            db_with_players, "Update", nation_id,
+            before={"name": "TestNation"}, after={"name": "TakenName"},
+        )
+        with flask_app.test_request_context("/"):
+            from flask import g
+            g.user = {"id": _ADMIN_DISCORD_ID}
+            result = ch.approve_change(change_id)
+
+        assert result is False
+        nation = db_with_players["nations"].find_one({"_id": nation_id})
+        assert nation["name"] == "TestNation"           # unchanged
+        change = db_with_players["changes"].find_one({"_id": change_id})
+        assert change["status"] == "Pending"             # never approved
+
+    def test_approve_change_update_allows_rename_to_free_name(self, db_with_players, nation_id,
+                                                                patch_helpers, flask_app):
+        change_id = _insert_pending_change(
+            db_with_players, "Update", nation_id,
+            before={"name": "TestNation"}, after={"name": "FreeName"},
+        )
+        with flask_app.test_request_context("/"):
+            from flask import g
+            g.user = {"id": _ADMIN_DISCORD_ID}
+            result = ch.approve_change(change_id)
+
+        assert result is True
+        nation = db_with_players["nations"].find_one({"_id": nation_id})
+        assert nation["name"] == "FreeName"
+
+    def test_approve_change_update_allows_keeping_own_name(self, db_with_players, nation_id,
+                                                             patch_helpers, flask_app):
+        # A no-op rename (name unchanged) must not collide with itself.
+        change_id = _insert_pending_change(
+            db_with_players, "Update", nation_id,
+            before={"name": "TestNation"}, after={"name": "TestNation", "gold": 500},
+        )
+        with flask_app.test_request_context("/"):
+            from flask import g
+            g.user = {"id": _ADMIN_DISCORD_ID}
+            result = ch.approve_change(change_id)
+
+        assert result is True
+        assert db_with_players["nations"].find_one({"_id": nation_id})["gold"] == 500
+
+    def test_approve_change_add_blocks_new_item_collision(self, db_with_players, patch_helpers, flask_app):
+        db_with_players["nations"].insert_one({"name": "TakenName"})
+        change_id = _insert_pending_change(
+            db_with_players, "Add", target_id=None,
+            before={}, after={"name": "TakenName"},
+        )
+        with flask_app.test_request_context("/"):
+            from flask import g
+            g.user = {"id": _ADMIN_DISCORD_ID}
+            result = ch.approve_change(change_id)
+
+        assert result is False
+        assert db_with_players["nations"].count_documents({"name": "TakenName"}) == 1
+
+    def test_approve_change_race_window_closed(self, db_with_players, nation_id, patch_helpers, flask_app):
+        # The exact reported gap: two Pending renames to the same name, both
+        # passed their (now-stale) request-time check; approving the second
+        # one after the first must fail instead of creating a duplicate.
+        other_id = db_with_players["nations"].insert_one({"name": "Other"}).inserted_id
+        change_1 = _insert_pending_change(
+            db_with_players, "Update", nation_id,
+            before={"name": "TestNation"}, after={"name": "RaceWinner"},
+        )
+        change_2 = _insert_pending_change(
+            db_with_players, "Update", other_id,
+            before={"name": "Other"}, after={"name": "RaceWinner"},
+        )
+        with flask_app.test_request_context("/"):
+            from flask import g
+            g.user = {"id": _ADMIN_DISCORD_ID}
+            assert ch.approve_change(change_1) is True
+            assert ch.approve_change(change_2) is False
+
+        assert db_with_players["nations"].count_documents({"name": "RaceWinner"}) == 1
+        assert db_with_players["nations"].find_one({"_id": other_id})["name"] == "Other"
+
+    def test_system_approve_change_update_blocks_collision(self, db_with_players, nation_id, patch_helpers):
+        db_with_players["nations"].insert_one({"name": "TakenName"})
+        change_id = _insert_pending_change(
+            db_with_players, "Update", nation_id,
+            before={"name": "TestNation"}, after={"name": "TakenName"},
+        )
+        assert ch.system_approve_change(change_id) is False
+        assert db_with_players["nations"].find_one({"_id": nation_id})["name"] == "TestNation"
+
+    def test_system_approve_change_add_blocks_collision(self, db_with_players, patch_helpers):
+        db_with_players["nations"].insert_one({"name": "TakenName"})
+        change_id = _insert_pending_change(
+            db_with_players, "Add", target_id=None,
+            before={}, after={"name": "TakenName"},
+        )
+        assert ch.system_approve_change(change_id) is False
+        assert db_with_players["nations"].count_documents({"name": "TakenName"}) == 1
+
+    def test_force_approve_change_update_blocks_collision(self, db_with_players, nation_id,
+                                                            patch_helpers, flask_app):
+        db_with_players["nations"].insert_one({"name": "TakenName"})
+        change_id = _insert_pending_change(
+            db_with_players, "Update", nation_id,
+            before={"name": "TestNation"}, after={"name": "TakenName"},
+        )
+        with flask_app.test_request_context("/"):
+            from flask import g
+            g.user = {"id": _ADMIN_DISCORD_ID}
+            result = ch.force_approve_change(change_id)
+
+        assert result is False
+        assert db_with_players["nations"].find_one({"_id": nation_id})["name"] == "TestNation"
+
+    def test_force_approve_change_add_blocks_collision(self, db_with_players, patch_helpers, flask_app):
+        db_with_players["nations"].insert_one({"name": "TakenName"})
+        change_id = _insert_pending_change(
+            db_with_players, "Add", target_id=None,
+            before={}, after={"name": "TakenName"},
+        )
+        with flask_app.test_request_context("/"):
+            from flask import g
+            g.user = {"id": _ADMIN_DISCORD_ID}
+            result = ch.force_approve_change(change_id)
+
+        assert result is False
+        assert db_with_players["nations"].count_documents({"name": "TakenName"}) == 1
+
+    def test_system_force_approve_change_update_blocks_collision(self, db_with_players, nation_id, patch_helpers):
+        db_with_players["nations"].insert_one({"name": "TakenName"})
+        change_id = _insert_pending_change(
+            db_with_players, "Update", nation_id,
+            before={"name": "TestNation"}, after={"name": "TakenName"},
+        )
+        assert ch.system_force_approve_change(change_id) is False
+        assert db_with_players["nations"].find_one({"_id": nation_id})["name"] == "TestNation"
+
+    def test_system_force_approve_change_add_blocks_collision(self, db_with_players, patch_helpers):
+        db_with_players["nations"].insert_one({"name": "TakenName"})
+        change_id = _insert_pending_change(
+            db_with_players, "Add", target_id=None,
+            before={}, after={"name": "TakenName"},
+        )
+        assert ch.system_force_approve_change(change_id) is False
+        assert db_with_players["nations"].count_documents({"name": "TakenName"}) == 1
+
+    def test_units_are_scoped_by_name_and_era(self, db_with_players, patch_helpers, flask_app):
+        # Two different eras may share a unit name; only a same-era collision
+        # should be blocked.
+        db_with_players["units"].insert_one({"name": "Swordsman", "era": "Classical"})
+        change_id = _insert_pending_change(
+            db_with_players, "Add", target_id=None,
+            before={}, after={"name": "Swordsman", "era": "Medieval"},
+            target_collection="units",
+        )
+        with flask_app.test_request_context("/"):
+            from flask import g
+            g.user = {"id": _ADMIN_DISCORD_ID}
+            result = ch.approve_change(change_id)
+
+        assert result is True
+        assert db_with_players["units"].count_documents({"name": "Swordsman"}) == 2
+
+    def test_units_same_era_collision_blocked(self, db_with_players, patch_helpers, flask_app):
+        db_with_players["units"].insert_one({"name": "Swordsman", "era": "Classical"})
+        change_id = _insert_pending_change(
+            db_with_players, "Add", target_id=None,
+            before={}, after={"name": "Swordsman", "era": "Classical"},
+            target_collection="units",
+        )
+        with flask_app.test_request_context("/"):
+            from flask import g
+            g.user = {"id": _ADMIN_DISCORD_ID}
+            result = ch.approve_change(change_id)
+
+        assert result is False
+        assert db_with_players["units"].count_documents({"name": "Swordsman"}) == 1
+
+
+# ---------------------------------------------------------------------------
 # TestSystemApproveChange
 # ---------------------------------------------------------------------------
 

@@ -840,6 +840,17 @@
         "description": "How many random non-research general resources the nation gains (1 unit each) each time it successfully expands its territory",
         "calculated": true
       },
+      "mrp_bonuses": {
+        "bsonType": "object",
+        "label": "Mech RP Bonuses",
+        "description": "Dynamic map of mrp_{key}_bonus / mrp_all_bonus field names to their summed value from laws/districts/wonders/modifiers. Populated automatically; not directly editable.",
+        "calculated": true
+      },
+      "mrp_cooldowns": {
+        "bsonType": "object",
+        "label": "Mech RP Cooldowns",
+        "description": "Internal, tick-managed map of {mrp_key: session last attempted}, used to enforce each mech RP definition's cooldown_sessions. Not directly editable."
+      },
       "pop_flee_chance": {
         "bsonType": "number",
         "label": "Pop Flee Chance",

@@ -409,6 +409,26 @@ def _approve_hex_map_change(change, change_id, changes_collection, approver, now
     return True
 
 
+def _find_name_collision(target_collection, data_type, name, era=None, exclude_id=None):
+    """Return the colliding document for a prospective `name` in this
+    collection, or None if the name is free.
+
+    Units are scoped by (name, era) — the same name is allowed to repeat
+    across different eras, matching the check already applied at request
+    time in routes/data_item_routes.py. `exclude_id`, when given, excludes
+    the document being updated from the collision search (a rename that
+    keeps the same name isn't a collision with itself).
+    """
+    if not name:
+        return None
+    query = {"name": name}
+    if data_type == "units":
+        query["era"] = era
+    if exclude_id is not None:
+        query["_id"] = {"$ne": exclude_id}
+    return target_collection.find_one(query)
+
+
 def approve_change(change_id):
     approver = mongo.db.players.find_one({"id": g.user.get("id", None)})
     if approver is None or not approver.get("is_admin", False):
@@ -449,6 +469,14 @@ def approve_change(change_id):
             after_data["status"] = "active"
             after_data["accepted_session"] = session_number
 
+        collision = _find_name_collision(
+            target_collection, change["target_collection"],
+            after_data.get("name"), era=after_data.get("era"),
+        )
+        if collision:
+            flash(f"Cannot approve: the name '{after_data.get('name')}' is already in use.")
+            return False
+
         after_data = _calculate_and_attach_fields(change["target_collection"], after_data)
         inserted_item_id = target_collection.insert_one(after_data).inserted_id
         changes_collection.update_one({"_id": change_id}, {"$set": {
@@ -479,6 +507,17 @@ def approve_change(change_id):
             if change["change_type"] == "Update":
                 existing = target_collection.find_one({"_id": change["target"]})
                 merged = deep_merge(existing, after_data)
+
+                new_name = merged.get("name")
+                if new_name and new_name != existing.get("name"):
+                    collision = _find_name_collision(
+                        target_collection, change["target_collection"], new_name,
+                        era=merged.get("era"), exclude_id=change["target"],
+                    )
+                    if collision:
+                        flash(f"Cannot approve: the name '{new_name}' is already in use.")
+                        return False
+
                 merged = _calculate_and_attach_fields(change["target_collection"], merged)
                 target_collection.update_one({"_id": change["target"]}, {"$set": merged})
 
@@ -520,6 +559,16 @@ def system_approve_change(change_id):
 
     if change["change_type"] == "Add":
         after_data = change["after_requested_data"]
+
+        collision = _find_name_collision(
+            target_collection, change["target_collection"],
+            after_data.get("name"), era=after_data.get("era"),
+        )
+        if collision:
+            print(f"system_approve_change blocked: name '{after_data.get('name')}' "
+                  f"already exists in {change['target_collection']}.")
+            return False
+
         after_data = _calculate_and_attach_fields(change["target_collection"], after_data)
 
         inserted_item_id = target_collection.insert_one(after_data).inserted_id
@@ -550,6 +599,18 @@ def system_approve_change(change_id):
             if change["change_type"] == "Update":
                 existing = target_collection.find_one({"_id": change["target"]})
                 merged = deep_merge(existing, after_data)
+
+                new_name = merged.get("name")
+                if new_name and new_name != existing.get("name"):
+                    collision = _find_name_collision(
+                        target_collection, change["target_collection"], new_name,
+                        era=merged.get("era"), exclude_id=change["target"],
+                    )
+                    if collision:
+                        print(f"system_approve_change blocked: name '{new_name}' "
+                              f"already exists in {change['target_collection']}.")
+                        return False
+
                 merged = _calculate_and_attach_fields(change["target_collection"], merged)
                 target_collection.update_one({"_id": change["target"]}, {"$set": merged})
                 if change["target_collection"] == "nations":
@@ -609,12 +670,31 @@ def force_approve_change(change_id):
     if change["change_type"] == "Update":
         existing = target_collection.find_one({"_id": change["target"]})
         merged = deep_merge(existing, after_data)
+
+        new_name = merged.get("name")
+        if new_name and new_name != existing.get("name"):
+            collision = _find_name_collision(
+                target_collection, change["target_collection"], new_name,
+                era=merged.get("era"), exclude_id=change["target"],
+            )
+            if collision:
+                flash(f"Cannot approve: the name '{new_name}' is already in use.")
+                return False
+
         merged = _calculate_and_attach_fields(change["target_collection"], merged)
         target_collection.update_one({"_id": change["target"]}, {"$set": merged})
         if change["target_collection"] == "nations":
             _handle_nation_rename(change["target"], existing.get("name", ""), merged.get("name", ""))
             _handle_city_changes(existing.get("cities", []), merged.get("cities", []))
     elif change["change_type"] == "Add":
+        collision = _find_name_collision(
+            target_collection, change["target_collection"],
+            after_data.get("name"), era=after_data.get("era"),
+        )
+        if collision:
+            flash(f"Cannot approve: the name '{after_data.get('name')}' is already in use.")
+            return False
+
         after_data = _calculate_and_attach_fields(change["target_collection"], after_data)
         change["target"] = target_collection.insert_one(after_data).inserted_id
     else:
@@ -660,12 +740,33 @@ def system_force_approve_change(change_id):
     if change["change_type"] == "Update":
         existing = target_collection.find_one({"_id": change["target"]})
         merged = deep_merge(existing, after_data)
+
+        new_name = merged.get("name")
+        if new_name and new_name != existing.get("name"):
+            collision = _find_name_collision(
+                target_collection, change["target_collection"], new_name,
+                era=merged.get("era"), exclude_id=change["target"],
+            )
+            if collision:
+                print(f"system_force_approve_change blocked: name '{new_name}' "
+                      f"already exists in {change['target_collection']}.")
+                return False
+
         merged = _calculate_and_attach_fields(change["target_collection"], merged)
         target_collection.update_one({"_id": change["target"]}, {"$set": merged})
         if change["target_collection"] == "nations":
             _handle_nation_rename(change["target"], existing.get("name", ""), merged.get("name", ""))
             _handle_city_changes(existing.get("cities", []), merged.get("cities", []))
     elif change["change_type"] == "Add":
+        collision = _find_name_collision(
+            target_collection, change["target_collection"],
+            after_data.get("name"), era=after_data.get("era"),
+        )
+        if collision:
+            print(f"system_force_approve_change blocked: name '{after_data.get('name')}' "
+                  f"already exists in {change['target_collection']}.")
+            return False
+
         after_data = _calculate_and_attach_fields(change["target_collection"], after_data)
         change["target"] = target_collection.insert_one(after_data).inserted_id
     else:

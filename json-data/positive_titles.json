@@ -251,7 +251,7 @@
 		"type": "positive",
 		"modifiers": {
 			"nation_food_production": 1,
-			"merchant_resource_production": 1
+			"merchant_food_production": 1
 		}
 	},
 	"the_countryman": {
@@ -260,7 +260,7 @@
 		"type": "positive",
 		"modifiers": {
 			"nation_food_production": 2,
-			"merchant_resource_production": 2
+			"merchant_food_production": 2
 		}
 	},
 	"the_green": {
@@ -269,7 +269,7 @@
 		"type": "positive",
 		"modifiers": {
 			"nation_food_production": 4,
-			"merchant_resource_production": 4
+			"merchant_food_production": 4
 		}
 	},
 	"the_tireless": {

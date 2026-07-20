@@ -2,10 +2,10 @@
 	"luxurious_displays": {
 		"display_name": "Luxurious Displays",
 		"cost": {
-			"money": 500
+			"money": 750
 		},
 		"modifiers": {
-			"income": 45
+			"income": 40
 		},
 		"requirements": {
 			"reputation": ["Acceptable", "Great", "Flawless"]
@@ -17,7 +17,7 @@
 			"money": 750
 		},
 		"modifiers": {
-			"trade_speed": 9
+			"trade_speed": 3
 		},
 		"requirements": {
 			"reputation": ["Acceptable", "Great", "Flawless"]
@@ -26,9 +26,11 @@
 	"seal_of_approval": {
 		"display_name": "Seal of Approval",
 		"cost": {
-			"money": 1000
+			"money": 750
 		},
-		"modifiers": {},
+		"modifiers": {
+			"market_buy_price_reduction": 25
+		},
 		"requirements": {
 			"reputation": ["Acceptable", "Great", "Flawless"]
 		}
@@ -39,7 +41,7 @@
 			"money": 750
 		},
 		"modifiers": {
-			"trade_slots": 3
+			"trade_slots": 1
 		},
 		"requirements": {
 			"reputation": ["Acceptable", "Great", "Flawless"]
@@ -51,19 +53,43 @@
 			"money": 750
 		},
 		"modifiers": {
-			"ruler_artifact_slots": 12
+			"ruler_artifact_slots": 4
 		},
 		"requirements": {
 			"reputation": ["Acceptable", "Great", "Flawless"]
 		}
 	},
-	"secure_transport": {
-		"display_name": "Secure Transport",
+	"hired_bureaucrats": {
+		"display_name": "Hired Bureaucrats",
 		"cost": {
 			"money": 750
 		},
 		"modifiers": {
-			"hostile_encounter_chance": -0.1
+			"progress_slots": 1
+		},
+		"requirements": {
+			"reputation": ["Acceptable", "Great", "Flawless"]
+		}
+	},
+	"efficiency_tables": {
+		"display_name": "Efficiency Tables",
+		"cost": {
+			"money": 750
+		},
+		"modifiers": {
+			"mech_rp_threshold_reduction": 50
+		},
+		"requirements": {
+			"reputation": ["Acceptable", "Great", "Flawless"]
+		}
+	},
+	"reliable_credit": {
+		"display_name": "Reliable Credit",
+		"cost": {
+			"money": 750
+		},
+		"modifiers": {
+			"loan_capacity_multiplier": 2
 		},
 		"requirements": {
 			"reputation": ["Acceptable", "Great", "Flawless"]

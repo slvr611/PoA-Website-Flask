@@ -129,6 +129,12 @@
         "description": "The amount of each resource the merchant company makes at the start of each session",
         "calculated": true
       },
+      "resource_capacity": {
+        "bsonType": "object",
+        "label": "Resource Capacity",
+        "description": "The maximum amount of each resource the merchant company can stockpile",
+        "calculated": true
+      },
       "production_district_1": {
         "bsonType": "json_district_enum",
         "label": "Production District 1",

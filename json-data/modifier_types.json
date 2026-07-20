@@ -105,6 +105,23 @@
         "field_template": "resource_windfall_on_expansion",
         "applicable_to": ["nation"]
     },
+    "mrp_specific_bonus": {
+        "name": "Mech RP Bonus (Specific)",
+        "description": "Grants a bonus to the d20 roll for one specific mech RP.",
+        "value_format": "number",
+        "field_template": "mrp_{mrp_key}_bonus",
+        "extra_fields": [
+            {"key": "mrp_key", "label": "Mech RP", "source": "mrp_defs"}
+        ],
+        "applicable_to": ["nation"]
+    },
+    "mrp_all_bonus": {
+        "name": "Mech RP Bonus (All)",
+        "description": "Grants a bonus to the d20 roll for every mech RP.",
+        "value_format": "number",
+        "field_template": "mrp_all_bonus",
+        "applicable_to": ["nation"]
+    },
     "compliance_gain_chance": {
         "name": "Compliance Gain Chance",
         "description": "Increases the chance for a vassal's compliance to improve by one level each tick.",

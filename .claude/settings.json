@@ -39,7 +39,11 @@
       "Bash(grep -n \"expandable-section\\\\|section-content\\\\|^\\\\s*</div>\\\\s*$\")",
       "Bash(awk 'NR==607,NR==676' templates/nation_owner_edit.html)",
       "Bash(awk 'NR==511,NR==610' templates/nation_owner_edit.html)",
-      "Bash(awk 'NR==742,NR==1019' templates/nation_owner_edit.html)"
+      "Bash(awk 'NR==742,NR==1019' templates/nation_owner_edit.html)",
+      "Bash(xargs -I{} sh -c 'grep -l \"merchant\" \"{}\" 2>/dev/null')",
+      "Read(//tmp/**)",
+      "Bash(PYTHONPATH=. python -X utf8 \"/c/Users/orion/AppData/Local/Temp/claude/c--Programming-Projects-PoA-Website-Flask/4e2b9b97-545a-4b46-bd70-320c206433fb/scratchpad/seed_mrp_defs.py\")",
+      "Bash(PYTHONPATH=. python -X utf8 -c ' *)"
     ]
   }
 }

@@ -6,7 +6,7 @@
 		},
 		"modifiers": {
 			"income": -25,
-			"food_production": 1
+			"food_production": 2
 		},
 		"requirements": {}
 	},
@@ -17,7 +17,7 @@
 		},
 		"modifiers": {
 			"income": -50,
-			"food_production": 3
+			"food_production": 4
 		},
 		"requirements": {
 			"reputation": ["Acceptable", "Great", "Flawless"]
@@ -30,7 +30,7 @@
 		},
 		"modifiers": {
 			"income": -25,
-			"wood_production": 1
+			"wood_production": 2
 		},
 		"requirements": {}
 	},
@@ -41,7 +41,7 @@
 		},
 		"modifiers": {
 			"income": -50,
-			"wood_production": 3
+			"wood_production": 4
 		},
 		"requirements": {
 			"reputation": ["Acceptable", "Great", "Flawless"]
@@ -54,7 +54,7 @@
 		},
 		"modifiers": {
 			"income": -25,
-			"stone_production": 1
+			"stone_production": 2
 		},
 		"requirements": {}
 	},
@@ -65,7 +65,7 @@
 		},
 		"modifiers": {
 			"income": -50,
-			"stone_production": 3
+			"stone_production": 4
 		},
 		"requirements": {
 			"reputation": ["Acceptable", "Great", "Flawless"]
@@ -78,7 +78,7 @@
 		},
 		"modifiers": {
 			"income": -25,
-			"mounts_production": 1
+			"mounts_production": 2
 		},
 		"requirements": {}
 	},
@@ -89,7 +89,7 @@
 		},
 		"modifiers": {
 			"income": -50,
-			"mounts_production": 2
+			"mounts_production": 4
 		},
 		"requirements": {
 			"reputation": ["Great", "Flawless"]
@@ -109,35 +109,11 @@
 	"prestigious_shrines": {
 		"display_name": "Prestigious Shrines",
 		"cost": {
-			"money": 700
+			"money": 750
 		},
 		"modifiers": {
 			"income": -100,
-			"magic_production": 2
-		},
-		"requirements": {
-			"reputation": ["Great", "Flawless"]
-		}
-	},
-	"simple_smithy": {
-		"display_name": "Simple Smithy",
-		"cost": {
-			"money": 500
-		},
-		"modifiers": {
-			"income": -75,
-			"bronze_production": 1
-		},
-		"requirements": {}
-	},
-	"great_forge": {
-		"display_name": "Great Forge",
-		"cost": {
-			"money": 1000
-		},
-		"modifiers": {
-			"income": -150,
-			"bronze_production": 2
+			"magic_production": 3
 		},
 		"requirements": {
 			"reputation": ["Great", "Flawless"]
@@ -152,9 +128,7 @@
 			"income": -75,
 			"iron_production": 1
 		},
-		"requirements": {
-			"reputation": ["Flawless"]
-		}
+		"requirements": {}
 	},
 	"deep_excavations": {
 		"display_name": "Deep Excavations",
@@ -163,7 +137,33 @@
 		},
 		"modifiers": {
 			"income": -150,
-			"iron_production": 2
+			"iron_production": 3
+		},
+		"requirements": {
+			"reputation": ["Great", "Flawless"]
+		}
+	},
+	"dung_ditch": {
+		"display_name": "Dung Ditch",
+		"cost": {
+			"money": 1000
+		},
+		"modifiers": {
+			"income": -100,
+			"gunpowder_production": 1
+		},
+		"requirements": {
+			"reputation": ["Flawless"]
+		}
+	},
+	"niter_manufactury": {
+		"display_name": "Niter Manufactury",
+		"cost": {
+			"money": 1500
+		},
+		"modifiers": {
+			"income": -200,
+			"gunpowder_production": 2
 		},
 		"requirements": {
 			"reputation": ["Flawless"]

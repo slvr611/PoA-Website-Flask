@@ -31,10 +31,8 @@ def disease_infect(item_ref):
         flash("Nation not found.", "error")
         return redirect(f"/diseases/item/{item_ref}")
 
-    if disease.get("cured"):
-        flash(f"{disease.get('name', item_ref)} is cured and cannot infect new pops.", "error")
-        return redirect(f"/diseases/item/{item_ref}")
-
+    # Note: a discovered cure ("cured") doesn't remove the disease or stop it
+    # from infecting new pops — it only doubles natural_cure_chance.
     infected = infect_random_pops(nation_id, disease, count)
     if infected:
         flash(f"Infected {infected} pop(s) of {nation.get('name', nation_id)} with {disease.get('name', item_ref)}.", "success")

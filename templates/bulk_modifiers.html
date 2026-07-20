@@ -69,6 +69,7 @@ const MODIFIER_TYPES = {{ modifier_types|tojson }};
 const SCALING_TYPES = {{ scaling_types|tojson }};
 const SCOPE_DEFS = {{ scope_definitions|tojson }};
 const ALL_RESOURCES = {{ all_resources|tojson }};
+const ALL_MRP_DEFS = {{ all_mrp_defs|tojson }};
 const ALL_JOBS = {{ all_jobs|tojson }};
 const ALL_TERRAINS = {{ all_terrains|tojson }};
 const ALL_NATIONS = {{ nations | map(attribute='name') | list | tojson }};
@@ -152,6 +153,8 @@ function updateExtraFields(idx) {
         let fieldHtml = '';
         if (extra.source === 'all_resources') {
             fieldHtml = `<select name="${extra.key}" id="mod-${idx}-${extra.key}">${buildSelectFrom(ALL_RESOURCES, 'key', 'name', '')}</select>`;
+        } else if (extra.source === 'mrp_defs') {
+            fieldHtml = `<select name="${extra.key}" id="mod-${idx}-${extra.key}">${buildSelectFrom(ALL_MRP_DEFS, 'key', 'name', '')}</select>`;
         } else if (extra.source === 'jobs') {
             fieldHtml = `<select name="${extra.key}" id="mod-${idx}-${extra.key}">${buildSelectFrom(ALL_JOBS, 'key', 'name', '')}</select>`;
         } else if (extra.source === 'terrains') {

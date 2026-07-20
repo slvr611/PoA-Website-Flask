@@ -92,6 +92,7 @@ category_data = {
     "titles": {"pluralName": "Titles", "singularName": "Title", "database": mongo.db.titles},
     "hex_map": {"pluralName": "Map Changes", "singularName": "Map Change", "database": mongo.db.hex_map_tiles},
     "diseases": {"pluralName": "Diseases", "singularName": "Disease", "database": mongo.db.diseases},
+    "mrp_defs": {"pluralName": "Mech RP Definitions", "singularName": "Mech RP Definition", "database": mongo.db.mrp_defs},
 }
 
 def ensure_mongo_indexes():
@@ -107,6 +108,7 @@ def ensure_mongo_indexes():
         "district_defs":       [[("key", ASCENDING)], [("category", ASCENDING), ("tier", ASCENDING)]],
         "district_categories": [[("key", ASCENDING)]],
         "changes": [[("last_modified_time", DESCENDING), ("time_requested", DESCENDING)]],
+        "mrp_defs": [[("key", ASCENDING)]],
     }
 
     for collection_name, specs in index_specs.items():
@@ -129,7 +131,7 @@ json_data = {"general_resources": [
             {"key": "wood",     "name": "Wood",     "base_storage": 15, "base_price": 100,  "color": "#b47e5a"},
             {"key": "stone",    "name": "Stone",    "base_storage": 15, "base_price": 100,  "color": "#96e3ef"},
             {"key": "mounts",   "name": "Mounts",   "base_storage": 15, "base_price": 100,  "color": "#ffeb00"},
-            {"key": "research", "name": "Research", "base_storage": 0,                     "color": "#ff00b8"},
+            {"key": "research", "name": "Research", "base_storage": 0,                     "color": "#ff00b8", "merchant_ineligible": True},
             {"key": "magic",    "name": "Magic",    "base_storage": 15, "base_price": 125, "color": "#ba00ff"},
         ],
         "unique_resources": [

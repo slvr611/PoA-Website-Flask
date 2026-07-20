@@ -168,7 +168,11 @@ def collect_disease_effects(target):
 
     for disease_id, infected in counts.items():
         disease = diseases.get(disease_id)
-        if not disease or disease.get("cured") or infected <= 0:
+        # Note: a discovered cure ("cured") does not free infected pops from
+        # their forced job — it only doubles natural_cure_chance going
+        # forward. Pops stay forced until they actually recover or the
+        # nation is otherwise resolved (civil war / acceptance).
+        if not disease or infected <= 0:
             continue
 
         stage_idx = active_stage_index(disease, infected, pop_count)
@@ -415,6 +419,31 @@ def convert_random_own_pop(nation, disease):
     if convert_pop_to_accepted(pop, disease):
         return pop
     return None
+
+
+def attempt_dual_spread(nation, disease, internal_fn):
+    """Shared 50/50 internal-vs-external targeting used by both the outbreak
+    spread tick and the accepted-nation spread tick, so the two mechanics stay
+    identical.
+
+    `internal_fn()` performs the internal spread action and returns True on
+    success. On a coin flip, whichever target type is tried first that
+    succeeds wins; if it fails (no valid victim), the other type is tried.
+
+    Returns (succeeded, target_type, external_target_nation_or_None) where
+    target_type is "internal", "external", or None if neither succeeded.
+    """
+    internal_first = random.random() < 0.5
+    order = ("internal", "external") if internal_first else ("external", "internal")
+    for target_type in order:
+        if target_type == "internal":
+            if internal_fn():
+                return True, "internal", None
+        else:
+            target = pick_external_spread_target(nation, disease)
+            if target is not None and infect_random_pops(str(target["_id"]), disease, 1):
+                return True, "external", target
+    return False, None, None
 
 
 def pick_external_spread_target(nation, disease, max_distance=5):

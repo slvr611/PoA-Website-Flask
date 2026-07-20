@@ -552,7 +552,10 @@ def data_item(data_type, item_ref):
 
     schema_props = schema.get("properties", {})
     breakdowns = {}
-    if any(v.get("show_breakdown") for v in schema_props.values() if isinstance(v, dict)):
+    # Merchants always recompute on view (rather than relying on a
+    # show_breakdown flag) so resource_production/resource_capacity stay
+    # accurate between session ticks instead of showing stale stored values.
+    if data_type == "merchants" or any(v.get("show_breakdown") for v in schema_props.values() if isinstance(v, dict)):
         singular_type = category_data[data_type]["singularName"].lower()
         calculated_values, breakdowns = calculate_all_fields(
             item, schema, singular_type, return_breakdowns=True

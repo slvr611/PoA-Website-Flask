@@ -1419,6 +1419,7 @@
             const MODIFIER_TYPES = {{ modifier_types | tojson | safe }};
             const SORTED_MODIFIER_KEYS = {{ sorted_modifier_types | map(attribute=0) | list | tojson | safe }};
             const ALL_RESOURCES = {{ all_resources | tojson | safe }};
+            const ALL_MRP_DEFS = {{ all_mrp_defs | tojson | safe }};
             const ALL_JOBS = {{ all_jobs | tojson | safe }};
             const ALL_ATTRIBUTES = {{ all_attributes | tojson | safe }};
             const ALL_UNIT_CATEGORIES = {{ all_unit_categories | tojson | safe }};
@@ -1733,6 +1734,13 @@
                                                 let opts = '<option value="">-- Select Resource --</option>';
                                                 for (const res of ALL_RESOURCES) {
                                                                 opts += `<option value="${res.key}" ${res.key === cur ? 'selected' : ''}>${res.name}</option>`;
+                                                }
+                                                html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
+                                                                <select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+                                } else if (extra.source === 'mrp_defs') {
+                                                let opts = '<option value="">-- Select Mech RP --</option>';
+                                                for (const mrp of ALL_MRP_DEFS) {
+                                                                opts += `<option value="${mrp.key}" ${mrp.key === cur ? 'selected' : ''}>${mrp.name}</option>`;
                                                 }
                                                 html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
                                                                 <select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;

@@ -287,12 +287,18 @@ class TestCollectDiseaseEffects:
         assert jd[key]["stage_name"] == "Majority"
         assert totals == {"civil_war_chance": 0.1}
 
-    def test_cured_disease_contributes_nothing(self, patch_disease_mongo, test_db, flask_app):
+    def test_cure_discovered_does_not_stop_the_forced_job(self, patch_disease_mongo, test_db, flask_app):
+        # A discovered cure ("cured") only doubles natural_cure_chance — it
+        # does NOT free infected pops from the forced job. See
+        # TestCuredDoesNotHaltMechanics for the equivalent tick-level checks.
         disease = _make_disease(cured=True)
         test_db["diseases"].insert_one(disease)
         target = {"_id": "n1", "_calc_cache": {
             "pop_count": 10, "disease_infection_counts": {str(disease["_id"]): 6}}}
-        assert dh.collect_disease_effects(target) == ({}, {}, {})
+        jd, ja, _ = dh.collect_disease_effects(target)
+        key = "disease_" + str(disease["_id"])
+        assert ja[key] == 6
+        assert jd[key]["forced_count"] == 6
 
     def test_forced_count_clamped_to_pop_count(self, patch_disease_mongo, test_db, flask_app):
         disease = _make_disease()
@@ -747,7 +753,11 @@ class TestDiseaseCureTick:
         assert doc["cure_progress"] == 15
         assert not doc.get("cured")
 
-    def test_completion_cures_all_pops(self, patch_disease_mongo, test_db, flask_app):
+    def test_completion_sets_cured_flag_without_healing_anyone(self, patch_disease_mongo, test_db, flask_app):
+        """Reaching required_progress is a one-time 'cure discovered' flag —
+        it must NOT heal pops, clear stages, or otherwise stop the disease.
+        Its only effect is doubling natural_cure_chance (tested separately in
+        TestNaturalCureTick)."""
         import helpers.tick_helpers as th
         disease = _make_disease(difficulty="Simple", cure_progress=98)
         test_db["diseases"].insert_one(disease)
@@ -767,9 +777,152 @@ class TestDiseaseCureTick:
              patch("helpers.tick_helpers.system_approve_change", lambda cid: True):
             result = th.disease_cure_cross_tick(nations, new_nations, {})
 
-        assert "HAS BEEN CURED" in result
+        assert "CURE HAS BEEN DISCOVERED" in result
         doc = test_db["diseases"].find_one({"_id": disease["_id"]})
         assert doc["cured"] is True
         assert doc["cure_progress"] == 100                       # clamped
+        # Nobody is healed and nothing else changes as a side effect of discovery.
+        assert test_db["pops"].count_documents({"disease": str(disease["_id"])}) == 6
+        assert new_nations[0]["disease_stages"][str(disease["_id"])] == 1
+
+    def test_already_cured_disease_is_skipped(self, patch_disease_mongo, test_db, flask_app):
+        """A disease already marked cured is skipped entirely by the cross
+        tick — no more progress accumulation, no repeated 'discovered'
+        message. The infection itself keeps existing independently."""
+        import helpers.tick_helpers as th
+        disease = _make_disease(difficulty="Simple", cure_progress=100, cured=True)
+        test_db["diseases"].insert_one(disease)
+        _seed_pops(test_db, "n1", 6, disease_id=disease["_id"])
+        nations = self._nations(disease["_id"], [5])
+
+        with patch("helpers.tick_helpers.mongo", patch_disease_mongo):
+            result = th.disease_cure_cross_tick(nations, [dict(n) for n in nations], {})
+
+        assert result == ""
+        assert test_db["pops"].count_documents({"disease": str(disease["_id"])}) == 6
+
+
+class TestNaturalCureTick:
+    def test_infected_pop_recovers_on_success(self, patch_disease_mongo, test_db, flask_app):
+        import helpers.tick_helpers as th
+        disease = _make_disease(natural_cure_chance=0.5)
+        test_db["diseases"].insert_one(disease)
+        _seed_pops(test_db, "n1", 3, disease_id=disease["_id"])
+        old_nation = {"_id": ObjectId(), "name": "Testland"}
+        # match pops to this nation id
+        test_db["pops"].update_many({"nation": "n1"}, {"$set": {"nation": str(old_nation["_id"])}})
+        new_nation = dict(old_nation)
+
+        with patch("helpers.tick_helpers.mongo", patch_disease_mongo), \
+             patch("helpers.tick_helpers.random.random", return_value=0.1):
+            result = th.nation_disease_natural_cure_tick(old_nation, new_nation, {})
+
+        assert "naturally recovered" in result
+        assert test_db["pops"].count_documents(
+            {"nation": str(old_nation["_id"]), "disease": str(disease["_id"])}) == 0
+
+    def test_no_recovery_when_roll_fails(self, patch_disease_mongo, test_db, flask_app):
+        import helpers.tick_helpers as th
+        disease = _make_disease(natural_cure_chance=0.1)
+        test_db["diseases"].insert_one(disease)
+        nation_id = ObjectId()
+        _seed_pops(test_db, nation_id, 2, disease_id=disease["_id"])
+        old_nation = {"_id": nation_id, "name": "Testland"}
+
+        with patch("helpers.tick_helpers.mongo", patch_disease_mongo), \
+             patch("helpers.tick_helpers.random.random", return_value=0.99):
+            result = th.nation_disease_natural_cure_tick(old_nation, dict(old_nation), {})
+
+        assert result == ""
+        assert test_db["pops"].count_documents({"disease": str(disease["_id"])}) == 2
+
+    def test_chance_doubles_once_cured(self, patch_disease_mongo, test_db, flask_app):
+        import helpers.tick_helpers as th
+        disease = _make_disease(natural_cure_chance=0.2, cured=True)
+        test_db["diseases"].insert_one(disease)
+        nation_id = ObjectId()
+        _seed_pops(test_db, nation_id, 1, disease_id=disease["_id"])
+        old_nation = {"_id": nation_id, "name": "Testland"}
+
+        # 0.35 fails against the base 0.2 chance but succeeds against the
+        # doubled 0.4 chance once cured.
+        with patch("helpers.tick_helpers.mongo", patch_disease_mongo), \
+             patch("helpers.tick_helpers.random.random", return_value=0.35):
+            result = th.nation_disease_natural_cure_tick(old_nation, dict(old_nation), {})
+
+        assert "naturally recovered" in result
         assert test_db["pops"].count_documents({"disease": str(disease["_id"])}) == 0
-        assert str(disease["_id"]) not in new_nations[0]["disease_stages"]
+
+    def test_no_chance_configured_means_no_recovery(self, patch_disease_mongo, test_db, flask_app):
+        import helpers.tick_helpers as th
+        disease = _make_disease()   # natural_cure_chance defaults to 0/unset
+        test_db["diseases"].insert_one(disease)
+        nation_id = ObjectId()
+        _seed_pops(test_db, nation_id, 2, disease_id=disease["_id"])
+        old_nation = {"_id": nation_id, "name": "Testland"}
+
+        with patch("helpers.tick_helpers.mongo", patch_disease_mongo), \
+             patch("helpers.tick_helpers.random.random", return_value=0.0):
+            result = th.nation_disease_natural_cure_tick(old_nation, dict(old_nation), {})
+
+        assert result == ""
+        assert test_db["pops"].count_documents({"disease": str(disease["_id"])}) == 2
+
+    def test_no_infected_pops_is_a_noop(self, patch_disease_mongo, test_db, flask_app):
+        import helpers.tick_helpers as th
+        old_nation = {"_id": ObjectId(), "name": "Testland"}
+        with patch("helpers.tick_helpers.mongo", patch_disease_mongo):
+            result = th.nation_disease_natural_cure_tick(old_nation, dict(old_nation), {})
+        assert result == ""
+
+
+class TestCuredDoesNotHaltMechanics:
+    """A discovered cure ('cured') must not act as a kill-switch anywhere
+    except doubling natural_cure_chance — outbreak spread, accepted spread,
+    and the forced job all keep functioning exactly as before discovery."""
+
+    def test_outbreak_spread_continues_after_cure_discovered(self, patch_disease_mongo, test_db, flask_app):
+        import helpers.tick_helpers as th
+        disease = _make_disease(infectivity="Extremely", cured=True)  # 40%+10%/pop
+        test_db["diseases"].insert_one(disease)
+        nation_id = ObjectId()
+        _seed_pops(test_db, nation_id, 2, disease_id=disease["_id"])
+        _seed_pops(test_db, nation_id, 18)
+        old_nation = {"_id": nation_id, "name": "Testland", "pop_count": 20}
+        new_nation = dict(old_nation)
+
+        with patch("helpers.tick_helpers.mongo", patch_disease_mongo), \
+             patch("helpers.tick_helpers.random.random", return_value=0.01):
+            result = th.nation_disease_spread_tick(old_nation, new_nation, {})
+
+        assert "has spread" in result
+        assert test_db["pops"].count_documents({"disease": str(disease["_id"])}) == 3
+
+    def test_forced_job_continues_after_cure_discovered(self, patch_disease_mongo, test_db, flask_app):
+        disease = _make_disease(cured=True)
+        test_db["diseases"].insert_one(disease)
+        target = {"_id": "n1", "_calc_cache": {
+            "pop_count": 10, "disease_infection_counts": {str(disease["_id"]): 3}}}
+        jd, ja, _ = dh.collect_disease_effects(target)
+        key = "disease_" + str(disease["_id"])
+        assert jd[key]["forced_count"] == 3
+        assert ja[key] == 3
+
+    def test_accepted_spread_continues_after_cure_discovered(self, patch_disease_mongo, test_db, flask_app):
+        import helpers.tick_helpers as th
+        disease = _make_disease(
+            name="Vampirism", changes_race=True, race_prefix="Vampiric",
+            accepted_spread_jobs=["full_vampire"], accepted_spread_chance=0.5,
+            cured=True,
+        )
+        test_db["diseases"].insert_one(disease)
+        nation, derived_id = _make_accepted_nation(test_db, jobs={"full_vampire": 1})
+        human_id = test_db["races"].insert_one({"name": "Human"}).inserted_id
+        _seed_pops(test_db, nation["_id"], 3, race=str(human_id))
+        new_nation = dict(nation)
+
+        with patch("helpers.tick_helpers.mongo", patch_disease_mongo), \
+             patch("helpers.tick_helpers.random.random", side_effect=[0.1, 0.1]):
+            result = th.nation_accepted_spread_tick(nation, new_nation, {})
+
+        assert "embraced" in result
