@@ -319,6 +319,8 @@ class HexMapViewer {
         this.panStart   = { x: 0, y: 0 };
         this.selectedTile = null;
         this._pinchDist   = null;
+        this._touchMulti  = false;
+        this._lastTouch   = { x: 0, y: 0 };
 
         this._bindEvents();
         this._initCanvas();
@@ -335,8 +337,34 @@ class HexMapViewer {
 
     _resize() {
         const rect = this.canvas.parentElement.getBoundingClientRect();
-        this.canvas.width  = Math.max(rect.width,  200);
-        this.canvas.height = Math.max(rect.height || 500, 200);
+        // viewW/viewH are CSS-pixel (logical) dimensions — everything else in
+        // this class (pan/zoom math, hit-testing, screen-space label drawing)
+        // is expressed in these units. The canvas's backing store is scaled
+        // up by devicePixelRatio for crispness on high-DPI screens; the CSS
+        // (width:100%/height:100%, set in styles.css) keeps its displayed
+        // size unchanged, so this is purely a backing-store resolution bump.
+        this.viewW = Math.max(rect.width,  200);
+        this.viewH = Math.max(rect.height || 500, 200);
+        this._dpr  = window.devicePixelRatio || 1;
+        this.canvas.width  = Math.round(this.viewW * this._dpr);
+        this.canvas.height = Math.round(this.viewH * this._dpr);
+    }
+
+    /**
+     * Logical (CSS-pixel) viewport size + effective DPR for whichever canvas
+     * is currently active. During image capture/export (_generateChangeImages,
+     * downloadMapImage, downloadTerrainImage), this.canvas/this.ctx are
+     * temporarily swapped to a plain offscreen canvas sized exactly to the
+     * capture dimensions, with no _resize()-style DPR scaling applied — so
+     * its "logical size" is just its actual width/height at dpr 1. Using
+     * this helper everywhere (instead of this.viewW/viewH directly) keeps
+     * pan/zoom/culling math correct in both contexts.
+     */
+    _viewport() {
+        if (this._capturingImage) {
+            return { w: this.canvas.width, h: this.canvas.height, dpr: 1 };
+        }
+        return { w: this.viewW, h: this.viewH, dpr: this._dpr || 1 };
     }
 
     /** Call when the canvas container becomes visible after being hidden. */
@@ -415,8 +443,9 @@ class HexMapViewer {
             const offY = this.bgOffsetY || 0;
             const l    = (-this.panX / this.zoom - offX) / ww;
             const t    = (-this.panY / this.zoom - offY) / ww;
-            const w    = this.canvas.width  / this.zoom / ww;
-            const h    = this.canvas.height / this.zoom / ww;
+            const vp   = this._viewport();
+            const w    = vp.w / this.zoom / ww;
+            const h    = vp.h / this.zoom / ww;
             this._bgViewer.viewport.fitBounds(
                 new OpenSeadragon.Rect(l, t, w, h), true
             );
@@ -677,13 +706,14 @@ class HexMapViewer {
 
     _centerView() {
         const ww = this._worldWidth(), wh = this._worldHeight();
+        const vp = this._viewport();
         const fitZoom = Math.min(
-            this.canvas.width  / ww * 0.9,
-            this.canvas.height / wh * 0.9,
+            vp.w / ww * 0.9,
+            vp.h / wh * 0.9,
         );
         this.zoom = Math.max(this.minZoom, Math.min(this.maxZoom, fitZoom));
-        this.panX = (this.canvas.width  - ww * this.zoom) / 2;
-        this.panY = (this.canvas.height - wh * this.zoom) / 2;
+        this.panX = (vp.w - ww * this.zoom) / 2;
+        this.panY = (vp.h - wh * this.zoom) / 2;
     }
 
     // -----------------------------------------------------------------------
@@ -827,8 +857,9 @@ class HexMapViewer {
         const sq3  = Math.sqrt(3);
         const wl   = -this.panX / this.zoom;
         const wt   = -this.panY / this.zoom;
-        const wr   = wl + this.canvas.width  / this.zoom;
-        const wb   = wt + this.canvas.height / this.zoom;
+        const vp   = this._viewport();
+        const wr   = wl + vp.w / this.zoom;
+        const wb   = wt + vp.h / this.zoom;
         const margin = s * 2;
 
         const cMin = Math.max(0, Math.floor((wl - margin) / (s * 1.5)) - 1);
@@ -849,7 +880,13 @@ class HexMapViewer {
     render() {
         const _t0 = performance.now();
         const ctx = this.ctx;
-        const W = this.canvas.width, H = this.canvas.height;
+        // Map the backing store's device pixels back to CSS-pixel logical
+        // coordinates for this whole frame; everything below (world
+        // translate/scale, screen-space label drawing) is unaffected and
+        // stays expressed in CSS pixels. During capture (_viewport() below),
+        // dpr is 1 and W/H are the offscreen capture canvas's actual size.
+        const { w: W, h: H, dpr } = this._viewport();
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         ctx.clearRect(0, 0, W, H);
 
         if (this._bgViewer) {
@@ -1218,6 +1255,7 @@ class HexMapViewer {
         ctx.save();
         ctx.textAlign    = 'center';
         ctx.textBaseline = 'middle';
+        const vp = this._viewport();
 
         for (const lb of this._nationLabels) {
             const { name } = lb;
@@ -1226,8 +1264,8 @@ class HexMapViewer {
             const sy = lb.wy * this.zoom + this.panY;
 
             // Skip if centroid is off-screen (with generous margin)
-            if (sx < -200 || sx > this.canvas.width + 200 ||
-                sy < -200 || sy > this.canvas.height + 200) continue;
+            if (sx < -200 || sx > vp.w + 200 ||
+                sy < -200 || sy > vp.h + 200) continue;
 
             // Compute font size: fill ~60% of bbox width, clamped
             const bboxWScreen = lb.wBboxW * this.zoom;
@@ -1433,9 +1471,10 @@ class HexMapViewer {
             }
         });
         c.addEventListener('wheel',      e => this._onWheel(e), { passive: false });
-        c.addEventListener('touchstart', e => this._onTouchStart(e), { passive: false });
-        c.addEventListener('touchmove',  e => this._onTouchMove(e),  { passive: false });
-        c.addEventListener('touchend',   e => this._onTouchEnd(e));
+        c.addEventListener('touchstart',  e => this._onTouchStart(e),  { passive: false });
+        c.addEventListener('touchmove',   e => this._onTouchMove(e),   { passive: false });
+        c.addEventListener('touchend',    e => this._onTouchEnd(e));
+        c.addEventListener('touchcancel', () => this._onTouchCancel());
         c.style.cursor = 'grab';
     }
 
@@ -1910,17 +1949,27 @@ class HexMapViewer {
         if (this._capturingImage) return;
         if (e.touches.length === 1) {
             const t = e.touches[0];
+            this._lastTouch = { x: t.clientX, y: t.clientY };
             this._onDown(t.clientX, t.clientY);
         } else if (e.touches.length === 2) {
-            this.isDragging = false;
-            this._pinchDist = this._dist2(e.touches);
+            // A second finger landed mid-gesture — finalize whatever the
+            // first finger was doing (pan or paint) before starting the pinch.
+            if (this._painting) {
+                this._painting    = false;
+                this._lastPainted = null;
+                this._finalizeUndoBatch();
+            }
+            this.isDragging  = false;
+            this._touchMulti = true;
+            this._pinchDist  = this._dist2(e.touches);
         }
     }
 
     _onTouchMove(e) {
         e.preventDefault();
-        if (e.touches.length === 1 && this.isDragging) {
+        if (e.touches.length === 1 && (this.isDragging || this._painting)) {
             const t = e.touches[0];
+            this._lastTouch = { x: t.clientX, y: t.clientY };
             this._onMove(t.clientX, t.clientY);
         } else if (e.touches.length === 2 && this._pinchDist !== null) {
             const dist   = this._dist2(e.touches);
@@ -1934,9 +1983,42 @@ class HexMapViewer {
 
     _onTouchEnd(e) {
         if (e.touches.length === 0) {
-            this.isDragging = false;
             this._pinchDist = null;
+            if (this._touchMulti) {
+                // The gesture was a pinch/multi-touch — no tap-to-select and
+                // no single-finger pan/paint was in flight to finalize.
+                this._touchMulti = false;
+                this.isDragging  = false;
+            } else {
+                // Single-finger gesture ending: this finalizes a pan (opening
+                // tile details on a tap via _onUp -> _onClickWorld when the
+                // finger never moved) and finalizes any in-progress paint
+                // undo batch — mirroring the mouseup handler in _bindEvents.
+                this._onUp(this._lastTouch.x, this._lastTouch.y);
+            }
+        } else if (e.touches.length === 1) {
+            // Going from 2 touches down to 1 (pinch -> pan): restart panning
+            // from the remaining finger without treating it as a tap.
+            const t = e.touches[0];
+            this._pinchDist  = null;
+            this._touchMulti = false;
+            this._lastTouch  = { x: t.clientX, y: t.clientY };
+            this.isDragging  = true;
+            this.hasMoved    = true;
+            this.dragStart   = { x: t.clientX, y: t.clientY };
+            this.panStart    = { x: this.panX, y: this.panY };
         }
+    }
+
+    _onTouchCancel() {
+        // Mirror the mouseleave cleanup — an interrupted touch (e.g. an
+        // incoming call, OS gesture) must not leave paint/drag state stuck.
+        this.isDragging  = false;
+        this._painting   = false;
+        this._pinchDist  = null;
+        this._touchMulti = false;
+        this._finalizeUndoBatch();
+        this._updateCursor();
     }
 
     _dist2(touches) {
@@ -2060,10 +2142,19 @@ class HexMapViewer {
 
         this.detailPanel.innerHTML = html;
         if (this._editMode) this._bindEditForm(q, r);
+
+        // On mobile, tile details live in a bottom sheet over the map rather
+        // than a sidebar that stacks below the (often off-screen) canvas.
+        // Desktop layout is untouched — .sheet-open only matters under the
+        // max-width:768px media query in styles.css.
+        if (window.matchMedia('(max-width: 768px)').matches) {
+            this.detailPanel.closest('.hex-map-sidebar')?.classList.add('sheet-open');
+        }
     }
 
     _clearDetails() {
         this.detailPanel.innerHTML = '<p class="hex-detail-placeholder">Click a tile to view details</p>';
+        this.detailPanel.closest('.hex-map-sidebar')?.classList.remove('sheet-open');
     }
 
     // -----------------------------------------------------------------------
@@ -2479,14 +2570,15 @@ class HexMapViewer {
         ctx.save();
         ctx.textAlign    = 'center';
         ctx.textBaseline = 'middle';
+        const vp = this._viewport();
 
         for (const lb of this._regionLabels) {
             const { name } = lb;
             const sx = lb.wx * this.zoom + this.panX;
             const sy = lb.wy * this.zoom + this.panY;
 
-            if (sx < -200 || sx > this.canvas.width + 200 ||
-                sy < -200 || sy > this.canvas.height + 200) continue;
+            if (sx < -200 || sx > vp.w + 200 ||
+                sy < -200 || sy > vp.h + 200) continue;
 
             const bboxWScreen = lb.wBboxW * this.zoom;
             let fontSize = Math.min(bboxWScreen * 0.18, 52);
@@ -3349,8 +3441,8 @@ class HexMapViewer {
     // Viewport controls
     // -----------------------------------------------------------------------
 
-    zoomIn()  { this._zoomAround(this.canvas.width / 2, this.canvas.height / 2, 1.25); }
-    zoomOut() { this._zoomAround(this.canvas.width / 2, this.canvas.height / 2, 1 / 1.25); }
+    zoomIn()  { const vp = this._viewport(); this._zoomAround(vp.w / 2, vp.h / 2, 1.25); }
+    zoomOut() { const vp = this._viewport(); this._zoomAround(vp.w / 2, vp.h / 2, 1 / 1.25); }
     resetView() { this._centerView(); this.render(); }
 
     _zoomAround(mx, my, factor) {

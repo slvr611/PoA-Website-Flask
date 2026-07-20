@@ -219,6 +219,11 @@ def civil_war_execute():
     if not new_name:
         flash("The new nation needs a name.")
         return redirect(f"/civil_war_helper?nation={source_id}")
+    from helpers.form_helpers import validate_name_characters
+    name_valid, name_error = validate_name_characters(new_name)
+    if not name_valid:
+        flash(name_error)
+        return redirect(f"/civil_war_helper?nation={source_id}")
     if db.find_one({"name": new_name}) is not None:
         flash(f"A nation named '{new_name}' already exists.")
         return redirect(f"/civil_war_helper?nation={source_id}")

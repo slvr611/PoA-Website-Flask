@@ -223,8 +223,19 @@ def find_dict_in_list(dict_list, key_field, key_value):
     
     return None
 
+# Must stay in sync with helpers/form_helpers.py's NAME_SCHEMA_PATTERN — kept
+# as a literal here (rather than imported) to avoid a circular import with
+# app_core during module load. Blocks characters that break URL routing
+# (#, /, \, ?, %), have special meaning in MongoDB queries ($), or are raw
+# control characters, so this is enforced even for code paths that build a
+# document directly and skip WTForms validation.
+_NAME_SCHEMA_PATTERN = r'^[^#/\\?%$\x00-\x1f\x7f]+$'
+
 for data_type in category_data:
-    category_data[data_type]["schema"] = load_json("json-data/schemas/" + data_type + ".json")["$jsonSchema"]
+    schema = load_json("json-data/schemas/" + data_type + ".json")["$jsonSchema"]
+    if "name" in schema.get("properties", {}):
+        schema["properties"]["name"]["pattern"] = _NAME_SCHEMA_PATTERN
+    category_data[data_type]["schema"] = schema
 
 for file in json_files:
     json_data[file] = load_json("json-data/" + file + ".json")

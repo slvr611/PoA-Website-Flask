@@ -145,3 +145,128 @@ class TestConcessionsResourceFiltering:
 
         assert new_nation.get("concessions", {}) == {}
         assert isinstance(result, str)
+
+
+_COMPLIANCE_SCHEMA = {
+    "properties": {
+        "compliance": {
+            "enum": ["None", "Rebellious", "Defiant", "Neutral", "Compliant", "Loyal"]
+        }
+    }
+}
+
+
+class TestConcessionsCooldown:
+    """A vassal granted concessions one session must not be granted them
+    again the very next session, regardless of compliance or roll luck."""
+
+    def test_cooldown_blocks_a_guaranteed_roll(self):
+        overlord_id = ObjectId()
+        fake_db = MagicMock()
+        fake_db.nations.find_one.return_value = {"nation_resource_capacity": _capacity()}
+        old_nation = _vassal(
+            overlord_id, _capacity(),
+            concessions_granted_last_session=True,
+            concessions_chance=1.0,  # would otherwise be a guaranteed roll
+        )
+        new_nation = dict(old_nation)
+
+        with patch("helpers.tick_helpers.mongo", MagicMock(db=fake_db)):
+            th.nation_concessions_tick(old_nation, new_nation, {})
+
+        assert new_nation.get("concessions", {}) == {}
+        assert new_nation.get("concessions_granted_last_session") is False
+
+    def test_cooldown_is_consumed_after_one_session(self):
+        # Session 1: blocked by the cooldown, flag flips to False.
+        overlord_id = ObjectId()
+        fake_db = MagicMock()
+        fake_db.nations.find_one.return_value = {"nation_resource_capacity": _capacity()}
+        old_nation = _vassal(
+            overlord_id, _capacity(),
+            concessions_granted_last_session=True,
+            concessions_chance=1.0,
+        )
+        session1 = dict(old_nation)
+        with patch("helpers.tick_helpers.mongo", MagicMock(db=fake_db)):
+            th.nation_concessions_tick(old_nation, session1, {})
+        assert session1["concessions_granted_last_session"] is False
+
+        # Session 2: cooldown cleared, a guaranteed roll succeeds normally.
+        session2 = dict(session1)
+        with patch("helpers.tick_helpers.mongo", MagicMock(db=fake_db)):
+            th.nation_concessions_tick(session1, session2, {})
+        assert session2.get("concessions", {}) != {}
+        assert session2.get("concessions_granted_last_session") is True
+
+    def test_granting_concessions_sets_the_cooldown_flag(self):
+        overlord_id = ObjectId()
+        fake_db = MagicMock()
+        fake_db.nations.find_one.return_value = {"nation_resource_capacity": _capacity()}
+        old_nation = _vassal(overlord_id, _capacity(), concessions_chance=1.0)
+        new_nation = dict(old_nation)
+
+        with patch("helpers.tick_helpers.mongo", MagicMock(db=fake_db)):
+            th.nation_concessions_tick(old_nation, new_nation, {})
+
+        assert new_nation.get("concessions", {}) != {}
+        assert new_nation.get("concessions_granted_last_session") is True
+
+    def test_a_failed_roll_does_not_set_the_cooldown_flag(self):
+        overlord_id = ObjectId()
+        fake_db = MagicMock()
+        fake_db.nations.find_one.return_value = {"nation_resource_capacity": _capacity()}
+        old_nation = _vassal(overlord_id, _capacity(), concessions_chance=0.0)
+        new_nation = dict(old_nation)
+
+        with patch("helpers.tick_helpers.mongo", MagicMock(db=fake_db)):
+            th.nation_concessions_tick(old_nation, new_nation, {})
+
+        assert new_nation.get("concessions", {}) == {}
+        assert new_nation.get("concessions_granted_last_session") is False
+
+
+class TestUnpaidConcessions:
+    """Concessions still outstanding at tick time count as unpaid: they are
+    cleared and compliance drops, but the vassal's stockpile must not grow."""
+
+    def test_unpaid_concessions_clear_and_reduce_compliance_without_granting_resources(self):
+        overlord_id = ObjectId()
+        fake_db = MagicMock()
+        fake_db.nations.find_one.return_value = {"nation_resource_capacity": _capacity()}
+        old_nation = _vassal(
+            overlord_id, _capacity(),
+            compliance="Neutral",  # index 3, above the rebellion threshold
+            concessions={"food": 2, "wood": 2},
+            resource_storage={"food": 5, "wood": 5},
+            concessions_chance=0.0,  # isolate the unpaid branch from a fresh roll
+        )
+        new_nation = dict(old_nation)
+
+        with patch("helpers.tick_helpers.mongo", MagicMock(db=fake_db)):
+            with patch("random.random", return_value=0.99):  # avoid the rebellion coinflip path
+                result = th.nation_concessions_tick(old_nation, new_nation, _COMPLIANCE_SCHEMA)
+
+        assert new_nation["concessions"] == {}
+        assert new_nation["compliance"] == "Defiant"
+        assert new_nation["resource_storage"] == {"food": 5, "wood": 5}  # unchanged — not paid out
+        assert "due to concessions not being paid" in result
+
+    def test_unpaid_concessions_at_low_compliance_may_trigger_rebellion_not_resources(self):
+        overlord_id = ObjectId()
+        fake_db = MagicMock()
+        fake_db.nations.find_one.return_value = {"nation_resource_capacity": _capacity()}
+        old_nation = _vassal(
+            overlord_id, _capacity(),
+            compliance="Rebellious",  # index 1, at/below the rebellion threshold
+            concessions={"food": 2, "wood": 2},
+            concessions_chance=0.0,
+        )
+        new_nation = dict(old_nation)
+
+        with patch("helpers.tick_helpers.mongo", MagicMock(db=fake_db)):
+            result = th.nation_concessions_tick(old_nation, new_nation, _COMPLIANCE_SCHEMA)
+
+        assert new_nation["concessions"] == {}
+        assert "resource_storage" not in new_nation
+        assert isinstance(result, str)

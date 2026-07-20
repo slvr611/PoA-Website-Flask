@@ -5,6 +5,7 @@ from wtforms import widgets
 from wtforms.validators import DataRequired, NumberRange, Optional, ValidationError
 from bson import ObjectId
 from app_core import json_data, category_data
+from helpers.form_helpers import wtforms_validate_name
 import json
 from copy import deepcopy
 from calculations.field_calculations import calculate_all_fields
@@ -1180,7 +1181,9 @@ class DynamicSchemaForm(BaseSchemaForm):
         field_type = field_schema.get("bsonType")
         required = field_name in schema.get("required", [])
         validators = [DataRequired()] if required else [Optional()]
-    
+        if field_name == "name":
+            validators.append(wtforms_validate_name)
+
         field_args = {
             "label": field_schema.get("label", field_name),
             "description": field_schema.get("description", ""),
@@ -1324,7 +1327,7 @@ class DynamicSchemaForm(BaseSchemaForm):
 class NationForm(BaseSchemaForm):
     """Specialized form for nations"""
     # Basic fields
-    name = StringField("Name", validators=[DataRequired()])
+    name = StringField("Name", validators=[DataRequired(), wtforms_validate_name])
     region = SelectField("Region", choices=[])
     prestige = IntegerField("Prestige", validators=[NumberRange(min=0)], default=0)
     stability = SelectField("Stability", choices=[], default="Balanced")
@@ -1552,7 +1555,7 @@ class DiseaseForm(BaseSchemaForm):
     """Bespoke form for disease definitions — the generic DynamicSchemaForm
     cannot render/round-trip the nested stage/effect object arrays."""
 
-    name = StringField("Name", validators=[DataRequired()])
+    name = StringField("Name", validators=[DataRequired(), wtforms_validate_name])
     description = TextAreaField("Description")
     rating = SelectField("Rating", choices=[])
     job_type = StringField("Job Type", validators=[DataRequired()])
@@ -1604,7 +1607,7 @@ class DiseaseForm(BaseSchemaForm):
 
 class NewCharacterForm(BaseSchemaForm):
     """Form for creating a new character"""
-    name = StringField("Name", validators=[DataRequired()])
+    name = StringField("Name", validators=[DataRequired(), wtforms_validate_name])
     
     player = SelectField("Player", choices=[])
     creator = SelectField("Creator", choices=[])

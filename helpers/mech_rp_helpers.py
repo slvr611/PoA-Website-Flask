@@ -199,7 +199,7 @@ def _apply_grant_resources(old_nation, new_nation, schema, mrp_def, magnitude, t
         return ""
     return _grant_specific_resource(
         old_nation, new_nation, target_resource, int(magnitude),
-        f"a mech RP ({mrp_def.get('display_name', mrp_def.get('key', '?'))})"
+        f"a mech RP ({mrp_def.get('name', mrp_def.get('key', '?'))})"
     )
 
 
@@ -207,7 +207,7 @@ def _apply_adjust_stability(old_nation, new_nation, schema, mrp_def, magnitude, 
     if magnitude == 0:
         return ""
     from helpers.tick_helpers import adjust_stability
-    label = f"mech RP: {mrp_def.get('display_name', mrp_def.get('key', '?'))}"
+    label = f"mech RP: {mrp_def.get('name', mrp_def.get('key', '?'))}"
     return adjust_stability(old_nation, new_nation, schema, [int(magnitude)], [label])
 
 
@@ -250,7 +250,7 @@ def _apply_expand_territory(old_nation, new_nation, schema, mrp_def, magnitude, 
         from helpers.hex_map_helpers import bump_tile_version
         bump_tile_version()
     verb = "would expand" if dry_run else "expanded"
-    return f"{nation_name} {verb} into {len(claimed)} tile(s) from a mech RP ({mrp_def.get('display_name', mrp_def.get('key', '?'))}).\n"
+    return f"{nation_name} {verb} into {len(claimed)} tile(s) from a mech RP ({mrp_def.get('name', mrp_def.get('key', '?'))}).\n"
 
 
 def _apply_gain_money(old_nation, new_nation, schema, mrp_def, magnitude, target_resource, need_weights, state, dry_run=False):
@@ -259,7 +259,7 @@ def _apply_gain_money(old_nation, new_nation, schema, mrp_def, magnitude, target
         return ""
     new_nation["money"] = new_nation.get("money", old_nation.get("money", 0)) + amount
     name = old_nation.get("name", "Unknown")
-    return f"{name} gained {amount} gold from a mech RP ({mrp_def.get('display_name', mrp_def.get('key', '?'))}).\n"
+    return f"{name} gained {amount} gold from a mech RP ({mrp_def.get('name', mrp_def.get('key', '?'))}).\n"
 
 
 def _apply_grant_temp_modifier(old_nation, new_nation, schema, mrp_def, magnitude, target_resource, need_weights, state, dry_run=False):
@@ -272,11 +272,11 @@ def _apply_grant_temp_modifier(old_nation, new_nation, schema, mrp_def, magnitud
         "field": f"mrp_{mrp_def.get('key', '')}_outcome",
         "value": magnitude,
         "duration": 3,
-        "source": f"Mech RP: {mrp_def.get('display_name', mrp_def.get('key', '?'))}",
+        "source": f"Mech RP: {mrp_def.get('name', mrp_def.get('key', '?'))}",
     })
     new_nation["modifiers"] = modifiers
     name = old_nation.get("name", "Unknown")
-    return f"{name} gained a temporary modifier from a mech RP ({mrp_def.get('display_name', mrp_def.get('key', '?'))}).\n"
+    return f"{name} gained a temporary modifier from a mech RP ({mrp_def.get('name', mrp_def.get('key', '?'))}).\n"
 
 
 def _score_law_value(law_dict, need_weights):
@@ -330,7 +330,7 @@ def _apply_change_law(old_nation, new_nation, schema, mrp_def, magnitude, target
     new_nation[axis] = best_value
     name = old_nation.get("name", "Unknown")
     axis_label = axis_schema.get("label", axis)
-    return f"{name} changed its {axis_label} from {current_value} to {best_value} following a mech RP ({mrp_def.get('display_name', mrp_def.get('key', '?'))}).\n"
+    return f"{name} changed its {axis_label} from {current_value} to {best_value} following a mech RP ({mrp_def.get('name', mrp_def.get('key', '?'))}).\n"
 
 
 MRP_EFFECT_HANDLERS = {
@@ -535,7 +535,7 @@ def select_mech_rps(old_nation, new_nation, state, goal, secondary_goal, persona
 
         entry = {
             "mrp_key": key,
-            "display_name": mrp_def.get("display_name", key),
+            "display_name": mrp_def.get("name", key),
             "character_name": (acting_character or {}).get("name", "Unknown"),
             "stat_used": result["stat_used"],
             "stat_value": result["stat_value"],
@@ -553,7 +553,7 @@ def select_mech_rps(old_nation, new_nation, state, goal, secondary_goal, persona
             log_lines.append(effect_summary)
         else:
             log_lines.append(
-                f"{old_nation.get('name', 'Unknown')} attempted {mrp_def.get('display_name', key)} "
+                f"{old_nation.get('name', 'Unknown')} attempted {mrp_def.get('name', key)} "
                 f"({result['outcome_tier'].replace('_', ' ')}) — no effect.\n"
             )
 

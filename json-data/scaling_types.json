@@ -194,6 +194,12 @@
         "default_x": 1,
         "has_dropdown": "resource"
     },
+    "per_x_excess_territory": {
+        "name": "Per X Territory Over Capacity",
+        "description": "Multiplied by how many tiles of territory the nation holds beyond its effective_territory capacity, divided by X, floored. 0 if not over capacity. Also usable as a condition (operator '>' value 0) to check whether a nation is over its effective territory.",
+        "has_x": true,
+        "default_x": 1
+    },
     "per_x_nations_in_shared_market": {
         "name": "Per X Nations in Shared Market",
         "description": "Multiplied by the number of other nations that share at least one market with this nation divided by X, floored. Nations in multiple shared markets are only counted once.",

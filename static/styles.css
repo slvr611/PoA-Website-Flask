@@ -89,9 +89,79 @@ header {
   white-space: nowrap;
 }
 
-/* Show dropdown on hover */
-.nav-item:hover .dropdown-content {
+/* Show dropdown on hover (pointer devices only — touch uses tap-toggle via .open) */
+@media (hover: hover) and (pointer: fine) {
+  .nav-item:hover .dropdown-content {
+    display: block;
+  }
+}
+
+/* Tap-toggled dropdown (mobile-nav.js adds/removes .open) */
+.nav-item.open > .dropdown-content {
   display: block;
+}
+
+/* Hamburger button — hidden on desktop, shown via the @media block below */
+.nav-toggle {
+  display: none;
+  background: none;
+  border: none;
+  color: #e0e0e0;
+  font-size: 1.5rem;
+  line-height: 1;
+  min-width: 44px;
+  min-height: 44px;
+  cursor: pointer;
+}
+
+@media (max-width: 900px) {
+  .navbar {
+    flex-wrap: wrap;
+  }
+
+  .nav-toggle {
+    display: block;
+  }
+
+  .nav-left,
+  .nav-right {
+    display: none;
+    width: 100%;
+  }
+
+  .navbar.nav-open .nav-left,
+  .navbar.nav-open .nav-right {
+    display: block;
+  }
+
+  .nav-left .nav-list,
+  .nav-right .nav-list {
+    flex-direction: column;
+  }
+
+  .nav-item {
+    margin-right: 0;
+  }
+
+  .nav-item a {
+    padding: 0.75rem 1rem;
+  }
+
+  /* Dropdowns become static/indented submenus instead of absolutely
+     positioned overlays, since the whole nav is already a column. */
+  .dropdown-content {
+    display: none;
+    position: static;
+    min-width: 0;
+    padding-left: 1rem;
+    border: none;
+    border-radius: 0;
+    background-color: #2a2a2a;
+  }
+
+  .nav-item.open > .dropdown-content {
+    display: block;
+  }
 }
 
 .navbar a {
@@ -127,6 +197,43 @@ a:visited {
     width: 80%;
     margin: auto;
     overflow: hidden;
+}
+
+/* Base form-control styling (previously unstyled, relying on browser
+   defaults). font-size:16px avoids iOS Safari's zoom-on-focus behavior. */
+.form-control {
+    width: 100%;
+    box-sizing: border-box;
+    background: #252535;
+    color: #eee;
+    border: 1px solid #555;
+    border-radius: 4px;
+    padding: 0.45rem;
+    font-size: 16px;
+}
+
+@media (pointer: coarse) {
+    .btn,
+    .map-btn,
+    button {
+        min-height: 44px;
+    }
+}
+
+@media (max-width: 768px) {
+    .container,
+    .nation-page-container {
+        width: auto;
+        padding: 0 12px;
+    }
+
+    .container {
+        overflow: visible;
+    }
+
+    .main-columns {
+        flex-direction: column;
+    }
 }
 
 .content {
@@ -545,6 +652,35 @@ h1, h2 {
     -webkit-overflow-scrolling: touch;
 }
 
+/* Modifiers table (nations/characters/artifacts/units/district defs) —
+   dense, many-column table; previously unstyled and not wrapped, so it
+   blew out the width of whatever edit page it appeared on. */
+.modifiers-table {
+    border-collapse: collapse;
+    margin: 0;
+}
+
+.modifiers-table th,
+.modifiers-table td {
+    border: 1px solid #444;
+    padding: 0.4em;
+    vertical-align: top;
+}
+
+.modifiers-table th {
+    background-color: #333;
+    color: #fff;
+    text-align: left;
+}
+
+@media (max-width: 768px) {
+    .modifiers-table select,
+    .modifiers-table input {
+        min-width: 80px;
+        font-size: 16px;
+    }
+}
+
 /* Adjust info-table styles */
 .info-table {
     width: 100%;
@@ -553,6 +689,23 @@ h1, h2 {
     /* Prevent table from shrinking below its natural size */
     white-space: nowrap;
     min-width: 800px; /* Minimum width before scrolling starts */
+}
+
+@media (max-width: 768px) {
+    /* Kill the 800px floor on mobile — wide tables still scroll inside
+       their existing .table-wrapper, but narrow ones (e.g. inside
+       .info-column) no longer force horizontal scroll on every page. */
+    .info-table {
+        min-width: 0;
+        white-space: normal;
+    }
+
+    /* Keep inputs/selects usable inside narrowed info-table cells rather
+       than collapsing to their intrinsic (tiny) size. */
+    .info-table input.form-control,
+    .info-table select.form-control {
+        min-width: 120px;
+    }
 }
 
 .info-table th,
@@ -1210,6 +1363,116 @@ h1, h2 {
     margin: 0;
 }
 
+/* ============================================================
+   Tech viewer — list/graph toggle (list is the mobile default;
+   graph remains the desktop default and is reachable from either).
+   ============================================================ */
+
+.tech-view-toggle {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.tech-view-btn {
+    padding: 0.5rem 1.25rem;
+    min-height: 44px;
+    background-color: #2a2a2a;
+    color: #aaa;
+    border: 1px solid #444;
+    border-radius: 4px 4px 0 0;
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+
+.tech-view-btn.active {
+    background-color: #0066cc;
+    color: #fff;
+    border-color: #0055aa;
+}
+
+.tech-tier-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.tech-card {
+    flex: 1 1 220px;
+    max-width: 320px;
+    background-color: #1e1e1e;
+    border: 1px solid #444;
+    border-left: 4px solid #888;
+    border-radius: 4px;
+    padding: 0.4rem 0.6rem;
+    color: #ddd;
+}
+
+.tech-card summary {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    list-style: none;
+    font-size: 0.9rem;
+}
+
+.tech-card summary::-webkit-details-marker {
+    display: none;
+}
+
+.tech-card-name {
+    font-weight: 600;
+    color: #e0e0e0;
+}
+
+.tech-card-status {
+    font-size: 0.78rem;
+    color: #8ab4f8;
+    white-space: nowrap;
+}
+
+.tech-card-body {
+    margin-top: 0.5rem;
+    font-size: 0.85rem;
+    border-top: 1px solid #333;
+    padding-top: 0.5rem;
+}
+
+.tech-card-body p {
+    margin: 0.25rem 0;
+}
+
+.tech-list-input-row {
+    margin-top: 0.4rem;
+}
+
+.tech-list-input {
+    width: 5rem;
+    font-size: 16px;
+    padding: 0.3rem;
+    background-color: #333;
+    color: #fff;
+    border: 1px solid #555;
+    border-radius: 3px;
+}
+
+@media (max-width: 768px) {
+    #cy {
+        height: 65vh;
+        height: 65svh;
+        touch-action: none;
+    }
+
+    #tech-info-panel {
+        left: 8px;
+        right: 8px;
+        width: auto;
+    }
+}
+
 .form-actions {
     margin-top: 1rem;
     text-align: right;
@@ -1286,6 +1549,18 @@ h1, h2 {
 .form-actions {
     margin-top: 2rem;
     text-align: left;
+}
+
+@media (max-width: 768px) {
+    /* Keep Save/Request reachable without scrolling back up through the
+       (often 2000+ line) nation edit form. */
+    .form-actions {
+        position: sticky;
+        bottom: 0;
+        background-color: #121212;
+        padding: 8px 0;
+        z-index: 100;
+    }
 }
 
 .reason-field {
@@ -1476,9 +1751,28 @@ input[type="text"].map-btn:focus {
         flex-direction: column;
         align-items: flex-start;
     }
-    
+
     .map-viewer {
         height: 50vh;
+    }
+
+    /* ~15-25 hex map toolbar buttons no longer wrap into a tall multi-row
+       block — they scroll horizontally in one row instead, each kept at a
+       tap-friendly size. */
+    #hex-controls {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        padding-bottom: 4px;
+    }
+
+    #hex-controls .map-btn,
+    #hex-controls button,
+    #hex-controls select.map-btn,
+    #hex-controls input[type="text"].map-btn {
+        flex: 0 0 auto;
+        min-height: 44px;
+        font-size: 16px;
     }
 }
 
@@ -1537,6 +1831,12 @@ input[type="text"].map-btn:focus {
     border-radius: 4px;
     overflow: hidden;
     position: relative;
+}
+
+#hex-map-canvas {
+    /* Let hex-map.js's own touchstart/touchmove handlers own pan/pinch/paint
+       gestures instead of the browser's default scroll/zoom. */
+    touch-action: none;
 }
 
 #hex-bg-viewer {
@@ -1812,17 +2112,83 @@ input[type="text"].map-btn:focus {
    Responsive
    ============================================================ */
 
+/* Bottom-sheet handle (grip + close button) — only shown on mobile, above
+   the tile-details content, inside .hex-map-sidebar. Hidden on desktop
+   since the sidebar there is a normal in-flow panel, not a sheet. */
+.hex-sheet-handle {
+    display: none;
+}
+
 @media (max-width: 768px) {
     .hex-map-layout {
         flex-direction: column;
         height: auto;
     }
+
     .hex-map-canvas-wrap {
-        height: 55vw;
+        height: 70vh;
+        height: 70svh;
         min-height: 280px;
     }
+
+    /* Slide-up bottom sheet over the map instead of a panel that stacks
+       below the canvas (previously off-screen until the user scrolled
+       past a nearly-full-height map). */
     .hex-map-sidebar {
-        width: 100%;
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        width: auto;
+        max-height: 45vh;
+        max-height: 45svh;
+        background-color: #1a1a1a;
+        border-top: 1px solid #444;
+        border-radius: 12px 12px 0 0;
+        box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.4);
+        z-index: 500;
+        transform: translateY(100%);
+        transition: transform 0.25s ease-out;
+        overflow-y: auto;
+    }
+
+    .hex-map-sidebar.sheet-open {
+        transform: none;
+    }
+
+    .hex-sheet-handle {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        padding: 0.5rem;
+        flex-shrink: 0;
+    }
+
+    .hex-sheet-grip {
+        width: 40px;
+        height: 4px;
+        border-radius: 2px;
+        background-color: #555;
+    }
+
+    .hex-sheet-close {
+        position: absolute;
+        right: 0.5rem;
+        top: 0.25rem;
+        background: none;
+        border: none;
+        color: #ccc;
+        font-size: 1.5rem;
+        line-height: 1;
+        min-width: 44px;
+        min-height: 44px;
+        cursor: pointer;
+    }
+
+    .hex-detail-panel {
+        border: none;
+        border-radius: 0;
     }
 }
 

@@ -297,6 +297,19 @@ def per_x_excess_resource(target, scaling_x=1, scaling_extra="", context=None):
     return int(amount / divisor)
 
 
+def per_x_excess_territory(target, scaling_x=1, scaling_extra="", context=None):
+    """Territory tiles held beyond the nation's effective_territory capacity,
+    floored at 0. effective_territory/current_territory are precalculated
+    before the general modifier pass runs (see attributes_to_precalculate in
+    field_calculations.py), so both are already correct on `target` here.
+    """
+    current_territory = target.get("current_territory", 0) or 0
+    effective_territory = target.get("effective_territory", 0) or 0
+    excess = max(0, current_territory - effective_territory)
+    divisor = float(scaling_x) if scaling_x else 1
+    return int(excess / divisor)
+
+
 def _get_unit_upkeep_cache():
     """Lazy-load and cache unit upkeep.
 
@@ -423,6 +436,7 @@ SCALING_METHODS = {
     "per_x_foreign_religion_pops": per_x_foreign_religion_pops,
     "per_x_vassals": per_x_vassals,
     "per_x_excess_resource": per_x_excess_resource,
+    "per_x_excess_territory": per_x_excess_territory,
     "per_x_nations_in_shared_market": per_x_nations_in_shared_market,
     "per_x_unit_upkeep": per_x_unit_upkeep,
 }

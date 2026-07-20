@@ -1,18 +1,18 @@
 {
   "$jsonSchema": {
     "bsonType": "object",
-    "required": ["key", "display_name", "effect_type"],
+    "required": ["key", "name", "effect_type"],
     "preview": ["effect_type", "base_difficulty"],
-    "sort": "display_name",
+    "sort": "name",
     "properties": {
       "key": {
         "bsonType": "string",
         "label": "Key",
         "description": "Stable unique identifier for this mech RP (used by modifiers, cooldown tracking, and law-scoring). Do not change once other content references it."
       },
-      "display_name": {
+      "name": {
         "bsonType": "string",
-        "label": "Display Name",
+        "label": "Name",
         "description": "Human-readable name shown to admins and (on success/failure) to players"
       },
       "description": {

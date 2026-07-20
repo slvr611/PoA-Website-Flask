@@ -123,8 +123,8 @@ def inject_modifier_data():
     _db_defs = list(mongo.db.district_defs.find({}, {"_id": 0, "key": 1, "display_name": 1}).sort("display_name", 1))
     all_district_defs = [{"key": d["key"], "display_name": d.get("display_name") or d["key"]} for d in _db_defs]
 
-    _db_mrp_defs = list(mongo.db.mrp_defs.find({}, {"_id": 0, "key": 1, "display_name": 1}).sort("display_name", 1))
-    all_mrp_defs = [{"key": m["key"], "name": m.get("display_name") or m["key"]} for m in _db_mrp_defs]
+    _db_mrp_defs = list(mongo.db.mrp_defs.find({}, {"_id": 0, "key": 1, "name": 1}).sort("name", 1))
+    all_mrp_defs = [{"key": m["key"], "name": m.get("name") or m["key"]} for m in _db_mrp_defs]
 
     all_unit_categories = [
         {"key": "naval", "name": "Naval"},

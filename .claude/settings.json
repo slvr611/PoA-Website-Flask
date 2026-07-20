@@ -43,7 +43,12 @@
       "Bash(xargs -I{} sh -c 'grep -l \"merchant\" \"{}\" 2>/dev/null')",
       "Read(//tmp/**)",
       "Bash(PYTHONPATH=. python -X utf8 \"/c/Users/orion/AppData/Local/Temp/claude/c--Programming-Projects-PoA-Website-Flask/4e2b9b97-545a-4b46-bd70-320c206433fb/scratchpad/seed_mrp_defs.py\")",
-      "Bash(PYTHONPATH=. python -X utf8 -c ' *)"
+      "Bash(PYTHONPATH=. python -X utf8 -c ' *)",
+      "Bash(sed -i 's/\"display_name\":/\"name\":/g' \"/c/Users/orion/AppData/Local/Temp/claude/c--Programming-Projects-PoA-Website-Flask/4e2b9b97-545a-4b46-bd70-320c206433fb/scratchpad/seed_mrp_defs.py\")",
+      "Read(//c/Users/orion/AppData/Local/Temp/claude/c--Programming-Projects-PoA-Website-Flask/4e2b9b97-545a-4b46-bd70-320c206433fb/scratchpad/**)",
+      "Bash(node --check static/js/mobile-nav.js)",
+      "Bash(env)",
+      "Bash(grep -n \"^import forms\\\\|from forms import\\\\|import forms$\" helpers/change_helpers.py helpers/form_helpers.py)"
     ]
   }
 }

@@ -1081,7 +1081,7 @@ def isolated_diplo_stance_tick(old_nation, new_nation, schema):
         for modifier in modifiers:
             if modifier.get("field", "") == "stability_gain_chance" and modifier.get("source", "") == "Isolated Diplomatic Stance":
                 old_value = modifier["value"]
-                new_value = min(modifier["value"] + gain_rate, cap)
+                new_value = round(min(modifier["value"] + gain_rate, cap), 4)
                 modifier["value"] = new_value
                 new_nation["modifiers"] = modifiers
                 return f"{old_nation.get('name', 'Unknown')} has had the stability gain chance modifier from their Isolated diplomatic stance increased from {old_value} to {new_value}.\n"
@@ -1372,11 +1372,14 @@ def nation_concessions_tick(old_nation, new_nation, schema):
                 f" due to concessions not being paid.\n"
             )
 
-    if old_nation.get("compliance", "None") in ("Loyal", "Compliant"):
-        if old_nation.get("concessions_roll", 1) < old_nation.get("concessions_chance_at_tick", 0):
-            new_nation["concessions_roll"] = 1
-            new_nation["concessions_chance_at_tick"] = 0
-            return result
+    # Cooldown: a vassal that was granted concessions last session cannot be
+    # granted them again this session (win or lose, paid or not) — consumed
+    # after skipping exactly one session.
+    if old_nation.get("concessions_granted_last_session", False):
+        new_nation["concessions_granted_last_session"] = False
+        new_nation["concessions_roll"] = 1
+        new_nation["concessions_chance_at_tick"] = 0
+        return result
 
     concessions_roll = random.random()
     new_nation["concessions_roll"] = concessions_roll
@@ -1412,7 +1415,9 @@ def nation_concessions_tick(old_nation, new_nation, schema):
 
         if len(resources) < 2:
             # Not enough mutually-storable resources to demand a two-resource
-            # concession this tick.
+            # concession this tick. No concessions granted, so the cooldown
+            # is not triggered.
+            new_nation["concessions_granted_last_session"] = False
             return result
 
         first_resource = random.choice(resources)
@@ -1425,8 +1430,11 @@ def nation_concessions_tick(old_nation, new_nation, schema):
             first_resource: first_amount,
             second_resource: second_amount
         }
+        new_nation["concessions_granted_last_session"] = True
 
         result += f"{old_nation.get('name', 'Unknown')} has demanded concessions from their overlord.\n"
+    else:
+        new_nation["concessions_granted_last_session"] = False
     return result
 
 def nation_rebellion_tick(old_nation, new_nation, schema):
@@ -1539,30 +1547,14 @@ def nation_passive_expansion_tick(old_nation, new_nation, schema):
     from helpers.hex_map_helpers import select_passive_expansion_tiles
 
     result = ""
-    expansion_rolls = 1
-    if old_nation.get("temperament", "None") != "Player":
-        global_modifiers = mongo.db["global_modifiers"].find_one({"name": "global_modifiers"})
-        current_session = global_modifiers.get("session_counter", 1)
-        if current_session % 5 == 0:
-            expansion_rolls = 5
-        else:
-            expansion_rolls = 0
-
-    if expansion_rolls <= 0:
-        return result
 
     expansion_chance = old_nation.get("passive_expansion_chance", 0)
     new_nation["expansion_chance_at_tick"] = expansion_chance
 
-    # Count how many rolls succeed
-    successes = 0
-    last_roll = 0.0
-    for _ in range(expansion_rolls):
-        roll = random.random()
-        last_roll = roll
-        if roll <= expansion_chance:
-            successes += 1
-    new_nation["expansion_roll"] = last_roll
+    # One roll per tick for every nation, AI and Player alike.
+    roll = random.random()
+    new_nation["expansion_roll"] = roll
+    successes = 1 if roll <= expansion_chance else 0
 
     if successes == 0:
         return result

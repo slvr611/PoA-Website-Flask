@@ -639,6 +639,11 @@ def create_war():
     if not name:
         flash("War name is required.")
         return redirect("/wars/create")
+    from helpers.form_helpers import validate_name_characters
+    name_valid, name_error = validate_name_characters(name)
+    if not name_valid:
+        flash(name_error)
+        return redirect("/wars/create")
     if not primary_aggressor_id or not primary_defender_id:
         flash("Both a primary aggressor and primary defender are required.")
         return redirect("/wars/create")

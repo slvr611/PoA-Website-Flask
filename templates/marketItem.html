@@ -30,30 +30,34 @@
                             <th><strong>{{ properties.label }}:</strong></th>
                             {% if field == "resource_storage" %}
                                 <td>
+                                    {% set all_resource_defs = json_data["general_resources"] + json_data["unique_resources"] + json_data["luxury_resources"] %}
+                                    {% set dyn_prices = item.get("resource_prices", {}) %}
                                     <table class="resources-table">
                                         <thead>
                                             <tr>
                                                 <th>Resource</th>
                                                 <th>Production</th>
                                                 <th>Storage</th>
+                                                <th>Price</th>
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            <tr>
-                                                <td>{{ item.primary_resource }}</td>
-                                                <td>{{ item.get("resource_production", {}).get(item.primary_resource, 0) }}</td>
-                                                <td>{{ item.get("resource_storage", {}).get(item.primary_resource, 0) }}/{{ item.get("market_resource_capacity", {}).get(item.primary_resource, 0) }}</td>
-                                            </tr>
-                                            <tr>
-                                                <td>{{ item.secondary_resource_one }}</td>
-                                                <td>{{ item.get("resource_production", {}).get(item.secondary_resource_one, 0) }}</td>
-                                                <td>{{ item.get("resource_storage", {}).get(item.secondary_resource_one, 0) }}/{{ item.get("market_resource_capacity", {}).get(item.secondary_resource_one, 0) }}</td>
-                                            </tr>
-                                            <tr>
-                                                <td>{{ item.secondary_resource_two }}</td>
-                                                <td>{{ item.get("resource_production", {}).get(item.secondary_resource_two, 0) }}</td>
-                                                <td>{{ item.get("resource_storage", {}).get(item.secondary_resource_two, 0) }}/{{ item.get("market_resource_capacity", {}).get(item.secondary_resource_two, 0) }}</td>
-                                            </tr>
+                                            {% for rkey in [item.primary_resource, item.secondary_resource_one, item.secondary_resource_two] %}
+                                                {% set resource_def = find_dict_in_list(all_resource_defs, "key", rkey) %}
+                                                {% set base_price = resource_def.get("base_price", 0) if resource_def else 0 %}
+                                                {% set market_price = ((dyn_prices.get(rkey, base_price) / 5) | round | int) * 5 %}
+                                                <tr>
+                                                    <td>{{ rkey }}</td>
+                                                    <td>{{ item.get("resource_production", {}).get(rkey, 0) }}</td>
+                                                    <td>{{ item.get("resource_storage", {}).get(rkey, 0) }}/{{ item.get("market_resource_capacity", {}).get(rkey, 0) }}</td>
+                                                    {% if resource_def %}
+                                                        <td class="{% if market_price > base_price %}excess-positive{% elif market_price < base_price %}excess-negative{% endif %}"
+                                                            title="Base Price: {{ base_price }}">{{ market_price }}</td>
+                                                    {% else %}
+                                                        <td>-</td>
+                                                    {% endif %}
+                                                </tr>
+                                            {% endfor %}
                                         </tbody>
                                     </table>
                                 </td>

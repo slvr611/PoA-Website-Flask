@@ -1,13 +1,58 @@
 {% macro render_tech_tree(nation_tech, tech_cost_modifier, tech_cost_minimum, json_data, editable=False, form=None, form_json=None, tech_category_cost_modifiers={}) %}
+{# Single source of truth for tier layout — used both to lay out the list-view
+   cards below and (via tojson) as the Cytoscape graph's manual row layout.
+   "" marks an empty slot within a row (kept for visual alignment in the graph). #}
+{% set tech_tiers = [
+    ["dawn_to_dusk"],
+    ["iron_harbors", "", "maleficium", "cantle_saddles", "bread_and_circus", "", "telescope"],
+    ["crop_rotation", "professional_peddlers", "cold-struck_coinage", "schools_of_magic", "chivalry", "pilgrim_caravans", "common_law", "standing_army", "legitimacy"],
+    ["windmills", "hourglass", "standard_measurements", "mage_college", "internal_development", "national_force", "central_heating", "strongholds", "advanced_numerals"],
+    ["agricultural_estate", "", "niter_grinding", "", "", "mortar_masonry", "", "siegeworks"],
+    ["manorialism", "", "prejudice", "", "casus_belli"],
+    ["archaic_inspirations", "", "", "cultural_rebirth", "", "", "crusade"],
+] %}
 <section class="tech-section">
     <h2>Tech</h2>
-    <div class="tech-controls" style="margin-bottom: 10px;">
-        <button type="button" onclick="zoomIn()" style="margin-right: 5px;">Zoom In</button>
-        <button type="button" onclick="zoomOut()" style="margin-right: 5px;">Zoom Out</button>
-        <button type="button" onclick="resetZoom()">Reset View</button>
+
+    <div class="tech-view-toggle">
+        <button type="button" class="tech-view-btn" id="tech-view-list-btn">List</button>
+        <button type="button" class="tech-view-btn" id="tech-view-graph-btn">Graph</button>
     </div>
-    <div id="cy" style="width: 100%; height: 800px; background-color: #222;"></div>
-    
+
+    {# List view — default on mobile. Cards are laid out server-side (tier
+       grouping + name); status/body content is filled in by buildTechListView()
+       below so it always matches getTechStatus()/getCost() exactly. #}
+    <div id="tech-list-view" style="display:none;">
+        {% for tier in tech_tiers %}
+        <div class="tech-tier-row">
+            {% for tech_id in tier %}
+                {% if tech_id %}
+                    {% set tech = json_data["tech"].get(tech_id) %}
+                    {% if tech %}
+                    <details class="tech-card" data-tech-id="{{ tech_id }}">
+                        <summary>
+                            <span class="tech-card-name">{{ tech.display_name }}</span>
+                            <span class="tech-card-status" data-tech-status-for="{{ tech_id }}"></span>
+                        </summary>
+                        <div class="tech-card-body" data-tech-body-for="{{ tech_id }}"></div>
+                    </details>
+                    {% endif %}
+                {% endif %}
+            {% endfor %}
+        </div>
+        {% endfor %}
+    </div>
+
+    {# Graph view — kept as the desktop default; still available on mobile via the toggle. #}
+    <div id="tech-graph-view" style="display:none;">
+        <div class="tech-controls" style="margin-bottom: 10px;">
+            <button type="button" onclick="zoomIn()" style="margin-right: 5px;">Zoom In</button>
+            <button type="button" onclick="zoomOut()" style="margin-right: 5px;">Zoom Out</button>
+            <button type="button" onclick="resetZoom()">Reset View</button>
+        </div>
+        <div id="cy" style="width: 100%; height: 800px; background-color: #222;"></div>
+    </div>
+
     <!-- Hidden form fields for tech investments -->
     {% if editable %}
         <div id="tech-investment-fields" style="display: none;">
@@ -38,7 +83,7 @@
         if (nation_techs[id] && typeof nation_techs[id] === 'object' && nation_techs[id].researched === true) {
             return "researched";
         }
-        
+
         // Check if all prerequisites are met
         let allPrereqsMet = true;
         if (tech.prerequisites_all && tech.prerequisites_all.length > 0) {
@@ -49,7 +94,7 @@
                 }
             }
         }
-        
+
         // Check if at least one of the "one of" prerequisites is met
         let onePrereqMet = true;
         if (tech.prerequisites_one && tech.prerequisites_one.length > 0) {
@@ -76,17 +121,17 @@
 
         return (allPrereqsMet && onePrereqMet && twoPrereqMet) ? "available" : "unavailable";
     }
-    
+
     // Function to format tech label
     function getTechLabel(techId, tech) {
         const status = getTechStatus(techId, tech);
         if (status === "researched") {
             return tech.display_name;
         }
-        
+
         const invested = nation_techs[techId] && typeof nation_techs[techId] === 'object' ? (nation_techs[techId].invested || 0) : 0;
         const investing = nation_techs[techId] && typeof nation_techs[techId] === 'object' ? (nation_techs[techId].investing || 0) : 0;
-        
+
         let label = tech.display_name;
         if (status !== "researched" && editable) {
             // Add a newline spacer to make room for the cost (and investing) overlay
@@ -96,7 +141,7 @@
         } else {
             label += `\n${invested} / ${getCost(techId)}`;
         }
-        
+
         return label;
     }
 
@@ -109,20 +154,20 @@
         }
 
         if (!tech && !nation_tech) return 0;
-        
+
         const cat_modifier = tech_category_cost_modifiers[(tech?.type || '').toLowerCase()] || 0;
         let cost = nation_tech?.cost || Math.max(tech?.cost + (tech_cost_modifier || 0) + cat_modifier, (tech_cost_minimum || 2));
-        
+
         return cost;
     }
-    
+
     // Prepare elements for Cytoscape
     const elements = [];
-    
+
     // Add nodes and edges
     for (const [id, tech] of Object.entries(techs)) {
         const status = getTechStatus(id, tech);
-        
+
         elements.push({
             data: {
                 id,
@@ -273,40 +318,26 @@
         const newZoom = Math.min(currentZoom * 1.1, 2.0); // 10% increment
         cy.zoom(newZoom);
     }
-    
+
     function zoomOut() {
         const currentZoom = cy.zoom();
         const newZoom = Math.max(currentZoom * 0.9, 0.3); // 10% decrement
         cy.zoom(newZoom);
     }
-    
+
     function resetZoom() {
         cy.fit();
         cy.zoom(cy.zoom() * 0.9);
     }
-    
+
     // Make zoom functions globally accessible
     window.zoomIn = zoomIn;
     window.zoomOut = zoomOut;
     window.resetZoom = resetZoom;
 
-    // Define the rows and their node order
-    const rowDefinitions = [
-        // Row 1 (tier 1)
-        ["dawn_to_dusk"],
-        // Row 2 (tier 2)
-        ["iron_harbors", , "maleficium", "cantle_saddles", "bread_and_circus", , "telescope"],
-        // Row 3 (tier 3)
-        ["crop_rotation", "professional_peddlers", "cold-struck_coinage", "schools_of_magic", "chivalry", "pilgrim_caravans", "common_law", "standing_army", "legitimacy"],
-        // Row 4 (tier 4)
-        ["windmills", "hourglass", "standard_measurements", "mage_college", "internal_development", "national_force", "central_heating", "strongholds", "advanced_numerals"],
-        // Row 5 (tier 5)
-        ["agricultural_estate", , "niter_grinding", , , "mortar_masonry", , "siegeworks"],
-        // Row 6 (tier 6)
-        ["manorialism", , "prejudice", , "casus_belli"],
-        // Row 7 (tier 7)
-        ["archaic_inspirations", , , "cultural_rebirth", , , "crusade"],
-    ];
+    // Define the rows and their node order — from the Jinja tech_tiers list
+    // above (single source of truth shared with the list view's markup).
+    const rowDefinitions = {{ tech_tiers|tojson }};
 
     // Apply custom layout
     function applyCustomLayout() {
@@ -314,13 +345,14 @@
         const nodeHeight = 40;
         const horizontalSpacing = 80;
         const verticalSpacing = 80;
-        
+
         // Position each node according to its row and position within the row
         rowDefinitions.forEach((row, rowIndex) => {
             const rowWidth = row.length * nodeWidth + (row.length - 1) * horizontalSpacing;
             const startX = -rowWidth / 2 + nodeWidth / 2;
-            
+
             row.forEach((nodeId, colIndex) => {
+                if (!nodeId) return;
                 const node = cy.getElementById(nodeId);
                 if (node.length > 0) {
                     const x = startX + colIndex * (nodeWidth + horizontalSpacing);
@@ -330,7 +362,7 @@
                 }
             });
         });
-        
+
         // Fit the graph to the viewport
         cy.fit();
         cy.zoom(cy.zoom() * 0.9); // Zoom out slightly to show everything
@@ -340,6 +372,7 @@
     function recenterTechTree() {
         if (cy) {
             setTimeout(() => {
+                cy.resize();
                 cy.fit();
                 cy.zoom(cy.zoom() * 0.9); // Zoom out slightly to show everything
             }, 200); // Small delay to ensure the container is fully visible
@@ -473,6 +506,7 @@
                             } else {
                                 nation_techs[techId].investing = value;
                             }
+                            syncTechInputsFromHidden(techId);
                         });
                         document.getElementById(investingID).addEventListener('click', function(e) {
                             e.target.select();
@@ -493,6 +527,7 @@
                         } else {
                             nation_techs[techId].cost = value;
                         }
+                        syncTechInputsFromHidden(techId);
                     });
                     document.getElementById(costID).addEventListener('click', function(e) {
                         e.target.select();
@@ -500,7 +535,7 @@
                     });
                 }
             });
-            
+
             // Batch update all overlay positions on zoom/pan for better performance
             let updateTimeout;
             cy.on('zoom pan drag', function() {
@@ -519,12 +554,12 @@
         }
     });
 
-    // Add tech info panel with edit functionality
+    // Add tech info panel (read-only — editing happens via the node/list overlays)
     cy.on('tap', 'node', function(evt){
         const node = evt.target;
         const tech = techs[node.id()];
         const techId = node.id();
-        
+
         // Create or update tech info panel
         let infoPanel = document.getElementById('tech-info-panel');
         if (!infoPanel) {
@@ -532,12 +567,12 @@
             infoPanel.id = 'tech-info-panel';
             document.getElementById('cy').appendChild(infoPanel);
         }
-        
+
         // Format prerequisites
         const allPrereqs = (tech.prerequisites_all || []).map(p => techs[p]?.display_name || p).join(", ");
         const onePrereqs = (tech.prerequisites_one || []).map(p => techs[p]?.display_name || p).join(", ");
         const twoPrereqs = (tech.prerequisites_two || []).map(p => techs[p]?.display_name || p).join(", ");
-        
+
         // Format modifiers
         let modifiersHtml = '';
         if (tech.modifiers) {
@@ -545,12 +580,11 @@
                 modifiersHtml += `<li>${mod}: ${value}</li>`;
             }
         }
-        
+
         // Get tech status
         const status = getTechStatus(techId, tech);
         const currentInvestment = nation_techs[techId] && typeof nation_techs[techId] === 'object' ? (nation_techs[techId].invested || 0) : 0;
-        const currentInvesting = nation_techs[techId] && typeof nation_techs[techId] === 'object' ? (nation_techs[techId].investing || 0) : 0;
-        
+
         // Create panel content
         let panelContent = `
             <h3>${tech.display_name}</h3>
@@ -562,43 +596,16 @@
             ${modifiersHtml ? `<p><strong>Modifiers:</strong></p><ul>${modifiersHtml}</ul>` : ''}
             <p><strong>Status:</strong> ${status}</p>
         `;
-        
+
         panelContent += `<button id="close-panel">Close</button>`;
-        
+
         infoPanel.innerHTML = panelContent;
         infoPanel.style.display = 'block';
-        
+
         // Add event listeners
         document.getElementById('close-panel').addEventListener('click', function() {
             infoPanel.style.display = 'none';
         });
-        
-        if (editable && status === "available") {
-            document.getElementById(`save-invest-${techId}`).addEventListener('click', function() {
-                const investValue = parseInt(document.getElementById(`quick-invest-${techId}`).value) || 0;
-                
-                // Update the node input if it exists
-                const nodeInput = document.getElementById(`node_input_${techId}`);
-                if (nodeInput) {
-                    nodeInput.value = investValue;
-                }
-                
-                // Update the hidden form field
-                document.getElementById(`hidden_tech_investment_${techId}`).value = investValue;
-                
-                // Update the node data
-                node.data('investing', investValue);
-                
-                // Update nation_techs for future reference
-                if (!nation_techs[techId]) {
-                    nation_techs[techId] = { invested: 0, investing: investValue };
-                } else {
-                    nation_techs[techId].investing = investValue;
-                }
-                
-                infoPanel.style.display = 'none';
-            });
-        }
     });
 
     // Close panel when clicking elsewhere
@@ -610,6 +617,164 @@
             }
         }
     });
+
+    // ── List view ───────────────────────────────────────────────────────────
+    // Renders tech-card bodies from the same techs/nation_techs/getTechStatus/
+    // getCost used by the graph, so the two views can never show different
+    // numbers. Editable inputs write straight to the same hidden WTForms
+    // fields the graph overlays use.
+
+    function techStatusMeta(techId, status) {
+        if (status === 'researched') return 'Researched ✓';
+        if (status === 'unavailable') return 'Locked';
+        const invested = nation_techs[techId] && typeof nation_techs[techId] === 'object' ? (nation_techs[techId].invested || 0) : 0;
+        const investing = nation_techs[techId] && typeof nation_techs[techId] === 'object' ? (nation_techs[techId].investing || 0) : 0;
+        const cost = getCost(techId);
+        return investing > 0 ? `${invested} (+${investing}) / ${cost}` : `${invested} / ${cost}`;
+    }
+
+    // Push a hidden field's current value into whichever visible inputs
+    // (graph overlay and/or list-view input) exist for it right now, so
+    // switching views never shows stale data regardless of which side the
+    // user last edited.
+    function syncTechInputsFromHidden(techId) {
+        if (!form || !form[techId]) return;
+        [form[techId].investing, form[techId].cost].forEach(field => {
+            if (!field) return;
+            const hidden = document.getElementById(field.id);
+            if (!hidden) return;
+            const overlayEl = document.getElementById('node_' + field.id);
+            if (overlayEl) overlayEl.value = hidden.value;
+            const listEl = document.getElementById('list_' + field.id);
+            if (listEl) listEl.value = hidden.value;
+        });
+    }
+
+    function syncAllTechInputsFromHidden() {
+        Object.keys(techs).forEach(syncTechInputsFromHidden);
+    }
+
+    function buildTechListView() {
+        for (const [techId, tech] of Object.entries(techs)) {
+            const card = document.querySelector(`.tech-card[data-tech-id="${techId}"]`);
+            if (!card) continue;
+
+            const status = getTechStatus(techId, tech);
+            card.style.borderLeftColor = typeColors[tech.type] || '#888';
+
+            const statusEl = card.querySelector('.tech-card-status');
+            if (statusEl) statusEl.textContent = techStatusMeta(techId, status);
+
+            const bodyEl = card.querySelector('.tech-card-body');
+            if (!bodyEl) continue;
+
+            const allPrereqs = (tech.prerequisites_all || []).map(p => techs[p]?.display_name || p).join(', ');
+            const onePrereqs = (tech.prerequisites_one || []).map(p => techs[p]?.display_name || p).join(', ');
+            const twoPrereqs = (tech.prerequisites_two || []).map(p => techs[p]?.display_name || p).join(', ');
+            let modifiersHtml = '';
+            if (tech.modifiers) {
+                for (const [mod, value] of Object.entries(tech.modifiers)) {
+                    modifiersHtml += `<li>${mod}: ${value}</li>`;
+                }
+            }
+
+            let html = `<p><strong>Type:</strong> ${tech.type}</p>`;
+            if (allPrereqs) html += `<p><strong>Required Prerequisites:</strong> ${allPrereqs}</p>`;
+            if (onePrereqs) html += `<p><strong>One of Prerequisites:</strong> ${onePrereqs}</p>`;
+            if (twoPrereqs) html += `<p><strong>Two of Prerequisites:</strong> ${twoPrereqs}</p>`;
+            if (modifiersHtml) html += `<p><strong>Modifiers:</strong></p><ul>${modifiersHtml}</ul>`;
+
+            if (editable && status !== 'researched' && form && form[techId]) {
+                const invested = nation_techs[techId] && typeof nation_techs[techId] === 'object' ? (nation_techs[techId].invested || 0) : 0;
+                const investing = nation_techs[techId] && typeof nation_techs[techId] === 'object' ? (nation_techs[techId].investing || 0) : 0;
+                const cost = getCost(techId);
+
+                if (status === 'available' && form[techId].investing) {
+                    const listInvestingId = 'list_' + form[techId].investing.id;
+                    html += `<div class="tech-list-input-row"><label>Invested ${invested} +
+                        <input type="number" inputmode="numeric" class="tech-list-input"
+                               id="${listInvestingId}" value="${investing}" min="0"></label></div>`;
+                }
+                if (form[techId].cost) {
+                    const listCostId = 'list_' + form[techId].cost.id;
+                    html += `<div class="tech-list-input-row"><label>Cost
+                        <input type="number" inputmode="numeric" class="tech-list-input"
+                               id="${listCostId}" value="${cost}" min="0"></label></div>`;
+                }
+            }
+
+            bodyEl.innerHTML = html;
+
+            if (editable && status !== 'researched' && form && form[techId]) {
+                if (status === 'available' && form[techId].investing) {
+                    const investingField = form[techId].investing;
+                    document.getElementById('list_' + investingField.id)?.addEventListener('change', function (e) {
+                        const value = parseInt(e.target.value) || 0;
+                        document.getElementById(investingField.id).value = value;
+                        const node = cy.getElementById(techId);
+                        if (node.length) node.data('investing', value);
+                        if (!nation_techs[techId]) nation_techs[techId] = { invested: 0, investing: value };
+                        else nation_techs[techId].investing = value;
+                        syncTechInputsFromHidden(techId);
+                    });
+                }
+                if (form[techId].cost) {
+                    const costField = form[techId].cost;
+                    document.getElementById('list_' + costField.id)?.addEventListener('change', function (e) {
+                        const value = parseInt(e.target.value) || 0;
+                        document.getElementById(costField.id).value = value;
+                        if (form[techId].cost_manually_set) {
+                            const msEl = document.getElementById(form[techId].cost_manually_set.id);
+                            if (msEl) msEl.checked = true;
+                        }
+                        const node = cy.getElementById(techId);
+                        if (node.length) node.data('cost', value);
+                        if (!nation_techs[techId]) nation_techs[techId] = { invested: 0, cost: value };
+                        else nation_techs[techId].cost = value;
+                        syncTechInputsFromHidden(techId);
+                    });
+                }
+            }
+        }
+    }
+
+    buildTechListView();
+
+    // ── View toggle ─────────────────────────────────────────────────────────
+    const techListViewEl  = document.getElementById('tech-list-view');
+    const techGraphViewEl = document.getElementById('tech-graph-view');
+    const techListBtn     = document.getElementById('tech-view-list-btn');
+    const techGraphBtn    = document.getElementById('tech-view-graph-btn');
+
+    function showTechListView() {
+        techListViewEl.style.display  = '';
+        techGraphViewEl.style.display = 'none';
+        techListBtn.classList.add('active');
+        techGraphBtn.classList.remove('active');
+        syncAllTechInputsFromHidden();
+    }
+
+    function showTechGraphView() {
+        techListViewEl.style.display  = 'none';
+        techGraphViewEl.style.display = '';
+        techGraphBtn.classList.add('active');
+        techListBtn.classList.remove('active');
+        syncAllTechInputsFromHidden();
+        // Cytoscape initializes at zero size inside a hidden container.
+        cy.resize();
+        cy.fit();
+        cy.zoom(cy.zoom() * 0.9);
+    }
+
+    techListBtn.addEventListener('click', showTechListView);
+    techGraphBtn.addEventListener('click', showTechGraphView);
+
+    // Default: list view on mobile (illegible-graph territory), graph on desktop.
+    if (window.matchMedia('(max-width: 768px)').matches) {
+        showTechListView();
+    } else {
+        showTechGraphView();
+    }
 </script>
 {% endmacro %}
 
@@ -644,8 +809,3 @@
 
     {{ all_prereqs_met and one_prereq_met and two_prereq_met }}
 {% endmacro %}
-
-
-
-
-

@@ -1,6 +1,40 @@
+import re
+
 from flask import flash, redirect
 from helpers.change_helpers import request_change
 from jsonschema import validate, ValidationError
+from wtforms.validators import ValidationError as WTFormsValidationError
+
+# Characters that break URL routing (#, /, \, ?, %), have special meaning in
+# MongoDB queries ($), or are raw control characters. Kept intentionally
+# narrow — punctuation like apostrophes, hyphens, periods, and unicode
+# letters are all common in real names and are left alone.
+NAME_INVALID_CHARS_RE = re.compile(r'[#/\\?%$\x00-\x1f\x7f]')
+# Whole-string form for JSON Schema's "pattern" keyword (must match the
+# character class above, negated and anchored).
+NAME_SCHEMA_PATTERN = r'^[^#/\\?%$\x00-\x1f\x7f]+$'
+
+
+def validate_name_characters(name):
+    """Return (is_valid, error_message) for a proposed item/character name.
+
+    Rejects characters that break URL routing (e.g. a character named "#1"
+    turning "/characters/item/#1" into a dead link) or that have special
+    meaning in MongoDB queries.
+    """
+    bad_chars = sorted(set(NAME_INVALID_CHARS_RE.findall(name or "")))
+    if bad_chars:
+        shown = " ".join(repr(c)[1:-1] or c for c in bad_chars)
+        return False, f"Name contains invalid character(s): {shown}. Names cannot contain # / \\ ? % $ or control characters."
+    return True, None
+
+
+def wtforms_validate_name(form, field):
+    """WTForms validator wrapping validate_name_characters for use in a field's validators=[...] list."""
+    is_valid, error = validate_name_characters(field.data)
+    if not is_valid:
+        raise WTFormsValidationError(error)
+
 
 def validate_form_with_jsonschema(form, schema, *, data=None, partial=False):
     """Validate form data against JSON schema.

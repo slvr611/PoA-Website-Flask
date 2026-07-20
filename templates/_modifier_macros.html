@@ -63,6 +63,7 @@
   'region':    'region_nations',
   'global':    'global_nations'
 } %}
+<div class="table-wrapper">
 <table class="modifiers-table">
   <thead>
     <tr>
@@ -579,6 +580,7 @@
     {% endfor %}
   </tbody>
 </table>
+</div>
 <button type="button" class="btn btn-primary" onclick="{{ add_fn }}('{{ field_name }}')">Add Modifier</button>
 <script>
 if(!window.buildScalingExtraHTML){window.buildScalingExtraHTML=function(dt,n,id,sel){var T=(typeof ALL_TERRAINS!=='undefined'?ALL_TERRAINS:[]);var C=(typeof ALL_DISTRICT_CATEGORIES!=='undefined'?ALL_DISTRICT_CATEGORIES:[]);var R=(typeof ALL_RESOURCES!=='undefined'?ALL_RESOURCES:[]);if(dt==='terrain'){var o='<option value="">-- Terrain --</option>';T.forEach(function(t){o+='<option value="'+t.key+'"'+(t.key===sel?' selected':'')+'>'+t.name+'</option>';});return'<select class="form-control" name="'+n+'" id="'+id+'">'+o+'</select>';}if(dt==='district_category'){var o2='<option value="">-- Category --</option>';C.forEach(function(c){o2+='<option value="'+c.key+'"'+(c.key===sel?' selected':'')+'>'+c.name+'</option>';});return'<select class="form-control" name="'+n+'" id="'+id+'">'+o2+'</select>';}if(dt==='resource'){var o3='<option value="">-- Resource --</option>';R.forEach(function(r){o3+='<option value="'+r.key+'"'+(r.key===sel?' selected':'')+'>'+r.name+'</option>';});return'<select class="form-control" name="'+n+'" id="'+id+'">'+o3+'</select>';}return'<input type="hidden" name="'+n+'" id="'+id+'" value="">';};}

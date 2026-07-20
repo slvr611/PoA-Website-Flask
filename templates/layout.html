@@ -8,11 +8,13 @@
     <script src="{{ url_for('static', filename='js/expandable-sections.js') }}"></script>
     <script src="{{ url_for('static', filename='js/prevent-enter-submit.js') }}"></script>
     <script src="{{ url_for('static', filename='js/context-tooltips.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/mobile-nav.js') }}"></script>
 </head>
 <body>
 	<header>
 		<nav class="navbar">
-			<div class="nav-left">
+			<button type="button" class="nav-toggle" aria-expanded="false" aria-controls="site-nav-left" aria-label="Toggle navigation menu">&#9776;</button>
+			<div class="nav-left" id="site-nav-left">
 				<ul class="nav-list">
 					<li class="nav-item"><a href="/">Home</a></li>
 					<li class="nav-item"><a href="/map">Map</a></li>
@@ -65,6 +67,7 @@
 							<li class="nav-item dropdown">
 								<a href="/admin_tools" class="dropbtn">Admin Tools</a>
 								<ul class="dropdown-content">
+									<li><a href="/admin_tools">Admin Tools Home</a></li>
 									<li><a href="/archived_changes_search">Archived Change Search</a></li>
 									<li><a href="/changes">Changes</a></li>
 									<li><a href="/civil_war_helper">Civil War Helper</a></li>

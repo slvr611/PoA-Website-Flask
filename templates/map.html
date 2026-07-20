@@ -139,7 +139,11 @@
                 <div id="hex-bg-viewer"></div>
                 <canvas id="hex-map-canvas"></canvas>
             </div>
-            <div class="hex-map-sidebar">
+            <div class="hex-map-sidebar" id="hex-map-sidebar">
+                <div class="hex-sheet-handle" id="hex-sheet-handle">
+                    <span class="hex-sheet-grip"></span>
+                    <button type="button" class="hex-sheet-close" id="hex-sheet-close" aria-label="Close tile details">&times;</button>
+                </div>
                 <div id="hex-tile-details" class="hex-detail-panel">
                     <p class="hex-detail-placeholder">Click a tile to view details</p>
                 </div>
@@ -969,6 +973,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
     document.getElementById('hex-map-canvas')?.addEventListener('hexmap:editchange', () => {
         _updateEditCount();
+    });
+
+    // Mobile bottom-sheet close button — desktop sidebar is unaffected since
+    // .sheet-open only changes layout under the max-width:768px media query.
+    document.getElementById('hex-sheet-close')?.addEventListener('click', () => {
+        document.getElementById('hex-map-sidebar')?.classList.remove('sheet-open');
     });
 
     if (editModeBtn) {

@@ -801,12 +801,18 @@
       "isolated_stab_gain_rate": {
         "bsonType": "number",
         "label": "Isolated Stability Gain Rate",
-        "description": "The nation's rate of stability gain while Isolated"
+        "description": "The nation's rate of stability gain while Isolated",
+        "calculated": true,
+        "base_value": 0,
+        "format": "percentage"
       },
       "isolated_stab_gain_max": {
         "bsonType": "number",
         "label": "Isolated Stability Gain Max",
-        "description": "The nation's maximum stability gain while Isolated"
+        "description": "The nation's maximum stability gain while Isolated",
+        "calculated": true,
+        "base_value": 0,
+        "format": "percentage"
       },
       "civil_war_chance": {
         "bsonType": "number",
@@ -891,7 +897,9 @@
             "city_slots": 3,
             "_modifiers": [
               { "modifier_type": "attribute",     "attribute": "attribute", "value": -1, "scope": "nation_ruling_characters" },
-              { "modifier_type": "attribute_cap", "attribute": "attribute", "value": -1, "scope": "nation_ruling_characters" }
+              { "modifier_type": "attribute_cap", "attribute": "attribute", "value": -1, "scope": "nation_ruling_characters" },
+              { "modifier_type": "resource_windfall_on_expansion", "value": 1, "scope": "nation_self" },
+              { "modifier_type": "resource_windfall_on_expansion", "value": 1, "scope": "nation_self", "condition_scaling": "per_x_excess_territory", "condition_operator": ">", "condition_value": 0 }
             ]
           },
           "Fanatical Theocracy": {
@@ -911,7 +919,8 @@
             "stability_loss_chance_cap": 0.5,
             "_modifiers": [
               { "modifier_type": "effective_territory", "value": 1, "scope": "nation_self", "scaling": "per_x_pops", "scaling_x": 1 },
-              { "modifier_type": "trade_speed", "value": 1, "scope": "nation_self", "scaling": "per_x_pops", "scaling_x": 3 }
+              { "modifier_type": "trade_speed", "value": 1, "scope": "nation_self", "scaling": "per_x_pops", "scaling_x": 3 },
+              { "modifier_type": "resource_windfall_on_stability_loss", "value": 5, "scope": "nation_self" }
             ]
           },
           "Archivist State": {
