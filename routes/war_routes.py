@@ -319,6 +319,23 @@ def _stat_breakdown_to_modifiers(stat_breakdown):
     return modifiers
 
 
+def _coerce_unit_range(value):
+    """base_stats["range"] is normally a plain number, but for units with a
+    variable min/max range field_calculations.py computes it as a "min-max"
+    display string (e.g. "1-2") instead — int() on that raises ValueError.
+    Only coerce when it safely parses as one; otherwise pass the string
+    through unchanged so the war page can still display "1-2" correctly.
+    """
+    if value is None:
+        return 1
+    if isinstance(value, str):
+        return value
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return value
+
+
 def _unit_types_for_nation(nation, nation_id_str):
     """Build UnitTypeDto list for a nation (own units + patron mercenaries)."""
     unit_types = []
@@ -373,7 +390,7 @@ def _unit_types_for_nation(nation, nation_id_str):
                 "baseHp":      int(base_stats.get("hp")      or 0),
                 "baseDamage":  int(base_stats.get("damage")  or 0),
                 "baseArmor":   int(base_stats.get("armor")   or 0),
-                "baseRange":   int(base_stats.get("range")   or 1),
+                "baseRange":   _coerce_unit_range(base_stats.get("range")),
                 "count":       int(count),
                 "modifiers":   _stat_breakdown_to_modifiers(stat_breakdown),
             })
@@ -424,7 +441,7 @@ def _unit_types_for_nation(nation, nation_id_str):
                     base_hp = int(base_stats.get("hp") or 0)
                     base_damage = int(base_stats.get("damage") or 0)
                     base_armor = int(base_stats.get("armor") or 0)
-                    base_range = int(base_stats.get("range") or 1)
+                    base_range = _coerce_unit_range(base_stats.get("range"))
                     modifiers = _stat_breakdown_to_modifiers(stat_breakdown)
                 else:
                     base_attack = int(unit_doc.get("attack") or 0) if unit_doc.get("has_attack", True) else 0

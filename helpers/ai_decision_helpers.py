@@ -248,6 +248,10 @@ def _base_prices():
         json_data.get("unique_resources", []) +
         json_data.get("luxury_resources", [])
     ):
+        # Research has no base_price — it's not a tradeable market good, so it
+        # must never get a fabricated price (previously defaulted to 10).
+        if r["key"] == "research":
+            continue
         prices[r["key"]] = r.get("base_price", 10)
     return prices
 
@@ -3661,6 +3665,9 @@ def generate_goal_trade_desires(state, goal, personality, district_plan, project
     money_crisis = money_sessions < 4
 
     for r in common + luxury:
+        # Research is never tradeable — no market price, no buy/sell desires.
+        if r == "research":
+            continue
         # Use projected_net (post-job-assignment) to determine actual deficits
         net = projected_net.get(r, state["net_production"].get(r, 0))
         stockpile = state["stockpiles"].get(r, 0)
