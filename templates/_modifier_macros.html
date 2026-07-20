@@ -274,7 +274,7 @@
             </small>
             <small class="form-text text-muted modifier-max-field"{% if cur_scaling == 'flat' %} style="display:none"{% endif %}>Max: <input type="number" step="any" class="form-control d-inline" style="width:80px" placeholder="None" name="{{ field_name }}-{{ idx }}-max_value" id="{{ field_name }}-{{ idx }}-max_value" value="{{ item.get('max_value', '') }}"></small>
             {% set cur_cond_sc = item.get('condition_scaling', '') %}
-            <details class="modifier-condition-details"{% if cur_cond_sc %} open{% endif %} style="margin-top:4px;font-size:0.8rem;">
+            <details class="modifier-condition-details"{% if cur_cond_sc and cur_cond_sc != 'flat' %} open{% endif %} style="margin-top:4px;font-size:0.8rem;">
               <summary style="cursor:pointer;color:var(--text-muted,#888);">Condition</summary>
               <div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin-top:4px;">
                 <span style="color:var(--text-muted,#888);">If</span>
@@ -527,7 +527,7 @@
             </small>
             <small class="form-text text-muted modifier-max-field"{% if cur_scaling == 'flat' %} style="display:none"{% endif %}>Max: {{ modifier_field.form.max_value(class="form-control d-inline", style="width:80px", placeholder="None") }}</small>
             {% set cur_cond_sc = modifier_field.form.condition_scaling.data or '' %}
-            <details class="modifier-condition-details"{% if cur_cond_sc %} open{% endif %} style="margin-top:4px;font-size:0.8rem;">
+            <details class="modifier-condition-details"{% if cur_cond_sc and cur_cond_sc != 'flat' %} open{% endif %} style="margin-top:4px;font-size:0.8rem;">
               <summary style="cursor:pointer;color:var(--text-muted,#888);">Condition</summary>
               <div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin-top:4px;">
                 <span style="color:var(--text-muted,#888);">If</span>

@@ -48,7 +48,9 @@
       "Read(//c/Users/orion/AppData/Local/Temp/claude/c--Programming-Projects-PoA-Website-Flask/4e2b9b97-545a-4b46-bd70-320c206433fb/scratchpad/**)",
       "Bash(node --check static/js/mobile-nav.js)",
       "Bash(env)",
-      "Bash(grep -n \"^import forms\\\\|from forms import\\\\|import forms$\" helpers/change_helpers.py helpers/form_helpers.py)"
+      "Bash(grep -n \"^import forms\\\\|from forms import\\\\|import forms$\" helpers/change_helpers.py helpers/form_helpers.py)",
+      "Bash(node --check \"static/js/mobile-nav.js\")",
+      "Bash(node --check _map_extracted.js)"
     ]
   }
 }

@@ -55,15 +55,40 @@ def _get_district_defs():
     return defs_full, defs_map, categories
 
 
+def _reconcile_district_upgrades(dist, live_upgrades):
+    """Strip the UI-only `upgrades_snapshot` field from a single submitted
+    district dict and, if its `upgrades` weren't deliberately changed from
+    what was rendered (submitted == snapshot), overwrite with the live DB
+    value so a stale/unrelated submission can't revert upgrades purchased
+    elsewhere since the page was loaded. Mutates `dist` in place.
+    """
+    snapshot_raw = dist.pop("upgrades_snapshot", None)
+    try:
+        snapshot = json.loads(snapshot_raw) if isinstance(snapshot_raw, str) else (snapshot_raw or [])
+    except (json.JSONDecodeError, TypeError):
+        snapshot = []
+    if dist.get("upgrades") == snapshot:
+        dist["upgrades"] = live_upgrades
+
+
 def _restore_live_district_upgrades(form_data, nation):
-    """Overwrite each submitted district's `upgrades` with the live DB value.
+    """Guard against reverting upgrades purchased since the edit page loaded,
+    without discarding a deliberate checkbox toggle made in this submission.
 
     District upgrades are purchased via a dedicated route that writes directly
     to Mongo ($push), bypassing the change-request system entirely. The edit
     form only ever knows whatever `upgrades` looked like when the page was
     rendered, so an unrelated edit submitted from a stale-loaded page would
-    otherwise silently revert any upgrades purchased since — treat `upgrades`
-    as server-managed, not form-owned, same as territory_types.
+    otherwise silently revert any upgrades purchased since.
+
+    `upgrades_snapshot` (see forms.py's DistrictDict) mirrors `upgrades` as it
+    was when the page was rendered and never changes client-side. Comparing
+    the submitted `upgrades` against it is the only reliable way to tell
+    "user toggled this in this submission" (differs from the snapshot) apart
+    from "unrelated/stale submission" (matches the snapshot) — only the
+    latter gets overwritten with the live DB value. Also applied to
+    `imperial_district`, a single (non-list) field that reuses the same
+    DistrictDict form and therefore carries the same `upgrades_snapshot`.
 
     Must run BEFORE _normalize_item_ids (called inside request_change) renames
     the raw form's `item_id` field to `_id` — at this point in the route,
@@ -77,8 +102,12 @@ def _restore_live_district_upgrades(form_data, nation):
     }
     for dist in form_data.get("districts", []):
         dist_id = dist.get("item_id") or dist.get("_id")
-        if dist_id in live_upgrades_by_id:
-            dist["upgrades"] = live_upgrades_by_id[dist_id]
+        _reconcile_district_upgrades(dist, live_upgrades_by_id.get(dist_id, dist.get("upgrades", [])))
+
+    imperial_dist = form_data.get("imperial_district")
+    if isinstance(imperial_dist, dict):
+        live_imperial = nation.get("imperial_district") or {}
+        _reconcile_district_upgrades(imperial_dist, live_imperial.get("upgrades", []))
 
 
 def _apply_paid_concessions(form_data, nation):

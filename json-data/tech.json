@@ -124,7 +124,9 @@
 		"display_name": "Internal Development",
 		"type": "Infrastructure",
 		"cost": 7,
-		"modifiers": {},
+		"modifiers": {
+			"effective_pop_capacity": 1
+		},
 		"prerequisites_all": ["chivalry"],
 		"prerequisites_one": []
 	},

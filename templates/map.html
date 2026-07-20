@@ -3,7 +3,7 @@
 {% block title %}Path of Ages - Maps{% endblock %}
 
 {% block content %}
-<div class="container">
+<div class="container" id="map-page-root">
 
     <!-- ======================================================
          Shared controls bar  (one selector drives everything)
@@ -31,6 +31,8 @@
                 <input type="range" id="opacity-slider" min="0" max="100" value="0">
                 <span id="opacity-value">0%</span>
             </div>
+            <span class="map-btn-separator"></span>
+            <button type="button" id="map-fullscreen-btn-static" class="map-btn map-fullscreen-btn" title="Toggle fullscreen">&#10021; Fullscreen</button>
         </div>
 
         <!-- Hex map controls — shown only for sessions at or above the hex threshold -->
@@ -38,6 +40,7 @@
             <button id="hex-zoom-in"  class="map-btn">+</button>
             <button id="hex-zoom-out" class="map-btn">−</button>
             <button id="hex-reset"    class="map-btn">⌂ Reset</button>
+            <button type="button" id="map-fullscreen-btn-hex" class="map-btn map-fullscreen-btn" title="Toggle fullscreen">&#10021; Fullscreen</button>
             <span class="map-btn-separator"></span>
             <button id="layer-terrain"   class="map-btn layer-btn"          data-layer="terrain">Terrain</button>
             <button id="layer-political" class="map-btn layer-btn active"   data-layer="political">Political</button>
@@ -400,6 +403,75 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('hex-zoom-in') .addEventListener('click', () => hexViewer && hexViewer.zoomIn());
     document.getElementById('hex-zoom-out').addEventListener('click', () => hexViewer && hexViewer.zoomOut());
     document.getElementById('hex-reset')   .addEventListener('click', () => hexViewer && hexViewer.resetView());
+
+    // ================================================================
+    // Fullscreen toggle — native Fullscreen API where available, with a
+    // CSS fixed-overlay fallback for browsers that lack it entirely for
+    // arbitrary elements (notably iOS Safari). Covers both the static
+    // (OpenSeadragon) and hex map toolbars; either button controls the
+    // same #map-page-root target.
+    // ================================================================
+    const mapFullscreenRoot = document.getElementById('map-page-root');
+    const fullscreenBtns = [
+        document.getElementById('map-fullscreen-btn-static'),
+        document.getElementById('map-fullscreen-btn-hex'),
+    ].filter(Boolean);
+
+    function nativeFullscreenSupported() {
+        return !!(mapFullscreenRoot.requestFullscreen || mapFullscreenRoot.webkitRequestFullscreen);
+    }
+
+    function isInFullscreen() {
+        return document.fullscreenElement === mapFullscreenRoot
+            || document.webkitFullscreenElement === mapFullscreenRoot
+            || mapFullscreenRoot.classList.contains('map-fullscreen-fallback');
+    }
+
+    function updateFullscreenButtons() {
+        const active = isInFullscreen();
+        fullscreenBtns.forEach(btn => {
+            btn.innerHTML = active ? '&#10021; Exit Fullscreen' : '&#10021; Fullscreen';
+            btn.classList.toggle('active', active);
+        });
+        // The canvas's available space just changed; resync the backing
+        // store and re-render. Native fullscreen transitions don't always
+        // fire a window 'resize' event promptly/consistently across
+        // browsers, so this is triggered explicitly rather than relied on.
+        if (hexViewer) {
+            requestAnimationFrame(() => hexViewer.show());
+        }
+    }
+
+    function enterMapFullscreen() {
+        if (nativeFullscreenSupported()) {
+            const request = mapFullscreenRoot.requestFullscreen || mapFullscreenRoot.webkitRequestFullscreen;
+            const result = request.call(mapFullscreenRoot);
+            if (result && result.catch) {
+                result.catch(() => { mapFullscreenRoot.classList.add('map-fullscreen-fallback'); updateFullscreenButtons(); });
+            }
+            return;
+        }
+        mapFullscreenRoot.classList.add('map-fullscreen-fallback');
+        updateFullscreenButtons();
+    }
+
+    function exitMapFullscreen() {
+        if (document.fullscreenElement || document.webkitFullscreenElement) {
+            const exit = document.exitFullscreen || document.webkitExitFullscreen;
+            if (exit) { exit.call(document); return; }
+        }
+        mapFullscreenRoot.classList.remove('map-fullscreen-fallback');
+        updateFullscreenButtons();
+    }
+
+    fullscreenBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (isInFullscreen()) exitMapFullscreen(); else enterMapFullscreen();
+        });
+    });
+
+    document.addEventListener('fullscreenchange', updateFullscreenButtons);
+    document.addEventListener('webkitfullscreenchange', updateFullscreenButtons);
 
     // Layer toggles
     document.querySelectorAll('.layer-btn').forEach(btn => {

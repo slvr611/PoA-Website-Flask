@@ -114,7 +114,11 @@ header {
   cursor: pointer;
 }
 
-@media (max-width: 900px) {
+/* Hamburger/stacked mode triggers on EITHER a narrow viewport OR a device
+   that can't hover (touch-primary) — a touch tablet or a large phone in
+   landscape can be wider than 900px while still having no way to trigger
+   the hover-only desktop dropdowns, so width alone isn't a safe gate. */
+@media (max-width: 900px), (hover: none) {
   .navbar {
     flex-wrap: wrap;
   }
@@ -524,6 +528,13 @@ h1, h2 {
 .resources-table th {
   background-color: #333;
   color: #fff;
+}
+
+/* Storage/money inputs hold a handful of digits — the base .form-control
+   (width:100%) would otherwise stretch them to fill the whole cell. */
+.resources-table input.form-control {
+  width: 90px;
+  display: inline-block;
 }
 
 .resources-header-row th {
@@ -1831,6 +1842,75 @@ input[type="text"].map-btn:focus {
     border-radius: 4px;
     overflow: hidden;
     position: relative;
+    /* Applied on the whole wrapper, not just the canvas: a pinch gesture
+       whose fingers land on the wrapper's border/padding (not precisely on
+       canvas pixels) would otherwise fall through to the browser's native
+       page-zoom instead of reaching hex-map.js's own pinch handling. */
+    touch-action: none;
+}
+
+/* ============================================================
+   Map fullscreen mode
+   #map-page-root:fullscreen — native Fullscreen API is active on it.
+   #map-page-root.map-fullscreen-fallback — CSS-only fallback for browsers
+   without Fullscreen API support for arbitrary elements (notably iOS
+   Safari). Both make the page content fill the viewport as a column flex
+   layout, so the controls bar keeps its natural height and the map (hex
+   canvas or static OpenSeadragon viewer) grows to fill everything else —
+   no fixed vh/svh heights left over from the normal in-page layout.
+   ============================================================ */
+
+#map-page-root:fullscreen,
+#map-page-root.map-fullscreen-fallback {
+    display: flex;
+    flex-direction: column;
+    background-color: #121212;
+    padding: 8px;
+    box-sizing: border-box;
+    overflow-y: auto;
+}
+
+#map-page-root.map-fullscreen-fallback {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    width: 100%;
+    height: 100vh;
+    height: 100dvh;
+}
+
+#map-page-root:fullscreen {
+    width: 100%;
+    height: 100%;
+}
+
+#map-page-root:fullscreen #hex-section,
+#map-page-root.map-fullscreen-fallback #hex-section {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+#map-page-root:fullscreen .hex-map-layout,
+#map-page-root.map-fullscreen-fallback .hex-map-layout {
+    flex: 1;
+    min-height: 0;
+    height: auto;
+}
+
+#map-page-root:fullscreen .hex-map-canvas-wrap,
+#map-page-root.map-fullscreen-fallback .hex-map-canvas-wrap {
+    height: auto;
+    flex: 1;
+    min-height: 0;
+}
+
+#map-page-root:fullscreen .map-viewer,
+#map-page-root.map-fullscreen-fallback .map-viewer {
+    flex: 1;
+    min-height: 0;
+    height: auto;
 }
 
 #hex-map-canvas {

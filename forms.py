@@ -505,6 +505,11 @@ class DistrictDict(Form):
     def_key = HiddenField('def_key')
     node = HiddenField('node', default="")
     upgrades = HiddenField('upgrades', default='[]')
+    # Mirrors `upgrades` as it was when the page was rendered, so the route
+    # can tell a deliberate checkbox toggle (differs from this snapshot) apart
+    # from a stale/unrelated edit (matches this snapshot) without guessing
+    # from the live DB value alone. Never persisted — stripped before save.
+    upgrades_snapshot = HiddenField('upgrades_snapshot', default='[]')
 
     class Meta:
         csrf = False
@@ -558,6 +563,9 @@ class DistrictDict(Form):
         # names that start with '_', so we expose it as item_id instead).
         if '_id' in item:
             self._fields['item_id'].data = str(item['_id'])
+
+        # Snapshot `upgrades` exactly as rendered (see field comment above).
+        self._fields['upgrades_snapshot'].data = self._fields['upgrades'].data
 
 class CityDict(Form):
     """Form for handling each City as a dictionary"""

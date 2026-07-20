@@ -846,7 +846,7 @@
                 <div class="section-content">
                     <h2>Resources</h2>
                     <div class="table-wrapper">
-                        <table class="info-table">
+                        <table class="info-table resources-table">
                             <tr class="resources-header-row">
                                 <th colspan="2" class="resources-header">Income</th>
                             </tr>
@@ -1090,6 +1090,7 @@
                         {% set cur_upgrades_edit = cur_upgrades_raw | from_json %}
                         {{ district_field.form.node() }}
                         {{ district_field.form.upgrades(id="district_upgrades_" ~ idx) }}
+                        {{ district_field.form.upgrades_snapshot() }}
                         <div id="district_card_preview_{{ idx }}"
                              data-init-defkey="{{ cur_def_key_edit }}"
                              data-init-node="{{ cur_node_edit }}"
