@@ -15,8 +15,24 @@ def _war_types():
     return json_data.get("war_types", {})
 
 
-def _get_infamy_for_war(war_type_key, aggressor_religion_name=None, defender_religion_name=None):
-    """Return infamy cost for a war type, applying Holy War religion modifiers."""
+def _infamy_cost_reduction_for_defender(defender_infamy):
+    """A defender's own infamy makes them a cheaper target to declare war on."""
+    infamy = defender_infamy or 0
+    if infamy < 10:
+        return 0
+    elif infamy < 20:
+        return 5
+    elif infamy < 30:
+        return 10
+    elif infamy < 50:
+        return 15
+    else:
+        return 25
+
+
+def _get_infamy_for_war(war_type_key, aggressor_religion_name=None, defender_religion_name=None, defender_infamy=0):
+    """Return infamy cost for a war type, applying Holy War religion modifiers
+    and the defender's own infamy-tier discount."""
     wt = _war_types().get(war_type_key, {})
     infamy = wt.get("infamy", 0)
     if war_type_key == "holy_war" and aggressor_religion_name and defender_religion_name:
@@ -25,6 +41,7 @@ def _get_infamy_for_war(war_type_key, aggressor_religion_name=None, defender_rel
             infamy = max(0, infamy - 5)
         elif rel_type == "kindred":
             infamy += 5
+    infamy = max(0, infamy - _infamy_cost_reduction_for_defender(defender_infamy))
     return infamy
 
 
@@ -684,7 +701,8 @@ def create_war():
     defender = _get_nation_by_id(primary_defender_id)
     aggressor_religion = aggressor.get("primary_religion", "") if aggressor else ""
     defender_religion = defender.get("primary_religion", "") if defender else ""
-    infamy_cost = _get_infamy_for_war(war_type_key, aggressor_religion, defender_religion)
+    defender_infamy = defender.get("infamy", 0) if defender else 0
+    infamy_cost = _get_infamy_for_war(war_type_key, aggressor_religion, defender_religion, defender_infamy)
 
     # Parse any war goals submitted on the create form
     war_goals_list = []

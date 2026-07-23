@@ -505,6 +505,15 @@ def approve_change(change_id):
 
         if check_no_other_changes(before_data, after_data, target):
             if change["change_type"] == "Update":
+                if change["target_collection"] == "mercenaries" and after_data.get("patron"):
+                    try:
+                        patron_nation = mongo.db.nations.find_one({"_id": ObjectId(after_data["patron"])}, {"infamy": 1})
+                    except Exception:
+                        patron_nation = None
+                    if patron_nation and patron_nation.get("infamy", 0) >= 50:
+                        flash("Cannot hire this mercenary company: the prospective patron nation has 50 or more infamy.")
+                        return False
+
                 existing = target_collection.find_one({"_id": change["target"]})
                 merged = deep_merge(existing, after_data)
 

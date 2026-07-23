@@ -125,6 +125,7 @@ _CIVIL_WAR_EXCLUDED_FIELDS = [
     "progress_quests",
     "ai_state", "notes",
     "breakdowns", "visibility_modifiers",
+    "pending_civil_war",
 ]
 
 
@@ -178,6 +179,7 @@ def _civil_war_pop_groups(nation_id_str):
 def civil_war_helper():
     schema, db = get_data_on_category("nations")
     nations = list(db.find({}, {"name": 1}).sort("name", ASCENDING))
+    flagged_nations = list(db.find({"pending_civil_war": True}, {"name": 1, "infamy": 1}).sort("name", ASCENDING))
 
     selected_nation = None
     pop_groups = []
@@ -193,10 +195,27 @@ def civil_war_helper():
     return render_template(
         "civil_war_helper.html",
         nations=nations,
+        flagged_nations=flagged_nations,
         selected_nation=selected_nation,
         selected_id=selected_id,
         pop_groups=pop_groups,
     )
+
+
+@admin_tool_routes.route("/civil_war_helper/dismiss_flag", methods=["POST"])
+@admin_required
+def civil_war_dismiss_flag():
+    schema, db = get_data_on_category("nations")
+    nation_id = request.form.get("nation_id", "")
+    try:
+        result = db.update_one({"_id": ObjectId(nation_id)}, {"$set": {"pending_civil_war": False}})
+    except Exception:
+        result = None
+    if not result or result.matched_count == 0:
+        flash("Nation not found.")
+    else:
+        flash("Pending civil war flag dismissed.")
+    return redirect("/civil_war_helper")
 
 
 @admin_tool_routes.route("/civil_war_helper/execute", methods=["POST"])
@@ -271,12 +290,14 @@ def civil_war_execute():
         return redirect(f"/civil_war_helper?nation={source_id}")
     new_id_str = str(new_doc["_id"])
 
-    # ── Subtract transferred money/resources from the source ──
+    # ── Subtract transferred money/resources from the source, and clear the
+    #    guaranteed-civil-war flag now that it has been resolved ──
+    updates = {"pending_civil_war": False}
     if money_moved or storage_moved:
-        updates = {"money": source.get("money", 0) - money_moved}
+        updates["money"] = source.get("money", 0) - money_moved
         for res, moved in storage_moved.items():
             updates[f"resource_storage.{res}"] = (source.get("resource_storage", {}).get(res, 0)) - moved
-        db.update_one({"_id": source["_id"]}, {"$set": updates})
+    db.update_one({"_id": source["_id"]}, {"$set": updates})
 
     # ── Move the selected pops ──
     moved_pops = 0

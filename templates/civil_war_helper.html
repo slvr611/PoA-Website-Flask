@@ -11,6 +11,35 @@
         map-derived data stay with the source nation.
     </p>
 
+    {% if flagged_nations %}
+    <div class="content" style="margin-bottom:1rem;">
+        <h2>Guaranteed Civil War (100+ Infamy)</h2>
+        <p class="text-muted">These nations ended a session at 100 or more infamy and are guaranteed a civil war.</p>
+        <table class="info-table">
+            <thead>
+                <tr><th>Nation</th><th>Infamy</th><th></th><th></th></tr>
+            </thead>
+            <tbody>
+                {% for n in flagged_nations %}
+                <tr>
+                    <td>{{ n.name }}</td>
+                    <td>{{ n.get("infamy", 0) }}</td>
+                    <td><a href="/civil_war_helper?nation={{ n._id }}">Split this nation</a></td>
+                    <td>
+                        <form method="post" action="/civil_war_helper/dismiss_flag" style="display:inline;"
+                              onsubmit="return confirm('Dismiss the guaranteed civil war flag for {{ n.name }} without splitting it?')">
+                            <input type="hidden" name="nation_id" value="{{ n._id }}">
+                            <button type="submit">Dismiss</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <hr>
+    {% endif %}
+
     <form method="get" action="/civil_war_helper">
         <label for="nation-select"><strong>Source nation:</strong></label>
         <select id="nation-select" name="nation" onchange="this.form.submit()">

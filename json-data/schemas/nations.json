@@ -188,6 +188,14 @@
         ],
         "view_access_level": 2
       },
+      "pending_civil_war": {
+        "bsonType": "boolean",
+        "label": "Pending Civil War",
+        "description": "Set when the nation ended a session at 100+ infamy — guarantees a civil war event next session, flagged for admin review in the Civil War Helper",
+        "default": false,
+        "hidden": true,
+        "view_access_level": 10
+      },
       "sessions_since_temperament_change": {
         "bsonType": "number",
         "label": "Sessions Since Temperament Change",
@@ -348,6 +356,13 @@
         "label": "Infamy",
         "description": "The nation's current level of infamy",
         "default": 0
+      },
+      "diplomatic_check_modifier": {
+        "bsonType": "number",
+        "label": "Diplomatic Check Modifier",
+        "description": "Penalty to all Diplomatic checks from the nation's infamy level",
+        "calculated": true,
+        "base_value": 0
       },
       "wars": {
         "bsonType": "array",

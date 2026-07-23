@@ -4183,8 +4183,7 @@ def _build_computed_contributions(
         contribs.append(SourceContribution(label="Bloodthirsty Pops", source_type="computed",
                                            modifiers={"stability_loss_chance": _bpc * _bpl}))
     infamy = target.get("infamy", 0)
-    _infamy_mult = overall_totals.get("stability_loss_chance_from_infamy_mult", 0)
-    if infamy >= 10 and _infamy_mult:
+    if infamy >= 10:
         if infamy < 20:
             _inf_loss = 0.20
         elif infamy < 30:
@@ -4193,7 +4192,7 @@ def _build_computed_contributions(
             _inf_loss = 0.40
         else:
             _inf_loss = infamy * 0.01
-        _inf_loss *= _infamy_mult
+        _inf_loss *= 1 + overall_totals.get("stability_loss_chance_from_infamy_mult", 0)
         if _inf_loss:
             contribs.append(SourceContribution(label="Infamy", source_type="computed",
                                                modifiers={"stability_loss_chance": _inf_loss}))

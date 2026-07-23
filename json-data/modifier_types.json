@@ -717,6 +717,16 @@
         "is_visibility_modifier": true,
         "applicable_to": ["nation"]
     },
+    "forced_flee_destination": {
+        "name": "Forced Flee Destination",
+        "description": "Overrides where fleeing pops end up: instead of a random non-Closed nation in the same region, pops fleeing from any nation in this region are sent to the named nation.",
+        "value_format": "number",
+        "field_template": "forced_flee_destination",
+        "extra_fields": [
+            {"key": "target_value", "label": "Destination Nation Name"}
+        ],
+        "applicable_to": ["nation"]
+    },
     "ignore_non_research_nodes": {
         "name": "Ignore Non-Research Nodes",
         "description": "When set, node production is disabled for all resource types except research nodes.",

@@ -130,4 +130,10 @@ def fake_category_data(test_db):
             "database": test_db["units"],
             "schema": _empty_schema,
         },
+        "mercenaries": {
+            "pluralName": "Mercenaries",
+            "singularName": "Mercenary",
+            "database": test_db["mercenaries"],
+            "schema": _empty_schema,
+        },
     }

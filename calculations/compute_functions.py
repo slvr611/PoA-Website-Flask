@@ -123,6 +123,27 @@ def compute_field_karma(field, target, base_value, field_schema, overall_total_m
     
     return int(value)
 
+def compute_diplomatic_check_modifier(field, target, base_value, field_schema, overall_total_modifiers):
+    """Reference value for human-adjudicated diplomatic checks (RP rolls) —
+    the game has no automated diplomacy-check mechanic to hook into, so this
+    is purely informational, following the infamy tier table."""
+    infamy = target.get("infamy", 0)
+    if infamy <= 0:
+        infamy_penalty = 0
+    elif infamy < 10:
+        infamy_penalty = -2
+    elif infamy < 20:
+        infamy_penalty = -4
+    elif infamy < 30:
+        infamy_penalty = -6
+    elif infamy < 50:
+        infamy_penalty = -8
+    else:
+        infamy_penalty = -10
+
+    value = base_value + infamy_penalty + overall_total_modifiers.get(field, 0)
+    return int(value)
+
 def compute_disobey_chance(field, target, base_value, field_schema, overall_total_modifiers):
     compliance = target.get("compliance", "None")
     
@@ -375,7 +396,7 @@ def compute_stability_loss_chance(field, target, base_value, field_schema, overa
         infamy_stability_loss = 0.40
     else:
         infamy_stability_loss = infamy * 0.01
-    infamy_stability_loss *= 1 * overall_total_modifiers.get("stability_loss_chance_from_infamy_mult", 0)
+    infamy_stability_loss *= 1 + overall_total_modifiers.get("stability_loss_chance_from_infamy_mult", 0)
 
     max_stability_loss_chance = 3 + overall_total_modifiers.get("max_stability_loss_chance", 0)
 
@@ -1150,6 +1171,7 @@ CUSTOM_COMPUTE_FUNCTIONS = {
     "route_capacity": compute_field_route_capacity,
     "karma": compute_field_karma,
     "disobey_chance": compute_disobey_chance,
+    "diplomatic_check_modifier": compute_diplomatic_check_modifier,
     "rebellion_chance": compute_rebellion_chance,
     "concessions_chance": compute_concessions_chance,
     "concessions_qty": compute_concessions_qty,

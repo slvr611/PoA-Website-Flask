@@ -1278,6 +1278,37 @@ def nation_infamy_decay_tick(old_nation, new_nation, schema):
     new_nation["infamy"] = max(0, infamy - decay)
     return ""
 
+def nation_infamy_consequences_tick(old_nation, new_nation, schema):
+    """Guaranteed consequences for ending a session at 100+ infamy: flags the
+    nation for a civil war (an admin picks the breakaway details via the
+    Civil War Helper — territory/unit splits aren't something to decide
+    algorithmically), and immediately forces every vassal into open rebellion.
+    """
+    infamy = old_nation.get("infamy", 0)
+    if infamy < 100:
+        return ""
+
+    result = ""
+    name = old_nation.get("name", "Unknown")
+
+    if not old_nation.get("pending_civil_war"):
+        new_nation["pending_civil_war"] = True
+        result += f"{name} has ended a session at 100 or more infamy and is guaranteed a civil war — flagged for admin review in the Civil War Helper.\n"
+
+    nation_id_str = str(old_nation.get("_id", ""))
+    vassals = list(mongo.db.nations.find({"overlord": nation_id_str}, {"name": 1, "rebellion_chance": 1}))
+    for vassal in vassals:
+        mongo.db.nations.update_one(
+            {"_id": vassal["_id"]},
+            {"$set": {
+                "rebellion_roll": 0.0,
+                "rebellion_chance_at_tick": vassal.get("rebellion_chance", 0),
+            }}
+        )
+        result += f"{vassal.get('name', 'Unknown')} has rebelled against their overlord due to {name}'s overwhelming infamy.\n"
+
+    return result
+
 def nation_prestige_gain_tick(old_nation, new_nation, schema):
     if not old_nation.get("empire", False):
         return ""
@@ -1970,8 +2001,32 @@ def disease_cure_cross_tick(old_nations, new_nations, schema):
 
     return result
 
+def _forced_flee_destination_for_region(region_id):
+    """If the region has a "Forced Flee Destination" modifier, return the
+    named destination nation doc ({_id, name}); otherwise None.
+
+    Unlike the normal random-candidate pool, a forced destination bypasses
+    the "Closed" citizenship_stance check entirely — it's a hard override,
+    not a preference within the normal pool.
+    """
+    try:
+        region = mongo.db.regions.find_one({"_id": ObjectId(region_id)}, {"modifiers": 1})
+    except Exception:
+        return None
+    if not region:
+        return None
+    for mod in region.get("modifiers", []):
+        if mod.get("modifier_type") == "forced_flee_destination":
+            target_name = mod.get("target_value", "")
+            if target_name:
+                return mongo.db.nations.find_one({"name": target_name}, {"_id": 1, "name": 1})
+    return None
+
 def pop_flee_tick(old_nation, new_nation, schema):
-    """Roll nation's pop_flee_chance once; on success one excess pop flees to a random non-Closed nation."""
+    """Roll nation's pop_flee_chance once; on success one excess pop flees to
+    a random non-Closed nation in the same region — unless the region has a
+    Forced Flee Destination modifier, in which case it always goes there.
+    """
     pop_count   = old_nation.get("pop_count", 0)
     eff_cap     = old_nation.get("effective_pop_capacity", 0)
     excess_pops = max(0, pop_count - eff_cap)
@@ -1986,20 +2041,27 @@ def pop_flee_tick(old_nation, new_nation, schema):
     if not region_id:
         return ""
 
-    try:
-        candidates = list(mongo.db.nations.find(
-            {
-                "region": region_id,
-                "_id": {"$ne": old_nation["_id"]},
-                "citizenship_stance": {"$ne": "Closed"},
-            },
-            {"_id": 1, "name": 1},
-        ))
-    except Exception:
-        return ""
+    destination = _forced_flee_destination_for_region(region_id)
+    if destination and destination["_id"] == old_nation["_id"]:
+        destination = None  # a nation can't force its own overcrowded pops to flee to itself
 
-    if not candidates:
-        return ""
+    if not destination:
+        try:
+            candidates = list(mongo.db.nations.find(
+                {
+                    "region": region_id,
+                    "_id": {"$ne": old_nation["_id"]},
+                    "citizenship_stance": {"$ne": "Closed"},
+                },
+                {"_id": 1, "name": 1},
+            ))
+        except Exception:
+            return ""
+
+        if not candidates:
+            return ""
+
+        destination = random.choice(candidates)
 
     nation_id_str = str(old_nation["_id"])
     try:
@@ -2014,7 +2076,6 @@ def pop_flee_tick(old_nation, new_nation, schema):
         return ""
 
     fleeing_pop  = random.choice(pops)
-    destination  = random.choice(candidates)
     old_pop_data = {k: v for k, v in fleeing_pop.items() if k != "_id"}
     new_pop_data = dict(old_pop_data)
     new_pop_data["nation"] = str(destination["_id"])
@@ -2671,6 +2732,7 @@ NATION_TICK_FUNCTIONS = {
     "Nation Tech Tick": nation_tech_tick,
     "Nation Update Rolling Karma Tick": update_rolling_karma,
     "Nation Infamy Decay Tick": nation_infamy_decay_tick,
+    "Nation Infamy Consequences Tick": nation_infamy_consequences_tick,
     "Nation Prestige Gain Tick": nation_prestige_gain_tick,
     "Nation Civil War Tick": nation_civil_war_tick,
     "Nation Stability Tick": nation_stability_tick,
