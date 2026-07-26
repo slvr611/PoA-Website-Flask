@@ -24,7 +24,7 @@
           },
           "Illicit": {
             "trade_risk": 0.15,
-            "member_nation_money_income_per_bandit_camp": 50
+            "member_nation_money_income_per_bandit_camp": 200
           },
           "Hub": {
             "resource_storage_capacity": 5,

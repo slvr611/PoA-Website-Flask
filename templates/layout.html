@@ -3,15 +3,47 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script>
+    // Set the theme attribute before the stylesheet paints anything, so
+    // returning visitors never see a flash of the wrong theme. Custom
+    // (Patreon-supporter) themes are applied separately via an inline
+    // <style> block further down, emitted server-side — this only handles
+    // the built-in dark/light toggle, which is client-only (localStorage)
+    // so it works for logged-out visitors too.
+    (function () {
+        try {
+            var t = localStorage.getItem('poa-theme');
+            if (t === 'light' || t === 'dark') {
+                document.documentElement.setAttribute('data-theme', t);
+            }
+        } catch (e) {}
+    })();
+    </script>
     <title>{% block title %}Path of Ages{% endblock %}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Caprasimo&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    {% if active_custom_theme %}
+    {# Patreon-supporter custom theme (see routes/theme_routes.py). Keys/values
+       are validated server-side before storage (fixed token whitelist, strict
+       #rrggbb regex), so this is safe to emit directly. !important is needed
+       because :root[data-theme="light"/"dark"] (in styles.css) is MORE
+       specific than a plain :root override and would otherwise still win
+       regardless of this block's later position in the document. #}
+    <style>
+        :root {
+            {% for key, value in active_custom_theme.items() %}
+            --{{ key }}: {{ value }} !important;
+            {% endfor %}
+        }
+    </style>
+    {% endif %}
     <script src="{{ url_for('static', filename='js/expandable-sections.js') }}"></script>
     <script src="{{ url_for('static', filename='js/prevent-enter-submit.js') }}"></script>
     <script src="{{ url_for('static', filename='js/context-tooltips.js') }}"></script>
     <script src="{{ url_for('static', filename='js/mobile-nav.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/theme-toggle.js') }}"></script>
 </head>
 <body class="{% block body_class %}{% endblock %}">
 <div class="page-card">
@@ -23,6 +55,7 @@
 		<nav class="navbar">
 			<button type="button" class="nav-toggle" aria-expanded="false" aria-controls="site-nav-left" aria-label="Toggle navigation menu">&#9776;</button>
 			<span class="site-brand">Path of Ages</span>
+			<button type="button" id="theme-toggle-btn" class="nav-pill theme-toggle-btn" title="Switch between dark and light mode" aria-label="Toggle color theme">&#9789;</button>
 			<div class="nav-left" id="site-nav-left">
 				<ul class="nav-list">
 					<li class="nav-item"><a class="nav-pill{% if _p == '/' %} active{% endif %}" href="/">Home</a></li>
@@ -125,6 +158,9 @@
 						</li>
 
 						<a class="nav-pill my-changes-link" href="/my_changes">My Changes{% if pending_changes_count %} <span class="count-badge">{{ pending_changes_count }}</span>{% endif %}</a>
+						{% if can_customize_theme %}
+							<a class="nav-pill{% if _p == '/settings/theme' %} active{% endif %}" href="/settings/theme">Theme</a>
+						{% endif %}
 						<a class="nav-pill" href="/logout">Logout</a>
 						<a href="/players/item/{{ g.user.name }}">
 							<img class="nav-avatar" src="{{ g.user.avatar_url }}" alt="User Avatar">

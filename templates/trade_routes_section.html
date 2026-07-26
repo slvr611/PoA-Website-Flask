@@ -55,21 +55,21 @@
 {% endmacro %}
 
 <style>
-.tr-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
-.tr-table th { text-align: left; padding: 0.35rem 0.6rem; color: #999; border-bottom: 1px solid #333; }
-.tr-table td { padding: 0.4rem 0.6rem; border-bottom: 1px solid #222; vertical-align: top; }
+.tr-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; color: var(--text); }
+.tr-table th { text-align: left; padding: 0.35rem 0.6rem; color: var(--text-dim); border-bottom: 1px solid var(--border-strong); }
+.tr-table td { padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--border-hi); vertical-align: top; }
 .tr-table tr:last-child td { border-bottom: none; }
-.tr-resource { color: #adf; white-space: nowrap; }
+.tr-resource { color: var(--link); white-space: nowrap; }
 .badge-tr { display: inline-block; padding: 0.1rem 0.45rem; border-radius: 999px; font-size: 0.72rem; font-weight: 700; }
-.badge-tr-instant { background: #1a3a1a; color: #6f6; border: 1px solid #4a4; }
-.badge-tr-near    { background: #2a2a10; color: #fd4; border: 1px solid #aa7; }
-.badge-tr-far     { background: #3a1a1a; color: #f88; border: 1px solid #a44; }
-.badge-tr-ending  { background: #2a1a00; color: #fa8; border: 1px solid #a64; }
-.tr-section-label { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.5px; color: #888; margin: 0.75rem 0 0.3rem; }
+.badge-tr-instant { background: color-mix(in oklch, var(--pos) 22%, transparent); color: var(--pos); border: 1px solid color-mix(in oklch, var(--pos) 55%, transparent); }
+.badge-tr-near    { background: color-mix(in oklch, var(--warn) 22%, transparent); color: var(--warn); border: 1px solid color-mix(in oklch, var(--warn) 55%, transparent); }
+.badge-tr-far     { background: color-mix(in oklch, var(--crit) 22%, transparent); color: var(--crit); border: 1px solid color-mix(in oklch, var(--crit) 55%, transparent); }
+.badge-tr-ending  { background: color-mix(in oklch, var(--accent) 22%, transparent); color: var(--accent); border: 1px solid color-mix(in oklch, var(--accent) 55%, transparent); }
+.tr-section-label { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-dim); margin: 0.75rem 0 0.3rem; }
 .tr-propose-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 0.5rem; }
 .tr-resource-row { display: flex; gap: 0.4rem; align-items: center; margin-bottom: 0.3rem; }
 .tr-resource-row select, .tr-resource-row input { font-size: 0.82rem; }
-.tr-add-row { font-size: 0.78rem; cursor: pointer; color: var(--nation-accent, #4a90d9); background: none; border: none; padding: 0; margin-top: 0.2rem; }
+.tr-add-row { font-size: 0.78rem; cursor: pointer; color: var(--accent); background: none; border: none; padding: 0; margin-top: 0.2rem; }
 </style>
 
 {# ═══════════════════════════════════════════════════════════════════════

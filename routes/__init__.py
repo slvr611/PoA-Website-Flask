@@ -18,6 +18,7 @@ from .district_def_routes import district_def_routes
 from .trade_route_routes import trade_route_routes
 from .disease_routes import disease_routes
 from .api_routes import api_routes
+from .theme_routes import theme_routes
 
 def register_routes(app, mongo, discord):
     app.register_blueprint(base_routes)
@@ -38,6 +39,7 @@ def register_routes(app, mongo, discord):
     app.register_blueprint(trade_route_routes)
     app.register_blueprint(disease_routes)
     app.register_blueprint(api_routes)
+    app.register_blueprint(theme_routes)
 
 @app.context_processor
 def inject_navbar_data():
@@ -55,6 +57,23 @@ def inject_pending_changes_count():
         if player:
             count = mongo.db.changes.count_documents({"requester": player["_id"], "status": "Pending"})
     return {'pending_changes_count': count}
+
+@app.context_processor
+def inject_active_custom_theme():
+    """The logged-in user's saved Patreon-supporter custom theme colors, if
+    they have one enabled — layout.html emits these as a <style> override
+    when present. None for logged-out users or anyone who hasn't enabled one.
+    Also exposes whether the current user is allowed to reach /settings/theme
+    at all, so the nav link only shows up for them."""
+    active_custom_theme = None
+    can_customize_theme = False
+    if getattr(g, 'user', None):
+        player = mongo.db.players.find_one({"id": g.user.get("id")})
+        if player:
+            can_customize_theme = bool(player.get("is_patreon_supporter") or player.get("is_admin"))
+            if player.get("custom_theme_enabled") and player.get("custom_theme"):
+                active_custom_theme = player["custom_theme"]
+    return {'active_custom_theme': active_custom_theme, 'can_customize_theme': can_customize_theme}
 
 @app.context_processor
 def inject_permission_data():

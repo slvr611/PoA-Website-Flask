@@ -58,7 +58,15 @@
       "Bash(powershell -Command \"if \\(Test-Path 'C:\\\\Users\\\\orion\\\\.claude\\\\projects\\\\c--Programming-Projects-PoA-Website-Flask\\\\memory\\\\MEMORY.md'\\) { Get-Content 'C:\\\\Users\\\\orion\\\\.claude\\\\projects\\\\c--Programming-Projects-PoA-Website-Flask\\\\memory\\\\MEMORY.md' } else { 'NO_FILE' }\")",
       "Bash(grep -n \"stat-strip\\\\|stat-card\\\\|Stability</\\\\|class=\\\\\"stat\" templates/nation_owner.html)",
       "Bash(PYTHONPATH=. python -X utf8 \"C:\\\\Users\\\\orion\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Programming-Projects-PoA-Website-Flask\\\\4e2b9b97-545a-4b46-bd70-320c206433fb\\\\scratchpad\\\\seed_training_mrp_defs.py\")",
-      "Bash(PYTHONPATH=. python -X utf8 \"C:\\\\Users\\\\orion\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Programming-Projects-PoA-Website-Flask\\\\4e2b9b97-545a-4b46-bd70-320c206433fb\\\\scratchpad\\\\seed_expand_convert_mrp_defs.py\")"
+      "Bash(PYTHONPATH=. python -X utf8 \"C:\\\\Users\\\\orion\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Programming-Projects-PoA-Website-Flask\\\\4e2b9b97-545a-4b46-bd70-320c206433fb\\\\scratchpad\\\\seed_expand_convert_mrp_defs.py\")",
+      "Bash(awk 'NR==58,NR==80{print NR\": \"$0}' static/styles.css)",
+      "Bash(awk 'NR==85,NR==210{print NR\": \"$0}' static/styles.css)",
+      "Bash(awk 'NR==258,NR==300{print NR\": \"$0}' static/styles.css)",
+      "Bash(awk 'NR==350,NR==360{print NR\": \"$0}' static/styles.css)",
+      "Bash(grep -n \"^header\\\\s*{\\\\|^\\\\.navbar\\\\s*{\\\\|header\\\\s*{$\" static/styles.css)",
+      "Bash(grep -n \"a\\\\s*{\\\\|a,\\\\|a\\\\.{0}\\\\s*:hover\\\\|nav-pill\\\\|dropdown-content a\\\\|\\\\.dc-upg-name\\\\|tr-add-row\\\\|\\\\.tr-resource\\\\b\" static/styles.css)",
+      "Bash(grep -n \"^\\\\.env\\\\|\\\\.env$\" .gitignore)",
+      "Bash(git check-ignore *)"
     ]
   }
 }

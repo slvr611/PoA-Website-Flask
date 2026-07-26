@@ -7,67 +7,68 @@
   .dist-page-header { display: flex; align-items: baseline; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
   .dist-page-header h1 { margin: 0; }
   .dist-cat-section { margin-bottom: 3rem; }
-  .dist-cat-heading { font-size: 1.4rem; font-weight: 800; border-bottom: 2px solid #444; padding-bottom: 0.3rem; margin-bottom: 1.25rem; }
+  .dist-cat-heading { font-size: 1.4rem; font-weight: 800; border-bottom: 2px solid var(--border-strong); padding-bottom: 0.3rem; margin-bottom: 1.25rem; color: var(--text); }
   .dist-tier-group { margin-bottom: 1.5rem; }
-  .dist-tier-heading { font-size: 1rem; letter-spacing: 1px; text-transform: uppercase; color: #888; margin: 0 0 0.75rem 0; }
+  .dist-tier-heading { font-size: 1rem; letter-spacing: 1px; text-transform: uppercase; color: var(--text-dim); margin: 0 0 0.75rem 0; }
   .dist-card-grid { display: flex; flex-wrap: wrap; gap: 1.25rem; }
 
-  /* District card */
-  .dc { background: #1a1a2a; color: #ddd; border-radius: 10px; overflow: hidden;
-        border: 3px solid #334; width: 260px; flex-shrink: 0; display: flex; flex-direction: column; font-size: 0.82rem; }
-  .dc--t1 { border-color: #2a6a4a; }
-  .dc--t2 { border-color: #2a4a8a; }
-  .dc--t3 { border-color: #6a2a4a; }
+  /* District card. Tier accent colors (green/blue/pink) stay fixed across
+     themes as tier indicators; everything else uses theme tokens. */
+  .dc { background: var(--surface-hi); color: var(--text); border-radius: 10px; overflow: hidden;
+        border: 3px solid var(--border-strong); width: 260px; flex-shrink: 0; display: flex; flex-direction: column; font-size: 0.82rem; }
+  .dc--t1 { border-color: #3a8a5a; }
+  .dc--t2 { border-color: #3a6ab0; }
+  .dc--t3 { border-color: #b03a6a; }
   .dc header { padding: 0.6rem 0.75rem 0.5rem; display: flex; align-items: flex-start;
-               justify-content: space-between; gap: 0.5rem; border-bottom: 2px solid #334; }
-  .dc--t1 header { border-bottom-color: #2a6a4a; background: #0d2218; }
-  .dc--t2 header { border-bottom-color: #2a4a8a; background: #0d1628; }
-  .dc--t3 header { border-bottom-color: #6a2a4a; background: #280d1a; }
+               justify-content: space-between; gap: 0.5rem; border-bottom: 2px solid var(--border-strong); }
+  .dc--t1 header { border-bottom-color: #3a8a5a; background: color-mix(in oklch, #3a8a5a 20%, var(--surface-hi)); }
+  .dc--t2 header { border-bottom-color: #3a6ab0; background: color-mix(in oklch, #3a6ab0 20%, var(--surface-hi)); }
+  .dc--t3 header { border-bottom-color: #b03a6a; background: color-mix(in oklch, #b03a6a 20%, var(--surface-hi)); }
   .dc-title { font-size: 1rem; font-weight: 800; letter-spacing: 0.5px; margin: 0; line-height: 1.2;
-              text-transform: uppercase; font-variant: small-caps; }
+              text-transform: uppercase; font-variant: small-caps; color: var(--text); }
   .dc-tier-badge { font-size: 0.68rem; font-weight: 700; padding: 0.15rem 0.4rem; border-radius: 999px;
-                   background: #222; border: 1px solid #555; color: #bbb; flex-shrink: 0; }
-  .dc--t1 .dc-tier-badge { border-color: #4a8; color: #4a8; }
-  .dc--t2 .dc-tier-badge { border-color: #8af; color: #8af; }
-  .dc--t3 .dc-tier-badge { border-color: #f8a; color: #f8a; }
+                   background: var(--surface); border: 1px solid var(--border-strong); color: var(--text-mid); flex-shrink: 0; }
+  .dc--t1 .dc-tier-badge { border-color: #3a8a5a; color: #3a8a5a; }
+  .dc--t2 .dc-tier-badge { border-color: #3a6ab0; color: #3a6ab0; }
+  .dc--t3 .dc-tier-badge { border-color: #b03a6a; color: #b03a6a; }
   .dc-body { padding: 0.6rem 0.75rem 0.5rem; flex: 1; }
-  .dc-desc { color: #999; font-style: italic; font-size: 0.8rem; margin: 0 0 0.5rem; line-height: 1.4; }
-  .dc-prereq { font-size: 0.78rem; color: #aaa; margin-bottom: 0.4rem; }
+  .dc-desc { color: var(--text-dim); font-style: italic; font-size: 0.8rem; margin: 0 0 0.5rem; line-height: 1.4; }
+  .dc-prereq { font-size: 0.78rem; color: var(--text-mid); margin-bottom: 0.4rem; }
   .dc-mods { margin: 0.35rem 0; }
   .dc-mod-row { display: flex; justify-content: space-between; font-size: 0.78rem; padding: 0.1rem 0; }
-  .dc-mod-key { color: #aaa; }
-  .dc-mod-val { color: #8f8; font-family: monospace; }
-  .dc-mod-val.neg { color: #f88; }
-  .dc-rule { height: 1px; background: #334; margin: 0.5rem 0; }
+  .dc-mod-key { color: var(--text-mid); }
+  .dc-mod-val { color: var(--pos); font-family: monospace; }
+  .dc-mod-val.neg { color: var(--crit); }
+  .dc-rule { height: 1px; background: var(--border-strong); margin: 0.5rem 0; }
   .dc-upgrades { font-size: 0.78rem; }
-  .dc-upg-label { color: #888; text-transform: uppercase; letter-spacing: 0.5px; font-size: 0.7rem; margin-bottom: 0.3rem; }
+  .dc-upg-label { color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; font-size: 0.7rem; margin-bottom: 0.3rem; }
   .dc-upg-item { margin-bottom: 0.35rem; }
-  .dc-upg-name { font-weight: 700; color: #ccf; }
-  .dc-upg-req { color: #888; font-size: 0.74rem; }
-  .dc-footer { padding: 0.5rem 0.75rem; border-top: 1px solid #334; font-size: 0.76rem; }
-  .dc-cost-heading { color: #777; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.2rem; }
+  .dc-upg-name { font-weight: 700; color: var(--link); }
+  .dc-upg-req { color: var(--text-dim); font-size: 0.74rem; }
+  .dc-footer { padding: 0.5rem 0.75rem; border-top: 1px solid var(--border-strong); font-size: 0.76rem; }
+  .dc-cost-heading { color: var(--text-dim); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.2rem; }
   .dc-cost-row { display: flex; align-items: center; justify-content: space-between; gap: 0.4rem; }
-  .dc-cost { color: #bbb; flex: 1; }
-  .dc-cost .muted { color: #666; font-style: italic; }
-  .dc-edit-link { background: #222; color: #8af; border: 1px solid #446; border-radius: 4px;
+  .dc-cost { color: var(--text-mid); flex: 1; }
+  .dc-cost .muted { color: var(--text-dim); font-style: italic; }
+  .dc-edit-link { background: var(--surface); color: var(--link); border: 1px solid var(--border-strong); border-radius: 4px;
                   padding: 0.15rem 0.5rem; text-decoration: none; font-size: 0.72rem; white-space: nowrap; flex-shrink: 0; }
-  .dc-edit-link:hover { background: #334; }
-  .no-defs { color: #666; margin-top: 2rem; }
-  .dc-image-wrap { background: #0d0d1a; display: flex; justify-content: center; align-items: center; padding: 0.4rem; }
+  .dc-edit-link:hover { background: var(--surface-hi); }
+  .no-defs { color: var(--text-dim); margin-top: 2rem; }
+  .dc-image-wrap { background: var(--bg-deep); display: flex; justify-content: center; align-items: center; padding: 0.4rem; }
   .dc-image { max-height: 80px; max-width: 100%; object-fit: contain; display: block; }
-  .dc-syn-label { color: #888; text-transform: uppercase; letter-spacing: 0.5px; font-size: 0.7rem; margin-bottom: 0.3rem; }
+  .dc-syn-label { color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; font-size: 0.7rem; margin-bottom: 0.3rem; }
   .dc-syn-item { font-size: 0.76rem; margin-bottom: 0.3rem; }
-  .dc-syn-node { color: #fa8; font-weight: 700; }
-  .dc-syn-flag { color: #666; font-size: 0.7rem; font-style: italic; }
-  .mod-scale-suffix { color: #666; font-size: 0.7rem; font-family: inherit; margin-left: 0.25rem; }
+  .dc-syn-node { color: var(--accent); font-weight: 700; }
+  .dc-syn-flag { color: var(--text-dim); font-size: 0.7rem; font-style: italic; }
+  .mod-scale-suffix { color: var(--text-dim); font-size: 0.7rem; font-family: inherit; margin-left: 0.25rem; }
 </style>
 
 <div class="dist-page">
 <div class="dist-page-header">
   <h1>Districts</h1>
   {% if g.user and g.user.is_admin %}
-    <a href="/district-defs/new" style="font-size:0.85rem; color:#8f8;">+ New Definition</a>
-    <a href="/district-categories" style="font-size:0.85rem; color:#8af;">Manage Categories</a>
+    <a href="/district-defs/new" style="font-size:0.85rem; color:var(--pos);">+ New Definition</a>
+    <a href="/district-categories" style="font-size:0.85rem; color:var(--link);">Manage Categories</a>
   {% endif %}
 </div>
 

@@ -1,0 +1,94 @@
+{% extends "layout.html" %}
+
+{% block title %}Theme Settings{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width:900px;margin:0 auto;padding:24px 28px 40px;">
+	<h1 class="font-heading">Custom Theme</h1>
+	<p style="color:var(--text-mid);margin-top:-6px;">
+		Patreon-supporter perk: pick your own colors for every part of the site.
+		When enabled, this replaces the built-in dark/light toggle for your account.
+	</p>
+
+	<form method="POST" action="/settings/theme/save">
+		<div class="surface-card" style="margin-bottom:18px;">
+			<label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
+				<input type="checkbox" name="enabled" {% if enabled %}checked{% endif %}>
+				<span><strong>Enable my custom theme</strong> — overrides dark/light mode for me on every page.</span>
+			</label>
+		</div>
+
+		<div style="display:grid;grid-template-columns:1fr 1fr;gap:22px;align-items:start;">
+			<div class="surface-card">
+				<h3>Colors</h3>
+				<div style="display:flex;flex-direction:column;gap:10px;">
+					{% for t in tokens %}
+					<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+						<label for="token-{{ t.key }}" style="color:var(--text-mid);font-size:13.5px;">{{ t.label }}</label>
+						<input type="color" id="token-{{ t.key }}" name="token_{{ t.key }}" value="{{ t.value }}"
+							class="theme-color-input" data-token="{{ t.key }}" style="width:56px;height:32px;padding:0;border:1px solid var(--border-strong);border-radius:6px;background:none;cursor:pointer;">
+					</div>
+					{% endfor %}
+				</div>
+			</div>
+
+			<div>
+				<h3 style="margin:0 0 10px;">Live Preview</h3>
+				<div id="theme-preview-box" style="border:1px solid var(--border);border-radius:var(--radius-card);padding:18px;background:var(--bg-page);">
+					<div class="surface-card">
+						<h3>Sample Card <span class="card-count">(42)</span></h3>
+						<div class="dotted-row">
+							<span class="k">Stability</span>
+							<span class="leader"></span>
+							<span class="v">Stable</span>
+						</div>
+						<div class="dotted-row">
+							<span class="k">Treasury</span>
+							<span class="leader"></span>
+							<span class="v">1,204</span>
+						</div>
+						<div style="display:flex;gap:6px;flex-wrap:wrap;margin:10px 0;">
+							<span class="chip chip-accent">Accent Chip</span>
+							<span class="chip chip-sage">Sage Chip</span>
+							<span class="chip chip-ember">Ember Chip</span>
+						</div>
+						<p style="color:var(--text-mid);font-size:13.5px;">
+							Secondary text sample. <a href="#" onclick="return false;">A link looks like this.</a>
+						</p>
+						<div style="display:flex;gap:8px;margin-top:10px;">
+							<button type="button" class="pill-btn">Primary</button>
+							<button type="button" class="pill-btn-outline">Outline</button>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<div style="margin-top:18px;display:flex;gap:10px;">
+			<button type="submit" class="pill-btn">Save Theme</button>
+		</div>
+	</form>
+
+	<form method="POST" action="/settings/theme/reset" style="margin-top:10px;" onsubmit="return confirm('Reset your custom theme colors to the defaults? This cannot be undone.');">
+		<button type="submit" class="pill-btn-outline">Reset to Defaults</button>
+	</form>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+	var previewBox = document.getElementById('theme-preview-box');
+	var inputs = document.querySelectorAll('.theme-color-input');
+
+	function applyPreview() {
+		inputs.forEach(function (input) {
+			previewBox.style.setProperty('--' + input.dataset.token, input.value);
+		});
+	}
+
+	inputs.forEach(function (input) {
+		input.addEventListener('input', applyPreview);
+	});
+	applyPreview();
+});
+</script>
+{% endblock %}

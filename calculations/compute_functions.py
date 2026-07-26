@@ -490,10 +490,27 @@ def compute_money_income(field, target, base_value, field_schema, overall_total_
                 if lnk.get("market")
             ]
             if market_ids:
-                bandit_count = _mongo.db.hex_map_tiles.count_documents(
-                    {"bandit_camp.market": {"$in": market_ids}}
-                )
-                value += int(money_per_bandit_camp * bandit_count)
+                market_object_ids = []
+                for mid in market_ids:
+                    try:
+                        market_object_ids.append(ObjectId(mid))
+                    except Exception:
+                        pass
+                # Bandit camps store their market by NAME (the paint-tool's
+                # market dropdown uses market.name as its option value, not
+                # the market's _id — see hex-map.js's bandit_market select),
+                # so market_links' _id strings must be resolved to names
+                # before matching against hex_map_tiles.bandit_camp.market.
+                market_names = [
+                    m["name"] for m in _mongo.db.markets.find(
+                        {"_id": {"$in": market_object_ids}}, {"name": 1}
+                    ) if m.get("name")
+                ]
+                if market_names:
+                    bandit_count = _mongo.db.hex_map_tiles.count_documents(
+                        {"bandit_camp.market": {"$in": market_names}}
+                    )
+                    value += int(money_per_bandit_camp * bandit_count)
 
     return int(value)
     

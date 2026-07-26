@@ -448,8 +448,6 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
         prestige_modifiers = {}
         if target.get("empire", False):
             prestige_modifiers = calculate_prestige_modifiers(target, schema_properties)
-
-        calculate_karma_from_negative_stockpiles(target, modifier_totals)
     elif target_data_type == "nation_jobs":
         job_details = calculate_job_details(target, modifier_totals, district_totals, tech_totals, city_totals, law_totals, external_modifiers_total)
         # Show forced disease jobs (read-only) on the jobs edit page too.
@@ -783,6 +781,10 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
         _etypes = (target.get("_calc_cache") or {}).get("effective_territory_types")
         if _etypes is not None:
             calculated_values["effective_territory_types"] = _etypes
+
+        # Must run after resource_excess (net production) is finalized above —
+        # karma is based on projected post-tick storage, not current storage.
+        calculate_karma_from_negative_stockpiles(target, overall_total_modifiers, calculated_values, schema_properties)
 
     phase_start = perf_counter()
     if return_breakdowns:
@@ -3799,15 +3801,42 @@ def sum_external_modifier_totals(external_modifiers):
             totals[field] = totals.get(field, 0) + val
     return totals
 
-def calculate_karma_from_negative_stockpiles(target, modifier_totals):
-    if target.get("temperament", "None") != "Player": #Only apply to player nations
+def calculate_karma_from_negative_stockpiles(target, overall_total_modifiers, calculated_values, schema_properties):
+    """Penalize karma based on projected storage AFTER the next tick (current
+    storage + this session's net production/resource_excess), not merely
+    storage that's already negative right now — a nation about to run a
+    resource dry should feel it before the deficit actually lands, and one
+    that's already producing enough to climb back out shouldn't keep getting
+    punished for a hole it's actively filling.
+
+    Must run after resource_excess is finalized (calculate_all_fields computes
+    it via the generic calculated-fields pass, and again in the food-shortage
+    branch above), and mutates overall_total_modifiers directly rather than
+    modifier_totals — the karma field's own compute_field call already ran by
+    this point, so karma is explicitly recomputed here to pick up the change.
+    """
+    if target.get("temperament", "None") != "Player":  # Only apply to player nations
         return
-    for resource in json_data["general_resources"]:
-        if target.get("resource_storage", {}).get(resource["key"], 0) < 0 and resource["key"] != "research":
-            modifier_totals["karma"] = modifier_totals.get("karma", 0) + target.get("resource_storage", {}).get(resource["key"], 0)
-    for resource in json_data["unique_resources"]:
-        if target.get("resource_storage", {}).get(resource["key"], 0) < 0:
-            modifier_totals["karma"] = modifier_totals.get("karma", 0) + target.get("resource_storage", {}).get(resource["key"], 0)
+
+    resource_excess = calculated_values.get("resource_excess", {}) or {}
+    storage = target.get("resource_storage", {}) or {}
+
+    penalty = 0
+    for resource in json_data["general_resources"] + json_data["unique_resources"]:
+        key = resource["key"]
+        if key == "research":
+            continue
+        projected = storage.get(key, 0) + resource_excess.get(key, 0)
+        if projected < 0:
+            penalty += projected
+
+    if penalty:
+        overall_total_modifiers["karma"] = overall_total_modifiers.get("karma", 0) + penalty
+        calculated_values["karma"] = compute_field(
+            "karma", target, schema_properties.get("karma", {}).get("base_value", 0),
+            schema_properties.get("karma", {}), overall_total_modifiers
+        )
+        target["karma"] = calculated_values["karma"]
 
 def parse_meta_modifiers(target, overall_total_modifiers):
     meta_mods = json_data["meta_mods"]

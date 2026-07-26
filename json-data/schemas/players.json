@@ -44,6 +44,23 @@
         "label": "Is Non-Player Admin?",
         "description": "RP moderator role: auto-applies visibility bypass on nation pages without logging"
       },
+      "is_patreon_supporter": {
+        "bsonType": "boolean",
+        "label": "Is Patreon Supporter?",
+        "description": "Manually granted — unlocks the custom theme editor at /settings/theme"
+      },
+      "custom_theme_enabled": {
+        "bsonType": "boolean",
+        "label": "Custom Theme Enabled?",
+        "description": "Whether this player's saved custom_theme colors are currently applied, overriding the dark/light toggle. Set via /settings/theme, not directly editable here.",
+        "hidden": true
+      },
+      "custom_theme": {
+        "bsonType": "object",
+        "label": "Custom Theme Colors",
+        "description": "Patreon-supporter per-token color overrides (design token name -> CSS color string), set via /settings/theme.",
+        "hidden": true
+      },
       "characters": {
         "bsonType": "array",
         "label": "Characters",

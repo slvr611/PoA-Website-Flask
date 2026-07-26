@@ -2,27 +2,38 @@
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Chronicle theme — design tokens
+   Two built-in themes ship as data-theme values on <html>: "dark" (default,
+   the original Chronicle look — contrast bumped slightly from launch after
+   player feedback) and "light" (parchment-and-ink inversion of the same
+   palette). Toggled client-side (see the theme-toggle script in layout.html)
+   and persisted in localStorage, so it works even for logged-out visitors.
+   Patreon-supporter custom themes (per-player color overrides, see
+   routes/theme_routes.py) are layered on top via an inline <style> block
+   emitted by layout.html when a supporter has one saved and active — that
+   block simply redeclares whichever of these custom properties they've
+   overridden, so anything not customized still falls through to dark/light.
    ═══════════════════════════════════════════════════════════════════════════ */
-:root {
+:root,
+:root[data-theme="dark"] {
   /* Grounds */
   --bg-page:      #191309;   /* page behind the card */
   --bg-card:      #221a12;   /* main content card */
   --bg-deep:      #1a140d;   /* top nav bar, flag tile */
-  --surface:      rgba(240,229,210,.05);  /* inset cards */
-  --surface-hi:   rgba(240,229,210,.08);  /* neutral chips, hover fills */
-  --border:       rgba(240,229,210,.10);  /* card borders */
-  --border-hi:    rgba(240,229,210,.12);  /* table row rules, small cards */
-  --border-strong:rgba(240,229,210,.25);  /* table header rule, outline buttons */
+  --surface:      rgba(240,229,210,.07);  /* inset cards */
+  --surface-hi:   rgba(240,229,210,.11);  /* neutral chips, hover fills */
+  --border:       rgba(240,229,210,.14);  /* card borders */
+  --border-hi:    rgba(240,229,210,.17);  /* table row rules, small cards */
+  --border-strong:rgba(240,229,210,.34);  /* table header rule, outline buttons */
 
   /* Text */
-  --text:         #f0e5d2;
-  --text-dim:     rgba(240,229,210,.55);  /* labels, captions */
-  --text-mid:     rgba(240,229,210,.7);   /* secondary copy */
+  --text:         #f5ecda;
+  --text-dim:     rgba(245,236,218,.68);  /* labels, captions */
+  --text-mid:     rgba(245,236,218,.82);  /* secondary copy */
 
   /* Voices */
   --accent:       #d98a54;   /* PER-NATION: overridden by nation accent color */
   --accent-hi:    #f4c89a;   /* active nav text, link hover */
-  --heading:      #a8b88a;   /* sage green — all card headings */
+  --heading:      #b0c090;   /* sage green — all card headings */
   --link:         #e8b46a;   /* default link + pending-changes gold */
   --pos:          #a8d88a;   /* good values */
   --warn:         #e8d46a;   /* caution values (over territory, draining) */
@@ -30,7 +41,38 @@
   --done:         #5a7a44;   /* researched-tech pill fill */
   --avail:        #8aa86a;   /* available-tech pill border */
   --avail-text:   #c8dcae;
+}
 
+:root[data-theme="light"] {
+  /* Grounds — parchment */
+  --bg-page:      #e8ddc2;
+  --bg-card:      #f6f0e1;
+  --bg-deep:      #ddceac;
+  --surface:      rgba(58,42,20,.05);
+  --surface-hi:   rgba(58,42,20,.09);
+  --border:       rgba(58,42,20,.15);
+  --border-hi:    rgba(58,42,20,.19);
+  --border-strong:rgba(58,42,20,.35);
+
+  /* Text — ink */
+  --text:         #2a2013;
+  --text-dim:     rgba(42,32,19,.64);
+  --text-mid:     rgba(42,32,19,.8);
+
+  /* Voices — darkened for legibility on a light ground */
+  --accent:       #a8552a;
+  --accent-hi:    #7a3a18;
+  --heading:      #43602f;
+  --link:         #8a5a1a;
+  --pos:          #3f7a2a;
+  --warn:         #8a6a10;
+  --crit:         #a83e22;
+  --done:         #3f5a2a;
+  --avail:        #5a7a3a;
+  --avail-text:   #3a5024;
+}
+
+:root {
   /* Shape */
   --radius-card:  16px;
   --radius-sm:    14px;      /* district/small cards */
@@ -60,7 +102,7 @@
     color: var(--heading);
 }
 .surface-card .card-count {
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 400;
     color: var(--text-dim);
     font-family: var(--font-body);
@@ -76,7 +118,7 @@
 .kh-table th {
     text-align: left;
     padding: 7px 10px;
-    font-size: 11px;
+    font-size: 12px;
     text-transform: uppercase;
     letter-spacing: .06em;
     font-weight: 700;
@@ -119,6 +161,15 @@
     font-size: 13.5px;
     margin: 0;
 }
+/* Several call sites force a 4-column (2-pair) layout via an inline
+   grid-template-columns override, which would otherwise stay 4-wide (and
+   can overflow) at any width since inline styles beat this stylesheet.
+   Collapse back to the normal 2-column layout on narrow screens. */
+@media (max-width: 700px) {
+    .kh-kv {
+        grid-template-columns: max-content 1fr !important;
+    }
+}
 .kh-kv dt { color: var(--text-dim); margin: 0; }
 .kh-kv dd { margin: 0; font-weight: 600; }
 
@@ -133,7 +184,7 @@
     display: inline-block;
     padding: 4px 12px;
     border-radius: var(--radius-pill);
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 600;
     background: var(--surface-hi);
     color: var(--text);
@@ -171,12 +222,15 @@
     transition: background .15s;
 }
 .pill-btn-outline:hover { background: var(--surface-hi); text-decoration: none; }
-.pill-btn-sm { padding: 6px 16px; font-size: 12.5px; }
+.pill-btn-sm { padding: 6px 16px; font-size: 13.5px; }
 
 /* Stat strip cards (nation page + data-item page) */
 .stat-strip {
     display: grid;
-    grid-template-columns: repeat(6, 1fr);
+    /* auto-fit + minmax reflows to fewer columns as the viewport narrows
+       (same pattern already used by .unit-grid below), instead of forcing
+       6 rigid columns that overflow the page on narrower screens/windows. */
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
     gap: 12px;
     padding: 18px 28px 6px;
 }
@@ -187,7 +241,7 @@
     padding: 12px 16px;
 }
 .stat-card .label {
-    font-size: 11px;
+    font-size: 12px;
     text-transform: uppercase;
     letter-spacing: .07em;
     color: var(--text-dim);
@@ -199,7 +253,7 @@
     margin-top: 2px;
 }
 .stat-card .sub {
-    font-size: 11.5px;
+    font-size: 12.5px;
     font-weight: 600;
     color: var(--text-dim);
 }
@@ -207,6 +261,7 @@
 /* Tab bar */
 .tab-bar {
     display: flex;
+    flex-wrap: wrap;
     gap: 6px;
     padding: 14px 28px 0;
     border-bottom: 2px solid var(--border-strong);
@@ -264,14 +319,19 @@ body {
     font-size: 13.5px;
 }
 
-/* Centered page card that all site content sits inside (Chronicle theme) */
+/* Centered page card that all site content sits inside (Chronicle theme).
+   overflow-x: auto (not hidden) is deliberate — hidden clips overflowing
+   content with NO way to reach it (no scrollbar at all); auto still clips
+   visually but gives a horizontal scrollbar when something inside is wider
+   than the card, so content never becomes permanently unreachable just
+   because a rigid layout somewhere didn't reflow at a given screen size. */
 .page-card {
     max-width: 1240px;
     margin: 26px auto 60px;
     background: var(--bg-card);
     border-radius: var(--radius-card);
     box-shadow: 0 2px 14px rgba(0,0,0,.5);
-    overflow: hidden;
+    overflow-x: auto;
 }
 
 h1, h2, h3, .font-heading {
@@ -293,7 +353,7 @@ header {
     gap: 24px;
     background-color: var(--bg-deep);
     padding: 10px 28px;
-    font-size: 13px;
+    font-size: 13.5px;
 }
 
 .site-brand {
@@ -349,11 +409,21 @@ header {
     transform: none !important;
 }
 
+.theme-toggle-btn {
+    background: none;
+    border: 1px solid var(--border-strong);
+    font-family: var(--font-body);
+    font-size: 15px;
+    line-height: 1;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
 .count-badge {
     display: inline-block;
     background: var(--accent);
     color: var(--bg-card);
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
     border-radius: var(--radius-pill);
     padding: 1px 7px;
@@ -486,7 +556,11 @@ header {
     color: var(--accent-hi);
 }
 
-a {
+/* :link and :visited combined into one rule (rather than a separate bare
+   `a {}` + `a:visited {}`) so visited links reliably match unvisited ones —
+   splitting them can leave some browsers still applying their own default
+   visited-link color under the :visited cascade's restricted rules. */
+a:link, a:visited {
     color: var(--link);
     text-decoration: none;
 }
@@ -494,10 +568,6 @@ a {
 a:hover {
     color: var(--accent-hi);
     text-decoration: underline;
-}
-
-a:visited {
-    color: var(--link);
 }
 
 :focus-visible {
@@ -560,36 +630,15 @@ h1, h2 {
     color: #fff;
 }
 
-/* Jobs table styling */
+/* Jobs table sizing (color/border/hover come from the shared kh-table-style
+   cascade further down — .info-table, .jobs-table, .modifiers-table, etc. —
+   which is theme-token-driven; this legacy block used to duplicate that
+   with hardcoded dark-only colors at higher specificity, silently
+   overriding the tokens and breaking light mode). */
 .jobs-table {
     width: 100%;
     border-collapse: collapse;
     margin-top: 2rem;
-}
-
-.jobs-table thead th {
-    background-color: #333;
-    color: #fff;
-    padding: 8px;
-    border: 1px solid #444;
-    text-align: left;
-}
-
-.jobs-table tbody td {
-    background-color: #222;
-    color: #e0e0e0;
-    padding: 8px;
-    border: 1px solid #444;
-}
-
-/* Alternate row background */
-.jobs-table tbody tr:nth-child(even) {
-    background-color: #1e1e1e;
-}
-
-/* Hover effect */
-.jobs-table tbody tr:hover {
-    background-color: #2a2a2a;
 }
 
 /* Army unit table — stat columns are centered and compact */
@@ -599,21 +648,21 @@ h1, h2 {
 }
 .unit-army-table .unit-stat-cell {
     text-align: center;
-    color: #ccc;
+    color: var(--text-mid);
     font-size: 0.88rem;
 }
 .unit-army-table .unit-stat-na {
-    color: #555;
+    color: var(--text-dim);
     text-align: center;
 }
 .unit-army-table .unit-stat-modified {
-    color: #7ec8ff;
+    color: var(--link);
     font-weight: 700;
     cursor: help;
     text-align: center;
 }
 .unit-magic-tag {
-    color: #a97dff;
+    color: var(--accent);
     font-size: 0.75rem;
     vertical-align: super;
 }
@@ -773,10 +822,10 @@ h1, h2 {
   margin-top: 1rem;
 }
 
-/* District Slot */
+/* District Slot (also used for city slots) */
 .district-slot {
-  background-color: #1e1e1e;
-  border: 1px solid #444;
+  background-color: var(--surface-hi);
+  border: 1px solid var(--border-strong);
   border-radius: 8px;
   padding: 1rem;
   text-align: center;
@@ -785,19 +834,19 @@ h1, h2 {
 .district-slot h3 {
   margin: 0.5rem 0;
   font-size: 1.1rem;
-  color: #fff;
+  color: var(--text);
 }
 
 .district-slot p {
   margin: 0.3rem 0;
   font-size: 0.9rem;
-  color: #e0e0e0;
+  color: var(--text-mid);
 }
 
 /* Empty Slot styling */
 .empty-slot {
   font-style: italic;
-  color: #888;
+  color: var(--text-dim);
 }
 
 /* For the select inputs on the edit page */
@@ -805,9 +854,9 @@ h1, h2 {
   width: 100%;
   padding: 0.5rem;
   border-radius: 4px;
-  background-color: #222;
-  color: #e0e0e0;
-  border: 1px solid #444;
+  background-color: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
 }
 
 .resources-section {
@@ -1599,7 +1648,7 @@ h1, h2 {
     position: relative;
     width: 100%;
     height: 800px;
-    background-color: #222;
+    background-color: var(--surface-hi);
 }
 
 .cy-controls {
@@ -1610,16 +1659,16 @@ h1, h2 {
 }
 
 .cy-controls button {
-    background: #333;
-    color: white;
-    border: 1px solid #555;
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border-strong);
     padding: 5px 10px;
     margin: 0 2px;
     cursor: pointer;
 }
 
 .cy-controls button:hover {
-    background: #444;
+    background: var(--surface-hi);
 }
 
 #tech-info-panel {
@@ -1627,34 +1676,35 @@ h1, h2 {
     bottom: 10px;
     right: 10px;
     width: 300px;
-    background: rgba(40, 40, 40, 0.9);
-    border: 1px solid #555;
+    background: var(--bg-card);
+    border: 1px solid var(--border-strong);
     padding: 15px;
     border-radius: 5px;
-    color: white;
+    color: var(--text);
     z-index: 1000;
     display: none;
     max-height: 400px;
     overflow-y: auto;
+    box-shadow: 0 4px 16px rgba(0,0,0,.3);
 }
 
 #tech-info-panel h3 {
     margin-top: 0;
-    border-bottom: 1px solid #555;
+    border-bottom: 1px solid var(--border-strong);
     padding-bottom: 5px;
 }
 
 #tech-info-panel button {
-    background: #333;
-    color: white;
-    border: 1px solid #555;
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border-strong);
     padding: 5px 10px;
     margin-top: 10px;
     cursor: pointer;
 }
 
 #tech-info-panel button:hover {
-    background: #444;
+    background: var(--surface-hi);
 }
 
 /* Tech Investment Form Styling */
@@ -1696,18 +1746,18 @@ h1, h2 {
 .tech-view-btn {
     padding: 0.5rem 1.25rem;
     min-height: 44px;
-    background-color: #2a2a2a;
-    color: #aaa;
-    border: 1px solid #444;
+    background-color: var(--surface-hi);
+    color: var(--text-mid);
+    border: 1px solid var(--border-strong);
     border-radius: 4px 4px 0 0;
     cursor: pointer;
     font-size: 0.9rem;
 }
 
 .tech-view-btn.active {
-    background-color: #0066cc;
-    color: #fff;
-    border-color: #0055aa;
+    background-color: var(--accent);
+    color: var(--bg-card);
+    border-color: var(--accent);
 }
 
 .tech-tier-row {
@@ -1720,12 +1770,12 @@ h1, h2 {
 .tech-card {
     flex: 1 1 220px;
     max-width: 320px;
-    background-color: #1e1e1e;
-    border: 1px solid #444;
-    border-left: 4px solid #888;
+    background-color: var(--surface-hi);
+    border: 1px solid var(--border-strong);
+    border-left: 4px solid var(--text-dim);
     border-radius: 4px;
     padding: 0.4rem 0.6rem;
-    color: #ddd;
+    color: var(--text);
 }
 
 .tech-card summary {
@@ -1744,19 +1794,19 @@ h1, h2 {
 
 .tech-card-name {
     font-weight: 600;
-    color: #e0e0e0;
+    color: var(--text);
 }
 
 .tech-card-status {
     font-size: 0.78rem;
-    color: #8ab4f8;
+    color: var(--link);
     white-space: nowrap;
 }
 
 .tech-card-body {
     margin-top: 0.5rem;
     font-size: 0.85rem;
-    border-top: 1px solid #333;
+    border-top: 1px solid var(--border-hi);
     padding-top: 0.5rem;
 }
 
@@ -1772,9 +1822,9 @@ h1, h2 {
     width: 5rem;
     font-size: 16px;
     padding: 0.3rem;
-    background-color: #333;
-    color: #fff;
-    border: 1px solid #555;
+    background-color: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border-strong);
     border-radius: 3px;
 }
 
@@ -2843,7 +2893,7 @@ input[type="text"].map-btn:focus {
     border-radius: 6px;
     z-index: 9999;
     max-width: 400px;
-    font-size: 13px;
+    font-size: 13.5px;
 }
 
 .context-tooltip-title {
@@ -2981,10 +3031,14 @@ h1, h2, h3 {
 }
 .nation-subtitle {
     margin-top: 2px;
-    font-size: 13px;
+    font-size: 13.5px;
     color: var(--text-dim);
 }
 .nation-subtitle a { color: var(--text-dim); text-decoration: underline; }
+/* Nation banner images are arbitrary user uploads, so this scrim + its
+   light text are intentionally fixed regardless of theme (same reasoning
+   as a photo hero banner on any site) — a light/dark-adaptive scrim would
+   make text unreadable against a bright banner image in light mode. */
 .nation-header-bar-has-banner {
     background-size: cover;
     background-position: center;
@@ -2998,15 +3052,20 @@ h1, h2, h3 {
     z-index: 0;
 }
 .nation-header-bar-has-banner > * { position: relative; z-index: 1; }
+.nation-header-bar-has-banner .nation-identity h1,
+.nation-header-bar-has-banner .nation-subtitle,
+.nation-header-bar-has-banner .nation-subtitle a {
+    color: #f5ecda;
+}
 .nation-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
 /* Visibility-tier lock placeholders (nation_owner.html, dataItem.html) */
-.visibility-locked { color: #888; font-style: italic; padding: 0.75rem 1rem; }
+.visibility-locked { color: var(--text-dim); font-style: italic; padding: 0.75rem 1rem; }
 .visibility-locked-inline {
-    color: #777;
+    color: var(--text-dim);
     font-style: italic;
     font-size: 0.85em;
-    border: 1px solid #444;
+    border: 1px solid var(--border-strong);
     border-radius: 3px;
     padding: 0 5px;
     white-space: nowrap;
@@ -3050,7 +3109,7 @@ h1, h2, h3 {
 .resources-table th, .jobs-table th, .modifiers-table th,
 .pops-table th, .demographics-table th {
     text-align: left;
-    font-size: 11px;
+    font-size: 12px;
     text-transform: uppercase;
     letter-spacing: .06em;
     font-weight: 700;
