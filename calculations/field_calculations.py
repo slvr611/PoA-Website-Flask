@@ -417,6 +417,14 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
             job_details.update(disease_job_details)
             jobs_assigned = dict(jobs_assigned)
             jobs_assigned.update(disease_jobs_assigned)
+        # Undead-horde nations (primary race Ravenous+Mindless): every pop is
+        # forced onto a single synthetic job, REPLACING (not merging with)
+        # whatever jobs would otherwise be assigned.
+        from helpers.undead_horde_helpers import collect_undead_horde_job
+        horde_job_details, horde_jobs_assigned = collect_undead_horde_job(target)
+        if horde_job_details:
+            job_details = horde_job_details
+            jobs_assigned = horde_jobs_assigned
         job_totals = sum_job_totals(target, jobs_assigned, job_details)
         record_timing("ts_jobs_ms", _sub)
 
@@ -449,6 +457,12 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
         disease_job_details, _, _ = collect_disease_effects(target)
         if disease_job_details:
             job_details.update(disease_job_details)
+        # Undead-horde nations: show the forced job (read-only) here too,
+        # replacing the normal job list entirely.
+        from helpers.undead_horde_helpers import collect_undead_horde_job
+        horde_job_details, _ = collect_undead_horde_job(target)
+        if horde_job_details:
+            job_details = horde_job_details
     elif target_data_type == "character":
         positive_title_modifiers = calculate_title_modifiers(target.get("positive_titles", []), target_data_type, schema_properties)
         negative_title_modifiers = calculate_title_modifiers(target.get("negative_titles", []), target_data_type, schema_properties)
@@ -4699,6 +4713,19 @@ def compute_nation_breakdowns(
     _slc_cap = round(3 + overall_total_modifiers.get("max_stability_loss_chance", 0), 4)
     calculated_values["stability_gain_chance_cap"] = _sgc_cap
     calculated_values["stability_loss_chance_cap"] = _slc_cap
+
+    def _stab_cap_bd(base_pct, modifier_key, cap_value):
+        entries = [{"label": "Base", "value": base_pct}]
+        for entry in build_field_breakdown(modifier_key, contributions):
+            v = round(entry["value"] * 100, 4)
+            if v:
+                entries.append({"label": entry["label"], "value": v})
+        entries.append({"label": "Total", "value": round(cap_value * 100, 2)})
+        return entries
+
+    breakdowns["stability_gain_chance_cap"] = _stab_cap_bd(100, "max_stability_gain_chance", _sgc_cap)
+    breakdowns["stability_loss_chance_cap"] = _stab_cap_bd(300, "max_stability_loss_chance", _slc_cap)
+
     _stab_caps = {
         "stability_gain_chance": round(_sgc_cap * 100, 2),
         "stability_loss_chance": round(_slc_cap * 100, 2),

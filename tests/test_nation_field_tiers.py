@@ -9,7 +9,8 @@ from helpers.visibility_helpers import NATION_VIEW_FIELD_TIERS, nation_field_tie
 class TestNationFieldTier:
     def test_known_field_returns_registered_tier(self):
         assert nation_field_tier("money") == 4
-        assert nation_field_tier("primary_race") == 1
+        assert nation_field_tier("primary_race") == 0
+        assert nation_field_tier("pops") == 1
         assert nation_field_tier("stability") == 2
         assert nation_field_tier("districts") == 3
 

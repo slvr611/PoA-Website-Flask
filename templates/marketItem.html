@@ -136,6 +136,31 @@
             </table>
         </div>
 
+        <!-- Luxury Resources Section (Luxury-type markets only) -->
+        {% if item.get("market_luxury_resources") %}
+            <h2>Luxuries Available This Session</h2>
+            <div class="table-wrapper">
+                {% set all_resource_defs = json_data["general_resources"] + json_data["unique_resources"] + json_data["luxury_resources"] %}
+                <table class="info-table resources-table">
+                    <thead>
+                        <tr>
+                            <th>Resource</th>
+                            <th>Price</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for rkey in item["market_luxury_resources"] %}
+                            {% set resource_def = find_dict_in_list(all_resource_defs, "key", rkey) %}
+                            <tr>
+                                <td>{{ rkey }}</td>
+                                <td>{{ resource_def.get("base_price", 0) if resource_def else "-" }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% endif %}
+
         <!-- Resource Desires Section -->
         <h2>Market Resource Desires</h2>
         {% if resource_desires %}

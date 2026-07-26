@@ -14,6 +14,11 @@
       "character_subtype",
       "health_status"
     ],
+    "view_groups": {
+      "attributes": {
+        "label": "Attributes"
+      }
+    },
     "external_calculation_requirements": {
       "race": [
         "positive_trait",
@@ -438,7 +443,9 @@
         "description": "The Rulership stat of the character",
         "calculated": true,
         "show_breakdown": true,
-        "max": "rulership_cap"
+        "max": "rulership_cap",
+        "view_group": "attributes",
+        "bar_style": "kv"
       },
       "cunning": {
         "bsonType": "number",
@@ -446,7 +453,9 @@
         "description": "The Cunning stat of the character",
         "calculated": true,
         "show_breakdown": true,
-        "max": "cunning_cap"
+        "max": "cunning_cap",
+        "view_group": "attributes",
+        "bar_style": "kv"
       },
       "charisma": {
         "bsonType": "number",
@@ -454,7 +463,9 @@
         "description": "The Charisma stat of the character",
         "calculated": true,
         "show_breakdown": true,
-        "max": "charisma_cap"
+        "max": "charisma_cap",
+        "view_group": "attributes",
+        "bar_style": "kv"
       },
       "prowess": {
         "bsonType": "number",
@@ -462,7 +473,9 @@
         "description": "The Prowess stat of the character",
         "calculated": true,
         "show_breakdown": true,
-        "max": "prowess_cap"
+        "max": "prowess_cap",
+        "view_group": "attributes",
+        "bar_style": "kv"
       },
       "magic": {
         "bsonType": "number",
@@ -470,7 +483,9 @@
         "description": "The Magic stat of the character",
         "calculated": true,
         "show_breakdown": true,
-        "max": "magic_cap"
+        "max": "magic_cap",
+        "view_group": "attributes",
+        "bar_style": "kv"
       },
       "strategy": {
         "bsonType": "number",
@@ -478,7 +493,9 @@
         "description": "The Strategy stat of the character",
         "calculated": true,
         "show_breakdown": true,
-        "max": "strategy_cap"
+        "max": "strategy_cap",
+        "view_group": "attributes",
+        "bar_style": "kv"
       },
       "positive_quirk": {
         "bsonType": "enum",

@@ -252,11 +252,12 @@ def tick(form_data):
                 nation.update(calculate_all_fields(nation, nation_schema, "nation"))
                 new_nations.append(deepcopy(nation))
 
-        # Nations in stasis have their market demands wiped completely for the
-        # duration of the tick (existing trade routes stay but pause instead —
-        # handled separately in get_trade_route_resource_net).
+        # Nations in stasis (or undead-horde nations, who can't generate or
+        # lose resources of any kind) have their market demands wiped
+        # completely for the duration of the tick (existing trade routes stay
+        # but pause instead — handled separately in get_trade_route_resource_net).
         for i in range(len(old_nations)):
-            if _in_stasis(old_nations[i]):
+            if _in_stasis(old_nations[i]) or _undead_horde_tick_blocked(old_nations[i], ""):
                 new_nations[i]["resource_desires"] = []
 
         for tick_function_label, tick_function in NATION_TICK_FUNCTIONS.items():
@@ -274,6 +275,11 @@ def tick(form_data):
                         # Stasis blocks every tick function except modifier decay, so
                         # a stasis modifier's own duration still counts down and expires.
                         if tick_function is not modifier_decay_tick and _in_stasis(old_nations[i]):
+                            continue
+                        # Undead-horde nations: same blanket freeze, but with their
+                        # own small exemption list (AI goal selection, vassal
+                        # compliance loss) instead of stasis's universal one.
+                        if tick_function is not modifier_decay_tick and _undead_horde_tick_blocked(old_nations[i], tick_function_label):
                             continue
                         result = tick_function(old_nations[i], new_nations[i], nation_schema)
                         if old_nations[i].get("temperament", "None") == "Player":
@@ -498,6 +504,26 @@ def _in_stasis(entity):
     return any(m.get("modifier_type") == "stasis" for m in (entity or {}).get("modifiers", []))
 
 
+# Tick functions that must keep running for undead-horde nations even though
+# everything else about them is frozen (see _undead_horde_tick_blocked):
+# AI Decision Tick so their strategic goal keeps resolving to war-prep every
+# session, and Nation Vassal Compliance Tick so vassal compliance keeps
+# dropping every session.
+UNDEAD_HORDE_EXEMPT_TICKS = {"AI Decision Tick", "Nation Vassal Compliance Tick"}
+
+
+def _undead_horde_tick_blocked(entity, tick_function_label):
+    """True when `entity` is an undead-horde nation (see
+    helpers.undead_horde_helpers.nation_is_undead_horde) and
+    `tick_function_label` isn't one of the few ticks that must keep running
+    for them. Mirrors _in_stasis's blanket-freeze pattern but with a small
+    per-nation-type exemption list instead of stasis's universal one."""
+    if tick_function_label in UNDEAD_HORDE_EXEMPT_TICKS:
+        return False
+    from helpers.undead_horde_helpers import nation_is_undead_horde
+    return nation_is_undead_horde(entity)
+
+
 def modifier_decay_tick(old_target, new_target, schema):
     new_modifiers = []
     for modifier in new_target.get("modifiers", []):
@@ -598,6 +624,14 @@ def generate_ai_character(org, org_schema, character_schema, previous_leader=Non
     for w in weaknesses:
         modifiers.append({"field": w, "value": random.randint(-4, -2), "duration": -1, "source": "Weakness"})
 
+    # Heir Training mech RPs (helpers/mech_rp_helpers.py) bank stat points on
+    # the nation for whoever succeeds the current ruler. Apply them here as
+    # permanent modifiers on the newly-generated heir, then clear the bank so
+    # they aren't applied again to a future ruler.
+    heir_training_bonuses = {k: v for k, v in (org.get("heir_training_bonuses") or {}).items() if v}
+    for stat, amount in heir_training_bonuses.items():
+        modifiers.append({"field": stat, "value": amount, "duration": -1, "source": "Heir Training"})
+
     org_name = org.get("name", "Unknown")
     succession_type = org.get("succession_type", "Inherited")
 
@@ -670,21 +704,31 @@ def generate_ai_character(org, org_schema, character_schema, previous_leader=Non
     new_char_id = new_char_change.get("target") if new_char_change else None
     result = f"Generated AI ruler '{name}' ({character_type} / {character_subtype}) for {org_name}.\n"
 
-    if pop_selected:
+    if pop_selected or heir_training_bonuses:
         new_org = deepcopy(org)
-        new_org["primary_race"] = ruler_race
-        new_org["primary_culture"] = ruler_culture
-        new_org["primary_religion"] = ruler_religion
+        reasons = []
+        if pop_selected:
+            new_org["primary_race"] = ruler_race
+            new_org["primary_culture"] = ruler_culture
+            new_org["primary_religion"] = ruler_religion
+            reasons.append(f"Succession ({succession_type}): primary demographics updated")
+        if heir_training_bonuses:
+            new_org["heir_training_bonuses"] = {}
+            reasons.append("Heir Training bonuses applied, clearing the bank")
         change_id = system_request_change(
             data_type="nations",
             item_id=org["_id"],
             change_type="Update",
             before_data=org,
             after_data=new_org,
-            reason=f"Succession ({succession_type}): primary demographics updated for {org_name}",
+            reason=f"{'; '.join(reasons)} for {org_name}",
         )
         system_approve_change(change_id)
-        result += f"  -> Updated {org_name} primary demographics via {succession_type} succession.\n"
+        if pop_selected:
+            result += f"  -> Updated {org_name} primary demographics via {succession_type} succession.\n"
+        if heir_training_bonuses:
+            trained_summary = ", ".join(f"+{v} {k}" for k, v in heir_training_bonuses.items())
+            result += f"  -> Applied banked Heir Training ({trained_summary}) to {name}.\n"
 
     if new_char_id and previous_leader:
         prev_id_str = str(previous_leader["_id"])
@@ -703,6 +747,28 @@ def generate_ai_character(org, org_schema, character_schema, previous_leader=Non
             result += f"  -> Transferred {len(predecessor_artifacts)} artifact(s) from predecessor.\n"
 
     return result
+
+
+def ai_ensure_leader_tick(old_nation, new_nation, schema):
+    """Nation tick: generate a fresh AI ruler immediately if the nation has no
+    living leader when the tick starts.
+
+    character_death_tick already generates a successor the moment a leader
+    dies mid-session, so this only covers nations that end up leaderless
+    outside that path (manual edits, imports, or any other gap) — checked
+    fresh at the start of every session tick, not just at era boundaries.
+    """
+    if old_nation.get("players"):
+        return ""
+    nation_id = str(old_nation.get("_id", ""))
+    has_living_leader = mongo.db.characters.find_one(
+        {"ruling_nation_org": nation_id, "health_status": {"$ne": "Dead"}},
+        {"_id": 1},
+    )
+    if has_living_leader:
+        return ""
+    character_schema, _ = get_data_on_category("characters")
+    return generate_ai_character(old_nation, schema, character_schema)
 
 
 def character_death_tick(old_character, new_character, schema):
@@ -897,6 +963,16 @@ def character_age_tick(old_character, new_character, schema):
     return ""
 
 def character_stat_gain_tick(old_character, new_character, schema):
+    """Passive stat gain: one random eligible stat per tick, same odds and
+    same one-roll shape for AI and players alike.
+
+    AI used to roll independently for EVERY stat each tick (up to 6
+    gains/session instead of 1), which is what caused AI characters to
+    snowball far past player stat levels — fixed by sharing this single-roll
+    path with players instead of branching. AI also gets deliberate stat
+    growth on top of this through the Character Training / Heir Training mech
+    RPs (helpers/mech_rp_helpers.py).
+    """
     result = ""
     if old_character.get("health_status", "Healthy") == "Dead":
         return ""
@@ -906,7 +982,6 @@ def character_stat_gain_tick(old_character, new_character, schema):
     # clamped to [0, 1] — trust it directly instead of re-deriving an AI-only
     # bonus here, which used to double-count cunning and bypass the cap.
     effective_chance = old_character.get("stat_gain_chance", 0)
-    is_ai = not old_character.get("player")
     name = old_character.get("name", "Unknown")
 
     if effective_chance <= 0:
@@ -914,25 +989,16 @@ def character_stat_gain_tick(old_character, new_character, schema):
 
     new_character["stat_gain_chance_at_tick"] = effective_chance
 
-    if is_ai:
-        modifiers = new_character.get("modifiers", [])
-        new_character["modifiers"] = modifiers
-        for stat in character_stats:
-            if old_character.get(stat, 0) < old_character.get(stat + "_cap", 4):
-                if random.random() <= effective_chance:
-                    modifiers.append({"_id": uuid.uuid4().hex[:8], "modifier_type": "attribute", "attribute": stat, "value": 1, "duration": -1, "source": "Stat gain tick"})
-                    result += f"{name} has gained a level of {stat}.\n"
-    else:
-        stat_gain_roll = random.random()
-        new_character["stat_gain_roll"] = stat_gain_roll
-        if stat_gain_roll <= effective_chance:
-            possible_stats = [s for s in character_stats if old_character.get(s, 0) < old_character.get(s + "_cap", 4)]
-            if possible_stats:
-                stat = random.choice(possible_stats)
-                modifiers = new_character.get("modifiers", [])
-                modifiers.append({"_id": uuid.uuid4().hex[:8], "modifier_type": "attribute", "attribute": stat, "value": 1, "duration": -1, "source": "Stat gain tick"})
-                new_character["modifiers"] = modifiers
-                result = f"{name} has gained a level of {stat}.\n"
+    stat_gain_roll = random.random()
+    new_character["stat_gain_roll"] = stat_gain_roll
+    if stat_gain_roll <= effective_chance:
+        possible_stats = [s for s in character_stats if old_character.get(s, 0) < old_character.get(s + "_cap", 4)]
+        if possible_stats:
+            stat = random.choice(possible_stats)
+            modifiers = new_character.get("modifiers", [])
+            modifiers.append({"_id": uuid.uuid4().hex[:8], "modifier_type": "attribute", "attribute": stat, "value": 1, "duration": -1, "source": "Stat gain tick"})
+            new_character["modifiers"] = modifiers
+            result = f"{name} has gained a level of {stat}.\n"
 
     return result
 
@@ -1033,25 +1099,25 @@ def market_income_tick(old_market, new_market, schema):
         new_market["resource_storage"][resource] = max(new_market["resource_storage"][resource], 0)
         new_market["resource_storage"][resource] = int(new_market["resource_storage"][resource])
 
-    # Luxury market: generate and store a random luxury resource each session
+    # Luxury market: re-roll this session's luxury offerings (1 rolled per
+    # market tier, duplicates allowed). These are not accumulated/stored —
+    # the whole list is replaced every session, never carried over.
     from calculations.field_calculations import collect_laws, sum_law_totals
     law_totals = sum_law_totals(collect_laws(old_market, schema))
     gen_per_tier = law_totals.get("generate_luxury_resources_per_market_tier", 0)
     luxury_log = ""
     if gen_per_tier > 0:
         tier_mult = int(law_totals.get("market_tier_multiplier", 1))
-        luxury_key = old_market.get("market_luxury_resource", "")
-        if not luxury_key:
-            luxury_resources = json_data.get("luxury_resources", [])
-            if luxury_resources:
-                luxury_key = random.choice(luxury_resources)["key"]
-                new_market["market_luxury_resource"] = luxury_key
-        if luxury_key:
-            gen_amount = int(gen_per_tier * tier_mult)
-            capacity = old_market.get("market_resource_capacity", {}).get(luxury_key) or tier_mult
-            current = old_market.get("resource_storage", {}).get(luxury_key, 0)
-            new_market["resource_storage"][luxury_key] = min(current + gen_amount, capacity)
-            luxury_log = f", +{gen_amount} {luxury_key} (luxury)"
+        roll_count = max(0, int(round(gen_per_tier * tier_mult)))
+        luxury_resources = json_data.get("luxury_resources", [])
+        if roll_count and luxury_resources:
+            rolled = [random.choice(luxury_resources)["key"] for _ in range(roll_count)]
+            new_market["market_luxury_resources"] = rolled
+            luxury_log = f", luxuries for sale: {', '.join(rolled)}"
+        else:
+            new_market["market_luxury_resources"] = []
+    else:
+        new_market["market_luxury_resources"] = []
 
     name = old_market.get("name", "Unknown")
     produced = [f"+{amt} {r}" for r, amt in old_market.get("resource_production", {}).items() if amt]
@@ -1933,7 +1999,7 @@ def disease_cure_cross_tick(old_nations, new_nations, schema):
     infected pop from then on (see nation_disease_natural_cure_tick). Diseases
     already marked cured are skipped — there's nothing further this tick does
     for them."""
-    from helpers.disease_helpers import get_global_infection_counts, get_difficulty_settings
+    from helpers.disease_helpers import get_global_infection_counts, get_global_accepted_count, get_difficulty_settings
 
     result = ""
     try:
@@ -1950,7 +2016,10 @@ def disease_cure_cross_tick(old_nations, new_nations, schema):
         disease_name = disease.get("name", disease_id)
         difficulty = get_difficulty_settings(disease)
         required = difficulty.get("required_progress", 0)
-        total_infected = global_counts.get(disease_id, 0)
+        # Include "accepted" pops (permanently converted to the disease's
+        # derived race, e.g. a vampire nation's own-born vampires) alongside
+        # actively infected pops — both are hosts of the disease.
+        total_infected = global_counts.get(disease_id, 0) + get_global_accepted_count(disease)
 
         # Sum every nation's shared-quest contribution for this disease.
         contribution = 0
@@ -2727,6 +2796,7 @@ VASSAL_SPECIFIC_NATION_TICK_FUNCTIONS = [
 ]
 
 NATION_TICK_FUNCTIONS = {
+    "AI Ensure Leader Tick": ai_ensure_leader_tick,
     "Nation Isolated Diplo Stance Tick": isolated_diplo_stance_tick,
     "Nation Income Tick": nation_income_tick,
     "Nation Tech Tick": nation_tech_tick,

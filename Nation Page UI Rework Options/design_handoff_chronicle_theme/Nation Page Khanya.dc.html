@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/organic-3fb392c8-d3f9-4501-aa93-8f914c46cc28/styles.css">
+<script src="_ds/organic-3fb392c8-d3f9-4501-aa93-8f914c46cc28/_ds_bundle.js"></script>
+<style>
+body{margin:0;background:#191309;font-family:var(--font-body,system-ui)}
+a{color:#e8b46a;text-decoration:none}a:hover{color:#f4c89a}
+.kh-table{width:100%;border-collapse:collapse;font-size:13.5px;color:#f0e5d2}
+.kh-table th{text-align:left;padding:7px 10px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;font-weight:700;color:rgba(240,229,210,.55);border-bottom:2px solid rgba(240,229,210,.25)}
+.kh-table td{padding:7px 10px;border-bottom:1px solid rgba(240,229,210,.12)}
+.kh-kv{display:grid;grid-template-columns:max-content 1fr;gap:5px 18px;font-size:13.5px;margin:0}
+.kh-kv dt{color:rgba(240,229,210,.6);margin:0}.kh-kv dd{margin:0;font-weight:600}
+</style>
+</helmet>
+<div style="max-width:1240px;margin:0 auto;padding:26px 20px 60px">
+<div style="border-radius:16px;overflow:hidden;box-shadow:0 2px 14px rgba(0,0,0,.5);background:#221a12;color:#f0e5d2;--na: {{ accent }}">
+  <div style="display:flex;align-items:center;gap:24px;padding:10px 28px;background:#1a140d;border-bottom:1px solid rgba(240,229,210,.08);font-size:13px">
+    <span style="font-family:var(--font-heading);font-size:17px">Path of Ages</span>
+    <nav style="display:flex;gap:4px">
+      <a href="#" style="padding:6px 12px;border-radius:999px;color:rgba(240,229,210,.8)">Map</a>
+      <a href="#" style="padding:6px 12px;border-radius:999px;background:color-mix(in oklch,var(--na,#d98a54) 24%, transparent);color:#f4c89a;font-weight:600">Nations</a>
+      <a href="#" style="padding:6px 12px;border-radius:999px;color:rgba(240,229,210,.8)">Demographics</a>
+      <a href="#" style="padding:6px 12px;border-radius:999px;color:rgba(240,229,210,.8)">World</a>
+    </nav>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:12px">
+      <a href="#" style="color:rgba(240,229,210,.85)">My Changes</a>
+      <div style="width:30px;height:30px;border-radius:50%;background:#5a7a44"></div>
+    </div>
+  </div>
+  <div style="height:110px;background:linear-gradient(105deg,color-mix(in oklch,var(--na,#d98a54) 42%,#221a12) 0%,#3a4230 100%);position:relative;overflow:hidden">
+    <div style="position:absolute;right:-40px;top:-60px;width:220px;height:220px;border-radius:50%;background:rgba(240,229,210,.08)"></div>
+    <div style="position:absolute;right:120px;bottom:-70px;width:140px;height:140px;border-radius:50%;background:rgba(240,229,210,.06)"></div>
+    <span style="position:absolute;left:28px;bottom:10px;font-size:11px;color:rgba(240,229,210,.45)">banner image slot</span>
+  </div>
+  <div style="display:flex;align-items:flex-end;gap:20px;padding:0 28px;margin-top:-34px;position:relative">
+    <div style="width:84px;height:84px;border-radius:20px;background:#1a140d;border:3px solid var(--na,#d98a54);box-shadow:0 4px 12px rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;font-size:11px;color:rgba(240,229,210,.5)">flag</div>
+    <div style="padding-bottom:6px">
+      <h1 style="font-family:var(--font-heading);font-size:34px;margin:0;line-height:1.05">Khanya</h1>
+      <div style="font-size:13px;color:rgba(240,229,210,.7);margin-top:2px"><a href="#">Frigid Caps</a> · Ruled by <a href="#">Odirile</a> · Archivist State · <span style="color:#a8b88a;font-weight:600">Player</span></div>
+    </div>
+    <div style="margin-left:auto;display:flex;gap:8px;padding-bottom:8px;align-items:center">
+      <sc-if value="{{ showPending }}" hint-placeholder-val="{{ true }}"><a href="#" style="font-size:12.5px;font-weight:600;color:#e8b46a;background:rgba(232,180,106,.14);padding:7px 14px;border-radius:999px">◆ Pending changes</a></sc-if>
+      <button style="border:0;border-radius:999px;padding:9px 20px;background:var(--na,#d98a54);color:#221a12;font-weight:700;font-size:13.5px;cursor:pointer;font-family:inherit" style-hover="filter:brightness(1.1)">Edit</button>
+      <button style="border:2px solid rgba(240,229,210,.25);border-radius:999px;padding:7px 18px;background:transparent;color:inherit;font-weight:600;font-size:13.5px;cursor:pointer;font-family:inherit" style-hover="background:rgba(240,229,210,.08)">Customize</button>
+      <button title="Pending changes · Change history · Recalculate · Visibility" style="border:2px solid rgba(240,229,210,.25);border-radius:999px;width:36px;height:36px;background:transparent;color:inherit;cursor:pointer;font-size:16px;line-height:1" style-hover="background:rgba(240,229,210,.08)">⋯</button>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px;padding:18px 28px 6px">
+    <div style="background:rgba(240,229,210,.05);border:1px solid rgba(240,229,210,.1);border-radius:16px;padding:12px 16px">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:rgba(240,229,210,.55);font-weight:700">Stability</div>
+      <div style="font-family:var(--font-heading);font-size:22px;margin-top:2px;color:#e8d46a;border-bottom:2px dotted rgba(217,138,84,.5);display:inline-block;cursor:help" title="Gain: Acceptance +28, Conservative +10, Standard consumption +5 = 43% · Loss: Restricted citizenship −10, modifier −50, over pop cap +50, over territory +20 = 15%">Fragile</div>
+      <div style="font-size:11.5px;color:#a8d88a;font-weight:600">+43% gain · 15% loss</div>
+    </div>
+    <div style="background:rgba(240,229,210,.05);border:1px solid rgba(240,229,210,.1);border-radius:16px;padding:12px 16px">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:rgba(240,229,210,.55);font-weight:700">Treasury</div>
+      <div style="font-family:var(--font-heading);font-size:22px;margin-top:2px;border-bottom:2px dotted rgba(217,138,84,.5);display:inline-block;cursor:help" title="Base 200 · Military Funding: Substantial −500 · Tax: Low +168 · 4 mercantile vassals +400 = +268">736</div>
+      <div style="font-size:11.5px;color:#a8d88a;font-weight:600">+268 / tick · cap 8,000</div>
+    </div>
+    <div style="background:rgba(240,229,210,.05);border:1px solid rgba(240,229,210,.1);border-radius:16px;padding:12px 16px">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:rgba(240,229,210,.55);font-weight:700">Pops</div>
+      <div style="font-family:var(--font-heading);font-size:22px;margin-top:2px;color:#e08a6a;border-bottom:2px dotted rgba(217,138,84,.5);display:inline-block;cursor:help" title="Capacity: base 15 + Sanctum bonuses ×4 = 19">21 / 19</div>
+      <div style="font-size:11.5px;color:#e08a6a;font-weight:600">2 over capacity · 19 working</div>
+    </div>
+    <div style="background:rgba(240,229,210,.05);border:1px solid rgba(240,229,210,.1);border-radius:16px;padding:12px 16px">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:rgba(240,229,210,.55);font-weight:700">Territory</div>
+      <div style="font-family:var(--font-heading);font-size:22px;margin-top:2px;color:#e8d46a;border-bottom:2px dotted rgba(217,138,84,.5);display:inline-block;cursor:help" title="Effective: base 20 − Archivist State 60 + Expansionist 4 + Leyline Amplifier 28 + Administration 60 = 52">61 / 52</div>
+      <div style="font-size:11.5px;color:#e8d46a;font-weight:600">9 over effective · +50% expansion</div>
+    </div>
+    <div style="background:rgba(240,229,210,.05);border:1px solid rgba(240,229,210,.1);border-radius:16px;padding:12px 16px">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:rgba(240,229,210,.55);font-weight:700">Administration</div>
+      <div style="font-family:var(--font-heading);font-size:22px;margin-top:2px;border-bottom:2px dotted rgba(217,138,84,.5);display:inline-block;cursor:help" title="Base 1 + Archivist State 3 + Courthouse 2 = 6">6</div>
+      <div style="font-size:11.5px;color:rgba(240,229,210,.55);font-weight:600">−1 tech cost per 5 admin</div>
+    </div>
+    <div style="background:rgba(240,229,210,.05);border:1px solid rgba(240,229,210,.1);border-radius:16px;padding:12px 16px">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:rgba(240,229,210,.55);font-weight:700">Infamy</div>
+      <div style="font-family:var(--font-heading);font-size:22px;margin-top:2px;color:#e08a6a">5</div>
+      <div style="font-size:11.5px;color:rgba(240,229,210,.55);font-weight:600">karma 0 · rolling +1</div>
+    </div>
+  </div>
+  <div style="display:flex;gap:6px;padding:14px 28px 0;border-bottom:2px solid rgba(240,229,210,.15)">
+    <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="6">
+      <button onClick="{{ t.onClick }}" style="{{ t.style }}" style-hover="color:#f4c89a">{{ t.label }}</button>
+    </sc-for>
+  </div>
+  <div style="padding:22px 28px 30px;min-height:560px">
+
+  <sc-if value="{{ tOv }}" hint-placeholder-val="{{ true }}">
+    <div style="display:grid;grid-template-columns:1.1fr .9fr;gap:18px">
+      <div style="display:flex;flex-direction:column;gap:18px">
+        <div style="background:rgba(240,229,210,.05);border:1px solid rgba(240,229,210,.1);border-radius:16px;padding:18px 20px">
+          <h3 style="font-family:var(--font-heading);margin:0 0 12px;font-size:17px;color:#a8b88a">At a glance</h3>
+          <dl class="kh-kv" style="grid-template-columns:max-content 1fr max-content 1fr">
+            <dt>Stability gain</dt><dd style="border-bottom:2px dotted rgba(217,138,84,.5);cursor:help" title="Acceptance +28 · Conservative +10 · Standard consumption +5">43% / 100%</dd>
+            <dt>Stability loss</dt><dd style="border-bottom:2px dotted rgba(217,138,84,.5);cursor:help" title="Restricted citizenship −10 · modifier −50 · 2 over pop cap +50 · 9 over territory +20">15% / 300%</dd>
+            <dt>Infamy</dt><dd style="color:#e08a6a">5</dd>
+            <dt>Karma</dt><dd>0 <span style="opacity:.55;font-weight:400">(rolling +1 · temp 0)</span></dd>
+            <dt>Diplomatic range</dt><dd>54</dd>
+            <dt>Prestige</dt><dd>0 <span style="color:#e08a6a;font-weight:600">(−8 / tick)</span></dd>
+            <dt>Origin</dt><dd>(T) Fortunate</dd>
+            <dt>Temperament</dt><dd>Player</dd>
+            <dt>Passive expansion</dt><dd>50%</dd>
+            <dt>Tech cost modifier</dt><dd style="color:#a8d88a">−1</dd>
+          </dl>
+        </div>
+        <div style="background:rgba(240,229,210,.05);border:1px solid rgba(240,229,210,.1);border-radius:16px;padding:18px 20px">
+          <h3 style="font-family:var(--font-heading);margin:0 0 10px;font-size:17px;color:#a8b88a">Blessings &amp; burdens <span style="font-size:12px;font-weight:400;color:rgba(240,229,210,.5);font-family:var(--font-body)">(16 modifiers)</span></h3>
+          <table class="kh-table">
+            <thead><tr><th>Effect</th><th>Value</th><th>Duration</th><th>Source</th></tr></thead>
+            <tbody>
+              <sc-for list="{{ mods }}" as="m" hint-placeholder-count="6">
+                <tr><td>{{ m.label }}</td><td style="color:{{ m.color }};font-weight:700">{{ m.v }}</td><td style="color:rgba(240,229,210,.6)">{{ m.dur }}</td><td>{{ m.note }}</td></tr>
+              </sc-for>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:18px">
+        <div style="background:rgba(90,122,68,.16);border:1px solid rgba(168,184,138,.25);border-radius:16px;padding:18px 20px">
+          <h3 style="font-family:var(--font-heading);margin:0 0 10px;font-size:17px;color:#a8b88a">Progress quests <span style="font-size:12px;font-weight:400;color:rgba(240,229,210,.5);font-family:var(--font-body)">(11)</span></h3>
+          <div style="display:flex;flex-direction:column;gap:10px;font-size:13px">
+            <sc-for list="{{ questsSlotted }}" as="q" hint-placeholder-count="3">
+              <div>
+                <div style="display:flex;justify-content:space-between;font-weight:600;gap:10px"><span>{{ q.name }}</span><span style="white-space:nowrap;color:{{ q.numColor }}">{{ q.progress }}</span></div>
+                <div style="height:8px;background:rgba(240,229,210,.12);border-radius:999px;margin-top:4px"><div style="width:{{ q.pctW }};height:8px;background:#8aa86a;border-radius:999px"></div></div>
+                <div style="font-size:11.5px;color:rgba(240,229,210,.55);margin-top:2px">{{ q.perTick }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="font-size:12.5px;color:rgba(240,229,210,.7);margin-top:12px;line-height:1.6">Unslotted: <sc-for list="{{ questsOther }}" as="q" hint-placeholder-count="4"><span style="display:inline-block;background:rgba(240,229,210,.08);border-radius:999px;padding:2px 10px;margin:2px 3px 0 0;font-size:11.5px">{{ q.name }} {{ q.progress }}</span></sc-for></div>
+          <div style="font-size:11.5px;color:rgba(240,229,210,.5);margin-top:8px">Slots: 1× tier-0 · 2× tier-2</div>
+        </div>
+        <div style="background:rgba(240,229,210,.05);border:1px solid rgba(240,229,210,.1);border-radius:16px;padding:18px 20px">
+          <h3 style="font-family:var(--font-heading);margin:0 0 8px;font-size:17px;color:#a8b88a">Demographics</h3>
+          <dl class="kh-kv">
+            <dt>Primary race</dt><dd><a href="#">Leyborne</a></dd>
+            <dt>Primary culture</dt><dd><a href="#">Ukuvutha</a></dd>
+            <dt>Primary religion</dt><dd><a href="#">Resplendent Sons</a></dd>
+            <dt>Minorities</dt><dd>14 unique</dd>
+          </dl>
+          <a href="#" style="font-size:12.5px;font-weight:600;display:inline-block;margin-top:10px">View all 21 pops →</a>
+        </div>
+        <div style="background:rgba(240,229,210,.05);border:1px solid rgba(240,229,210,.1);border-radius:16px;padding:18px 20px">
+          <h3 style="font-family:var(--font-heading);margin:0 0 8px;font-size:17px;color:#a8b88a">Chronicle notes</h3>
+          <div style="margin:0;font-size:13px;line-height:1.6;color:rgba(240,229,210,.85);font-style:italic;white-space:pre-line">{{ notes }}</div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ tEc }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex;flex-direction:column;gap:18px">
+      <div style="background:rgba(240,229,210,.05);border:1px solid rgba(240,229,210,.1);border-radius:16px;padding:18px 20px">
+        <h3 style="font-family:var(--font-heading);margin:0 0 10px;font-size:17px;color:#a8b88a">Resources <span style="font-size:12px;font-weight:400;color:rgba(240,229,210,.5);font-family:var(--font-body)">— dotted numbers open breakdowns</span></h3>
+        <table class="kh-table">
+          <thead><tr><th>Resource</th><th>Production</th><th>Consumption</th><th>Net</th><th>Storage</th><th></th></tr></thead>
+          <tbody>
+            <sc-for list="{{ resources }}" as="r" hint-placeholder-count="7">
+              <tr>
+                <td style="font-weight:600">{{ r.name }}</td>
+                <td><span style="border-bottom:2px dotted rgba(217,138,84,.5);cursor:help">{{ r.prod }}</span></td>
+                <td><span style="border-bottom:2px dotted rgba(217,138,84,.5);cursor:help">{{ r.cons }}</span></td>
+                <td style="color:{{ r.netColor }};font-weight:700">{{ r.net }}</td>
+                <td>{{ r.store }}</td>
+                <td style="font-size:11.5px;color:#e8b46a;font-weight:600">{{ r.note }}</td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+      </div>
+      <div style="display:grid;grid-template-columns:1.2fr .8fr;gap:18px">
+        <div style="background:rgba(240,229,210,.05);border:1px solid rgba(240,229,210,.1);border-radius:16px;padding:18px 20px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline">
+            <h3 style="font-family:var(--font-heading);margin:0 0 10px;font-size:17px;color:#a8b88a">Jobs <span style="font-size:12px;font-weight:400;color:rgba(240,229,210,.5);font-family:var(--font-body)">19 / 21 pops working</span></h3>
+            <button style="border:0;border-radius:999px;padding:6px 16px;background:var(--na,#d98a54);color:#221a12;font-weight:700;font-size:12.5px;cursor:pointer;font-family:inherit" style-hover="filter:brightness(1.1)">Edit jobs</button>
+          </div>
+          <table class="kh-table">
+            <thead><tr><th>Job</th><th>Pops</th><th>Upkeep / worker</th><th>Production / worker</th></tr></thead>
+            <tbody>
+              <sc-for list="{{ jobs }}" as="j" hint-placeholder-count="4">
+                <tr><td>{{ j.name }}</td><td>{{ j.count }}</td><td style="color:rgba(240,229,210,.7)">{{ j.up }}</td><td><span style="border-bottom:2px dotted rgba(217,138,84,.5);cursor:help">{{ j.prod }}</span></td></tr>
+              </sc-for>
+            </tbody>
+          </table>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:18px">
+          <div style="background:rgba(240,229,210,.05);border:1px solid rgba(240,229,210,.1);border-radius:16px;padding:18px 20px">
+            <h3 style="font-family:var(--font-heading);margin:0 0 10px;font-size:17px;color:#a8b88a">Trade</h3>
+            <dl class="kh-kv">
+              <dt>Treasury</dt><dd>736 / 8,000</dd>
+              <dt>Income / tick</dt><dd style="border-bottom:2px dotted rgba(217,138,84,.5);cursor:help;color:#a8d88a" title="Base 200 · Military Funding −500 · Low Tax +168 · Vassals +400">+268</dd>
+              <dt>Import slots</dt><dd>3 / 4 free</dd>
+              <dt>Export slots</dt><dd>1 / 4 free</dd>
+              <dt>Route capacity</dt><dd>30</dd>
+              <dt>Trade speed</dt><dd>12</dd>
+              <dt>Trade distance</dt><dd>7</dd>
+            </dl>
+            <div style="margin-top:10px;font-size:12.5px;color:rgba(240,229,210,.6);font-style:italic">No active trade routes.</div>
+          </div>
+          <div style="background:rgba(240,229,210,.05);border:1px solid rgba(240,229,210,.1);border-radius:16px;padding:18px 20px">
+            <h3 style="font-family:var(--font-heading);margin:0 0 10px;font-size:17px;color:#a8b88a">Income ledger</h3>
+            <sc-for list="{{ incomeBd }}" as="row" hint-placeholder-count="6">
+              <div style="display:flex;align-items:baseline;font-size:13px;padding:3px 0">
+                <span style="color:rgba(240,229,210,.65)">{{ row.label }}</span>
+                <span style="flex:1;border-bottom:1px dotted rgba(240,229,210,.25);margin:0 8px"></span>
+                <b style="color:{{ row.color }}">{{ row.value }}</b>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ tDev }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex;flex-direction:column;gap:18px">
+      <div>
+        <h3 style="font-family:var(--font-heading);margin:0 0 12px;font-size:17px;color:#a8b88a">Districts <span style="font-size:12px;font-weight:400;color:rgba(240,229,210,.5);font-family:var(--font-body)">6 of 7 slots built · duration +13</span></h3>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px">
+          <sc-for list="{{ districts }}" as="d" hint-placeholder-count="7">
+            <div style="background:rgba(240,229,210,.05);border:1px solid rgba(240,229,210,.12);border-left:4px solid {{ d.tint }};border-radius:14px;padding:12px 14px">
+              <div style="font-family:var(--font-heading);font-size:15px">{{ d.name }}</div>
+              <div style="font-size:11.5px;color:rgba(240,229,210,.55);margin-top:4px">{{ d.sub }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+        <div style="background:rgba(240,229,210,.05);border:1px solid rgba(240,229,210,.1);border-radius:16px;padding:18px 20px">
+          <h3 style="font-family:var(--font-heading);margin:0 0 8px;font-size:17px;color:#a8b88a">Cities <span style="font-size:12px;font-weight:400;color:rgba(240,229,210,.5);font-family:var(--font-body)">1 / 1 slot</span></h3>
+          <div style="font-size:13px"><b>The Archives</b> — Sanctum · magic node · +4 pop capacity from magic output</div>
+        </div>
+        <div style="background:rgba(240,229,210,.05);border:1px solid rgba(240,229,210,.1);border-radius:16px;padding:18px 20px">
+          <h3 style="font-family:var(--font-heading);margin:0 0 8px;font-size:17px;color:#a8b88a">Wonders</h3>
+          <div style="font-size:13px;line-height:1.7"><a href="#"><b>Leyline Amplifier</b></a> · +28 effective territory<br><a href="#"><b>Altar of Ascension</b></a> · <a href="#"><b>The Great Archive</b></a></div>
+        </div>
+      </div>
+      <div style="background:rgba(240,229,210,.05);border:1px solid rgba(240,229,210,.1);border-radius:16px;padding:18px 20px">
+        <h3 style="font-family:var(--font-heading);margin:0 0 4px;font-size:17px;color:#a8b88a">Technologies — tier list <span style="font-size:12px;font-weight:400;color:rgba(240,229,210,.5);font-family:var(--font-body)">9 researched · 7 investing · costs −1 (admin)</span></h3>
+        <p style="margin:0 0 12px;font-size:12px;color:rgba(240,229,210,.5)">Hover a pill for prerequisites and cost. Archivist State: each research grants windfall resources worth half its base cost.</p>
+        <sc-for list="{{ techTiers }}" as="tier" hint-placeholder-count="6">
+          <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:10px">
+            <div style="font-family:var(--font-heading);font-size:13px;color:rgba(240,229,210,.5);min-width:44px;padding-top:6px">{{ tier.label }}</div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px">
+              <sc-for list="{{ tier.items }}" as="tk" hint-placeholder-count="5">
+                <span style="{{ tk.style }}" title="{{ tk.tip }}">{{ tk.name }}</span>
+              </sc-for>
+            </div>
+          </div>
+        </sc-for>
+        <div style="display:flex;gap:16px;font-size:11.5px;color:rgba(240,229,210,.6);margin-top:6px">
+          <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#5a7a44;vertical-align:-1px"></span> researched</span>
+          <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:var(--na,#d98a54);vertical-align:-1px"></span> investing</span>
+          <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;border:2px solid #8aa86a;vertical-align:-2px"></span> available</span>
+          <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:rgba(240,229,210,.1);vertical-align:-1px"></span> locked</span>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ tMil }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex;flex-direction:column;gap:18px">
+      <div style="background:rgba(240,229,210,.05);border:1px solid rgba(240,229,210,.1);border-radius:16px;padding:26px 24px;text-align:center">
+        <div style="font-family:var(--font-heading);font-size:20px;color:#a8b88a">The realm keeps no standing army</div>
+        <div style="font-size:13px;color:rgba(240,229,210,.6);margin-top:6px">Land 0 / 3 · Naval 0 / 3 · Support 0 / 1 — Conscription: Low · Funding: Substantial · Doctrine: Safeguard</div>
+        <div style="font-size:12.5px;color:rgba(240,229,210,.5);margin-top:4px">Land attack +1 · defense −1 &nbsp;·&nbsp; Naval attack +1 · defense −1</div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px">
+        <div style="background:rgba(240,229,210,.05);border:1px solid rgba(240,229,210,.1);border-radius:16px;padding:18px 20px">
+          <h3 style="font-family:var(--font-heading);margin:0 0 10px;font-size:16px;color:#a8b88a">Recruitable — land</h3>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;font-size:12px;font-weight:600">
+            <sc-for list="{{ landTypes }}" as="u" hint-placeholder-count="2"><span style="background:rgba(240,229,210,.08);border-radius:999px;padding:4px 12px">{{ u }}</span></sc-for>
+          </div>
+        </div>
+        <div style="background:rgba(240,229,210,.05);border:1px solid rgba(240,229,210,.1);border-radius:16px;padding:18px 20px">
+          <h3 style="font-family:var(--font-heading);margin:0 0 10px;font-size:16px;color:#a8b88a">Recruitable — naval</h3>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;font-size:12px;font-weight:600">
+            <sc-for list="{{ navalTypes }}" as="u" hint-placeholder-count="4"><span style="background:rgba(240,229,210,.08);border-radius:999px;padding:4px 12px">{{ u }}</span></sc-for>
+          </div>
+        </div>
+        <div style="background:rgba(240,229,210,.05);border:1px solid rgba(240,229,210,.1);border-radius:16px;padding:18px 20px">
+          <h3 style="font-family:var(--font-heading);margin:0 0 10px;font-size:16px;color:#a8b88a">Recruitable — support</h3>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;font-size:12px;font-weight:600">
+            <sc-for list="{{ supportTypes }}" as="u" hint-placeholder-count="2"><span style="background:rgba(240,229,210,.08);border-radius:999px;padding:4px 12px">{{ u }}</span></sc-for>
+          </div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ tDip }}" hint-placeholder-val="{{ false }}">
+    <div style="display:grid;grid-template-columns:1.2fr .8fr;gap:18px">
+      <div style="background:rgba(240,229,210,.05);border:1px solid rgba(240,229,210,.1);border-radius:16px;padding:18px 20px">
+        <h3 style="font-family:var(--font-heading);margin:0 0 10px;font-size:17px;color:#a8b88a">Relations <span style="font-size:12px;font-weight:400;color:rgba(240,229,210,.5);font-family:var(--font-body)">(18) · diplomatic range 54</span></h3>
+        <table class="kh-table">
+          <thead><tr><th>Nation</th><th>Relation</th><th>Pact</th></tr></thead>
+          <tbody>
+            <sc-for list="{{ relations }}" as="rel" hint-placeholder-count="8">
+              <tr>
+                <td><a href="#">{{ rel.name }}</a></td>
+                <td><span style="display:inline-flex;align-items:center;gap:7px"><span style="width:9px;height:9px;border-radius:50%;background:{{ rel.dot }}"></span>{{ rel.relation }}</span></td>
+                <td style="color:rgba(240,229,210,.7)">{{ rel.pact }}</td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+        <div style="font-size:12.5px;color:rgba(240,229,210,.55);margin-top:10px">Slots — Alliance 1 · Defensive 2 · Non-aggression 5</div>
+      </div>
+      <div style="background:rgba(240,229,210,.05);border:1px solid rgba(240,229,210,.1);border-radius:16px;padding:18px 20px;align-self:start">
+        <h3 style="font-family:var(--font-heading);margin:0 0 10px;font-size:17px;color:#a8b88a">Vassals <span style="font-size:12px;font-weight:400;color:rgba(240,229,210,.5);font-family:var(--font-body)">5 / 5 slots · mercantile</span></h3>
+        <div style="display:flex;flex-direction:column;gap:8px;font-size:13.5px">
+          <sc-for list="{{ vassals }}" as="v" hint-placeholder-count="5">
+            <div style="display:flex;align-items:baseline"><a href="#"><b>{{ v.name }}</b></a><span style="flex:1;border-bottom:1px dotted rgba(240,229,210,.25);margin:0 8px"></span><span style="color:#a8d88a;font-weight:600">{{ v.tribute }}</span></div>
+          </sc-for>
+        </div>
+        <div style="font-size:12px;color:#e08a6a;margin-top:12px;font-weight:600">⚠ 4 of 5 vassals are Hostile toward Khanya</div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ tLaw }}" hint-placeholder-val="{{ false }}">
+    <div style="background:rgba(240,229,210,.05);border:1px solid rgba(240,229,210,.1);border-radius:16px;padding:18px 20px">
+      <h3 style="font-family:var(--font-heading);margin:0 0 12px;font-size:17px;color:#a8b88a">Government &amp; laws</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px 28px;font-size:13.5px">
+        <sc-for list="{{ laws }}" as="l" hint-placeholder-count="12">
+          <div style="display:flex;align-items:baseline;padding:5px 0;border-bottom:1px solid rgba(240,229,210,.1)"><span style="color:rgba(240,229,210,.6)">{{ l.k }}</span><span style="flex:1"></span><b>{{ l.v }}</b></div>
+        </sc-for>
+      </div>
+    </div>
+  </sc-if>
+  </div>
+</div>
+<p style="font:12px/1.5 system-ui,sans-serif;color:rgba(240,229,210,.45);margin:16px 4px 0">Layout of 1a · palette of 1b · live data from the 2026-07-20 backup. Compare with <b>Nation Page Rework.dc.html</b>.</p>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1280},&quot;accent&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#d98a54&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;#d98a54&quot;,&quot;#a8b88a&quot;,&quot;#7a9ac0&quot;,&quot;#c07a9a&quot;],&quot;section&quot;:&quot;Nation flavor&quot;},&quot;showPending&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Nation flavor&quot;}}">
+class Component extends DCLogic {
+  state = { tab: 'ov', d: null };
+  componentDidMount() {
+    import('./data/khanya_data.js').then(m => this.setState({ d: m.default })).catch(e => console.error('data load failed', e));
+  }
+  renderVals() {
+    const s = this.state, d = s.d;
+    const accent = this.props.accent ?? '#d98a54';
+    const showPending = this.props.showPending ?? true;
+    const tabs = [['ov','Overview'],['ec','Economy'],['dev','Development'],['mil','Military'],['dip','Diplomacy'],['law','Laws']].map(([k,label]) => ({
+      label,
+      onClick: () => this.setState({ tab: k }),
+      style: `border:0;background:none;cursor:pointer;font-family:inherit;font-size:14px;padding:10px 16px;border-radius:12px 12px 0 0;font-weight:${s.tab===k?700:500};color:${s.tab===k?'#f4c89a':'rgba(240,229,210,.7)'};border-bottom:3px solid ${s.tab===k?'var(--na,#d98a54)':'transparent'};margin-bottom:-2px`,
+    }));
+    const netColor = k => ({ pos:'#a8d88a', neg:'#e8d46a', crit:'#e08a6a', zero:'rgba(240,229,210,.55)' }[k]);
+    const resources = (d?.resources ?? []).map(r => ({ ...r, netColor: netColor(r.kind) }));
+    const mods = (d?.mods ?? []).map(m => ({ ...m, color: m.good ? '#a8d88a' : '#e08a6a' }));
+    const quests = d?.quests ?? [];
+    const qMap = q => ({ name: q.name, progress: (q.done?'✓ ':'') + q.cur + ' / ' + q.req, numColor: q.done ? '#a8d88a' : '#f0e5d2', pctW: Math.min(100, Math.round(q.cur/q.req*100)) + '%', perTick: q.per > 0 ? '+' + q.per + ' / tick' : 'no progress / tick' });
+    const questsSlotted = quests.filter(q => q.slotted).map(qMap);
+    const questsOther = quests.filter(q => !q.slotted).map(qMap);
+    const jobs = d?.jobs ?? [];
+    const incomeBd = (d?.breakdowns?.income ?? []).map(b => ({ label: b.label, value: (b.value>0&&b.label!=='Total'?'+':'') + b.value, color: b.label==='Total' ? '#f4c89a' : b.value >= 0 ? '#a8d88a' : '#e08a6a' }));
+    const dTint = { Observatory:'#8aa86a', School:'#8aa86a', Library:'#8aa86a', Artifactory:'var(--na,#d98a54)', Courthouse:'var(--na,#d98a54)', Outpost:'#7a9ac0' };
+    const dSub = { Observatory:'education · research', School:'education · +1 admin (Archivist)', Library:'education · duration +13', Outpost:'military · frontier', Artifactory:'production · artifacts', Courthouse:'civic · +2 admin' };
+    const districts = (d?.districts ?? []).map(x => x.empty
+      ? { name: 'Empty slot', sub: 'Nothing built here yet.', tint: 'rgba(240,229,210,.25)' }
+      : { name: x.name, sub: dSub[x.name] ?? 'district', tint: dTint[x.name] ?? '#8aa86a' });
+    const pillBase = 'font-size:12px;font-weight:600;padding:4px 12px;border-radius:999px;cursor:help;';
+    const pillStyle = { done: pillBase+'background:#5a7a44;color:#fff', invest: pillBase+'background:var(--na,#d98a54);color:#221a12', avail: pillBase+'background:transparent;border:2px solid #8aa86a;color:#c8dcae;padding:2px 10px', locked: pillBase+'background:rgba(240,229,210,.1);color:rgba(240,229,210,.45)' };
+    const roman = ['I','II','III','IV','V','VI','VII'];
+    const stateWord = { done:'Researched', invest:'Investing', avail:'Available', locked:'Locked' };
+    const techTiers = (d?.techTiers ?? []).map(t => ({
+      label: roman[t.tier-1] ?? String(t.tier),
+      items: t.items.map(tk => ({
+        name: tk.s === 'invest' ? `${tk.n} ${tk.i}/${tk.c}` : tk.n,
+        style: pillStyle[tk.s],
+        tip: `${stateWord[tk.s]} · cost ${tk.c}` + (tk.tip ? ` · requires ${tk.tip}` : ''),
+      })),
+    }));
+    const relDot = { Hostile:'#e08a6a', Unfriendly:'#e8d46a', Neutral:'rgba(240,229,210,.4)', Friendly:'#a8d88a' };
+    const relations = (d?.relations ?? []).map(r => ({ ...r, dot: relDot[r.relation] ?? 'rgba(240,229,210,.4)' }));
+    const vassals = (d?.vassals ?? []).map(v => ({ name: v, tribute: '+100 / tick' }));
+    return {
+      accent, showPending, tabs,
+      notes: d?.notes ?? '', mods, questsSlotted, questsOther,
+      resources, jobs, incomeBd, districts, techTiers, relations, vassals,
+      landTypes: d?.military?.land ?? [], navalTypes: d?.military?.naval ?? [], supportTypes: d?.military?.support ?? [],
+      laws: d?.laws ?? [],
+      tOv: s.tab==='ov', tEc: s.tab==='ec', tDev: s.tab==='dev', tMil: s.tab==='mil', tDip: s.tab==='dip', tLaw: s.tab==='law',
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -616,7 +616,7 @@ def _build_war_payload(war_id_strings):
 
 # ---------------------------------------------------------------------------
 # War creation — /wars/new redirects to the custom /wars/create page so the
-# generic schema form (dataItemNew.html) is never shown for wars.
+# generic schema form (dataItem.html's editable mode) is never shown for wars.
 # ---------------------------------------------------------------------------
 
 @war_routes.route("/wars/new", methods=["GET"])
@@ -915,7 +915,7 @@ def edit_war_form(item_ref):
     defender_participants = [p for p in participants if p["stance"] == "Defender"]
 
     return render_template(
-        "war_edit.html",
+        "war_item.html",
         war=war,
         war_id=war_id_str,
         participants=participants,
@@ -925,6 +925,7 @@ def edit_war_form(item_ref):
         current_session=current_session,
         war_types=_war_types(),
         war_goals_data=json_data.get("war_goals", {}),
+        editable=True,
     )
 
 

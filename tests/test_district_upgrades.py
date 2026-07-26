@@ -15,7 +15,7 @@ toggled this checkbox in this exact submission" — so a deliberate toggle was
 silently discarded 100% of the time. `upgrades_snapshot` (see forms.py's
 DistrictDict) mirrors `upgrades` exactly as rendered at GET time and is never
 touched by anything except a user's checkbox toggle (via syncDistrictUpgrades
-in nation_owner_edit.html). Comparing submitted `upgrades` against this
+in nation_owner.html's editable mode). Comparing submitted `upgrades` against this
 snapshot is what lets the helper tell the two cases apart:
   - submitted == snapshot  -> nothing changed here this submission -> may be
     stale -> overwrite with the live DB value.

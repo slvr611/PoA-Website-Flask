@@ -4,23 +4,32 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Path of Ages{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Caprasimo&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     <script src="{{ url_for('static', filename='js/expandable-sections.js') }}"></script>
     <script src="{{ url_for('static', filename='js/prevent-enter-submit.js') }}"></script>
     <script src="{{ url_for('static', filename='js/context-tooltips.js') }}"></script>
     <script src="{{ url_for('static', filename='js/mobile-nav.js') }}"></script>
 </head>
-<body>
+<body class="{% block body_class %}{% endblock %}">
+<div class="page-card">
+	{% set _p = request.path %}
+	{% set active_national = _p.startswith('/factions') or _p.startswith('/regions') or _p.startswith('/mercenaries') or _p.startswith('/merchants') or _p.startswith('/nations') %}
+	{% set active_demographics = _p.startswith('/demographics_overview') or _p.startswith('/races') or _p.startswith('/cultures') or _p.startswith('/religions') or _p.startswith('/pops') %}
+	{% set active_misc = _p.startswith('/artifacts') or _p.startswith('/characters') or _p.startswith('/diplo_relations') or _p.startswith('/diseases') or _p.startswith('/markets') or _p.startswith('/market_links') or _p.startswith('/spells') or _p.startswith('/titles') or _p.startswith('/districts') or _p.startswith('/units') or _p.startswith('/wars') or _p.startswith('/wonders') %}
 	<header>
 		<nav class="navbar">
 			<button type="button" class="nav-toggle" aria-expanded="false" aria-controls="site-nav-left" aria-label="Toggle navigation menu">&#9776;</button>
+			<span class="site-brand">Path of Ages</span>
 			<div class="nav-left" id="site-nav-left">
 				<ul class="nav-list">
-					<li class="nav-item"><a href="/">Home</a></li>
-					<li class="nav-item"><a href="/map">Map</a></li>
+					<li class="nav-item"><a class="nav-pill{% if _p == '/' %} active{% endif %}" href="/">Home</a></li>
+					<li class="nav-item"><a class="nav-pill{% if _p.startswith('/map') %} active{% endif %}" href="/map">Map</a></li>
 
 					<li class="nav-item dropdown">
-						<a href="#" class="dropbtn">National Entities</a>
+						<a href="#" class="dropbtn nav-pill{% if active_national %} active{% endif %}">National Entities</a>
 						<ul class="dropdown-content">
 							<li><a href="/factions">Factions</a></li>
 							<li><a href="/regions">Regions</a></li>
@@ -31,7 +40,7 @@
 					</li>
 
 					<li class="nav-item dropdown">
-						<a href="#" class="dropbtn">Demographics</a>
+						<a href="#" class="dropbtn nav-pill{% if active_demographics %} active{% endif %}">Demographics</a>
 						<ul class="dropdown-content">
 							<li><a href="/demographics_overview">Demographics Overview</a></li>
 							<li><a href="/races">Races</a></li>
@@ -40,9 +49,9 @@
 							<li><a href="/pops">Pops</a></li>
 						</ul>
 					</li>
-					
+
 					<li class="nav-item dropdown">
-						<a href="#" class="dropbtn">Misc</a>
+						<a href="#" class="dropbtn nav-pill{% if active_misc %} active{% endif %}">Misc</a>
 						<ul class="dropdown-content">
 							<li><a href="/artifacts">Artifacts</a></li>
 							<li><a href="/characters">Characters</a></li>
@@ -65,7 +74,7 @@
 					{% if g.user %}
 						{% if g.user.is_admin %}
 							<li class="nav-item dropdown">
-								<a href="/admin_tools" class="dropbtn">Admin Tools</a>
+								<a href="/admin_tools" class="dropbtn nav-pill{% if _p.startswith('/admin_tools') or _p.startswith('/changes') or _p.startswith('/tick_helper') or _p.startswith('/era_tick_helper') or _p.startswith('/karma_helper') or _p.startswith('/tick_summaries') or _p.startswith('/global_modifiers') %} active{% endif %}">Admin Tools</a>
 								<ul class="dropdown-content">
 									<li><a href="/admin_tools">Admin Tools Home (All Tools)</a></li>
 									<li><a href="/changes">Changes</a></li>
@@ -77,23 +86,23 @@
 								</ul>
 							</li>
 						{% endif %}
-						
+
 						<li class="nav-item dropdown">
 							{% if user_entities %}
-								<a href="#" class="dropbtn">Quick Links</a>
+								<a href="#" class="dropbtn nav-pill">Quick Links</a>
 								<ul class="dropdown-content">
 									{% if user_entities.characters %}
 										{% for character in user_entities.characters %}
 											<li><a href="/characters/item/{{ character.name }}">{{ character.name }}</a></li>
 										{% endfor %}
 									{% endif %}
-									
+
 									{% if user_entities.nations %}
 										{% for nation in user_entities.nations %}
 											<li><a href="/nations/item/{{ nation.name }}">{{ nation.name }}</a></li>
 										{% endfor %}
 									{% endif %}
-									
+
 									{% if user_entities.mercenaries %}
 										{% for mercenary in user_entities.mercenaries %}
 											<li><a href="/mercenaries/item/{{ mercenary.name }}">{{ mercenary.name }}</a></li>
@@ -115,13 +124,13 @@
 							{% endif %}
 						</li>
 
-						<a href="/my_changes">My Changes</a>
-						<a href="/logout">Logout</a>
+						<a class="nav-pill my-changes-link" href="/my_changes">My Changes{% if pending_changes_count %} <span class="count-badge">{{ pending_changes_count }}</span>{% endif %}</a>
+						<a class="nav-pill" href="/logout">Logout</a>
 						<a href="/players/item/{{ g.user.name }}">
-							<img src="{{ g.user.avatar_url }}" alt="User Avatar">
+							<img class="nav-avatar" src="{{ g.user.avatar_url }}" alt="User Avatar">
 						</a>
 					{% else %}
-						<a href="/login">Login</a>
+						<a class="nav-pill" href="/login">Login</a>
 					{% endif %}
 				</ul>
 			</div>
@@ -144,5 +153,6 @@
 		{% endwith %}
         {% block content %}There should be something here...{% endblock %}
     </main>
+</div>
 </body>
 </html>

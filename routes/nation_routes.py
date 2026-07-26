@@ -280,7 +280,7 @@ def nation_item(item_ref):
 
     calc_timings = {}
     breakdowns = nation.get("breakdowns", None)
-    required_breakdown_keys = {"stability_gain_chance", "stability_loss_chance", "resource_production", "resource_consumption", "money_income", "job_production", "job_consumption"}
+    required_breakdown_keys = {"stability_gain_chance", "stability_loss_chance", "stability_gain_chance_cap", "stability_loss_chance_cap", "resource_production", "resource_consumption", "money_income", "job_production", "job_consumption"}
     has_cached_breakdowns = isinstance(breakdowns, dict) and required_breakdown_keys.issubset(set(breakdowns.keys())) and "slave_capacity" in nation
 
     timings["calculate_all_fields_ms"] = 0.0
@@ -413,7 +413,7 @@ def nation_item(item_ref):
 
     # ── Disease info: active infections (derived from pops) + shared cure quests ──
     from helpers.disease_helpers import (
-        get_nation_infection_counts, get_global_infection_counts, resolve_diseases,
+        get_nation_infection_counts, get_global_infection_counts, get_global_accepted_count, resolve_diseases,
         active_stage_index, get_stage, get_difficulty_settings,
     )
     _infection_counts = get_nation_infection_counts(str(nation["_id"]))
@@ -446,7 +446,7 @@ def nation_item(item_ref):
         if not _d:
             continue
         _diff = get_difficulty_settings(_d)
-        _total_infected = _global_counts.get(str(_q.get("disease")), 0)
+        _total_infected = _global_counts.get(str(_q.get("disease")), 0) + get_global_accepted_count(_d)
         shared_quest_rows.append({
             "disease_name": _d.get("name", ""),
             "slot": _q.get("slot", "no_slot"),
@@ -639,8 +639,20 @@ def _render_nation_edit(item_ref, form=None):
     ]
     disease_name_map = {d["id"]: d["name"] for d in disease_options}
 
+    all_players = []
+    nation_players = []
+    if g.user and g.user.get("is_admin"):
+        all_players = list(mongo.db.players.find({}, {"_id": 1, "name": 1}).sort("name", 1))
+        player_ids = nation.get("players", [])
+        if player_ids:
+            try:
+                obj_ids = [ObjectId(pid) for pid in player_ids]
+                nation_players = list(mongo.db.players.find({"_id": {"$in": obj_ids}}, {"_id": 1, "name": 1}))
+            except Exception:
+                nation_players = []
+
     rendered = render_template(
-        "nation_owner_edit.html",
+        "nation_owner.html",
         form=form,
         form_json=wtform_to_json(form),
         title="Edit " + item_ref,
@@ -662,6 +674,8 @@ def _render_nation_edit(item_ref, form=None):
         visibility_bypassed=visibility_bypassed,
         disease_options=disease_options,
         disease_name_map=disease_name_map,
+        all_players=all_players,
+        nation_players=nation_players,
     )
     _r10 = perf_counter()
 

@@ -2,7 +2,8 @@ from flask import Blueprint, render_template, redirect, request, flash, url_for,
 from helpers.auth_helpers import admin_required
 from helpers.data_helpers import get_data_on_category
 from helpers.admin_tool_helpers import grow_all_population_async, roll_events_async, recalculate_all_items_async
-from app_core import category_data, mongo, json_data, temperament_enum
+from app_core import category_data, mongo, json_data, temperament_enum, find_dict_in_list
+from helpers.data_item_view_helpers import build_item_view
 from pymongo import ASCENDING
 from app_core import restore_mongodb_async
 from forms import form_generator
@@ -604,15 +605,22 @@ def global_modifiers():
         global_modifiers = {"name": "global_modifiers"}
         mongo.db.global_modifiers.insert_one(global_modifiers)
     
+    schema = category_data["global_modifiers"]["schema"]
+    item_view = build_item_view(
+        schema, global_modifiers, {}, {}, json_data,
+        None, None, False, 999,
+        find_dict_in_list, json_data.get("scope_definitions", {}),
+    )
     return render_template('dataItem.html',
                           item=global_modifiers,
                           title="Global Modifier",
                           category="global_modifiers",
-                          schema=category_data["global_modifiers"]["schema"],
+                          schema=schema,
                           field_tiers=None,
                           visibility_level=None,
                           visibility_bypassed=False,
-                          json_data=json_data)
+                          json_data=json_data,
+                          item_view=item_view)
 
 @admin_tool_routes.route('/global_modifiers/edit/global_modifiers', methods=['GET'])
 @admin_required
@@ -625,12 +633,15 @@ def edit_global_modifiers():
     schema = category_data["global_modifiers"]["schema"]
     form = form_generator.get_form("global_modifiers", schema, item=global_modifiers)
     
-    return render_template('dataItemEdit.html', 
-                          item=global_modifiers, 
-                          title="Global Modifier", 
+    return render_template('dataItem.html',
+                          item=global_modifiers,
+                          title="Global Modifier",
                           category="global_modifiers",
                           schema=schema,
-                          form=form)
+                          form=form,
+                          data_type="global_modifiers",
+                          entity_source_type="global",
+                          editable=True)
 
 @admin_tool_routes.route("/temperament_overview")
 @admin_required

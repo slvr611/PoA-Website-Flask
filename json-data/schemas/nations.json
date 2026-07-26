@@ -872,6 +872,11 @@
         "label": "Mech RP Cooldowns",
         "description": "Internal, tick-managed map of {mrp_key: session last attempted}, used to enforce each mech RP definition's cooldown_sessions. Not directly editable."
       },
+      "heir_training_bonuses": {
+        "bsonType": "object",
+        "label": "Heir Training Bonuses",
+        "description": "Internal, tick-managed map of {stat: banked points} from Heir Training mech RPs, applied as modifiers to the next AI ruler generated for this nation and then cleared. Not directly editable."
+      },
       "pop_flee_chance": {
         "bsonType": "number",
         "label": "Pop Flee Chance",

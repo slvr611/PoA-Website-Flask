@@ -769,12 +769,8 @@
     techListBtn.addEventListener('click', showTechListView);
     techGraphBtn.addEventListener('click', showTechGraphView);
 
-    // Default: list view on mobile (illegible-graph territory), graph on desktop.
-    if (window.matchMedia('(max-width: 768px)').matches) {
-        showTechListView();
-    } else {
-        showTechGraphView();
-    }
+    // Default to the tier-list view; Graph remains reachable via the toggle button.
+    showTechListView();
 </script>
 {% endmacro %}
 

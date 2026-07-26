@@ -1,9 +1,328 @@
 {% extends "layout.html" %}
 
-{% block title %}{{ war.name }}{% endblock %}
+{% block title %}{% if editable %}Edit – {{ war.name }}{% else %}{{ war.name }}{% endif %}{% endblock %}
 
 {% block content %}
 <div class="container">
+{% if editable %}
+    <a href="/wars/item/{{ war.name | urlencode }}">← Back to War</a>
+
+    {% with messages = get_flashed_messages() %}
+        {% if messages %}<ul class="errors">{% for m in messages %}<li>{{ m }}</li>{% endfor %}</ul>{% endif %}
+    {% endwith %}
+
+    <h1>Edit: {{ war.name }}</h1>
+
+    <form method="POST" action="/wars/edit/{{ war_id }}/save">
+
+        {# ── Basic fields ── #}
+        <table class="info-table" style="margin-bottom:1.5rem;">
+            <tr>
+                <th><label for="name">War Name</label></th>
+                <td><input type="text" id="name" name="name" class="form-control" value="{{ war.name }}" required></td>
+            </tr>
+            <tr>
+                <th>Session Declared</th>
+                <td style="color:#aaa;">{{ war.session_declared if war.session_declared is not none else '—' }}</td>
+            </tr>
+            <tr>
+                <th><label for="session_ended">Session Ended</label></th>
+                <td>
+                    <select id="session_ended" name="session_ended" class="form-control" style="min-width:120px;">
+                        <option value="ongoing" {% if war.session_ended is none %}selected{% endif %}>Ongoing</option>
+                        {% set start = (war.session_declared or 1)|int %}
+                        {% for s in range(start, current_session + 1) %}
+                        <option value="{{ s }}" {% if war.session_ended == s %}selected{% endif %}>Session {{ s }}</option>
+                        {% endfor %}
+                    </select>
+                </td>
+            </tr>
+            <tr>
+                <th><label for="victor">Victor</label></th>
+                <td>
+                    <select id="victor" name="victor" class="form-control" style="min-width:120px;">
+                        <option value="None" {% if not war.victor or war.victor == "None" %}selected{% endif %}>— None —</option>
+                        <option value="Aggressor" {% if war.victor == "Aggressor" %}selected{% endif %}>Aggressor</option>
+                        <option value="Defender" {% if war.victor == "Defender" %}selected{% endif %}>Defender</option>
+                    </select>
+                </td>
+            </tr>
+            <tr>
+                <th><label for="war_type">War Type</label></th>
+                <td>
+                    <select id="war_type" name="war_type" class="form-control" onchange="onWarTypeChange()">
+                        <option value="">— None —</option>
+                        {% for key, wt in war_types.items() %}
+                        <option value="{{ key }}" {% if war.war_type == key %}selected{% endif %}>{{ wt.display_name }}</option>
+                        {% endfor %}
+                    </select>
+                </td>
+            </tr>
+            <tr>
+                <th><label for="primary_aggressor">Primary Aggressor</label></th>
+                <td>
+                    <select id="primary_aggressor" name="primary_aggressor" class="form-control">
+                        <option value="">— Select from Attacker participants —</option>
+                        {% for p in attacker_participants %}
+                        <option value="{{ p.nation_id_str }}" {% if war.primary_aggressor == p.nation_id_str %}selected{% endif %}>{{ p.nation.name }}</option>
+                        {% endfor %}
+                    </select>
+                </td>
+            </tr>
+            <tr>
+                <th><label for="primary_defender">Primary Defender</label></th>
+                <td>
+                    <select id="primary_defender" name="primary_defender" class="form-control">
+                        <option value="">— Select from Defender participants —</option>
+                        {% for p in defender_participants %}
+                        <option value="{{ p.nation_id_str }}" {% if war.primary_defender == p.nation_id_str %}selected{% endif %}>{{ p.nation.name }}</option>
+                        {% endfor %}
+                    </select>
+                </td>
+            </tr>
+        </table>
+
+        {# ── Participants ── #}
+        <h2 style="margin-bottom:0.5rem;">Participants</h2>
+        <table class="info-table war-edit-table">
+            <thead><tr><th>Nation</th><th>Stance</th><th>Actions</th></tr></thead>
+            <tbody id="participants-tbody">
+                {% for p in participants %}
+                <tr>
+                    <input type="hidden" name="participants-{{ loop.index0 }}-link_id"  value="{{ p.link_id }}">
+                    <input type="hidden" name="participants-{{ loop.index0 }}-nation_id" value="{{ p.nation_id_str }}">
+                    <td>{{ p.nation.name }}</td>
+                    <td>
+                        <select name="participants-{{ loop.index0 }}-stance" class="form-control we-stance">
+                            <option value="Attacker" {% if p.stance == "Attacker" %}selected{% endif %}>Attacker</option>
+                            <option value="Defender" {% if p.stance == "Defender" %}selected{% endif %}>Defender</option>
+                        </select>
+                    </td>
+                    <td><button type="button" class="btn-remove" onclick="removeParticipantRow(this)">Remove</button></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <button type="button" class="btn-add" onclick="addParticipantRow()">+ Add Participant</button>
+
+        {# ── War Goals — fully JS-driven so they update when war_type changes ── #}
+        <div id="goals-section" style="margin-top:1.5rem;display:none;">
+            <h2 style="margin-bottom:0.25rem;">War Goals</h2>
+            <div id="slot-summary" style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-bottom:0.75rem;"></div>
+            <table class="info-table war-edit-table">
+                <thead><tr><th>Tier</th><th>Goal</th><th>Attacker</th><th>Target</th><th>Notes</th><th></th></tr></thead>
+                <tbody id="goals-tbody"></tbody>
+            </table>
+            <div id="goal-pickers" style="margin-top:0.5rem;display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;"></div>
+        </div>
+
+        <div style="margin-top:1.5rem;">
+            <button type="submit" class="btn-save">Save Changes</button>
+            <a href="/wars/item/{{ war.name | urlencode }}" style="margin-left:1rem;color:#aaa;">Cancel</a>
+        </div>
+    </form>
+</div>
+
+{# Embed existing war goals for JS to pre-populate the table #}
+<script>
+const WAR_GOALS_DATA  = {{ war_goals_data | tojson }};
+const ALL_WAR_TYPES   = {{ war_types | tojson }};
+const SLOT_ORDER      = ["Trivial", "Minor", "Standard", "Extreme"];
+
+// Participant lists (server-rendered, static for this page load)
+const ATTACKER_NAMES = [{% for p in attacker_participants %}{{ p.nation.name | tojson }}{% if not loop.last %},{% endif %}{% endfor %}];
+const DEFENDER_NAMES = [{% for p in defender_participants %}{{ p.nation.name | tojson }}{% if not loop.last %},{% endif %}{% endfor %}];
+
+// All nations for the "add participant" dropdown
+const ALL_NATIONS = [{% for n in all_nations %}{"id":{{ n._id | string | tojson }},"name":{{ n.name | tojson }}}{% if not loop.last %},{% endif %}{% endfor %}];
+
+// Existing goals loaded server-side
+const EXISTING_GOALS = {{ (war.war_goals or []) | tojson }};
+
+let SLOT_LIMITS = {};
+let goalCount = 0;
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+function _participantOptions(names, selectedVal, blankLabel) {
+    return `<option value="">${blankLabel}</option>` +
+        names.map(n => `<option value="${n}"${n===selectedVal?' selected':''}>${n}</option>`).join('');
+}
+
+function _allNationOptions(selectedId) {
+    return ALL_NATIONS.map(n =>
+        `<option value="${n.id}"${n.id===selectedId?' selected':''}>${n.name}</option>`
+    ).join('');
+}
+
+// ── War type ──────────────────────────────────────────────────────────────────
+function onWarTypeChange() {
+    const key = document.getElementById('war_type').value;
+    const wt  = ALL_WAR_TYPES[key] || {};
+    SLOT_LIMITS = wt.slots || {};
+
+    const hasSlots = Object.keys(SLOT_LIMITS).length > 0;
+    document.getElementById('goals-section').style.display = hasSlots ? '' : 'none';
+    rebuildSlotSummary();
+    rebuildGoalPickers();
+}
+
+// ── Slot summary ──────────────────────────────────────────────────────────────
+function rebuildSlotSummary() {
+    const el = document.getElementById('slot-summary');
+    el.innerHTML = '';
+    SLOT_ORDER.filter(t => SLOT_LIMITS[t]).forEach(t => {
+        const span = document.createElement('span');
+        span.id = `slot-${t.toLowerCase()}`;
+        span.style.cssText = 'padding:3px 12px;border-radius:4px;font-size:0.82rem;background:#333;color:#aaa;border:1px solid #555;';
+        el.appendChild(span);
+    });
+    updateSlotSummary();
+}
+
+function updateSlotSummary() {
+    SLOT_ORDER.filter(t => SLOT_LIMITS[t]).forEach(t => {
+        const el = document.getElementById(`slot-${t.toLowerCase()}`);
+        if (!el) return;
+        const used = Array.from(document.querySelectorAll('input[name$="-slot_tier"]')).filter(i => i.value === t).length;
+        const over = used > SLOT_LIMITS[t];
+        el.textContent = `${t}: ${used}/${SLOT_LIMITS[t]}`;
+        el.style.color = over ? '#e08080' : '#aaa';
+        el.style.borderColor = over ? '#e08080' : '#555';
+    });
+}
+
+// ── Goal pickers ──────────────────────────────────────────────────────────────
+function rebuildGoalPickers() {
+    const el = document.getElementById('goal-pickers');
+    el.innerHTML = '';
+    SLOT_ORDER.filter(t => SLOT_LIMITS[t]).forEach(t => {
+        const tierGoals = WAR_GOALS_DATA[t.toLowerCase()] || {};
+        const opts = Object.entries(tierGoals).map(([k,d]) => `<option value="${k}">${d.display_name}</option>`).join('');
+        const wrap = document.createElement('div');
+        wrap.style.cssText = 'display:flex;gap:0.4rem;align-items:center;';
+        wrap.innerHTML =
+            `<span style="font-size:0.82rem;color:#aaa;white-space:nowrap;">+ ${t}:</span>` +
+            `<select id="add-goal-${t.toLowerCase()}" class="form-control" style="min-width:180px;">` +
+                `<option value="">— select goal —</option>${opts}` +
+            `</select>` +
+            `<button type="button" class="btn-add" onclick="addGoalRow('${t}')">Add</button>`;
+        el.appendChild(wrap);
+    });
+}
+
+// ── Goal rows ─────────────────────────────────────────────────────────────────
+function addGoalRow(tier, selectedGoalKey, selectedAttacker, selectedTarget, existingNotes) {
+    const sel = document.getElementById('add-goal-' + tier.toLowerCase());
+    const goalKey = selectedGoalKey || (sel ? sel.value : '');
+    if (!goalKey) return;
+
+    if (!selectedGoalKey) {  // user-initiated (not pre-populate)
+        const max = SLOT_LIMITS[tier] || 0;
+        const used = Array.from(document.querySelectorAll('input[name$="-slot_tier"]')).filter(i => i.value === tier).length;
+        if (used >= max) { alert(`No remaining ${tier} slots (${used}/${max} used).`); return; }
+
+        const goalDef = (WAR_GOALS_DATA[tier.toLowerCase()] || {})[goalKey] || {};
+        if (goalDef.max_per_war !== null && goalDef.max_per_war !== undefined) {
+            const already = Array.from(document.querySelectorAll('input[name$="-goal_key"]')).filter(i => i.value === goalKey).length;
+            if (already >= goalDef.max_per_war) {
+                alert(`"${goalDef.display_name}" may only be used ${goalDef.max_per_war} time(s) per war.`);
+                return;
+            }
+        }
+    }
+
+    const goalDef = (WAR_GOALS_DATA[tier.toLowerCase()] || {})[goalKey] || {};
+    const idx = goalCount++;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+        <input type="hidden" name="goals-${idx}-slot_tier" value="${tier}">
+        <input type="hidden" name="goals-${idx}-goal_key"  value="${goalKey}">
+        <td><span class="tier-badge-sm">${tier}</span></td>
+        <td>${goalDef.display_name || goalKey}</td>
+        <td><select name="goals-${idx}-attacker" class="form-control we-goal-nation">
+            ${_participantOptions(ATTACKER_NAMES, selectedAttacker || '', '— Any attacker —')}
+        </select></td>
+        <td><select name="goals-${idx}-target" class="form-control we-goal-nation">
+            ${_participantOptions(DEFENDER_NAMES, selectedTarget || '', '— Any defender —')}
+        </select></td>
+        <td><input type="text" name="goals-${idx}-notes" class="form-control" style="min-width:150px;" placeholder="Notes" value="${existingNotes || ''}"></td>
+        <td><button type="button" class="btn-remove" onclick="removeGoalRow(this)">Remove</button></td>
+    `;
+    document.getElementById('goals-tbody').appendChild(tr);
+    if (sel && !selectedGoalKey) sel.value = '';
+    updateSlotSummary();
+}
+
+function removeGoalRow(btn) {
+    btn.closest('tr').remove();
+    updateSlotSummary();
+}
+
+// ── Participants ───────────────────────────────────────────────────────────────
+function _rowIndex() { return document.getElementById('participants-tbody').children.length; }
+
+function _reindex() {
+    Array.from(document.getElementById('participants-tbody').children).forEach((tr, i) => {
+        tr.querySelectorAll('input[name],select[name]').forEach(el => {
+            el.name = el.name.replace(/participants-\d+-/, `participants-${i}-`);
+        });
+    });
+}
+
+function addParticipantRow(nationId, stance) {
+    const idx = _rowIndex();
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+        <input type="hidden" name="participants-${idx}-link_id" value="">
+        <td><select name="participants-${idx}-nation_id" class="form-control we-nation">
+            <option value="">— select nation —</option>
+            ${_allNationOptions(nationId || '')}
+        </select></td>
+        <td><select name="participants-${idx}-stance" class="form-control we-stance">
+            <option value="Attacker"${stance==='Attacker'?' selected':''}>Attacker</option>
+            <option value="Defender"${stance==='Defender'?' selected':''}>Defender</option>
+        </select></td>
+        <td><button type="button" class="btn-remove" onclick="removeParticipantRow(this)">Remove</button></td>
+    `;
+    document.getElementById('participants-tbody').appendChild(tr);
+}
+
+function removeParticipantRow(btn) {
+    btn.closest('tr').remove();
+    _reindex();
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────────
+(function init() {
+    // Apply current war_type on load
+    onWarTypeChange();
+
+    // Pre-populate existing goals
+    EXISTING_GOALS.forEach(wg => {
+        if (wg.slot_tier && wg.goal_key) {
+            addGoalRow(wg.slot_tier, wg.goal_key, wg.attacker, wg.target, wg.notes);
+        }
+    });
+})();
+</script>
+
+<style>
+.war-edit-table { width:100%;margin-bottom:0.5rem; }
+.war-edit-table th { text-align:left;padding:6px 10px; }
+.war-edit-table td { padding:4px 10px;vertical-align:middle; }
+.war-edit-table input[type="hidden"] { display:none; }
+.we-stance { min-width:110px; }
+.we-nation { min-width:200px; }
+.we-goal-nation { min-width:150px; }
+.tier-badge-sm { display:inline-block;font-size:0.75rem;padding:2px 8px;border-radius:3px;background:#333;color:#aaa;border:1px solid #555;white-space:nowrap; }
+.btn-add { background:#2a3f2a;color:#90d090;border:1px solid #4a7a4a;border-radius:4px;padding:6px 14px;cursor:pointer;font-size:0.9rem;margin-top:4px; }
+.btn-add:hover { background:#33502a; }
+.btn-remove { background:#3f2a2a;color:#d09090;border:1px solid #7a4a4a;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:0.85rem; }
+.btn-remove:hover { background:#502a2a; }
+.btn-save { background:#2a3f5a;color:#90b8e0;border:1px solid #3a5a8a;border-radius:4px;padding:7px 18px;cursor:pointer;font-size:0.95rem; }
+.btn-save:hover { background:#334d72; }
+</style>
+{% else %}
     <div class="war-nav">
         <a href="/wars">← All Wars</a>
         {% if g.user and g.user.get("is_admin") %}
@@ -567,4 +886,5 @@ ${goalLines}
     _copyToClipboard(text, "copy-declaration-btn", "📋 Copy Declaration");
 }
 </script>
+{% endif %}
 {% endblock %}

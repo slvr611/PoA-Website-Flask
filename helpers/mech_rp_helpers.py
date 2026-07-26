@@ -21,6 +21,8 @@ planned_district for the same nation within the same tick pass.
 import random
 from copy import deepcopy
 
+from bson import ObjectId
+
 from app_core import mongo, category_data
 from helpers.ai_decision_helpers import (
     evaluate_nation_state, get_ai_personality, compute_need_weights,
@@ -30,6 +32,19 @@ from helpers.ai_decision_helpers import (
 from helpers.hex_map_helpers import select_passive_expansion_tiles
 
 CHARACTER_STATS = ["rulership", "cunning", "charisma", "prowess", "magic", "strategy"]
+
+# Culture/religion documents rate their pull with a "conversion_strength" enum
+# (json-data/schemas/cultures.json, religions.json) that nothing previously
+# consumed. Convert Population mech RPs use it to scale how many pops a
+# successful attempt actually converts.
+CONVERSION_STRENGTH_MULTIPLIER = {
+    "None": 0.0,
+    "Weak": 0.5,
+    "Moderate": 1.0,
+    "Strong": 1.5,
+    "Intense": 2.0,
+    "Zealous": 3.0,
+}
 
 TIER_ORDER = ["critical_failure", "failure", "partial_success", "success", "critical_success"]
 
@@ -194,7 +209,7 @@ def _grant_specific_resource(old_nation, new_nation, resource_key, amount, label
     return f"{name} gained {amount} {resource_key} from {label}.\n"
 
 
-def _apply_grant_resources(old_nation, new_nation, schema, mrp_def, magnitude, target_resource, need_weights, state, dry_run=False):
+def _apply_grant_resources(old_nation, new_nation, schema, mrp_def, magnitude, target_resource, need_weights, state, dry_run=False, acting_character=None, stat_used=None, conversion_target=None):
     if magnitude <= 0 or not target_resource:
         return ""
     return _grant_specific_resource(
@@ -203,7 +218,7 @@ def _apply_grant_resources(old_nation, new_nation, schema, mrp_def, magnitude, t
     )
 
 
-def _apply_adjust_stability(old_nation, new_nation, schema, mrp_def, magnitude, target_resource, need_weights, state, dry_run=False):
+def _apply_adjust_stability(old_nation, new_nation, schema, mrp_def, magnitude, target_resource, need_weights, state, dry_run=False, acting_character=None, stat_used=None, conversion_target=None):
     if magnitude == 0:
         return ""
     from helpers.tick_helpers import adjust_stability
@@ -211,7 +226,7 @@ def _apply_adjust_stability(old_nation, new_nation, schema, mrp_def, magnitude, 
     return adjust_stability(old_nation, new_nation, schema, [int(magnitude)], [label])
 
 
-def _apply_expand_territory(old_nation, new_nation, schema, mrp_def, magnitude, target_resource, need_weights, state, dry_run=False):
+def _apply_expand_territory(old_nation, new_nation, schema, mrp_def, magnitude, target_resource, need_weights, state, dry_run=False, acting_character=None, stat_used=None, conversion_target=None):
     """dry_run=True simulates tile selection (for the read-only AI Goals
     Preview tool) WITHOUT writing to hex_map_tiles/nations or bumping the map
     version — mirrors the dry_run convention already used by
@@ -253,7 +268,7 @@ def _apply_expand_territory(old_nation, new_nation, schema, mrp_def, magnitude, 
     return f"{nation_name} {verb} into {len(claimed)} tile(s) from a mech RP ({mrp_def.get('name', mrp_def.get('key', '?'))}).\n"
 
 
-def _apply_gain_money(old_nation, new_nation, schema, mrp_def, magnitude, target_resource, need_weights, state, dry_run=False):
+def _apply_gain_money(old_nation, new_nation, schema, mrp_def, magnitude, target_resource, need_weights, state, dry_run=False, acting_character=None, stat_used=None, conversion_target=None):
     amount = int(magnitude) * 50
     if amount == 0:
         return ""
@@ -262,7 +277,7 @@ def _apply_gain_money(old_nation, new_nation, schema, mrp_def, magnitude, target
     return f"{name} gained {amount} gold from a mech RP ({mrp_def.get('name', mrp_def.get('key', '?'))}).\n"
 
 
-def _apply_grant_temp_modifier(old_nation, new_nation, schema, mrp_def, magnitude, target_resource, need_weights, state, dry_run=False):
+def _apply_grant_temp_modifier(old_nation, new_nation, schema, mrp_def, magnitude, target_resource, need_weights, state, dry_run=False, acting_character=None, stat_used=None, conversion_target=None):
     if magnitude == 0:
         return ""
     import uuid
@@ -297,7 +312,7 @@ def _score_law_value(law_dict, need_weights):
     return score
 
 
-def _apply_change_law(old_nation, new_nation, schema, mrp_def, magnitude, target_resource, need_weights, state, dry_run=False):
+def _apply_change_law(old_nation, new_nation, schema, mrp_def, magnitude, target_resource, need_weights, state, dry_run=False, acting_character=None, stat_used=None, conversion_target=None):
     if magnitude <= 0:
         return ""
     axis = mrp_def.get("law_axis", "")
@@ -333,6 +348,117 @@ def _apply_change_law(old_nation, new_nation, schema, mrp_def, magnitude, target
     return f"{name} changed its {axis_label} from {current_value} to {best_value} following a mech RP ({mrp_def.get('name', mrp_def.get('key', '?'))}).\n"
 
 
+def _apply_character_training(old_nation, new_nation, schema, mrp_def, magnitude, target_resource, need_weights, state, dry_run=False, acting_character=None, stat_used=None, conversion_target=None):
+    """Grant the acting character stat points directly, in the stat used for
+    this roll — replaces the AI's old passive per-session stat gain, which
+    used to roll independently for every stat and snowball far past players."""
+    gain = int(magnitude)
+    if gain == 0 or not acting_character or not stat_used:
+        return ""
+    name = acting_character.get("name", "Unknown")
+    cap = acting_character.get(f"{stat_used}_cap", 4)
+    current = acting_character.get(stat_used, 0)
+    gain = min(gain, max(0, cap - current)) if gain > 0 else gain
+    if gain == 0:
+        return f"{name} is already at their {stat_used} cap — Character Training had no effect.\n"
+    label = f"Mech RP: {mrp_def.get('name', mrp_def.get('key', '?'))}"
+    if dry_run:
+        return f"{name} would gain {gain} {stat_used} from a mech RP ({mrp_def.get('name', mrp_def.get('key', '?'))}).\n"
+    import uuid
+    from helpers.change_helpers import system_request_change, system_approve_change
+    new_character = deepcopy(acting_character)
+    modifiers = list(new_character.get("modifiers") or [])
+    modifiers.append({
+        "_id": uuid.uuid4().hex[:8],
+        "modifier_type": "attribute",
+        "attribute": stat_used,
+        "value": gain,
+        "duration": -1,
+        "source": label,
+    })
+    new_character["modifiers"] = modifiers
+    change_id = system_request_change(
+        data_type="characters",
+        item_id=acting_character["_id"],
+        change_type="Update",
+        before_data=acting_character,
+        after_data=new_character,
+        reason=f"Character Training mech RP for {name}",
+    )
+    system_approve_change(change_id)
+    return f"{name} gained {gain} {stat_used} from a mech RP ({mrp_def.get('name', mrp_def.get('key', '?'))}).\n"
+
+
+def _apply_heir_training(old_nation, new_nation, schema, mrp_def, magnitude, target_resource, need_weights, state, dry_run=False, acting_character=None, stat_used=None, conversion_target=None):
+    """Bank stat points on the nation for whoever succeeds the current ruler.
+    Only mutates the in-memory new_nation dict (like every handler besides
+    expand_territory), so no dry_run handling is needed here — the actual
+    apply-and-clear happens later in generate_ai_character
+    (helpers/tick_helpers.py) the next time this nation generates a new ruler."""
+    gain = int(magnitude)
+    if gain == 0 or not stat_used:
+        return ""
+    name = old_nation.get("name", "Unknown")
+    bonuses = dict(new_nation.get("heir_training_bonuses") or old_nation.get("heir_training_bonuses") or {})
+    if gain < 0 and not bonuses.get(stat_used):
+        return ""
+    bonuses[stat_used] = max(0, bonuses.get(stat_used, 0) + gain)
+    new_nation["heir_training_bonuses"] = bonuses
+    if gain < 0:
+        return f"{name} lost {-gain} banked {stat_used} of heir training from a mech RP ({mrp_def.get('name', mrp_def.get('key', '?'))}).\n"
+    return f"{name} banked {gain} {stat_used} of heir training for its next ruler from a mech RP ({mrp_def.get('name', mrp_def.get('key', '?'))}).\n"
+
+
+def _apply_convert_population(old_nation, new_nation, schema, mrp_def, magnitude, target_resource, need_weights, state, dry_run=False, acting_character=None, stat_used=None, conversion_target=None):
+    """Convert pops (domestic or a nearby foreign nation's) to this nation's
+    own primary culture/religion. Writes directly to the pops collection —
+    like _apply_expand_territory's tile claims, this is a real, immediate DB
+    write outside the normal new_nation diffing, so it must respect dry_run."""
+    if magnitude <= 0 or not conversion_target:
+        return ""
+    field = mrp_def.get("conversion_field", "culture")
+    own_value = old_nation.get(f"primary_{field}", "")
+    if not own_value:
+        return ""
+
+    is_foreign = conversion_target.get("is_foreign")
+    target_nation_id = conversion_target.get("target_nation_id")
+    eligible_count = conversion_target.get("eligible_count", 0)
+    strength_multiplier = conversion_target.get("strength_multiplier", 1.0)
+
+    count = min(int(magnitude * strength_multiplier), eligible_count)
+    if count <= 0:
+        return ""
+
+    nation_name = old_nation.get("name", "Unknown")
+    label = mrp_def.get("name", mrp_def.get("key", "?"))
+
+    if is_foreign:
+        query_nation_id = target_nation_id
+        try:
+            target_doc = mongo.db.nations.find_one({"_id": ObjectId(target_nation_id)}, {"name": 1})
+        except Exception:
+            target_doc = None
+        target_desc = f"pops in {target_doc['name']}" if target_doc else "foreign pops"
+    else:
+        query_nation_id = str(old_nation.get("_id", ""))
+        target_desc = f"{nation_name}'s own pops"
+
+    if dry_run:
+        return f"{nation_name} would convert {count} {target_desc} to its {field} from a mech RP ({label}).\n"
+
+    pop_ids = [
+        p["_id"] for p in mongo.db.pops.find(
+            {"nation": query_nation_id, field: {"$nin": [None, "", own_value]}},
+            {"_id": 1},
+        ).limit(count)
+    ]
+    if not pop_ids:
+        return ""
+    mongo.db.pops.update_many({"_id": {"$in": pop_ids}}, {"$set": {field: own_value}})
+    return f"{nation_name} converted {len(pop_ids)} {target_desc} to its {field} from a mech RP ({label}).\n"
+
+
 MRP_EFFECT_HANDLERS = {
     "grant_resources": _apply_grant_resources,
     "adjust_stability": _apply_adjust_stability,
@@ -340,11 +466,111 @@ MRP_EFFECT_HANDLERS = {
     "gain_money": _apply_gain_money,
     "grant_temp_modifier": _apply_grant_temp_modifier,
     "change_law": _apply_change_law,
+    "character_training": _apply_character_training,
+    "heir_training": _apply_heir_training,
+    "convert_population": _apply_convert_population,
 }
 
 
 def _magnitude_for_tier(mrp_def, tier):
     return mrp_def.get(f"tier_magnitude_{tier}", 0) or 0
+
+
+# ---------------------------------------------------------------------------
+# Target selection: expand_territory (DC) and convert_population (DC + target)
+# ---------------------------------------------------------------------------
+
+def _expand_territory_difficulty(mrp_def, old_nation):
+    """DC for an expand_territory attempt: harder the more tiles this
+    definition is themed around claiming (tiles_requested), easier with more
+    administration. tiles_requested only feeds the DC — the actual tiles
+    claimed on success still follows tier_magnitude_* as before."""
+    tiles_requested = mrp_def.get("tiles_requested", 1) or 1
+    per_tile = mrp_def.get("difficulty_per_tile", 0) or 0
+    admin_reduction = mrp_def.get("difficulty_reduction_per_admin", 0) or 0
+    administration = old_nation.get("administration", 0) or 0
+    difficulty = mrp_def.get("base_difficulty", 10) + tiles_requested * per_tile - administration * admin_reduction
+    return max(1, difficulty)
+
+
+def _best_foreign_conversion_target(old_nation, field, cache=None):
+    """Nearby-nation scan for convert_population's foreign fallback —
+    get_nations_within_distance does a full hex-map pass, so this memoizes
+    per (nation, field) in the caller-supplied cache to avoid repeating that
+    scan across multiple attempts/defs within one select_mech_rps call. Only
+    depends on the acting nation and field, not on which mrp_def is asking."""
+    if cache is not None and field in cache:
+        return cache[field]
+    try:
+        from helpers.hex_map_helpers import get_nations_within_distance
+        nearby_names = get_nations_within_distance(old_nation.get("name", ""), 5)
+    except Exception:
+        nearby_names = []
+    own_value = old_nation.get(f"primary_{field}", "")
+    best_target, best_count = None, 0
+    for cand_name in nearby_names:
+        cand = mongo.db.nations.find_one({"name": cand_name}, {"_id": 1})
+        if not cand:
+            continue
+        cand_id = str(cand["_id"])
+        count = mongo.db.pops.count_documents({
+            "nation": cand_id, field: {"$nin": [None, "", own_value]},
+        })
+        if count > best_count:
+            best_target, best_count = cand_id, count
+    result = (best_target, best_count)
+    if cache is not None:
+        cache[field] = result
+    return result
+
+
+def _pick_conversion_target(mrp_def, old_nation, state, cache=None):
+    """Choose what a convert_population attempt targets this session: pops
+    within the nation's own borders (domestic, preferred — lower DC) or a
+    nearby foreign nation's pops (foreign, only when no domestic candidates
+    exist). Returns a dict with is_foreign/target_nation_id/eligible_count/
+    difficulty/strength_multiplier, or None when nothing is convertible.
+
+    `cache` (see _best_foreign_conversion_target) makes the expensive foreign
+    scan a one-time cost per field for the whole select_mech_rps call instead
+    of once per attempt per convert_population mech RP def."""
+    field = mrp_def.get("conversion_field", "culture")
+    own_value = old_nation.get(f"primary_{field}", "")
+    if not own_value:
+        return None
+
+    collection_name = "cultures" if field == "culture" else "religions"
+    try:
+        own_doc = mongo.db[collection_name].find_one({"_id": ObjectId(str(own_value))}, {"conversion_strength": 1})
+    except Exception:
+        own_doc = None
+    strength = (own_doc or {}).get("conversion_strength", "None")
+    multiplier = CONVERSION_STRENGTH_MULTIPLIER.get(strength, 0.0)
+    if multiplier <= 0:
+        # Own culture/religion has no conversion pull — nothing to attempt.
+        return None
+
+    base_difficulty = mrp_def.get("base_difficulty", 10)
+    nation_id = str(old_nation.get("_id", ""))
+    domestic_count = mongo.db.pops.count_documents({
+        "nation": nation_id, field: {"$nin": [None, "", own_value]},
+    })
+    if domestic_count > 0:
+        return {
+            "is_foreign": False, "target_nation_id": None,
+            "eligible_count": domestic_count, "difficulty": base_difficulty,
+            "strength_multiplier": multiplier,
+        }
+
+    foreign_modifier = mrp_def.get("foreign_conversion_difficulty_modifier", 0) or 0
+    best_target, best_count = _best_foreign_conversion_target(old_nation, field, cache=cache)
+    if not best_target:
+        return None
+    return {
+        "is_foreign": True, "target_nation_id": best_target,
+        "eligible_count": best_count, "difficulty": base_difficulty + foreign_modifier,
+        "strength_multiplier": multiplier,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -448,10 +674,11 @@ def select_mech_rps(old_nation, new_nation, state, goal, secondary_goal, persona
     persisted ai_state.mech_rps shape; log_lines is a list of human-readable
     strings for the tick summary.
 
-    dry_run=True simulates territory-expansion tile selection without
-    writing to hex_map_tiles/nations or bumping the map version — used by the
-    read-only AI Goals Preview tool so viewing a preview never mutates the
-    live hex map. All other effect handlers only ever mutate the passed-in
+    dry_run=True skips the real, immediate DB writes made outside the normal
+    new_nation diffing — expand_territory's tile claims, character_training's
+    character update, and convert_population's pop conversions — used by the
+    read-only AI Goals Preview tool so viewing a preview never mutates live
+    data. Every other effect handler only ever mutates the passed-in
     new_nation dict, so they're already preview-safe without needing dry_run.
     """
     nation_id = str(old_nation.get("_id", ""))
@@ -475,6 +702,7 @@ def select_mech_rps(old_nation, new_nation, state, goal, secondary_goal, persona
     attempts = []
     log_lines = []
     pops_used_cooldowns = dict(cooldowns)
+    foreign_conversion_cache = {}
 
     for _attempt in range(MAX_ATTEMPTS_PER_SESSION):
         candidates = []
@@ -490,10 +718,19 @@ def select_mech_rps(old_nation, new_nation, state, goal, secondary_goal, persona
                 continue
 
             target_resource, difficulty = (None, mrp_def.get("base_difficulty", 10))
-            if mrp_def.get("effect_type") == "grant_resources":
+            conversion_target = None
+            effect_type = mrp_def.get("effect_type", "")
+            if effect_type == "grant_resources":
                 target_resource, difficulty = _pick_target_resource(mrp_def, old_nation, state)
                 if target_resource is None:
                     continue
+            elif effect_type == "expand_territory":
+                difficulty = _expand_territory_difficulty(mrp_def, old_nation)
+            elif effect_type == "convert_population":
+                conversion_target = _pick_conversion_target(mrp_def, old_nation, state, cache=foreign_conversion_cache)
+                if conversion_target is None:
+                    continue
+                difficulty = conversion_target["difficulty"]
 
             acting_character = _pick_acting_character(characters, mrp_def.get("relevant_stats"))
             modifier_total = _modifier_total_for(key, old_nation)
@@ -508,13 +745,13 @@ def select_mech_rps(old_nation, new_nation, state, goal, secondary_goal, persona
             if score <= 0:
                 continue
 
-            candidates.append((score, mrp_def, acting_character, target_resource, difficulty, modifier_total))
+            candidates.append((score, mrp_def, acting_character, target_resource, difficulty, modifier_total, conversion_target))
 
         if not candidates:
             break
 
         candidates.sort(key=lambda c: c[0], reverse=True)
-        _, mrp_def, acting_character, target_resource, difficulty, modifier_total = candidates[0]
+        _, mrp_def, acting_character, target_resource, difficulty, modifier_total, conversion_target = candidates[0]
         key = mrp_def.get("key", "")
 
         result = _resolve_roll(mrp_def, acting_character, difficulty, modifier_total)
@@ -523,7 +760,11 @@ def select_mech_rps(old_nation, new_nation, state, goal, secondary_goal, persona
         handler = MRP_EFFECT_HANDLERS.get(mrp_def.get("effect_type", ""))
         effect_summary = ""
         if handler:
-            effect_summary = handler(old_nation, new_nation, schema, mrp_def, magnitude, target_resource, need_weights, state, dry_run=dry_run) or ""
+            effect_summary = handler(
+                old_nation, new_nation, schema, mrp_def, magnitude, target_resource, need_weights, state,
+                dry_run=dry_run, acting_character=acting_character, stat_used=result["stat_used"],
+                conversion_target=conversion_target,
+            ) or ""
 
         # Keep local state roughly current so the next attempt this session
         # sees the effects of this one (e.g. don't re-target the same
@@ -545,6 +786,7 @@ def select_mech_rps(old_nation, new_nation, state, goal, secondary_goal, persona
             "non_rp_bonus": result["non_rp_bonus"],
             "difficulty": result["difficulty"],
             "target_resource": target_resource,
+            "is_foreign": (conversion_target or {}).get("is_foreign"),
             "outcome_tier": result["outcome_tier"],
             "effect_summary": effect_summary.strip(),
         }

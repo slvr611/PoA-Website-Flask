@@ -5,37 +5,39 @@
 
 {% block content %}
 <div class="container">
-	{% block edit_link %}
-	{% if g.user is not none %}
-		<a href="{{ request.path }}/edit">Edit</a>
-	{% endif %}
-	{% endblock %}
+	<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+		{% block table_heading %}<h1 class="font-heading" style="margin:0;">{{ title }} <span class="card-count">({{ items|length }})</span></h1>{% endblock %}
+		{% block edit_link %}
+		{% if g.user is not none %}
+			<a href="{{ request.path }}/edit" class="pill-btn pill-btn-sm">Edit</a>
+		{% endif %}
+		{% endblock %}
+	</div>
 	{% block action_links %}
 	<div class="action-links">
 		<a href="{{ request.path }}/changes/pending">View Pending Changes</a>
 		<a href="{{ request.path }}/changes/archived">View Archived Changes</a>
 		{% if request.path == '/wars' and g.user and g.user.get('is_admin') %}
-		<a href="/wars/create" class="edit-button" style="background:#2a3f5a;color:#90b8e0;border:1px solid #3a5a8a;">+ Create New War</a>
+		<a href="/wars/create" class="pill-btn pill-btn-sm">+ Create New War</a>
 		{% endif %}
 	</div>
 	{% endblock %}
 	{% if visibility_bypassed is not none %}
 		{% if g.is_non_player_admin or g.is_non_player_rp_mod %}
-			<span class="edit-button" style="background:#2d4a5a;cursor:default;">Visibility: Bypassed (RP)</span>
+			<span class="chip chip-sage">Visibility: Bypassed (RP)</span>
 		{% elif g.user and (g.user.get('is_admin') or g.is_rp_mod) %}
 			{% if visibility_bypassed %}
-				<span class="edit-button" style="background:#2d5a2d;">Visibility: Bypassed</span>
+				<span class="chip chip-sage">Visibility: Bypassed</span>
 			{% else %}
 				<form method="POST" action="/visibility/toggle_bypass" style="display:inline;">
 					<input type="hidden" name="page_url" value="{{ request.full_path }}">
 					<input type="hidden" name="nation_name" value="">
-					<button type="submit" class="edit-button" style="background:#5a2d2d;">Visibility: Filtered</button>
+					<button type="submit" class="chip chip-ember" style="border:0;cursor:pointer;">Visibility: Filtered</button>
 				</form>
 			{% endif %}
 		{% endif %}
 	{% endif %}
 	{% block pre_table %}{% endblock %}
-	{% block table_heading %}<h1>{{ title }}:</h1>{% endblock %}
 	{{ render_data_table(items, schema, preview_references, base_url=request.path) }}
 	{% block extra_content %}{% endblock %}
 </div>

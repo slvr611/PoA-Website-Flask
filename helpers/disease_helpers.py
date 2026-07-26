@@ -71,6 +71,20 @@ def get_global_infection_counts():
     return counts
 
 
+def get_global_accepted_count(disease):
+    """Return the number of pops permanently converted to `disease`'s derived
+    race across all nations ('accepted' pops — convert_pop_to_accepted clears
+    their disease marker, so get_global_infection_counts alone misses them,
+    even though they're still hosts of the disease's identity)."""
+    derived_ids = _derived_race_ids(disease)
+    if not derived_ids:
+        return 0
+    try:
+        return mongo.db.pops.count_documents({"race": {"$in": list(derived_ids)}})
+    except Exception:
+        return 0
+
+
 def infection_counts_from_pops(pops):
     """Derive {disease_id_str: count} from an in-memory pops list."""
     counts = {}

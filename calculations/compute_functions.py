@@ -457,6 +457,10 @@ def compute_support_unit_capacity(field, target, base_value, field_schema, overa
     return max(0, land_unit_capacity // 2 + extra)
 
 def compute_money_income(field, target, base_value, field_schema, overall_total_modifiers):
+    from helpers.undead_horde_helpers import nation_is_undead_horde
+    if nation_is_undead_horde(target):
+        return 0
+
     pop_count = target.get("pop_count", 0)
 
     value = base_value + overall_total_modifiers.get(field, 0) + (pop_count * overall_total_modifiers.get("money_income_per_pop", 0))
@@ -494,6 +498,11 @@ def compute_money_income(field, target, base_value, field_schema, overall_total_
     return int(value)
     
 def compute_resource_production(field, target, base_value, field_schema, overall_total_modifiers):
+    from helpers.undead_horde_helpers import nation_is_undead_horde
+    if nation_is_undead_horde(target):
+        all_resources = json_data["general_resources"] + json_data["unique_resources"] + json_data["luxury_resources"]
+        return {r["key"]: 0 for r in all_resources}
+
     production_dict = {}
 
     production_of_available_nodes = overall_total_modifiers.get("production_of_available_nodes", 0)  #TODO:  Figure out how to calculate which nodes the nation has for this modifier
@@ -575,6 +584,11 @@ def compute_resource_production(field, target, base_value, field_schema, overall
     return production_dict
 
 def compute_resource_consumption(field, target, base_value, field_schema, overall_total_modifiers):
+    from helpers.undead_horde_helpers import nation_is_undead_horde
+    if nation_is_undead_horde(target):
+        all_resources = json_data["general_resources"] + json_data["unique_resources"]
+        return {r["key"]: 0 for r in all_resources}
+
     all_resources = json_data["general_resources"] + json_data["unique_resources"]
     resource_keys = {r["key"] for r in all_resources}
     pop_count = target.get("pop_count", 0)
@@ -691,11 +705,6 @@ def compute_market_resource_storage_capacity(field, target, base_value, field_sc
         specific_resource_storage += overall_total_modifiers.get(resource["key"] + "_storage_capacity", 0)
         specific_resource_storage += overall_total_modifiers.get("resource_storage_capacity", 0)
         storage_dict[resource["key"]] = int(specific_resource_storage)
-
-    luxury_key = target.get("market_luxury_resource", "")
-    tier_mult = int(overall_total_modifiers.get("market_tier_multiplier", 0))
-    if luxury_key and tier_mult > 0:
-        storage_dict[luxury_key] = tier_mult
 
     return storage_dict
 

@@ -1,472 +1,823 @@
 {% extends "layout.html" %}
+{% from "_modifier_macros.html" import modifier_table, modifier_shared_js with context %}
 
-{% block title %}{{ item["name"] }}{% endblock %}
+{% block title %}{% if editable %}{{ ('New ' if item is none else 'Edit ') ~ title }}{% else %}{{ item_view.title if item_view else (item.name or item._id) }}{% endif %}{% endblock %}
 
 {% block content %}
+{% if editable %}
 <div class="container">
-	{% if g.user is not none %}
-		<a href="{{ request.path.replace('item', 'edit') }}">Edit</a>
-	{% endif %}
-	{% if visibility_level is not none %}
-		{% if g.is_non_player_admin or g.is_non_player_rp_mod %}
-			<span class="edit-button" style="background:#2d4a5a;cursor:default;">Visibility: Bypassed (RP)</span>
-		{% elif g.user and (g.user.get('is_admin') or g.is_rp_mod) %}
-			{% if visibility_bypassed %}
-				<span class="edit-button" style="background:#2d5a2d;">Visibility: Bypassed</span>
-			{% else %}
-				<form method="POST" action="/visibility/toggle_bypass" style="display:inline;">
-					<input type="hidden" name="page_url" value="{{ request.full_path }}">
-					<input type="hidden" name="nation_name" value="">
-					<button type="submit" class="edit-button" style="background:#5a2d2d;">Visibility: Filtered (Tier {{ visibility_level }})</button>
-				</form>
-			{% endif %}
+	{% set is_new = item is none %}
+	{% if is_new %}
+		<a href="{{ request.path.replace('/new', '') }}">Back to View</a></br>
+	{% else %}
+		<a href="{{ request.path.replace('edit', 'item') }}">Back to View</a></br>
+		{% if g.user.is_admin %}
+			{% set default_clone_action = request.path.replace('edit', 'clone') ~ '/save' %}
+		{% else %}
+			{% set default_clone_action = request.path.replace('edit', 'clone') ~ '/request' %}
 		{% endif %}
-	{% endif %}
-	<div class="action-links">
-		<a href="{{ request.path }}/changes/pending">View Pending Changes</a>
-		<a href="{{ request.path }}/changes/archived">View Change History</a>
-		<a href="{{ request.path }}/recalculate">Recalculate</a>
-	</div>
-	<div class="content">
-		<h1>
-			{% if item.name %}
-				{# If there's a name, use it in the URL #}
-				{{ item.name }}:
-			{% else %}
-				{# Otherwise, use the _id #}
-				{{ item._id }}:
+		<form method="POST" action="{{ default_clone_action }}" data-prevent-enter-submit="true">
+			<label for="reason">Reason</label>
+			<input type="text" id="reason" name="reason" value="" required >
+			{% if g.user.is_admin %}
+				<button type="submit" formaction="{{ request.path.replace('edit', 'clone') }}/save">Immediate Clone</button>
 			{% endif %}
-		</h1>
+			<button type="submit" formaction="{{ request.path.replace('edit', 'clone') }}/request">Request Clone</button>
+		</form>
+	{% endif %}
+	<h1>{{ title }}:</h1>
+	{% if g.user.is_admin %}
+		{% set default_action = request.path ~ '/save' %}
+	{% else %}
+		{% set default_action = request.path ~ '/request' %}
+	{% endif %}
+	<form method="POST" action="{{ default_action }}" data-prevent-enter-submit="true">
+		{{ form.csrf_token }}
 		<div class="table-wrapper">
 			<table class="info-table">
-				{% for field, properties in schema.properties.items() %}
-					{% if properties and not properties.hidden
-					and not (properties.hideIfNone is defined and (item.get(properties.hideIfNone) is none or item.get(properties.hideIfNone) == "" or not item.get(properties.hideIfNone)))
-					and not (field in ("resource_storage", "resource_capacity") and "resource_capacity" in schema.properties)
-					and (view_access_level >= properties.get("view_access_level", 0))
-					and (field_tiers is none or visibility_level is none or visibility_bypassed or visibility_level >= field_tiers.get(field, 0)) %}
-						<tr>
-							<th><strong>{{ properties.label }}:</strong></th>
-							{% if properties.bsonType == "string" or properties.bsonType == "enum" or properties.bsonType == "date"%}
-								{% if properties.image %}
-									<td><img src="{{ item[field] }}" alt="{{ properties.label }}" style="border-radius: 50%; width: 100px; height: 100px;"></td>
-								{% elif properties.long_text %}
-									<td>
-										<div class="multiline-text">
-											{{ item[field] }}
-										</div>
-									</td>
-								{% else %}
-									<td>{{ item[field] }}</td>
-								{% endif %}
-							{% elif properties.bsonType == "json_district_enum" %}
-								{% if item[field] and item[field] in json_data[properties.json_data] %}
-									<td>{{ json_data[properties.json_data][item[field]]["display_name"] }}</td>
-								{% else %}
-									<td>None</td>
-								{% endif %}
-							{% elif properties.bsonType == "number" %}
-								{% set bd = (breakdowns if breakdowns is defined else {}).get(field, []) %}
-								{% set cap_field = properties.get("max") if (properties.get("max") is string) else none %}
-								{% set cap_bd = (breakdowns if breakdowns is defined else {}).get(cap_field, []) if cap_field else [] %}
-								{% set cap_label = schema.properties.get(cap_field, {}).get('label', cap_field) if cap_field else '' %}
-								{% if properties.get("show_breakdown") and bd %}
-									<td><span class="context-tooltip"
-											  data-tooltip-title="{{ properties.label }}"
-											  data-breakdown='{{ bd | tojson }}'>
-										{% if properties.format == "percentage" %}{{ (item.get(field, 0) * 100)|int }}%
-										{% else %}{{ item.get(field, 0) }}{% if cap_field %} / {% if cap_bd %}<span class="context-tooltip" data-tooltip-title="{{ cap_label }}" data-breakdown='{{ cap_bd | tojson }}'>{{ item.get(cap_field, 0) }}</span>{% else %}{{ item.get(cap_field, 0) }}{% endif %}{% elif properties.get("max") %} / {{ properties.get("max") }}{% endif %}{% endif %}
-									</span></td>
-								{% elif properties.format == "percentage" %}
-									<td>{{ (item.get(field, 0) * 100)|int }}%</td>
-								{% else %}
-									<td>{{ item.get(field, 0) }}{% if cap_field %} / {% if cap_bd %}<span class="context-tooltip" data-tooltip-title="{{ cap_label }}" data-breakdown='{{ cap_bd | tojson }}'>{{ item.get(cap_field, 0) }}</span>{% else %}{{ item.get(cap_field, 0) }}{% endif %}{% elif properties.get("max") %} / {{ properties.get("max") }}{% endif %}</td>
-								{% endif %}
-							{% elif properties.bsonType == "boolean" %}
-								<td>
-									{% if item[field] %}
-										<span style="color: #4CAF50;">&#10003;</span>
-									{% else %}
-										<span style="color: #f44336;">&#10007;</span>
-									{% endif %}
-								</td>
-							{% elif properties.bsonType == "linked_object" %}
-								<td>
-									{% if field in linked_objects and linked_objects[field] is not none %}
-										<a href="{{ linked_objects[field]['link'] }}">{{ linked_objects[field]["name"] }}</a>
-									{% elif item[field] %}
-										{{ item[field] }}
-									{% else %}
-										{{ properties.get("noneResult", "None") }}
-									{% endif %}
-								</td>
-							{% elif properties.bsonType == "object" %}
-								<td>
-									{% if field == "resource_production" and "resource_capacity" in schema.properties %}
-										{% set res_prod = item.get("resource_production", {}) %}
-										{% set res_store = item.get("resource_storage", {}) %}
-										{% set res_cap = item.get("resource_capacity", {}) %}
-										{% set prod_bd = (breakdowns if breakdowns is defined else {}).get("resource_production", {}) %}
-										{% set cap_bd = (breakdowns if breakdowns is defined else {}).get("resource_capacity", {}) %}
-										<table class="compact-table resource-table">
-											<thead>
-												<tr><th>Resource</th><th>Production</th><th>Stockpile / Capacity</th></tr>
-											</thead>
-											<tbody>
-												{% for resource in json_data["general_resources"] + json_data["unique_resources"] + json_data["luxury_resources"] %}
-													{% set rkey = resource["key"] %}
-													{% set cap = res_cap.get(rkey, 0) %}
-													{% set prod = res_prod.get(rkey, 0) %}
-													{% set store = res_store.get(rkey, 0) %}
-													{% if cap != 0 or prod != 0 or store != 0 %}
-														<tr>
-															<th>{{ resource.name }}</th>
-															<td><span class="context-tooltip" data-tooltip-title="{{ resource.name }} Production" data-breakdown='{{ prod_bd.get(rkey, [])|tojson }}'>{{ prod }}</span></td>
-															<td>{{ store }} / <span class="context-tooltip" data-tooltip-title="{{ resource.name }} Capacity" data-breakdown='{{ cap_bd.get(rkey, [])|tojson }}'>{{ cap }}</span></td>
-														</tr>
-													{% endif %}
-												{% endfor %}
-											</tbody>
-										</table>
-									{% elif properties.resource_storage or field == "resource_storage" or field == "resource_capacity" or field == "resource_production" or field == "resource_consumption" or field == "resource_excess" %}
-										<table class="compact-table resource-table">
-											<tbody>
-												{% set res_cap = item.get("resource_capacity", {}) %}
-												{% for resource_key, resource_value in item.get(field, {}).items()|sort %}
-													{% if not res_cap or res_cap.get(resource_key, 1) != 0 %}
-														<tr>
-															<th>{{ resource_key }}</th>
-															<td>{{ resource_value }}</td>
-														</tr>
-													{% endif %}
-												{% endfor %}
-											</tbody>
-										</table>
-									{% else %}
-										<table class="compact-table">
-											<tbody>
-												{% for key, value in item[field].items()|sort %}
-													<tr>
-														<th>{{ key }}</th>
-														<td>{{ value }}</td>
-													</tr>
-												{% endfor %}
-											</tbody>
-										</table>
-									{% endif %}
-								</td>
-							{% elif properties.bsonType == "json_resource_enum" %}
-								<td>
-									{% if item[field] is not none %}
-										{% set resource = find_dict_in_list(json_data["general_resources"], "key", item[field]) %}
-										{% if not resource %}
-											{% set resource = find_dict_in_list(json_data["unique_resources"], "key", item[field]) %}
-										{% endif %}
-										
-										{% if resource and resource is not none %}
-											{{ resource["name"] }}
-										{% elif resource is none %}
-											None
-										{% else %}
-											Unknown Resource ({{ item[field] }})
-										{% endif %}
-									{% else %}
-										None
-									{% endif %}
-								</td>
-							{% elif properties.bsonType == "array" %}
-								{% if properties.get("items", {}).get("bsonType", "None") == "string" %}
-									<td>
-										{% for sub_item in item[field] %}
-											{{ sub_item }}<br>
+				{% for field in form if field.name != 'csrf_token' and field.name != 'submit' and field.name != 'reason' %}
+					<tr>
+						<th><label for="{{ field.id }}">{{ field.label.text }}</label></th>
+						<td>
+							{% if field.type == 'FieldList' and field.name == 'external_modifiers' %}
+								<table class="modifiers-table">
+									<thead>
+										<tr>
+											<th>Type</th>
+											<th>Modifier</th>
+											<th>Value</th>
+											<th>Actions</th>
+										</tr>
+									</thead>
+									<tbody id="{{ field.name }}-tbody">
+										{% for modifier_field in field %}
+											<tr>
+												<td>{{ modifier_field.form.item_id() }}{{ modifier_field.form.type(class="form-control") }}</td>
+												<td>{{ modifier_field.form.modifier(class="form-control") }}</td>
+												<td>{{ modifier_field.form.value(class="form-control") }}</td>
+												<td>
+													<span class="drag-handle">⋮⋮</span>
+													<button type="button" class="btn btn-danger" onclick="removeFromArray(this, '${fieldName}')">Remove</button>
+												</td>
+											</tr>
 										{% endfor %}
-									</td>
-								{% elif properties.get("items", {}).get("bsonType", "None") == "linked_object" %}
-									<td>
-										{% if linked_objects[field] %}
-											<table class="linked-objects-table">
-												<thead>
-													<tr>
-														<th>Name</th>
-														{% if linked_objects[field][0] and linked_objects[field][0].get("linked_objects") %}
-															{% for preview_field in linked_objects[field][0].get("linked_objects", {}).keys() %}
-																<th>{{ preview_field|title }}</th>
-															{% endfor %}
-														{% endif %}
-														{% set preview_fields = properties.get("preview", []) %}
-														{% for preview_field in preview_fields %}
-															<th>{{ schema.properties.get(preview_field, {}).get("label", preview_field|title) }}</th>
-														{% endfor %}
-													</tr>
-												</thead>
-												<tbody>
-													{% for item in linked_objects[field] %}
-														<tr>
-															<td><a href="{{ item['link'] }}">{{ item["name"] }}</a></td>
-															{% if item.get("linked_objects") %}
-																{% for preview_field, preview_obj in item.get("linked_objects", {}).items() %}
-																	<td>
-																		{% if preview_obj %}
-																			<a href="{{ preview_obj['link'] }}">{{ preview_obj["name"] }}</a>
-																		{% else %}
-																			None
-																		{% endif %}
-																	</td>
-																{% endfor %}
-															{% endif %}
-															{% set preview_fields = properties.get("preview", []) %}
-															{% for preview_field in preview_fields %}
-																{% if properties.get("preview_formats", {}).get(preview_field, "string") == "boolean" %}
-																	<td>
-																		{% if item.get(preview_field, false) %}
-																			<span style="color: #4CAF50;">&#10003;</span>
-																		{% else %}
-																			<span style="color: #f44336;">&#10007;</span>
-																		{% endif %}
-																	</td>
-																{% else %}
-																	<td>{{ item.get(preview_field, "None") }}</td>
-																{% endif %}
-															{% endfor %}
-														</tr>
-													{% endfor %}
-												</tbody>
-											</table>
-										{% else %}
-											None
-										{% endif %}
-									</td>
-								{% elif properties.get("items", {}).get("bsonType", "None") == "object" %}
-									<td>
-										{% if field == "modifiers" %}
-											<table class="linked-objects-table">
-												<thead>
-													<tr>
-														<th>Modifier</th>
-														<th>Scope</th>
-														<th>Value</th>
-														<th>Duration</th>
-														<th>Source</th>
-													</tr>
-												</thead>
-												<tbody>
-													{% for sub_item in item.get(field, []) %}
-														{% set mod_type_key = sub_item.get("modifier_type", sub_item.get("key", sub_item.get("field", ""))) %}
-														{% set type_def = json_data.get("modifier_types", {}).get(mod_type_key, {}) %}
-														{% set type_name = type_def.get("name", mod_type_key) %}
-														{% set field_template = type_def.get("field_template", mod_type_key) %}
-														{% set resolved_field = field_template
-															| replace("{attribute}", sub_item.get("attribute", ""))
-															| replace("{resource}", sub_item.get("resource", ""))
-															| replace("{resource_from}", sub_item.get("resource_from", ""))
-															| replace("{resource_to}", sub_item.get("resource_to", ""))
-															| replace("{job}", sub_item.get("job", ""))
-														%}
-														{% set scope_key = sub_item.get("scope", "") %}
-														{% set scope_name = scope_definitions.get(scope_key, {}).get("name", scope_key) if scope_key else "" %}
-														<tr>
-															<td>
-																<strong>{{ type_name }}</strong>
-																{% if type_def.get("extra_fields") %}
-																	<br><small class="text-muted">{{ resolved_field }}</small>
-																{% endif %}
-															</td>
-															<td>{{ scope_name }}</td>
-															<td>{{ sub_item.get("value", 0) }}</td>
-															<td>{{ sub_item.get("duration", -1) }}</td>
-															<td>{{ sub_item.get("source", "") }}</td>
-														</tr>
-													{% endfor %}
-												</tbody>
-											</table>
-										{% elif field == "progress_quests" %}
-											<table class="linked-objects-table">
-												<thead>
-													<tr>
-														<th>Quest Name</th>
-														<th>Slot</th>
-														<th>Bonus Progress Per Tick</th>
-														<th>Total Progress Per Tick</th>
-														<th>Current Progress</th>
-														<th>Link</th>
-													</tr>
-												</thead>
-												<tbody>
-													{% for sub_item in item[field] %}
-														<tr>
-															<td>{{ sub_item["quest_name"] }}</td>
-															{% set slot_key = sub_item.get("slot", "no_slot") %}
-															<td>{{ (json_data["slot_types"].get(slot_key) or {"name": slot_key})["name"] }}</td>
-															<td>{{ sub_item["bonus_progress_per_tick"] }}</td>
-															<td>{{ sub_item["total_progress_per_tick"] }}</td>
-															<td>{{ sub_item["current_progress"] }} / {{ sub_item["required_progress"] }}</td>
-															<td>{{ sub_item["link"]|format_discord_link|safe }}</td>
-														</tr>
-													{% endfor %}
-												</tbody>
-											</table>
-										{% elif properties.get("items", {}).get("properties", {}).get("name") %}
-											<table class="linked-objects-table">
-												<thead>
-													<tr>
-														<th>Name</th>
-														{% for preview_field, preview_properties in properties.get("items", {}).get("properties", {}).items() %}
-															{% if preview_field != "name" %}
-																<th>{{ preview_properties.label }}</th>
-															{% endif %}
-														{% endfor %}
-													</tr>
-												</thead>
-												<tbody>
-													{% for sub_item in item[field] %}
-														<tr>
-															<td>{{ sub_item["name"] }}</td>
-															{% for preview_field, preview_properties in properties.get("items", {}).get("properties", {}).items() %}
-																{% if preview_field != "name" %}
-																	<td>{{ sub_item[preview_field] }}</td>
-																{% endif %}
-															{% endfor %}
-														</tr>
-													{% endfor %}
-												</tbody>
-											</table>
-										{% else %}
-										<table class="linked-objects-table">
-											<thead>
-												<tr>
-													{% for preview_field, preview_properties in properties.get("items", {}).get("properties", {}).items() %}
-														<th>{{ preview_properties.label }}</th>
-													{% endfor %}
-												</tr>
-											</thead>
-											<tbody>
-												{% for sub_item in item[field] %}
-													<tr>
-														{% for preview_field, preview_properties in properties.get("items", {}).get("properties", {}).items() %}
-															<td>{{ sub_item[preview_field] }}</td>
-														{% endfor %}
-													</tr>
-												{% endfor %}
-											</tbody>
-										</table>
-
-										{% endif %}
-									</td>
-								{% elif properties.get("items", {}).get("bsonType", "None") == "json_district_enum" %}
-									<td>
-										<ul>
-											{% set length = item[field]|length %}
-											{% set max_length = properties.get("max_length") %}
-											{% if max_length and max_length is string %}
-												{% set max_length = item.get(max_length, 0) %}
-											{% endif %}
-											{% if max_length and length < max_length %}
-												{% set length = max_length %}
-											{% endif %}
-											{% set district_data = json_data[properties.get("items", {}).get("json_data")] %}
-											{% for i in range(0, length) %}
-												{% if item.get(field, [])[i] in district_data and item.get(field, [])[i] %}
-													<li>{{ district_data[item[field][i]]["display_name"] }}</li>
-												{% else %}
-													<li>None</li>
-												{% endif %}
-											{% endfor %}
-										</ul>
-									</td>
-								{% elif properties.get("items", {}).get("bsonType", "None") == "json_unit_enum" %}
-									<td>
-										<ul>
-											{% set length = item[field]|length %}
-											{% set max_length = properties.get("max_length") %}
-											{% if max_length and max_length is string %}
-												{% set max_length = item.get(max_length, 0) %}
-											{% endif %}
-											{% if max_length and length < max_length %}
-												{% set length = max_length %}
-											{% endif %}
-											{% set combined_data = {} %}
-											{% for file_name in properties.get("items", {}).get("json_data", []) %}
-												{% set combined_data = combined_data.update(json_data[file_name]) %}
-											{% endfor %}
-											{% for i in range(0, length) %}
-												{% if item.get(field, [])[i] and item.get(field, [])[i] in combined_data %}
-													<li>{{ combined_data[item.get(field, [])[i]]["display_name"] }}</li>
-												{% else %}
-													<li>None</li>
-												{% endif %}
-											{% endfor %}
-										</ul>
-									</td>
-								{% elif properties.get("items", {}).get("bsonType", "None") == "db_unit_enum" %}
-								<td>
-									<ul>
-										{% set length = item[field]|length %}
-										{% set max_length = properties.get("max_length") %}
-										{% if max_length and max_length is string %}
-											{% set max_length = item.get(max_length, 0) %}
-										{% endif %}
-										{% if max_length and length < max_length %}
-											{% set length = max_length %}
-										{% endif %}
-										{% for i in range(0, length) %}
-											{% if item.get(field, [])[i] %}
-												<li>{{ item.get(field, [])[i] }}</li>
-											{% else %}
-												<li>None</li>
-											{% endif %}
+									</tbody>
+								</table>
+								<button type="button" class="btn btn-primary" onclick="addToArray('{{ field.name }}')">Add Modifier</button>
+							{% elif field.type == 'FieldList' and field.name == 'modifiers' %}
+								{{ modifier_table(field,
+								                  scopes_by_source_type.get(entity_source_type, []) if entity_source_type else [],
+								                  field_name=field.name,
+								                  entity_source_type=entity_source_type,
+								                  show_scaling=True, show_drag=True) }}
+							{% elif field.type == 'FieldList' and field.name == 'progress_quests' %}
+								<table class="modifiers-table">
+									<thead>
+										<tr>
+											<th>Name</th>
+											<th>Slot</th>
+											<th>Bonus Progress Per Tick</th>
+											<th>Current Progress</th>
+											<th>Required Progress</th>
+											<th>Link</th>
+											<th>Actions</th>
+										</tr>
+									</thead>
+									<tbody id="{{ field.name }}-tbody" class="sortable-tbody">
+										{% for quest_field in field %}
+											<tr class="sortable-row">
+												<td>{{ quest_field.form.item_id() }}{{ quest_field.form.quest_name(class="form-control") }}</td>
+												<td>{{ quest_field.form.slot(class="form-control") }}</td>
+												<td>{{ quest_field.form.bonus_progress_per_tick(class="form-control") }}</td>
+												<td>{{ quest_field.form.current_progress(class="form-control") }}</td>
+												<td>{{ quest_field.form.required_progress(class="form-control") }}</td>
+												<td>{{ quest_field.form.link(class="form-control") }}</td>
+												<td>
+													<span class="drag-handle">⋮⋮</span>
+													<button type="button" class="btn btn-danger" onclick="removeFromArray(this, '{{ field.name }}')">Remove</button>
+												</td>
+											</tr>
 										{% endfor %}
-									</ul>
-								</td>
-							{% elif properties.get("items", {}).get("bsonType", "None") == "json_resource_enum" %}
-									<td>
-										<ul>
-											{% set length = item[field]|length %}
-											{% set max_length = properties.get("max_length") %}
-											{% if max_length and max_length is string %}
-												{% set max_length = item.get(max_length, 0) %}
-											{% endif %}
-											{% if max_length and length < max_length %}
-												{% set length = max_length %}
-											{% endif %}
-											{% set resources = json_data.get("general_resources", []) + json_data.get("unique_resources", []) %}
-											{% for i in range(0, length) %}
-												{% if item[field][i] in resources %}
-													<li>{{ resources[item[field][i]]["name"] }}</li>
-												{% else %}
-													<li>None</li>
-												{% endif %}
-											{% endfor %}
-										</ul>
-									</td>
+									</tbody>
+								</table>
+								<button type="button" class="btn btn-primary" onclick="addToArray('{{ field.name }}')">Add Quest</button>
+							{% elif field.type == 'FieldList' and field.name == 'negative_titles' %}
+								<table class="modifiers-table">
+									<thead>
+										<tr>
+											<th>Negative Title</th>
+											<th>Actions</th>
+										</tr>
+									</thead>
+									<tbody id="{{ field.name }}-tbody">
+										{% for negative_title_field in field %}
+											<tr>
+												<td>{{ negative_title_field(class="form-control") }}</td>
+												<td>
+													<button type="button" class="btn btn-danger" onclick="removeFromArray(this, '{{ field.name }}')">Remove</button>
+												</td>
+											</tr>
+										{% endfor %}
+									</tbody>
+								</table>
+								<button type="button" class="btn btn-primary" onclick="addToArray('{{ field.name }}')">Add Negative Title</button>
+							{% elif schema.properties.get(field.name, {}).get('image') %}
+								{{ field(class="form-control", placeholder="https://...") }}
+								{% if g.user and g.user.is_admin %}
+								<div style="display:flex; gap:0.5rem; margin-top:0.4rem; align-items:center; flex-wrap:wrap;">
+									<input type="file" id="{{ field.name }}_file_input" accept="image/*" style="display:none">
+									<button type="button" class="btn-add" onclick="document.getElementById('{{ field.name }}_file_input').click()">Upload Image</button>
+									<span id="{{ field.name }}_upload_status" style="font-size:0.78rem; color:#888;"></span>
+								</div>
+								<div id="{{ field.name }}_preview_wrap" style="margin-top:0.5rem; display:none;">
+									<img id="{{ field.name }}_preview" src="" alt="Preview" style="max-width:160px; max-height:220px; border-radius:6px; border:1px solid #444;">
+								</div>
 								{% endif %}
+							{% else %}
+								{{ field(class="form-control") }}
 							{% endif %}
-						</tr>
-					{% endif %}
+
+							{% if field.errors %}
+								<ul class="errors">
+									{% for error in field.errors %}
+										<li>{{ error }}</li>
+									{% endfor %}
+								</ul>
+							{% endif %}
+							{% if field.description %}
+								<small class="form-text text-muted">{{ field.description }}</small>
+							{% endif %}
+						</td>
+					</tr>
 				{% endfor %}
+				<tr>
+					<th><label for="{{ form.reason.id }}">{{ form.reason.label.text }}</label></th>
+					<td>{{ form.reason(class="form-control") }}</td>
+				</tr>
 			</table>
+		</div>
+
+		{% if g.user.is_admin %}
+			<button type="submit" formaction="{{ request.path }}/save">Save</button>
+		{% endif %}
+        <button type="submit" formaction="{{ request.path }}/request">Request</button>
+    </form>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+<script>
+	const negativeTitleOptions = {{ (form.negative_titles.unbound_field.choices if form.negative_titles is defined else []) | tojson | safe }};
+	const MODIFIER_TYPES = {{ modifier_types | tojson | safe }};
+	const SORTED_MODIFIER_KEYS = {{ sorted_modifier_types | map(attribute=0) | list | tojson | safe }};
+	const SCALING_TYPES = {{ scaling_types | tojson | safe }};
+	const SORTED_SCALING_KEYS = {{ sorted_scaling_type_keys | tojson | safe }};
+	const ALL_TERRAINS = {{ all_terrains | tojson | safe }};
+	const ALL_DISTRICT_CATEGORIES = {{ all_district_categories | tojson | safe }};
+	const ALL_DISTRICT_DEFS = {{ all_district_defs | tojson | safe }};
+	const ALL_RESOURCES = {{ all_resources | tojson | safe }};
+	const ALL_MRP_DEFS = {{ all_mrp_defs | tojson | safe }};
+	const ALL_JOBS = {{ all_jobs | tojson | safe }};
+	const ALL_ATTRIBUTES = {{ all_attributes | tojson | safe }};
+	const ALL_UNIT_CATEGORIES = {{ all_unit_categories | tojson | safe }};
+	const ALL_UNIT_STATS = {{ all_unit_stats | tojson | safe }};
+	const ALL_PROGRESS_TIERS = {{ all_progress_tiers | tojson | safe }};
+	const ALL_TECH_CATEGORIES = {{ all_tech_categories | tojson | safe }};
+	const SCOPE_DEFINITIONS = {{ scope_definitions | tojson | safe }};
+	const ENTITY_SOURCE_TYPE = {{ entity_source_type | default("") | tojson | safe }};
+	const SCOPE_OPTIONS = {{ scopes_by_source_type.get(entity_source_type, []) | tojson | safe }};
+	const SELF_SCOPE_MAP = {"nation": "nation_self", "character": "character_self", "merchant": "merchant_self", "mercenary": "mercenary_self", "artifact": "artifact_owner", "wonder": "wonder_owner_nation", "region": "region_nations", "global": "global_nations"};
+
+	// ── Modifier helper functions ────────────────────────────────────────────
+
+	function buildModifierTypeOptions(selectedValue, targetType) {
+		let options = '<option value="">-- Select Modifier --</option>';
+		for (const key of SORTED_MODIFIER_KEYS) {
+			const mt = MODIFIER_TYPES[key];
+			if (targetType && mt.applicable_to && !mt.applicable_to.includes(targetType)) continue;
+			const sel = key === selectedValue ? 'selected' : '';
+			options += `<option value="${key}" ${sel}>${mt.name}</option>`;
+		}
+		return options;
+	}
+
+	function buildScopeOptions(selectedValue) {
+		const effective = selectedValue || SELF_SCOPE_MAP[ENTITY_SOURCE_TYPE] || '';
+		if (SCOPE_OPTIONS && SCOPE_OPTIONS.length) {
+			return SCOPE_OPTIONS.map(s => `<option value="${s.key}" ${s.key === effective ? 'selected' : ''}>${s.name}</option>`).join('');
+		}
+		let options = '<option value="">-- No Scope --</option>';
+		for (const [key, def] of Object.entries(SCOPE_DEFINITIONS)) {
+			const sel = key === effective ? 'selected' : '';
+			options += `<option value="${key}" ${sel}>${def.name}</option>`;
+		}
+		return options;
+	}
+
+	function buildScalingOptions(selectedValue) {
+		const sel = selectedValue || 'flat';
+		let opts = '';
+		for (const key of SORTED_SCALING_KEYS) {
+			const st = SCALING_TYPES[key];
+			opts += '<option value="' + key + '" ' + (key === sel ? 'selected' : '') + '>' + st.name + '</option>';
+		}
+		return opts;
+	}
+
+	function onScopeChange(select) {
+		const row = select.closest('tr');
+		const scopeKey = select.value;
+		const scopeDef = SCOPE_DEFINITIONS[scopeKey] || {};
+		const targetType = scopeDef.target_type || '';
+		const typeSelect = row ? row.querySelector('.modifier-type-select') : null;
+		if (typeSelect) {
+			const currentVal = typeSelect.value;
+			typeSelect.innerHTML = buildModifierTypeOptions(currentVal, targetType);
+		}
+	}
+
+	function buildExtraFieldsHTML(fieldName, index, modifierType, currentData) {
+		const typeDef = MODIFIER_TYPES[modifierType] || {};
+		const extraFields = typeDef.extra_fields || [];
+		const ALL_EXTRA_KEYS = ['resource', 'resource_from', 'resource_to', 'job', 'attribute', 'unit_category', 'unit_stat', 'tier', 'tech_category', 'terrain', 'node_resource', 'terrain_as'];
+		const renderedKeys = new Set();
+		let html = '';
+
+		for (const extra of extraFields) {
+			renderedKeys.add(extra.key);
+			const cur = (currentData && currentData[extra.key]) || '';
+			if (extra.source === 'all_resources') {
+				let opts = '<option value="">-- Select Resource --</option>';
+				for (const res of ALL_RESOURCES) {
+					opts += `<option value="${res.key}" ${res.key === cur ? 'selected' : ''}>${res.name}</option>`;
+				}
+				html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
+					<select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+			} else if (extra.source === 'mrp_defs') {
+				let opts = '<option value="">-- Select Mech RP --</option>';
+				for (const mrp of ALL_MRP_DEFS) {
+					opts += `<option value="${mrp.key}" ${mrp.key === cur ? 'selected' : ''}>${mrp.name}</option>`;
+				}
+				html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
+					<select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+			} else if (extra.source === 'jobs') {
+				let opts = '<option value="">-- Select Job --</option>';
+				for (const job of ALL_JOBS) {
+					opts += `<option value="${job.key}" ${job.key === cur ? 'selected' : ''}>${job.name}</option>`;
+				}
+				html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
+					<select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+			} else if (extra.source === 'attributes') {
+				let opts = '<option value="">-- Select Attribute --</option>';
+				for (const attr of ALL_ATTRIBUTES) {
+					opts += `<option value="${attr.key}" ${attr.key === cur ? 'selected' : ''}>${attr.name}</option>`;
+				}
+				html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
+					<select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+			} else if (extra.source === 'unit_categories') {
+				let opts = '<option value="">-- Select Category --</option>';
+				for (const uc of ALL_UNIT_CATEGORIES) {
+					opts += `<option value="${uc.key}" ${uc.key === cur ? 'selected' : ''}>${uc.name}</option>`;
+				}
+				html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
+					<select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+			} else if (extra.source === 'unit_stats') {
+				let opts = '<option value="">-- Select Stat --</option>';
+				for (const us of ALL_UNIT_STATS) {
+					opts += `<option value="${us.key}" ${us.key === cur ? 'selected' : ''}>${us.name}</option>`;
+				}
+				html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
+					<select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+			} else if (extra.source === 'progress_tiers') {
+				let opts = '<option value="">-- Select Tier --</option>';
+				for (const pt of ALL_PROGRESS_TIERS) {
+					opts += `<option value="${pt.key}" ${pt.key === cur ? 'selected' : ''}>${pt.name}</option>`;
+				}
+				html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
+					<select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+			} else if (extra.source === 'tech_categories') {
+				let opts = '<option value="">-- Select Category --</option>';
+				for (const tc of ALL_TECH_CATEGORIES) {
+					opts += `<option value="${tc.key}" ${tc.key === cur ? 'selected' : ''}>${tc.name}</option>`;
+				}
+				html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
+					<select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+			} else if (extra.source === 'terrains') {
+				let opts = '<option value="">-- Select Terrain --</option>';
+				for (const t of ALL_TERRAINS) {
+					opts += `<option value="${t.key}" ${t.key === cur ? 'selected' : ''}>${t.name}</option>`;
+				}
+				html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
+					<select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+			} else if (extra.source === 'visibility_target_types') {
+				const vtOpts = [
+					{key: 'all_nations', name: 'All Nations'},
+					{key: 'region', name: 'Region'},
+					{key: 'specific_nation', name: 'Specific Nation'},
+				];
+				let opts = '';
+				for (const t of vtOpts) {
+					opts += `<option value="${t.key}" ${t.key === cur ? 'selected' : ''}>${t.name}</option>`;
+				}
+				html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
+					<select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+			}
+		}
+
+		for (const key of ALL_EXTRA_KEYS) {
+			if (!renderedKeys.has(key)) {
+				html += `<input type="hidden" name="${fieldName}-${index}-${key}" id="${fieldName}-${index}-${key}" value="">`;
+			}
+		}
+		return html;
+	}
+
+	function onModifierTypeChange(select) {
+		const fieldName = select.dataset.field;
+		const index     = parseInt(select.dataset.idx);
+		const modType   = select.value;
+		const cell      = select.closest('td');
+		const extraDiv  = cell ? cell.querySelector('.modifier-extra-fields') : null;
+		if (extraDiv) {
+			const currentData = {};
+			extraDiv.querySelectorAll('select, input').forEach(el => {
+				const parts = el.name.split('-');
+				const key = parts.slice(2).join('-');
+				if (key) currentData[key] = el.value;
+			});
+			extraDiv.innerHTML = buildExtraFieldsHTML(fieldName, index, modType, currentData);
+		}
+		const row       = select.closest('tr');
+		const hint      = row ? row.querySelector('.modifier-value-hint') : null;
+		if (hint) {
+			const typeDef = MODIFIER_TYPES[modType] || {};
+			hint.textContent = 'Decimal (0.1 = 10%)';
+			hint.style.display = typeDef.value_format === 'percentage' ? '' : 'none';
+		}
+	}
+
+	// ── Sortable initialisation ──────────────────────────────────────────────
+
+	document.addEventListener('DOMContentLoaded', function() {
+		const progressQuestsTbody = document.getElementById('progress_quests-tbody');
+		if (progressQuestsTbody) {
+			new Sortable(progressQuestsTbody, {
+				handle: '.drag-handle', animation: 150,
+				onEnd: function() { reindexProgressQuests(); }
+			});
+		}
+		const modifiersTbody = document.getElementById('modifiers-tbody');
+		if (modifiersTbody) {
+			new Sortable(modifiersTbody, {
+				handle: '.drag-handle', animation: 150,
+				onEnd: function() { reindexModifiers(); }
+			});
+		}
+		const externalModifiersTbody = document.getElementById('external_modifiers-tbody');
+		if (externalModifiersTbody) {
+			new Sortable(externalModifiersTbody, {
+				handle: '.drag-handle', animation: 150,
+				onEnd: function() { reindexExternalModifiers(); }
+			});
+		}
+	});
+
+	// ── Reindex functions ────────────────────────────────────────────────────
+
+	function reindexProgressQuests() {
+		const tbody = document.getElementById('progress_quests-tbody');
+		Array.from(tbody.children).forEach((row, index) => {
+			row.querySelectorAll('select, input').forEach(input => {
+				const fieldPart = input.name.split('-').pop();
+				input.name = `progress_quests-${index}-${fieldPart}`;
+				input.id   = `progress_quests-${index}-${fieldPart}`;
+			});
+		});
+	}
+
+	function reindexModifiers() {
+		const tbody = document.getElementById('modifiers-tbody');
+		Array.from(tbody.children).forEach((row, index) => {
+			// Reindex all inputs and selects — names are "modifiers-N-fieldPart"
+			row.querySelectorAll('input, select').forEach(input => {
+				const parts     = input.name.split('-');
+				const fieldPart = parts.slice(2).join('-');
+				input.name = `modifiers-${index}-${fieldPart}`;
+				input.id   = `modifiers-${index}-${fieldPart}`;
+			});
+			// Update the data-idx on the modifier-type and scope selects so onchange stays correct
+			const typeSelect = row.querySelector('.modifier-type-select');
+			if (typeSelect) typeSelect.dataset.idx = index;
+			const scopeSelect = row.querySelector('.modifier-scope-select');
+			if (scopeSelect) scopeSelect.dataset.idx = index;
+		});
+	}
+
+	function reindexExternalModifiers() {
+		const tbody = document.getElementById('external_modifiers-tbody');
+		Array.from(tbody.children).forEach((row, index) => {
+			row.querySelectorAll('select, input').forEach(input => {
+				const fieldPart = input.name.split('-').pop();
+				input.name = `external_modifiers-${index}-${fieldPart}`;
+				input.id   = `external_modifiers-${index}-${fieldPart}`;
+			});
+		});
+	}
+
+	function reindexNegativeTitles() {
+		const tbody = document.getElementById('negative_titles-tbody');
+		if (!tbody) return;
+		Array.from(tbody.children).forEach((row, index) => {
+			row.querySelectorAll('select').forEach(input => {
+				input.name = `negative_titles-${index}`;
+				input.id   = `negative_titles-${index}`;
+			});
+		});
+	}
+
+	// ── Add/Remove array rows ────────────────────────────────────────────────
+
+	function addToArray(fieldName) {
+		const tbody = document.getElementById(`${fieldName}-tbody`);
+		const currentCount = tbody.children.length;
+		const newRow = document.createElement('tr');
+		if (fieldName === 'progress_quests') newRow.className = 'sortable-row';
+
+		if (fieldName === 'external_modifiers') {
+			const typeOptions = ['nation','character','merchant','mercenary','faction']
+				.map(v => `<option value="${v}">${v}</option>`).join('');
+			newRow.innerHTML = `
+				<td><select class="form-control" name="${fieldName}-${currentCount}-type" id="${fieldName}-${currentCount}-type">${typeOptions}</select></td>
+				<td><input type="text" class="form-control" name="${fieldName}-${currentCount}-modifier" id="${fieldName}-${currentCount}-modifier"></td>
+				<td><input type="number" step="any" class="form-control" name="${fieldName}-${currentCount}-value" id="${fieldName}-${currentCount}-value"></td>
+				<td><span class="drag-handle">&#8942;&#8942;</span>
+				    <button type="button" class="btn btn-danger" onclick="removeFromArray(this,'${fieldName}')">Remove</button></td>`;
+
+		} else if (fieldName === 'modifiers') {
+			const defaultScope = (SELF_SCOPE_MAP[ENTITY_SOURCE_TYPE]) || (SCOPE_OPTIONS.length ? SCOPE_OPTIONS[0].key : '');
+			const defaultTargetType = defaultScope ? (SCOPE_DEFINITIONS[defaultScope] || {}).target_type || '' : '';
+			const typeSelect = `<select class="form-control modifier-type-select"
+				name="${fieldName}-${currentCount}-modifier_type"
+				id="${fieldName}-${currentCount}-modifier_type"
+				data-field="${fieldName}" data-idx="${currentCount}"
+				onchange="onModifierTypeChange(this)">
+				${buildModifierTypeOptions('', defaultTargetType)}
+			</select>`;
+			const scopeSelect = `<select class="form-control modifier-scope-select"
+				name="${fieldName}-${currentCount}-scope"
+				id="${fieldName}-${currentCount}-scope"
+				data-field="${fieldName}" data-idx="${currentCount}"
+				onchange="onScopeChange(this)">
+				${buildScopeOptions(defaultScope)}
+			</select>`;
+			const extraFields = buildExtraFieldsHTML(fieldName, currentCount, '', {});
+			const scalingSelect = `<select class="form-control modifier-scaling-select"
+				name="${fieldName}-${currentCount}-scaling"
+				id="${fieldName}-${currentCount}-scaling"
+				onchange="onScalingChange(this)">
+				${buildScalingOptions('flat')}
+			</select><small class="modifier-scaling-x-field" style="display:none">Per <input type="number" step="any" class="form-control d-inline" style="width:70px" placeholder="1" name="${fieldName}-${currentCount}-scaling_x" id="${fieldName}-${currentCount}-scaling_x" value=""></small><small class="modifier-scaling-extra-field" style="display:none"><input type="hidden" name="${fieldName}-${currentCount}-scaling_extra" id="${fieldName}-${currentCount}-scaling_extra" value=""></small><small class="form-text text-muted modifier-max-field" style="display:none">Max: <input type="number" step="any" class="form-control d-inline" style="width:80px" placeholder="None" name="${fieldName}-${currentCount}-max_value" id="${fieldName}-${currentCount}-max_value"></small>`;
+			const conditionHtml = buildConditionHTML(fieldName, currentCount);
+			newRow.innerHTML = `
+				<td>
+					${typeSelect}
+					<div class="modifier-extra-fields mt-1">${extraFields}</div>
+				</td>
+				<td>${scopeSelect}</td>
+				<td>
+					<input type="number" step="any" class="form-control" name="${fieldName}-${currentCount}-value" id="${fieldName}-${currentCount}-value" value="1">
+					<small class="form-text text-muted modifier-value-hint" style="display:none">Decimal (0.1 = 10%)</small>
+				</td>
+				<td>${scalingSelect}${conditionHtml}</td>
+				<td><input type="number" class="form-control" name="${fieldName}-${currentCount}-duration" id="${fieldName}-${currentCount}-duration" value="-1"></td>
+				<td><input type="text" class="form-control" name="${fieldName}-${currentCount}-source" id="${fieldName}-${currentCount}-source"></td>
+				<td><span class="drag-handle">&#8942;&#8942;</span>
+				    <button type="button" class="btn btn-danger" onclick="removeFromArray(this,'modifiers')">Remove</button></td>`;
+
+		} else if (fieldName === 'progress_quests') {
+			newRow.innerHTML = `
+				<td><input type="text" class="form-control" name="${fieldName}-${currentCount}-quest_name" id="${fieldName}-${currentCount}-quest_name"></td>
+				<td><select class="form-control" name="${fieldName}-${currentCount}-slot" id="${fieldName}-${currentCount}-slot">
+					<option value="no_slot">No Slot</option>
+					<option value="tier_1_spell_slot">Tier 1 Spell Slot</option>
+					<option value="tier_2_spell_slot">Tier 2 Spell Slot</option>
+					<option value="tier_3_spell_slot">Tier 3 Spell Slot</option>
+				</select></td>
+				<td><input type="number" class="form-control" name="${fieldName}-${currentCount}-bonus_progress_per_tick" id="${fieldName}-${currentCount}-bonus_progress_per_tick" value="0"></td>
+				<td><input type="number" class="form-control" name="${fieldName}-${currentCount}-current_progress" id="${fieldName}-${currentCount}-current_progress" value="0"></td>
+				<td><input type="number" class="form-control" name="${fieldName}-${currentCount}-required_progress" id="${fieldName}-${currentCount}-required_progress" value="0"></td>
+				<td><input type="text" class="form-control" name="${fieldName}-${currentCount}-link" id="${fieldName}-${currentCount}-link"></td>
+				<td><span class="drag-handle">&#8942;&#8942;</span>
+				    <button type="button" class="btn btn-danger" onclick="removeFromArray(this,'${fieldName}')">Remove</button></td>`;
+
+		} else if (fieldName === 'negative_titles') {
+			const options = (negativeTitleOptions || []).map(
+				([value, label]) => `<option value="${value}">${label}</option>`).join('');
+			newRow.innerHTML = `
+				<td><select class="form-control" name="${fieldName}-${currentCount}" id="${fieldName}-${currentCount}">${options}</select></td>
+				<td><button type="button" class="btn btn-danger" onclick="removeFromArray(this,'${fieldName}')">Remove</button></td>`;
+		}
+
+		tbody.appendChild(newRow);
+		if (fieldName === 'progress_quests') updateProgressQuestSlots();
+		if (fieldName === 'negative_titles')  reindexNegativeTitles();
+	}
+
+	// ── Image upload ────────────────────────────────────────────────────────
+
+	function initImageUpload(fieldName, uploadUrl) {
+		const urlInput   = document.getElementById(fieldName);
+		const fileInput  = document.getElementById(fieldName + '_file_input');
+		const preview    = document.getElementById(fieldName + '_preview');
+		const previewWrap = document.getElementById(fieldName + '_preview_wrap');
+		const status     = document.getElementById(fieldName + '_upload_status');
+
+		function showPreview(src) {
+			if (src) { preview.src = src; previewWrap.style.display = ''; }
+			else { previewWrap.style.display = 'none'; }
+		}
+
+		if (urlInput && urlInput.value) showPreview(urlInput.value);
+		if (urlInput) urlInput.addEventListener('input', () => showPreview(urlInput.value));
+		if (!fileInput) return;
+
+		fileInput.addEventListener('change', function() {
+			const file = fileInput.files[0];
+			if (!file) return;
+			const nameInput = document.getElementById('name');
+			const itemName  = (nameInput ? nameInput.value : '') || 'unknown';
+			const fd = new FormData();
+			fd.append('image', file);
+			fd.append('item_name', itemName);
+			if (status) { status.textContent = 'Uploading…'; status.style.color = '#888'; }
+			fetch(uploadUrl, { method: 'POST', body: fd })
+				.then(r => r.json())
+				.then(data => {
+					if (data.success) {
+						if (urlInput) urlInput.value = data.url;
+						showPreview(data.url);
+						if (status) { status.textContent = 'Uploaded!'; status.style.color = '#4a8'; }
+					} else {
+						if (status) { status.textContent = 'Upload failed: ' + data.error; status.style.color = '#e55'; }
+					}
+				})
+				.catch(err => {
+					if (status) { status.textContent = 'Error: ' + err.message; status.style.color = '#e55'; }
+				});
+		});
+	}
+
+	{% for field in form %}
+	{% if schema.properties.get(field.name, {}).get('image') and g.user and g.user.is_admin %}
+	initImageUpload({{ field.name | tojson }}, '/{{ data_type }}/upload_image');
+	{% endif %}
+	{% endfor %}
+
+	function removeFromArray(button, categoryName) {
+		button.closest('tr').remove();
+		if      (categoryName === 'progress_quests') reindexProgressQuests();
+		else if (categoryName === 'negative_titles') reindexNegativeTitles();
+		else if (categoryName === 'modifiers')       reindexModifiers();
+		else {
+			const tbody = document.getElementById(`${categoryName}-tbody`);
+			Array.from(tbody.children).forEach((row, index) => {
+				row.querySelectorAll('select, input').forEach(input => {
+					const fieldPart = input.name.split('-').pop();
+					input.name = `${categoryName}-${index}-${fieldPart}`;
+					input.id   = `${categoryName}-${index}-${fieldPart}`;
+				});
+			});
+		}
+	}
+</script>
+{{ modifier_shared_js() }}
+{% else %}
+<div class="nation-page-container">
+	<div class="nation-header-bar">
+		<div class="nation-identity">
+			{% if item_view and item_view.image and item_view.image.url %}
+				<img src="{{ item_view.image.url }}" alt="{{ item_view.image.label }}" class="nation-flag" style="border-radius:50%;width:74px;height:74px;">
+			{% endif %}
+			<div>
+				{% if item_view and item_view.kicker %}
+				<div style="font-size:11px;text-transform:uppercase;letter-spacing:.14em;color:var(--heading);font-weight:700;">{{ item_view.kicker }}</div>
+				{% endif %}
+				<h1 class="font-heading">{{ item_view.title if item_view else (item.name or item._id) }}</h1>
+			</div>
+		</div>
+		<div class="nation-actions">
+			<a href="{{ request.path }}/changes/pending" class="pill-btn-outline pill-btn-sm">Pending</a>
+			<a href="{{ request.path }}/changes/archived" class="pill-btn-outline pill-btn-sm">History</a>
+			<a href="{{ request.path }}/recalculate" class="pill-btn-outline pill-btn-sm">Recalculate</a>
+			{% if g.user is not none %}
+				<a href="{{ request.path.replace('item', 'edit') }}" class="pill-btn pill-btn-sm">Edit</a>
+			{% endif %}
+			{% if visibility_level is not none %}
+				{% if g.is_non_player_admin or g.is_non_player_rp_mod %}
+					<span class="chip chip-sage">Visibility: Bypassed (RP)</span>
+				{% elif g.user and (g.user.get('is_admin') or g.is_rp_mod) %}
+					{% if visibility_bypassed %}
+						<a href="{{ request.path }}" class="chip chip-sage">Visibility: Bypassed</a>
+					{% else %}
+						<form method="POST" action="/visibility/toggle_bypass" style="display:inline;">
+							<input type="hidden" name="page_url" value="{{ request.full_path }}">
+							<input type="hidden" name="nation_name" value="">
+							<button type="submit" class="chip chip-ember" style="border:0;cursor:pointer;">Visibility: Filtered (Tier {{ visibility_level }})</button>
+						</form>
+					{% endif %}
+				{% endif %}
+			{% endif %}
 		</div>
 	</div>
 
+	{% if item_view %}
+	{% if item_view.num_rows[:6] %}
+	<div class="stat-strip">
+		{% for row in item_view.num_rows[:6] %}
+		<div class="stat-card">
+			<div class="label">{{ row.label }}</div>
+			{% if row.kind == 'locked' %}
+				<div class="value"><span class="visibility-locked-inline" title="Requires Tier {{ row.tier }} visibility to view">Tier {{ row.tier }}+</span></div>
+			{% else %}
+				<div class="value{% if row.breakdown %} context-tooltip bd-number{% endif %}"
+					{% if row.breakdown %}data-tooltip-title="{{ row.label }}" data-breakdown='{{ row.breakdown|tojson }}'{% endif %}>{{ row.value }}</div>
+			{% endif %}
+		</div>
+		{% endfor %}
+	</div>
+	{% endif %}
+
+	{% macro _render_bar(b) %}
+	<div style="display:grid;grid-template-columns:120px 1fr 74px;align-items:center;gap:12px;font-size:13.5px;">
+		<span style="color:var(--text-mid);font-weight:600;">{{ b.label }}</span>
+		<div style="height:9px;background:var(--surface-hi);border-radius:999px;">
+			<div style="width:{{ b.pct }}%;height:9px;background:var(--accent);border-radius:999px;"></div>
+		</div>
+		<b style="text-align:right;">
+			<span class="context-tooltip bd-number" data-tooltip-title="{{ b.label }}" data-breakdown='{{ b.breakdown|tojson }}'>{% if b.is_percentage %}{{ (b.value * 100)|int }}%{% else %}{{ b.value }}{% endif %}</span> /
+			<span class="context-tooltip bd-number" data-tooltip-title="{{ b.cap_label or (b.label ~ ' Cap') }}" data-breakdown='{{ b.cap_breakdown|tojson }}'>{% if b.is_percentage %}{{ (b.cap * 100)|int }}%{% else %}{{ b.cap }}{% endif %}</span>
+		</b>
+	</div>
+	{% endmacro %}
+
+	{% macro _render_kv_capped(b) %}
+	<div class="dotted-row">
+		<span class="k">{{ b.label }}</span>
+		<span class="leader"></span>
+		<span class="v">
+			<span class="context-tooltip bd-number" data-tooltip-title="{{ b.label }}" data-breakdown='{{ b.breakdown|tojson }}'>{% if b.is_percentage %}{{ (b.value * 100)|int }}%{% else %}{{ b.value }}{% endif %}</span> /
+			<span class="context-tooltip bd-number" data-tooltip-title="{{ b.cap_label or (b.label ~ ' Cap') }}" data-breakdown='{{ b.cap_breakdown|tojson }}'>{% if b.is_percentage %}{{ (b.cap * 100)|int }}%{% else %}{{ b.cap }}{% endif %}</span>
+		</span>
+	</div>
+	{% endmacro %}
+
+	{% macro _render_kv(row) %}
+	<div class="dotted-row">
+		<span class="k">{{ row.label }}</span>
+		<span class="leader"></span>
+		{% if row.link %}<a href="{{ row.link }}" class="v">{{ row.value }}</a>
+		{% elif row.is_bool %}<span class="v" style="color:{{ 'var(--pos)' if row.good else 'var(--crit)' }};">{{ row.value }}</span>
+		{% else %}<span class="v">{{ row.value }}</span>{% endif %}
+	</div>
+	{% endmacro %}
+
+	{% macro _render_num(row) %}
+	<div class="dotted-row">
+		<span class="k">{{ row.label }}</span>
+		<span class="leader"></span>
+		<span class="v{% if row.breakdown %} context-tooltip bd-number{% endif %}"
+			{% if row.breakdown %}data-tooltip-title="{{ row.label }}" data-breakdown='{{ row.breakdown|tojson }}'{% endif %}>{{ row.value }}</span>
+	</div>
+	{% endmacro %}
+
+	{% macro _render_locked(row) %}
+	<div class="dotted-row">
+		<span class="k">{{ row.label }}</span>
+		<span class="leader"></span>
+		<span class="v"><span class="visibility-locked-inline" title="Requires Tier {{ row.tier }} visibility to view">Tier {{ row.tier }}+</span></span>
+	</div>
+	{% endmacro %}
+
+	{% macro _render_scalar(it) %}
+		{%- if it.kind == 'bar' %}{{ _render_bar(it) }}
+		{%- elif it.kind == 'kv_capped' %}{{ _render_kv_capped(it) }}
+		{%- elif it.kind == 'num' %}{{ _render_num(it) }}
+		{%- elif it.kind == 'locked' %}{{ _render_locked(it) }}
+		{%- else %}{{ _render_kv(it) }}
+		{%- endif %}
+	{% endmacro %}
+
+	<div style="display:grid;grid-template-columns:1fr 1.1fr;gap:18px;padding:16px 28px 30px;align-items:start;">
+		<div style="display:flex;flex-direction:column;gap:18px;">
+			{% if item_view.bars %}
+			<div class="surface-card">
+				<h3>Capped Values</h3>
+				<div style="display:flex;flex-direction:column;gap:9px;">
+					{% for b in item_view.bars %}{{ _render_scalar(b) }}{% endfor %}
+				</div>
+			</div>
+			{% endif %}
+
+			{% for group in item_view.groups %}
+			<div class="surface-card">
+				<h3>{{ group.label }}</h3>
+				<div style="display:flex;flex-direction:column;gap:9px;">
+					{% for it in group.fields %}{{ _render_scalar(it) }}{% endfor %}
+				</div>
+			</div>
+			{% endfor %}
+
+			{% if item_view.kv_rows or item_view.num_rows[6:] %}
+			<div class="surface-card">
+				<h3>Details</h3>
+				{% for row in item_view.kv_rows %}{{ _render_scalar(row) }}{% endfor %}
+				{% for row in item_view.num_rows[6:] %}{{ _render_scalar(row) }}{% endfor %}
+			</div>
+			{% endif %}
+
+			{% for group in item_view.chip_groups %}
+			<div class="surface-card">
+				<h3>{{ group.title }}</h3>
+				{% if group.locked_tier %}
+					<p class="visibility-locked">Requires Tier {{ group.locked_tier }} visibility.</p>
+				{% else %}
+				<div style="display:flex;flex-wrap:wrap;gap:6px;">
+					{% for chip in group.chips %}<span class="chip chip-accent">{{ chip }}</span>{% endfor %}
+				</div>
+				{% endif %}
+			</div>
+			{% endfor %}
+		</div>
+
+		<div style="display:flex;flex-direction:column;gap:18px;">
+			{% for table in item_view.tables %}
+			<div class="surface-card">
+				<h3>{{ table.title }}{% if table.rows %} <span class="card-count">({{ table.rows|length }})</span>{% endif %}</h3>
+				{% if table.locked_tier %}
+					<p class="visibility-locked">Requires Tier {{ table.locked_tier }} visibility.</p>
+				{% elif not table.rows %}
+					<p class="empty-state">None</p>
+				{% else %}
+				<div style="max-height:360px;overflow:auto;">
+					<table class="kh-table">
+						{% if table.headers %}
+						<thead><tr>{% for h in table.headers %}<th>{{ h }}</th>{% endfor %}</tr></thead>
+						{% endif %}
+						<tbody>
+							{% for row in table.rows %}
+							<tr>
+								{% for cell in row.cells %}
+								<td{% if cell.is_bool %} style="color:{{ 'var(--pos)' if cell.good else 'var(--crit)' }};"{% endif %}>
+									{%- if cell.link -%}
+										<a href="{{ cell.link }}">{{ cell.text }}</a>
+									{%- elif cell.discord_link -%}
+										{{ cell.text|format_discord_link|safe }}
+									{%- elif cell.cap_text is defined -%}
+										{{ cell.text }} / <span class="context-tooltip bd-number" data-tooltip-title="{{ cell.cap_tooltip_title }}" data-breakdown='{{ cell.cap_breakdown|tojson }}'>{{ cell.cap_text }}</span>
+									{%- elif cell.breakdown is defined -%}
+										<span class="context-tooltip bd-number" data-tooltip-title="{{ cell.tooltip_title }}" data-breakdown='{{ cell.breakdown|tojson }}'>{{ cell.text }}</span>
+									{%- else -%}
+										{{ cell.text }}
+									{%- endif -%}
+								</td>
+								{% endfor %}
+							</tr>
+							{% endfor %}
+						</tbody>
+					</table>
+				</div>
+				{% endif %}
+			</div>
+			{% endfor %}
+
+			{% for note in item_view.notes %}
+			<div class="surface-card">
+				<h3>{{ note.title }}</h3>
+				{% if note.locked_tier %}
+					<p class="visibility-locked">Requires Tier {{ note.locked_tier }} visibility.</p>
+				{% else %}
+				<div class="multiline-text" style="font-style:italic;color:var(--text-mid);">{{ note.text }}</div>
+				{% endif %}
+			</div>
+			{% endfor %}
+		</div>
+	</div>
+	{% else %}
+	<p class="empty-state" style="padding:20px 28px;">No schema-driven fields to display.</p>
+	{% endif %}
+
 	{% if primary_nations %}
-	<div class="content" style="margin-top:1.5rem;">
-		<h2>Nations with this as Primary</h2>
-		<table class="info-table">
-			<thead>
-				<tr>
-					<th>Nation</th>
-					<th>Pop Count</th>
-				</tr>
-			</thead>
+	<div class="surface-card" style="margin:0 28px 24px;">
+		<h3>Nations with this as Primary</h3>
+		<table class="kh-table">
+			<thead><tr><th>Nation</th><th>Pop Count</th></tr></thead>
 			<tbody>
 				{% for n in primary_nations %}
-				<tr>
-					<td><a href="/nations/item/{{ n.name | urlencode }}">{{ n.name }}</a></td>
-					<td>{{ n.pop_count }}</td>
-				</tr>
+				<tr><td><a href="/nations/item/{{ n.name | urlencode }}">{{ n.name }}</a></td><td>{{ n.pop_count }}</td></tr>
 				{% endfor %}
 			</tbody>
 		</table>
 	</div>
 	{% endif %}
 </div>
+{% endif %}
 {% endblock %}

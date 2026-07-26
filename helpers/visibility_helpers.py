@@ -134,7 +134,9 @@ ITEM_VIEW_FIELD_TIERS = {
 # knowing a nation trades doesn't reveal much, but its treasury does.
 NATION_VIEW_FIELD_TIERS = {
     # Tier 1 — demographics, pacts/vassalage, trade logistics (low-sensitivity)
-    "primary_race": 1, "primary_culture": 1, "primary_religion": 1,
+    # (primary_race/primary_culture/primary_religion are deliberately absent here —
+    # they default to tier 0 and are always visible; only the detailed pop-level
+    # breakdown ("pops") requires tier 1.)
     "pops": 1, "unique_minority_count": 1,
     "overlord": 1, "vassal_type": 1, "compliance": 1, "disobey_chance": 1,
     "rebellion_chance": 1, "compliance_gain_chance": 1, "compliance_loss_chance": 1,
@@ -162,9 +164,11 @@ NATION_VIEW_FIELD_TIERS = {
     "tax_stance": 2, "slavery_stance": 2,
 
     # Tier 3 — territory / districts / tech / quests / modifiers
+    # (current_territory/territory_types/effective_territory_types are deliberately
+    # absent here — they default to tier 0 and are always visible; only the
+    # "effective territory" capacity figure requires tier 3.)
     "administration": 3, "passive_expansion_chance": 3, "effective_territory": 3,
-    "current_territory": 3, "road_usage": 3, "route_capacity": 3,
-    "effective_territory_types": 3, "territory_types": 3, "nodes": 3,
+    "road_usage": 3, "route_capacity": 3, "nodes": 3,
     "effective_pop_capacity": 3,
     "districts": 3, "district_slots": 3, "imperial_district": 3,
     "city_slots": 3, "cities": 3, "wonders": 3,

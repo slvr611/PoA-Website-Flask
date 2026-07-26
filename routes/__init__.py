@@ -17,6 +17,7 @@ from .hex_map_routes import hex_map_routes
 from .district_def_routes import district_def_routes
 from .trade_route_routes import trade_route_routes
 from .disease_routes import disease_routes
+from .api_routes import api_routes
 
 def register_routes(app, mongo, discord):
     app.register_blueprint(base_routes)
@@ -36,12 +37,24 @@ def register_routes(app, mongo, discord):
     app.register_blueprint(district_def_routes)
     app.register_blueprint(trade_route_routes)
     app.register_blueprint(disease_routes)
+    app.register_blueprint(api_routes)
 
 @app.context_processor
 def inject_navbar_data():
     return {
         'user_entities': get_user_entities()
     }
+
+@app.context_processor
+def inject_pending_changes_count():
+    """Count of the current user's own Pending changes, for the "My Changes"
+    nav badge — same query as the /my_changes route itself."""
+    count = 0
+    if getattr(g, 'user', None):
+        player = mongo.db.players.find_one({"id": g.user.get("id")})
+        if player:
+            count = mongo.db.changes.count_documents({"requester": player["_id"], "status": "Pending"})
+    return {'pending_changes_count': count}
 
 @app.context_processor
 def inject_permission_data():

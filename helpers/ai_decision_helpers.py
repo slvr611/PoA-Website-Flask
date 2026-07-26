@@ -59,6 +59,10 @@ TRAIT_PERSONALITY_BIAS = {
     "Docile":       {"aggression": -0.3},
     "Fecund":       {"expansion": 0.2},
     "Industrious":  {"economic": 0.4},
+    # Undead-horde nations (Ravenous+Mindless together): massively bias toward
+    # war-prep — +2.0 alone guarantees the aggression dim clamps to its 1.0
+    # ceiling regardless of starting value (clamp range is -1.0..1.0).
+    "Ravenous":     {"aggression": 2.0,  "military": 1.0},
     "Semi-Aquatic": {"expansion": 0.15},
     "Sturdy":       {"military": 0.15},
     "Swift":        {"military": 0.1,   "expansion": 0.1},
@@ -66,6 +70,7 @@ TRAIT_PERSONALITY_BIAS = {
     "Bloodthirsty": {"aggression": 0.4,  "military": 0.3},
     "Insatiable":   {"economic": 0.2},
     "Irksome":      {"trade": -0.3},
+    "Mindless":     {"aggression": 2.0,  "military": 1.0},
     "Rowdy":        {"aggression": 0.2},
 }
 

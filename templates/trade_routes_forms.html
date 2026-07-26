@@ -5,7 +5,7 @@
   trade_routes_section.html reference via the HTML5 form attribute.
 
   Kept separate from the section partial so pages that embed the section
-  inside another <form> (nation_owner_edit.html's main edit form) can emit
+  inside another <form> (nation_owner.html's main edit form, when editable) can emit
   these AFTER that form closes. A <form> nested inside another form is
   invalid HTML: browsers drop the inner start tag but honor its </form>,
   closing the outer form early and orphaning every control after it —

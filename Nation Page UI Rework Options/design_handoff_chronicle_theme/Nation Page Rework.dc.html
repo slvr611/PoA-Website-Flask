@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/organic-3fb392c8-d3f9-4501-aa93-8f914c46cc28/styles.css">
+<script src="_ds/organic-3fb392c8-d3f9-4501-aa93-8f914c46cc28/_ds_bundle.js"></script>
+<style>
+body{margin:0;background:#efe4d0;font-family:var(--font-body,system-ui)}
+a{color:var(--color-accent-700,#8a4a22);text-decoration:none}a:hover{color:var(--color-accent-800,#6e3a19)}
+.dv-turn{padding:40px 44px 32px;scroll-margin-top:16px}
+.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 20px}
+.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1a1a1a;color:#fff;border-radius:4px;text-decoration:none}
+.dv-tname{font:600 13px/1.2 system-ui,sans-serif;color:#1a1a1a}
+.dv-opts{display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start}
+.dv-opt{flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px}
+.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,.08);color:#1a1a1a;border-radius:5px;text-decoration:none}
+.dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 11px/1.3 system-ui,sans-serif;color:rgba(0,0,0,.55)}
+.dv-card{max-width:100%;border-radius:16px;box-shadow:0 1px 3px rgba(0,0,0,.1);overflow:hidden}
+.dv-opt:target .dv-oid{background:#c67139;color:#fff}
+.dv-next{margin:22px 0 0;font:12px/1.5 system-ui,sans-serif;color:rgba(0,0,0,.5)}
+.rw-table{width:100%;border-collapse:collapse;font-size:13.5px}
+.rw-table th{text-align:left;padding:7px 10px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;font-weight:700;opacity:.65;border-bottom:2px solid currentColor}
+.rw-table td{padding:7px 10px;border-bottom:1px solid rgba(128,110,90,.25);white-space:nowrap}
+.rw-kv{display:grid;grid-template-columns:max-content 1fr;gap:5px 18px;font-size:13.5px}
+.rw-kv dt{opacity:.6;margin:0}.rw-kv dd{margin:0;font-weight:600}
+</style>
+</helmet>
+
+<section class="dv-turn" id="t1">
+<div class="dv-thd"><a class="dv-tid" href="#t1">1</a><span class="dv-tname">Nation page rework — three directions</span></div>
+
+<div style="max-width:960px;background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:12px;padding:22px 26px;margin-bottom:26px;font:13px/1.6 system-ui,sans-serif;color:#333">
+  <div style="font-weight:700;margin-bottom:6px">Assumptions &amp; reasoning</div>
+  <ul style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px">
+    <li><b>All data stays</b> — the 13 collapsible sections are regrouped into 6 domains: Overview, Economy (resources+jobs+trade), Development (districts+cities+wonders+tech+quests), Military, Diplomacy (relations+vassals), Laws. Nothing is removed, just relocated.</li>
+    <li><b>Header decluttered</b> — Edit/Customize stay as buttons; pending changes, history, recalculate, and the admin visibility toggle collapse into one "⋯ More" menu. A pending-changes count badge replaces the always-visible link.</li>
+    <li><b>Your top tasks get a summary strip</b> — resources/income, pops/jobs, stability and treasury are always visible above the fold, with breakdown tooltips kept (shown as dotted-underline numbers).</li>
+    <li><b>Per-nation flavor kept</b> — accent color, flag and banner slots survive in all three (try the accent tweak ↗).</li>
+    <li><b>New tech view</b> — a tier-by-tier list with progress bars replaces the Cytoscape graph as default; works at phone width (see Development in <a class="dv-oid" href="#1a">1a</a>).</li>
+    <li>Data shown is sample data for a fictional nation, Thornevale. Compare against <b>Current Nation Page.dc.html</b> (the baseline recreation).</li>
+  </ul>
+</div>
+
+<div class="dv-opts">
+
+<!-- ═══════════════════ 1a LEDGER — warm light, top tabs ═══════════════════ -->
+<div class="dv-opt" id="1a">
+<div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a>Ledger — warm light, top tabs, by-the-book Organic</div>
+<div class="dv-card" style="width:1180px;background:var(--color-bg,#f5ead8);color:var(--color-text,#201e1d)">
+<div style="--na: {{ accent }}">
+  <div style="display:flex;align-items:center;gap:24px;padding:10px 28px;background:var(--color-neutral-100);border-bottom:1px solid var(--color-neutral-200);font-size:13px">
+    <span style="font-family:var(--font-heading);font-size:17px">Path of Ages</span>
+    <nav style="display:flex;gap:4px">
+      <a href="#1a" style="padding:6px 12px;border-radius:999px;color:inherit">Map</a>
+      <a href="#1a" style="padding:6px 12px;border-radius:999px;background:var(--color-accent-100);color:var(--color-accent-800);font-weight:600">Nations</a>
+      <a href="#1a" style="padding:6px 12px;border-radius:999px;color:inherit">Demographics</a>
+      <a href="#1a" style="padding:6px 12px;border-radius:999px;color:inherit">World</a>
+    </nav>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:12px">
+      <a href="#1a" style="color:inherit">My Changes <span style="background:var(--color-accent);color:#fff;border-radius:999px;padding:1px 7px;font-size:11px;font-weight:700">2</span></a>
+      <div style="width:30px;height:30px;border-radius:50%;background:var(--color-accent-2-300)"></div>
+    </div>
+  </div>
+  <div style="height:110px;background:linear-gradient(105deg,color-mix(in oklch,var(--na,#c67139) 35%,var(--color-bg)) 0%,var(--color-accent-2-200) 100%);position:relative;overflow:hidden">
+    <div style="position:absolute;right:-40px;top:-60px;width:220px;height:220px;border-radius:50%;background:rgba(255,255,255,.25)"></div>
+    <div style="position:absolute;right:120px;bottom:-70px;width:140px;height:140px;border-radius:50%;background:rgba(255,255,255,.18)"></div>
+    <span style="position:absolute;left:28px;bottom:10px;font-size:11px;color:rgba(32,30,29,.55)">banner image slot</span>
+  </div>
+  <div style="display:flex;align-items:flex-end;gap:20px;padding:0 28px;margin-top:-34px;position:relative">
+    <div style="width:84px;height:84px;border-radius:20px;background:var(--color-neutral-100);border:3px solid var(--na,#c67139);box-shadow:var(--shadow-md);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--color-neutral-600)">flag</div>
+    <div style="padding-bottom:6px">
+      <h1 style="font-family:var(--font-heading);font-size:34px;margin:0;line-height:1.05">Thornevale</h1>
+      <div style="font-size:13px;color:var(--color-neutral-700);margin-top:2px"><a href="#1a">Golden Expanse</a> · Ruled by <a href="#1a">Queen Maerwen Thistledown</a> · Feudal Monarchy</div>
+    </div>
+    <div style="margin-left:auto;display:flex;gap:8px;padding-bottom:8px;align-items:center">
+      <sc-if value="{{ showPending }}" hint-placeholder-val="{{ true }}"><a href="#1a" style="font-size:12.5px;font-weight:600;color:var(--color-accent-700);background:var(--color-accent-100);padding:7px 14px;border-radius:999px">2 pending changes</a></sc-if>
+      <button style="border:0;border-radius:999px;padding:9px 20px;background:var(--na,#c67139);color:#fff;font-weight:700;font-size:13.5px;cursor:pointer;font-family:inherit" style-hover="filter:brightness(.92)">Edit</button>
+      <button style="border:2px solid var(--color-neutral-300);border-radius:999px;padding:7px 18px;background:transparent;color:inherit;font-weight:600;font-size:13.5px;cursor:pointer;font-family:inherit" style-hover="background:var(--color-neutral-100)">Customize</button>
+      <button title="Pending changes · Change history · Recalculate · Visibility" style="border:2px solid var(--color-neutral-300);border-radius:999px;width:36px;height:36px;background:transparent;cursor:pointer;font-size:16px;line-height:1" style-hover="background:var(--color-neutral-100)">⋯</button>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px;padding:18px 28px 6px">
+    <sc-for list="{{ statsA }}" as="st" hint-placeholder-count="6">
+      <div style="background:var(--color-neutral-100);border-radius:16px;padding:12px 16px;box-shadow:var(--shadow-sm)">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--color-neutral-600);font-weight:700">{{ st.label }}</div>
+        <div style="font-family:var(--font-heading);font-size:22px;margin-top:2px;border-bottom:2px dotted var(--color-accent-300);display:inline-block;cursor:help" title="Click for breakdown">{{ st.value }}</div>
+        <div style="font-size:11.5px;color:{{ st.subColor }};font-weight:600">{{ st.sub }}</div>
+      </div>
+    </sc-for>
+  </div>
+  <div style="display:flex;gap:6px;padding:14px 28px 0;border-bottom:2px solid var(--color-neutral-200)">
+    <sc-for list="{{ tabsA }}" as="t" hint-placeholder-count="6">
+      <button onClick="{{ t.onClick }}" style="{{ t.style }}" style-hover="color:var(--color-accent-700)">{{ t.label }}</button>
+    </sc-for>
+  </div>
+  <div style="padding:22px 28px 30px;min-height:560px">
+
+  <sc-if value="{{ aOv }}" hint-placeholder-val="{{ true }}">
+    <div style="display:grid;grid-template-columns:1.1fr .9fr;gap:18px">
+      <div style="display:flex;flex-direction:column;gap:18px">
+        <div style="background:var(--color-neutral-100);border-radius:16px;padding:18px 20px;box-shadow:var(--shadow-sm)">
+          <h3 style="font-family:var(--font-heading);margin:0 0 12px;font-size:17px">At a glance</h3>
+          <dl class="rw-kv" style="grid-template-columns:max-content 1fr max-content 1fr">
+            <dt>Stability gain</dt><dd style="border-bottom:2px dotted var(--color-accent-300);cursor:help">45% / 100%</dd>
+            <dt>Stability loss</dt><dd style="border-bottom:2px dotted var(--color-accent-300);cursor:help">10% / 300%</dd>
+            <dt>Infamy</dt><dd>3</dd>
+            <dt>Karma</dt><dd style="border-bottom:2px dotted var(--color-accent-300);cursor:help">12</dd>
+            <dt>Diplomatic range</dt><dd>12</dd>
+            <dt>Diplo check mod</dt><dd>+1</dd>
+            <dt>Origin</dt><dd>Riverfolk Confederacy</dd>
+            <dt>Temperament</dt><dd>Player</dd>
+            <dt>Routes</dt><dd>3 / 5</dd>
+            <dt>Passive expansion</dt><dd>15%</dd>
+          </dl>
+        </div>
+        <div style="background:var(--color-neutral-100);border-radius:16px;padding:18px 20px;box-shadow:var(--shadow-sm)">
+          <h3 style="font-family:var(--font-heading);margin:0 0 10px;font-size:17px">Active modifiers <span style="font-size:12px;font-weight:400;color:var(--color-neutral-600)">(4)</span></h3>
+          <table class="rw-table">
+            <thead><tr><th>Effect</th><th>Scope</th><th>Value</th><th>Duration</th><th>Source</th></tr></thead>
+            <tbody>
+              <tr><td>Food Production</td><td>National</td><td style="color:var(--color-accent-2-700);font-weight:700">+2</td><td>Permanent</td><td>Fertile Valleys</td></tr>
+              <tr><td>Stability Loss Chance</td><td>National</td><td style="color:var(--color-accent-800);font-weight:700">+5%</td><td>3 ticks</td><td>Post-War Weariness</td></tr>
+              <tr><td>Diplomatic Check</td><td>National</td><td style="color:var(--color-accent-2-700);font-weight:700">+1</td><td>5 ticks</td><td>Royal Wedding</td></tr>
+              <tr><td>Research (Researcher)</td><td>Job</td><td style="color:var(--color-accent-2-700);font-weight:700">+1</td><td>Permanent</td><td>Mage College Patronage</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:18px">
+        <div style="background:var(--color-accent-2-100);border-radius:16px;padding:18px 20px">
+          <h3 style="font-family:var(--font-heading);margin:0 0 10px;font-size:17px">Progress quests</h3>
+          <div style="display:flex;flex-direction:column;gap:10px;font-size:13px">
+            <div><div style="display:flex;justify-content:space-between;font-weight:600"><span>Chart the Western Fords</span><span>6 / 10</span></div>
+              <div style="height:8px;background:var(--color-accent-2-200);border-radius:999px;margin-top:4px"><div style="width:60%;height:8px;background:var(--color-accent-2-600);border-radius:999px"></div></div></div>
+            <div><div style="display:flex;justify-content:space-between;font-weight:600"><span>Found the River Guard</span><span style="color:var(--color-accent-2-800)">✓ 8 / 8</span></div>
+              <div style="height:8px;background:var(--color-accent-2-200);border-radius:999px;margin-top:4px"><div style="width:100%;height:8px;background:var(--color-accent-2-700);border-radius:999px"></div></div></div>
+          </div>
+        </div>
+        <div style="background:var(--color-neutral-100);border-radius:16px;padding:18px 20px;box-shadow:var(--shadow-sm)">
+          <h3 style="font-family:var(--font-heading);margin:0 0 8px;font-size:17px">Demographics</h3>
+          <dl class="rw-kv">
+            <dt>Primary race</dt><dd><a href="#1a">Human</a></dd>
+            <dt>Primary culture</dt><dd><a href="#1a">Thornish</a></dd>
+            <dt>Primary religion</dt><dd><a href="#1a">The Verdant Flame</a></dd>
+            <dt>Minorities</dt><dd>3 unique</dd>
+          </dl>
+          <a href="#1a" style="font-size:12.5px;font-weight:600;display:inline-block;margin-top:10px">View all 42 pops →</a>
+        </div>
+        <div style="background:var(--color-neutral-100);border-radius:16px;padding:18px 20px;box-shadow:var(--shadow-sm)">
+          <h3 style="font-family:var(--font-heading);margin:0 0 8px;font-size:17px">Notes</h3>
+          <p style="margin:0;font-size:13px;line-height:1.55;color:var(--color-neutral-800)">Thornevale controls the western fords. Standing agreement with Ashenreach on river tolls.</p>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ aEc }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex;flex-direction:column;gap:18px">
+      <div style="background:var(--color-neutral-100);border-radius:16px;padding:18px 20px;box-shadow:var(--shadow-sm)">
+        <h3 style="font-family:var(--font-heading);margin:0 0 10px;font-size:17px">Resources <span style="font-size:12px;font-weight:400;color:var(--color-neutral-600)">— dotted numbers open breakdowns</span></h3>
+        <table class="rw-table">
+          <thead><tr><th>Resource</th><th>Production</th><th>Consumption</th><th>Net</th><th>Storage</th><th></th></tr></thead>
+          <tbody>
+            <sc-for list="{{ resources }}" as="r" hint-placeholder-count="7">
+              <tr>
+                <td style="font-weight:600">{{ r.name }}</td>
+                <td style="border-bottom:1px solid rgba(128,110,90,.25)"><span style="border-bottom:2px dotted var(--color-accent-300);cursor:help">{{ r.prod }}</span></td>
+                <td><span style="border-bottom:2px dotted var(--color-accent-300);cursor:help">{{ r.cons }}</span></td>
+                <td><span style="background:{{ r.chipBg }};color:{{ r.chipFg }};font-weight:700;padding:2px 10px;border-radius:999px;font-size:12px">{{ r.net }}</span></td>
+                <td>{{ r.store }}</td>
+                <td style="font-size:11.5px;color:var(--color-accent-800);font-weight:600">{{ r.note }}</td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+      </div>
+      <div style="display:grid;grid-template-columns:1.2fr .8fr;gap:18px">
+        <div style="background:var(--color-neutral-100);border-radius:16px;padding:18px 20px;box-shadow:var(--shadow-sm)">
+          <div style="display:flex;justify-content:space-between;align-items:baseline">
+            <h3 style="font-family:var(--font-heading);margin:0 0 10px;font-size:17px">Jobs <span style="font-size:12px;font-weight:400;color:var(--color-neutral-600)">29 / 42 pops working</span></h3>
+            <button style="border:0;border-radius:999px;padding:6px 16px;background:var(--na,#c67139);color:#fff;font-weight:700;font-size:12.5px;cursor:pointer;font-family:inherit" style-hover="filter:brightness(.92)">Edit jobs</button>
+          </div>
+          <table class="rw-table">
+            <thead><tr><th>Job</th><th>Pops</th><th>Upkeep / worker</th><th>Production / worker</th></tr></thead>
+            <tbody>
+              <tr><td>Farmer</td><td>12</td><td>—</td><td><span style="border-bottom:2px dotted var(--color-accent-300);cursor:help">Food 2.5</span></td></tr>
+              <tr><td>Miner</td><td>6</td><td>Food 0.5</td><td><span style="border-bottom:2px dotted var(--color-accent-300);cursor:help">Stone 1.5</span></td></tr>
+              <tr><td>Researcher</td><td>4</td><td>Money 2</td><td><span style="border-bottom:2px dotted var(--color-accent-300);cursor:help">Research 1</span></td></tr>
+              <tr><td>Guard</td><td>3</td><td>Food 1</td><td>—</td></tr>
+              <tr><td>Entertainer</td><td>2</td><td>—</td><td>—</td></tr>
+              <tr><td>Mystic</td><td>2</td><td>Food 0.5</td><td><span style="border-bottom:2px dotted var(--color-accent-300);cursor:help">Magic 1.5</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:18px">
+          <div style="background:var(--color-neutral-100);border-radius:16px;padding:18px 20px;box-shadow:var(--shadow-sm)">
+            <h3 style="font-family:var(--font-heading);margin:0 0 10px;font-size:17px">Trade</h3>
+            <dl class="rw-kv">
+              <dt>Treasury</dt><dd>1,240 / 2,000</dd>
+              <dt>Income / tick</dt><dd style="border-bottom:2px dotted var(--color-accent-300);cursor:help">+185</dd>
+              <dt>Import slots</dt><dd>1 / 3 free</dd>
+              <dt>Export slots</dt><dd>2 / 4 free</dd>
+              <dt>Trade speed</dt><dd>2</dd>
+            </dl>
+            <div style="margin-top:10px;font-size:12.5px;line-height:1.6">
+              <div>→ <b>Ashenreach</b> · Food 3 out, Iron 1 in</div>
+              <div>→ <b>Guild of Sorrel</b> · Wood 2 out, Spices 1 in</div>
+            </div>
+          </div>
+          <div style="background:var(--color-neutral-100);border-radius:16px;padding:18px 20px;box-shadow:var(--shadow-sm)">
+            <h3 style="font-family:var(--font-heading);margin:0 0 10px;font-size:17px">Luxuries</h3>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;font-size:12px;font-weight:600">
+              <span style="background:var(--color-accent-100);border-radius:999px;padding:4px 12px">Spices 2/10</span>
+              <span style="background:var(--color-accent-100);border-radius:999px;padding:4px 12px">Furs 5/10</span>
+              <span style="background:var(--color-accent-100);border-radius:999px;padding:4px 12px">Gold 1/10</span>
+              <span style="background:var(--color-accent-100);border-radius:999px;padding:4px 12px">Tea 3/10</span>
+              <span style="background:var(--color-neutral-200);border-radius:999px;padding:4px 12px;color:var(--color-neutral-600)">Dyes 0</span>
+              <span style="background:var(--color-neutral-200);border-radius:999px;padding:4px 12px;color:var(--color-neutral-600)">Moonstone 0</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ aDev }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex;flex-direction:column;gap:18px">
+      <div>
+        <h3 style="font-family:var(--font-heading);margin:0 0 12px;font-size:17px">Districts <span style="font-size:12px;font-weight:400;color:var(--color-neutral-600)">3 of 4 slots built</span></h3>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px">
+          <sc-for list="{{ districts }}" as="d" hint-placeholder-count="4">
+            <div style="background:var(--color-neutral-100);border-radius:16px;overflow:hidden;box-shadow:var(--shadow-sm);border-top:5px solid {{ d.tint }}">
+              <div style="padding:12px 14px 10px">
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                  <div style="font-family:var(--font-heading);font-size:15.5px">{{ d.name }}</div>
+                  <span style="font-size:10.5px;font-weight:700;background:{{ d.tint }};color:#fff;border-radius:999px;padding:2px 8px">{{ d.tier }}</span>
+                </div>
+                <div style="font-size:11.5px;color:var(--color-neutral-600);margin-top:2px">Node: {{ d.node }}</div>
+                <div style="font-size:12.5px;margin-top:8px;line-height:1.5">{{ d.mods }}</div>
+                <div style="font-size:11.5px;color:var(--color-accent-2-800);margin-top:6px;font-weight:600">{{ d.extra }}</div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+        <div style="background:var(--color-neutral-100);border-radius:16px;padding:18px 20px;box-shadow:var(--shadow-sm)">
+          <h3 style="font-family:var(--font-heading);margin:0 0 8px;font-size:17px">Cities <span style="font-size:12px;font-weight:400;color:var(--color-neutral-600)">1 / 2 slots</span></h3>
+          <div style="font-size:13px"><b>Briarhold</b> — Fortified Town · +5 pop capacity, +2 defense · node: none</div>
+          <div style="font-size:12.5px;color:var(--color-neutral-600);margin-top:4px;font-style:italic">Empty city slot available</div>
+        </div>
+        <div style="background:var(--color-neutral-100);border-radius:16px;padding:18px 20px;box-shadow:var(--shadow-sm)">
+          <h3 style="font-family:var(--font-heading);margin:0 0 8px;font-size:17px">Wonders</h3>
+          <div style="font-size:13px"><a href="#1a"><b>The Everbloom Arbor</b></a> · Food node · Age of Founding · Active legacy</div>
+        </div>
+      </div>
+      <div style="background:var(--color-neutral-100);border-radius:16px;padding:18px 20px;box-shadow:var(--shadow-sm)">
+        <h3 style="font-family:var(--font-heading);margin:0 0 4px;font-size:17px">Technologies — tier list</h3>
+        <p style="margin:0 0 12px;font-size:12px;color:var(--color-neutral-600)">Replaces the graph as default. Each tier is a row of pills; tap to expand cost &amp; prerequisites. Scales to phone width — no canvas, no pinch-zoom.</p>
+        <sc-for list="{{ techTiers }}" as="tier" hint-placeholder-count="4">
+          <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:10px">
+            <div style="font-family:var(--font-heading);font-size:13px;color:var(--color-neutral-600);min-width:44px;padding-top:6px">{{ tier.label }}</div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px">
+              <sc-for list="{{ tier.items }}" as="tk" hint-placeholder-count="4">
+                <span style="{{ tk.style }}" title="{{ tk.tip }}">{{ tk.name }}</span>
+              </sc-for>
+            </div>
+          </div>
+        </sc-for>
+        <div style="display:flex;gap:16px;font-size:11.5px;color:var(--color-neutral-700);margin-top:6px">
+          <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:var(--color-accent-2-600);vertical-align:-1px"></span> researched</span>
+          <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:var(--na,#c67139);vertical-align:-1px"></span> investing</span>
+          <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:var(--color-neutral-100);border:2px solid var(--color-accent-2-600);vertical-align:-2px"></span> available</span>
+          <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:var(--color-neutral-200);vertical-align:-1px"></span> locked</span>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ aMil }}" hint-placeholder-val="{{ false }}">
+    <div style="background:var(--color-neutral-100);border-radius:16px;padding:18px 20px;box-shadow:var(--shadow-sm)">
+      <h3 style="font-family:var(--font-heading);margin:0 0 10px;font-size:17px">Land units <span style="font-size:12px;font-weight:400;color:var(--color-neutral-600)">18 / 20</span></h3>
+      <table class="rw-table">
+        <thead><tr><th>Unit</th><th>#</th><th>Atk</th><th>Def</th><th>HP</th><th>Morale</th><th>Dmg</th><th>Range</th><th>Speed</th><th>Armor</th><th>Upkeep</th></tr></thead>
+        <tbody>
+          <tr><td>Levy Spears</td><td>12</td><td>2</td><td style="border-bottom:2px dotted var(--color-accent-300);cursor:help;font-weight:700">3</td><td>4</td><td>3</td><td>1</td><td>1</td><td>2</td><td>1</td><td>Food 1</td></tr>
+          <tr><td>Longbowmen</td><td>4</td><td style="border-bottom:2px dotted var(--color-accent-300);cursor:help;font-weight:700">3</td><td>1</td><td>3</td><td>3</td><td>2</td><td>2</td><td>2</td><td>0</td><td>Food 1 · Wood 1</td></tr>
+          <tr><td>Hearth Mages ✦</td><td>2</td><td style="border-bottom:2px dotted var(--color-accent-300);cursor:help;font-weight:700">4</td><td>1</td><td>2</td><td>4</td><td>3</td><td>2</td><td>2</td><td>0</td><td>Food 1 · Magic 1</td></tr>
+        </tbody>
+      </table>
+      <h3 style="font-family:var(--font-heading);margin:18px 0 10px;font-size:17px">Support <span style="font-size:12px;font-weight:400;color:var(--color-neutral-600)">1 / 2</span> &nbsp;·&nbsp; Naval <span style="font-size:12px;font-weight:400;color:var(--color-neutral-600)">2 / 4</span></h3>
+      <table class="rw-table">
+        <tbody>
+          <tr><td>Supply Wagons</td><td>1</td><td colspan="8" style="color:var(--color-neutral-600)">support · Def 1 · HP 3 · Speed 2</td><td>Food 1</td></tr>
+          <tr><td>River Galleys</td><td>2</td><td colspan="8" style="color:var(--color-neutral-600)">naval · Atk 2 · Def 2 · HP 4 · Speed 3</td><td>Wood 1 · Money 5</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ aDip }}" hint-placeholder-val="{{ false }}">
+    <div style="display:grid;grid-template-columns:1.2fr .8fr;gap:18px">
+      <div style="background:var(--color-neutral-100);border-radius:16px;padding:18px 20px;box-shadow:var(--shadow-sm)">
+        <h3 style="font-family:var(--font-heading);margin:0 0 10px;font-size:17px">Relations</h3>
+        <table class="rw-table">
+          <thead><tr><th>Nation</th><th>Relation</th><th>Pact</th><th>Temperament</th></tr></thead>
+          <tbody>
+            <tr><td><a href="#1a">Ashenreach</a></td><td><span style="background:var(--color-accent-2-200);color:var(--color-accent-2-900);border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700">Friendly</span></td><td>Military Alliance</td><td>Player</td></tr>
+            <tr><td><a href="#1a">Vharlom</a></td><td><span style="background:var(--color-neutral-200);border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700">Neutral</span></td><td>Non-Aggression</td><td>Unknown</td></tr>
+            <tr><td><a href="#1a">Duskmere</a></td><td><span style="background:var(--color-accent-200);color:var(--color-accent-900);border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700">Hostile</span></td><td>—</td><td>Unknown</td></tr>
+          </tbody>
+        </table>
+        <div style="font-size:12.5px;color:var(--color-neutral-700);margin-top:10px">Slots — Alliance 1 · Defensive 2 · Non-aggression 3</div>
+      </div>
+      <div style="background:var(--color-neutral-100);border-radius:16px;padding:18px 20px;box-shadow:var(--shadow-sm)">
+        <h3 style="font-family:var(--font-heading);margin:0 0 10px;font-size:17px">Vassals</h3>
+        <p style="margin:0;font-size:13px;color:var(--color-neutral-600)">No vassals. 1 vassal slot available.</p>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ aLaw }}" hint-placeholder-val="{{ false }}">
+    <div style="background:var(--color-neutral-100);border-radius:16px;padding:18px 20px;box-shadow:var(--shadow-sm)">
+      <h3 style="font-family:var(--font-heading);margin:0 0 12px;font-size:17px">Government &amp; laws</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px 28px;font-size:13.5px">
+        <sc-for list="{{ laws }}" as="l" hint-placeholder-count="9">
+          <div style="display:flex;justify-content:space-between;border-bottom:1px solid var(--color-neutral-200);padding:5px 0"><span style="color:var(--color-neutral-600)">{{ l.k }}</span><b>{{ l.v }}</b></div>
+        </sc-for>
+      </div>
+    </div>
+  </sc-if>
+  </div>
+</div>
+</div>
+</div>
+
+<!-- ═══════════════════ 1b CHRONICLE — dark fantasy, sidebar ═══════════════════ -->
+<div class="dv-opt" id="1b">
+<div class="dv-olabel"><a class="dv-oid" href="#1b">1b</a>Chronicle — dark keep, left sidebar, same Organic shapes</div>
+<div class="dv-card" style="width:1180px;--color-bg:#221a12;--color-text:#f0e5d2;background:#221a12;color:#f0e5d2">
+<div style="display:flex;min-height:760px;--na: {{ accent }}">
+  <aside style="width:230px;flex:none;background:#1a140d;padding:22px 16px;display:flex;flex-direction:column;gap:4px;border-right:1px solid rgba(240,229,210,.08)">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;padding:0 8px">
+      <div style="width:52px;height:52px;border-radius:50%;background:radial-gradient(circle at 35% 30%,color-mix(in oklch,var(--na,#d98a54) 70%,#fff) 0%,var(--na,#d98a54) 60%,#7a4426 100%);display:flex;align-items:center;justify-content:center;font-family:var(--font-heading);font-size:22px;color:#221a12">T</div>
+      <div>
+        <div style="font-family:var(--font-heading);font-size:18px;line-height:1.1">Thornevale</div>
+        <div style="font-size:11px;color:rgba(240,229,210,.55)">Golden Expanse</div>
+      </div>
+    </div>
+    <sc-for list="{{ navB }}" as="n" hint-placeholder-count="6">
+      <button onClick="{{ n.onClick }}" style="{{ n.style }}" style-hover="background:rgba(217,138,84,.14)">
+        <span>{{ n.label }}</span><span style="font-size:11px;opacity:.6">{{ n.hint }}</span>
+      </button>
+    </sc-for>
+    <div style="margin-top:auto;display:flex;flex-direction:column;gap:8px;padding:0 8px">
+      <sc-if value="{{ showPending }}" hint-placeholder-val="{{ true }}"><a href="#1b" style="font-size:12px;color:#e8b46a;font-weight:600">◆ 2 pending changes</a></sc-if>
+      <button style="border:0;border-radius:999px;padding:9px 0;background:var(--na,#d98a54);color:#221a12;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit" style-hover="filter:brightness(1.1)">Edit nation</button>
+      <button style="border:1.5px solid rgba(240,229,210,.25);border-radius:999px;padding:7px 0;background:transparent;color:inherit;font-size:12.5px;cursor:pointer;font-family:inherit" style-hover="background:rgba(240,229,210,.08)">Customize · More ⋯</button>
+    </div>
+  </aside>
+  <div style="flex:1;min-width:0">
+    <div style="height:96px;background:linear-gradient(100deg,color-mix(in oklch,var(--na,#d98a54) 40%,#221a12),#3a4230);position:relative">
+      <div style="position:absolute;right:30px;top:-40px;width:160px;height:160px;border-radius:50%;background:rgba(240,229,210,.07)"></div>
+      <span style="position:absolute;left:24px;bottom:8px;font-size:11px;color:rgba(240,229,210,.5)">banner image slot</span>
+      <div style="position:absolute;right:24px;bottom:-18px;width:64px;height:64px;border-radius:16px;border:3px solid var(--na,#d98a54);background:#1a140d;display:flex;align-items:center;justify-content:center;font-size:10px;color:rgba(240,229,210,.5)">flag</div>
+    </div>
+    <div style="display:flex;gap:26px;padding:16px 26px 12px;border-bottom:1px solid rgba(240,229,210,.1);flex-wrap:wrap">
+      <sc-for list="{{ statsB }}" as="st" hint-placeholder-count="6">
+        <div>
+          <div style="font-size:10.5px;text-transform:uppercase;letter-spacing:.1em;color:rgba(240,229,210,.5);font-weight:700">{{ st.label }}</div>
+          <div style="font-family:var(--font-heading);font-size:20px;color:{{ st.color }};border-bottom:2px dotted rgba(217,138,84,.5);display:inline-block;cursor:help">{{ st.value }}</div>
+        </div>
+      </sc-for>
+    </div>
+    <div style="padding:20px 26px 30px">
+      <h2 style="font-family:var(--font-heading);font-size:22px;margin:0 0 14px;color:#a8b88a">{{ bTitle }}</h2>
+
+      <sc-if value="{{ bOv }}" hint-placeholder-val="{{ true }}">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          <div style="background:rgba(240,229,210,.05);border:1px solid rgba(240,229,210,.1);border-radius:16px;padding:16px 18px">
+            <div style="font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:#a8b88a;font-weight:700;margin-bottom:10px">The realm</div>
+            <sc-for list="{{ ovB }}" as="row" hint-placeholder-count="8">
+              <div style="display:flex;align-items:baseline;font-size:13.5px;padding:4px 0">
+                <span style="color:rgba(240,229,210,.6)">{{ row.k }}</span>
+                <span style="flex:1;border-bottom:1px dotted rgba(240,229,210,.25);margin:0 8px"></span>
+                <b>{{ row.v }}</b>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:16px">
+            <div style="background:rgba(240,229,210,.05);border:1px solid rgba(240,229,210,.1);border-radius:16px;padding:16px 18px">
+              <div style="font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:#a8b88a;font-weight:700;margin-bottom:10px">Blessings &amp; burdens (modifiers)</div>
+              <div style="font-size:13px;line-height:1.7">
+                <div><span style="color:#a8d88a;font-weight:700">+2</span> Food production — Fertile Valleys <span style="opacity:.5">· permanent</span></div>
+                <div><span style="color:#e08a6a;font-weight:700">+5%</span> Stability loss — Post-War Weariness <span style="opacity:.5">· 3 ticks</span></div>
+                <div><span style="color:#a8d88a;font-weight:700">+1</span> Diplomatic check — Royal Wedding <span style="opacity:.5">· 5 ticks</span></div>
+                <div><span style="color:#a8d88a;font-weight:700">+1</span> Research per Researcher — Mage College Patronage <span style="opacity:.5">· permanent</span></div>
+              </div>
+            </div>
+            <div style="background:rgba(240,229,210,.05);border:1px solid rgba(240,229,210,.1);border-radius:16px;padding:16px 18px">
+              <div style="font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:#a8b88a;font-weight:700;margin-bottom:8px">Chronicle notes</div>
+              <p style="margin:0;font-size:13px;line-height:1.6;color:rgba(240,229,210,.85);font-style:italic">Thornevale controls the western fords. Standing agreement with Ashenreach on river tolls.</p>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ bEc }}" hint-placeholder-val="{{ false }}">
+        <div style="background:rgba(240,229,210,.05);border:1px solid rgba(240,229,210,.1);border-radius:16px;padding:16px 18px;color:#f0e5d2">
+          <table class="rw-table" style="color:#f0e5d2">
+            <thead><tr><th>Resource</th><th>Prod</th><th>Cons</th><th>Net</th><th>Storage</th></tr></thead>
+            <tbody>
+              <sc-for list="{{ resources }}" as="r" hint-placeholder-count="7">
+                <tr>
+                  <td style="font-weight:600">{{ r.name }}</td>
+                  <td><span style="border-bottom:2px dotted rgba(217,138,84,.5);cursor:help">{{ r.prod }}</span></td>
+                  <td>{{ r.cons }}</td>
+                  <td style="color:{{ r.darkFg }};font-weight:700">{{ r.net }}</td>
+                  <td>{{ r.store }}</td>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+          <div style="margin-top:14px;font-size:13px;display:flex;gap:22px;flex-wrap:wrap">
+            <span>Treasury <b>1,240 / 2,000</b></span><span>Income <b style="color:#a8d88a">+185</b></span><span>Working pops <b>29 / 42</b></span>
+            <a href="#1b" style="color:#e8b46a;font-weight:600">Edit jobs →</a>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ bDev }}" hint-placeholder-val="{{ false }}">
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">
+          <sc-for list="{{ districts }}" as="d" hint-placeholder-count="4">
+            <div style="background:rgba(240,229,210,.05);border:1px solid rgba(240,229,210,.12);border-left:4px solid {{ d.tint }};border-radius:14px;padding:12px 14px">
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <div style="font-family:var(--font-heading);font-size:14.5px">{{ d.name }}</div>
+                <span style="font-size:10px;font-weight:700;color:{{ d.tint }};border:1px solid {{ d.tint }};border-radius:999px;padding:1px 7px">{{ d.tier }}</span>
+              </div>
+              <div style="font-size:11px;opacity:.55;margin-top:2px">node: {{ d.node }}</div>
+              <div style="font-size:12px;margin-top:6px;line-height:1.5">{{ d.mods }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="background:rgba(240,229,210,.05);border:1px solid rgba(240,229,210,.1);border-radius:16px;padding:16px 18px">
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:#a8b88a;font-weight:700;margin-bottom:10px">Tech — tier list</div>
+          <sc-for list="{{ techTiers }}" as="tier" hint-placeholder-count="4">
+            <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:8px">
+              <div style="font-family:var(--font-heading);font-size:12px;opacity:.55;min-width:40px;padding-top:5px">{{ tier.label }}</div>
+              <div style="display:flex;flex-wrap:wrap;gap:6px">
+                <sc-for list="{{ tier.items }}" as="tk" hint-placeholder-count="4">
+                  <span style="{{ tk.darkStyle }}" title="{{ tk.tip }}">{{ tk.name }}</span>
+                </sc-for>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ bMil }}" hint-placeholder-val="{{ false }}">
+        <div style="background:rgba(240,229,210,.05);border:1px solid rgba(240,229,210,.1);border-radius:16px;padding:16px 18px">
+          <table class="rw-table" style="color:#f0e5d2">
+            <thead><tr><th>Unit</th><th>#</th><th>Atk</th><th>Def</th><th>HP</th><th>Morale</th><th>Upkeep</th></tr></thead>
+            <tbody>
+              <tr><td>Levy Spears</td><td>12</td><td>2</td><td style="color:#e8b46a;font-weight:700">3</td><td>4</td><td>3</td><td>Food 1</td></tr>
+              <tr><td>Longbowmen</td><td>4</td><td style="color:#e8b46a;font-weight:700">3</td><td>1</td><td>3</td><td>3</td><td>Food 1 · Wood 1</td></tr>
+              <tr><td>Hearth Mages ✦</td><td>2</td><td style="color:#e8b46a;font-weight:700">4</td><td>1</td><td>2</td><td>4</td><td>Food 1 · Magic 1</td></tr>
+              <tr><td>Supply Wagons</td><td>1</td><td>—</td><td>1</td><td>3</td><td>2</td><td>Food 1</td></tr>
+              <tr><td>River Galleys</td><td>2</td><td>2</td><td>2</td><td>4</td><td>3</td><td>Wood 1 · Money 5</td></tr>
+            </tbody>
+          </table>
+          <div style="font-size:12.5px;opacity:.6;margin-top:8px">Land 18/20 · Support 1/2 · Naval 2/4</div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ bDip }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <sc-for list="{{ relations }}" as="rel" hint-placeholder-count="3">
+            <div style="display:flex;align-items:center;gap:14px;background:rgba(240,229,210,.05);border:1px solid rgba(240,229,210,.1);border-radius:14px;padding:12px 16px;font-size:13.5px">
+              <span style="width:10px;height:10px;border-radius:50%;background:{{ rel.dot }}"></span>
+              <b style="min-width:110px">{{ rel.name }}</b>
+              <span style="opacity:.75">{{ rel.relation }}</span>
+              <span style="margin-left:auto;opacity:.6">{{ rel.pact }}</span>
+            </div>
+          </sc-for>
+          <div style="font-size:12.5px;opacity:.6">Slots — Alliance 1 · Defensive 2 · Non-aggression 3 · No vassals (1 slot)</div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ bLaw }}" hint-placeholder-val="{{ false }}">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px 34px;background:rgba(240,229,210,.05);border:1px solid rgba(240,229,210,.1);border-radius:16px;padding:16px 20px">
+          <sc-for list="{{ laws }}" as="l" hint-placeholder-count="9">
+            <div style="display:flex;align-items:baseline;font-size:13.5px;padding:4px 0">
+              <span style="color:rgba(240,229,210,.6)">{{ l.k }}</span>
+              <span style="flex:1;border-bottom:1px dotted rgba(240,229,210,.25);margin:0 8px"></span>
+              <b>{{ l.v }}</b>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+    </div>
+  </div>
+</div>
+</div>
+</div>
+
+<!-- ═══════════════════ 1c COUNCIL TABLE — dashboard + drill-in ═══════════════════ -->
+<div class="dv-opt" id="1c">
+<div class="dv-olabel"><a class="dv-oid" href="#1c">1c</a>Council Table — dashboard of domain cards, click to drill in; most fantasy-flavored</div>
+<div class="dv-card" style="width:1180px;background:var(--color-bg,#f5ead8);color:var(--color-text,#201e1d)">
+<div style="--na: {{ accent }};padding:0 0 30px">
+  <div style="background:linear-gradient(180deg,color-mix(in oklch,var(--na,#c67139) 22%,var(--color-bg)),var(--color-bg));padding:26px 32px 18px;position:relative;overflow:hidden">
+    <div style="position:absolute;left:-50px;top:-70px;width:200px;height:200px;border-radius:50%;border:24px solid rgba(198,113,57,.12)"></div>
+    <div style="position:absolute;right:-30px;top:-40px;width:150px;height:150px;border-radius:50%;background:rgba(122,138,94,.14)"></div>
+    <div style="display:flex;align-items:center;gap:18px;position:relative">
+      <div style="width:72px;height:72px;border-radius:50%;background:var(--color-neutral-100);border:3px solid var(--na,#c67139);box-shadow:var(--shadow-md);display:flex;align-items:center;justify-content:center;font-size:10.5px;color:var(--color-neutral-600)">flag</div>
+      <div>
+        <div style="font-size:11.5px;text-transform:uppercase;letter-spacing:.18em;color:var(--color-accent-800);font-weight:700">The Free Realm of</div>
+        <h1 style="font-family:var(--font-heading);font-size:36px;margin:0;line-height:1">Thornevale</h1>
+        <div style="font-size:13px;color:var(--color-neutral-700);margin-top:4px"><a href="#1c">Golden Expanse</a> · <a href="#1c">Queen Maerwen Thistledown</a> · 42 souls across 38 leagues</div>
+      </div>
+      <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+        <button style="border:0;border-radius:999px;padding:9px 20px;background:var(--na,#c67139);color:#fff;font-weight:700;font-size:13.5px;cursor:pointer;font-family:inherit" style-hover="filter:brightness(.92)">Edit</button>
+        <button style="border:2px solid var(--color-neutral-300);border-radius:999px;width:36px;height:36px;background:transparent;cursor:pointer;font-size:16px" title="Customize · Pending · History · Recalculate · Visibility" style-hover="background:var(--color-neutral-100)">⋯</button>
+      </div>
+    </div>
+  </div>
+
+  <sc-if value="{{ cDash }}" hint-placeholder-val="{{ true }}">
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;padding:14px 32px 0">
+      <sc-for list="{{ domainCards }}" as="dc" hint-placeholder-count="6">
+        <div onClick="{{ dc.onClick }}" style="background:var(--color-neutral-100);border-radius:20px;padding:18px 20px;box-shadow:var(--shadow-sm);cursor:pointer;border:2px solid transparent" style-hover="border-color:var(--na,#c67139);box-shadow:var(--shadow-md)">
+          <div style="display:flex;justify-content:space-between;align-items:baseline">
+            <div style="font-family:var(--font-heading);font-size:18px">{{ dc.title }}</div>
+            <span style="font-size:12px;color:var(--color-accent-700);font-weight:700">open →</span>
+          </div>
+          <div style="display:flex;gap:18px;margin:10px 0 8px">
+            <div><div style="font-family:var(--font-heading);font-size:26px;color:var(--color-accent-800)">{{ dc.big }}</div><div style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--color-neutral-600);font-weight:700">{{ dc.bigLabel }}</div></div>
+            <div><div style="font-family:var(--font-heading);font-size:26px;color:var(--color-accent-2-800)">{{ dc.big2 }}</div><div style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--color-neutral-600);font-weight:700">{{ dc.big2Label }}</div></div>
+          </div>
+          <div style="font-size:12.5px;color:var(--color-neutral-700);line-height:1.55">{{ dc.preview }}</div>
+        </div>
+      </sc-for>
+    </div>
+    <p style="margin:16px 32px 0;font-size:12px;color:var(--color-neutral-600)">Every stat from the old page lives inside one of these six halls — click any card.</p>
+  </sc-if>
+
+  <sc-if value="{{ cDetail }}" hint-placeholder-val="{{ false }}">
+    <div style="padding:14px 32px 0">
+      <button onClick="{{ cBack }}" style="border:0;background:none;color:var(--color-accent-700);font-weight:700;font-size:13px;cursor:pointer;padding:0;font-family:inherit;margin-bottom:12px" style-hover="color:var(--color-accent-800)">← Back to the Council Table</button>
+      <div style="background:var(--color-neutral-100);border-radius:20px;padding:20px 24px;box-shadow:var(--shadow-sm)">
+        <h2 style="font-family:var(--font-heading);font-size:24px;margin:0 0 6px">{{ cTitle }}</h2>
+        <sc-if value="{{ cEconomy }}" hint-placeholder-val="{{ false }}">
+          <table class="rw-table">
+            <thead><tr><th>Resource</th><th>Production</th><th>Consumption</th><th>Net</th><th>Storage</th><th></th></tr></thead>
+            <tbody>
+              <sc-for list="{{ resources }}" as="r" hint-placeholder-count="7">
+                <tr>
+                  <td style="font-weight:600">{{ r.name }}</td>
+                  <td><span style="border-bottom:2px dotted var(--color-accent-300);cursor:help">{{ r.prod }}</span></td>
+                  <td>{{ r.cons }}</td>
+                  <td><span style="background:{{ r.chipBg }};color:{{ r.chipFg }};font-weight:700;padding:2px 10px;border-radius:999px;font-size:12px">{{ r.net }}</span></td>
+                  <td>{{ r.store }}</td>
+                  <td style="font-size:11.5px;color:var(--color-accent-800);font-weight:600">{{ r.note }}</td>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+          <div style="font-size:13px;margin-top:12px;display:flex;gap:24px">Treasury <b>1,240 / 2,000</b> · Income <b style="color:var(--color-accent-2-800)">+185</b> · Jobs: 29/42 working <a href="#1c" style="font-weight:700">Edit jobs →</a></div>
+        </sc-if>
+        <sc-if value="{{ cOther }}" hint-placeholder-val="{{ false }}">
+          <p style="margin:0;font-size:13.5px;color:var(--color-neutral-700);line-height:1.6">{{ cBody }}</p>
+        </sc-if>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</div>
+</div>
+
+</div>
+<p class="dv-next">Try next: "extend <a class="dv-oid" href="#1a">1a</a> to the data list + item pages" · "make <a class="dv-oid" href="#1b">1b</a>'s sidebar collapse on mobile" · "mix <a class="dv-oid" href="#1c">1c</a>'s header with <a class="dv-oid" href="#1a">1a</a>'s tabs"</p>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1280},&quot;accent&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#c67139&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;#c67139&quot;,&quot;#7a8a5e&quot;,&quot;#4a6fa5&quot;,&quot;#8a4a6f&quot;],&quot;section&quot;:&quot;Nation flavor&quot;},&quot;showPending&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Nation flavor&quot;}}">
+class Component extends DCLogic {
+  state = { a: 'ov', b: 'ov', c: 'dash' };
+  renderVals() {
+    const s = this.state;
+    const accent = this.props.accent ?? '#c67139';
+    const showPending = this.props.showPending ?? true;
+
+    const tabDefsA = [['ov', 'Overview'], ['ec', 'Economy'], ['dev', 'Development'], ['mil', 'Military'], ['dip', 'Diplomacy'], ['law', 'Laws']];
+    const tabsA = tabDefsA.map(([k, label]) => ({
+      label,
+      onClick: () => this.setState({ a: k }),
+      style: `border:0;background:none;cursor:pointer;font-family:inherit;font-size:14px;padding:10px 16px;border-radius:12px 12px 0 0;font-weight:${s.a === k ? 700 : 500};color:${s.a === k ? 'var(--color-accent-800)' : 'var(--color-neutral-700)'};border-bottom:3px solid ${s.a === k ? 'var(--na,#c67139)' : 'transparent'};margin-bottom:-2px`,
+    }));
+
+    const navDefsB = [['ov', 'Overview', ''], ['ec', 'Economy', '+185'], ['dev', 'Development', '3/4'], ['mil', 'Military', '18/20'], ['dip', 'Diplomacy', '3'], ['law', 'Laws', '']];
+    const navB = navDefsB.map(([k, label, hint]) => ({
+      label, hint,
+      onClick: () => this.setState({ b: k }),
+      style: `display:flex;justify-content:space-between;align-items:center;width:100%;border:0;text-align:left;cursor:pointer;font-family:inherit;font-size:13.5px;padding:10px 14px;border-radius:12px;background:${s.b === k ? 'color-mix(in oklch,var(--na,#d98a54) 22%, transparent)' : 'transparent'};color:${s.b === k ? '#f4c89a' : 'rgba(240,229,210,.8)'};font-weight:${s.b === k ? 700 : 500}`,
+    }));
+    const bTitles = { ov: 'Overview', ec: 'Economy — resources, jobs & trade', dev: 'Development — districts, cities & tech', mil: 'Military', dip: 'Diplomacy', law: 'Government & laws' };
+
+    const statsA = [
+      { label: 'Stability', value: '6', sub: '+45% / −10% chance', subColor: 'var(--color-accent-2-800)' },
+      { label: 'Treasury', value: '1,240', sub: '+185 / tick', subColor: 'var(--color-accent-2-800)' },
+      { label: 'Pops', value: '42 / 50', sub: '29 working', subColor: 'var(--color-neutral-600)' },
+      { label: 'Territory', value: '38 / 45', sub: '+15% expansion', subColor: 'var(--color-neutral-600)' },
+      { label: 'Administration', value: '52', sub: 'healthy', subColor: 'var(--color-accent-2-800)' },
+      { label: 'Research', value: '+4', sub: 'Telescope 2/3', subColor: 'var(--color-accent-800)' },
+    ];
+    const statsB = [
+      { label: 'Stability', value: '6', color: '#a8d88a' },
+      { label: 'Treasury', value: '1,240', color: '#f0e5d2' },
+      { label: 'Income', value: '+185', color: '#a8d88a' },
+      { label: 'Pops', value: '42/50', color: '#f0e5d2' },
+      { label: 'Territory', value: '38/45', color: '#f0e5d2' },
+      { label: 'Infamy', value: '3', color: '#e08a6a' },
+    ];
+
+    const chip = { pos: ['var(--color-accent-2-200)', 'var(--color-accent-2-900)'], neg: ['#f3dfae', '#7a5a10'], crit: ['var(--color-accent-200)', 'var(--color-accent-900)'], zero: ['var(--color-neutral-200)', 'var(--color-neutral-700)'] };
+    const darkFg = { pos: '#a8d88a', neg: '#e8d46a', crit: '#e08a6a', zero: 'rgba(240,229,210,.6)' };
+    const mkRes = (name, prod, cons, net, kind, store, note) => ({ name, prod, cons, net, store, note, chipBg: chip[kind][0], chipFg: chip[kind][1], darkFg: darkFg[kind] });
+    const resources = [
+      mkRes('Food', '14', '11', '+3', 'pos', '22 / 25', ''),
+      mkRes('Wood', '6', '7', '−1', 'neg', '4 / 15', 'draining stock'),
+      mkRes('Stone', '5', '2', '+3', 'pos', '15 / 15', 'storage full'),
+      mkRes('Mounts', '2', '2', '0', 'zero', '6 / 15', ''),
+      mkRes('Research', '4', '0', '+4', 'pos', '—', ''),
+      mkRes('Magic', '3', '4', '−2', 'crit', '1 / 15', 'shortfall next tick'),
+      mkRes('Iron', '2', '1', '+1', 'pos', '7 / 10', 'unique'),
+    ];
+
+    const districts = [
+      { name: 'Farmstead', tier: 'Tier 1', tint: 'var(--color-accent-2-600)', node: 'food', mods: 'Food +3 · Pop capacity +2', extra: '✓ Irrigation unlocked · 1 upgrade available' },
+      { name: 'Mage Tower', tier: 'Tier 2', tint: 'var(--na,#c67139)', node: 'magic', mods: 'Magic +2 · Research +1', extra: 'Synergy: magic node ✓ active' },
+      { name: 'Grand Bazaar', tier: 'Tier 2', tint: 'var(--na,#c67139)', node: 'unset', mods: 'Money +40 · Trade speed +1', extra: 'Assign a node for synergy' },
+      { name: 'Empty slot', tier: '—', tint: 'var(--color-neutral-400)', node: '—', mods: 'Nothing built here yet.', extra: '' },
+    ];
+
+    const pill = (state) => {
+      const base = 'font-size:12px;font-weight:600;padding:4px 12px;border-radius:999px;cursor:help;';
+      const map = {
+        done: base + 'background:var(--color-accent-2-600);color:#fff',
+        invest: base + `background:var(--na,#c67139);color:#fff`,
+        avail: base + 'background:var(--color-neutral-100);border:2px solid var(--color-accent-2-600);color:var(--color-accent-2-900);padding:2px 10px',
+        locked: base + 'background:var(--color-neutral-200);color:var(--color-neutral-600)',
+      };
+      const dark = {
+        done: base + 'background:#5a7a44;color:#fff',
+        invest: base + 'background:var(--na,#d98a54);color:#221a12',
+        avail: base + 'background:transparent;border:2px solid #8aa86a;color:#c8dcae;padding:2px 10px',
+        locked: base + 'background:rgba(240,229,210,.1);color:rgba(240,229,210,.45)',
+      };
+      return [map[state], dark[state]];
+    };
+    const mkTech = (name, state, tip) => { const [style, darkStyle] = pill(state); return { name, style, darkStyle, tip }; };
+    const techTiers = [
+      { label: 'I', items: [mkTech('Dawn to Dusk', 'done', 'Researched')] },
+      { label: 'II', items: [mkTech('Iron Harbors', 'done', 'Researched · 3'), mkTech('Maleficium', 'avail', 'Available · cost 3'), mkTech('Cantle Saddles', 'avail', 'Available · cost 3'), mkTech('Bread and Circus', 'done', 'Researched · 3'), mkTech('Telescope 2/3', 'invest', 'Investing · 2 of 3 paid')] },
+      { label: 'III', items: [mkTech('Crop Rotation', 'avail', 'Available · cost 5'), mkTech('Professional Peddlers', 'locked', 'Requires Iron Harbors + Telescope'), mkTech('Cold-Struck Coinage', 'locked', 'Locked'), mkTech('Schools of Magic', 'locked', 'Requires Maleficium'), mkTech('Chivalry', 'locked', 'Requires Cantle Saddles'), mkTech('Common Law', 'locked', 'Locked'), mkTech('Standing Army', 'locked', 'Locked'), mkTech('Legitimacy', 'locked', 'Locked')] },
+      { label: 'IV', items: [mkTech('Windmills', 'locked', 'Locked'), mkTech('Hourglass', 'locked', 'Locked'), mkTech('Mage College', 'locked', 'Locked'), mkTech('Strongholds', 'locked', 'Locked'), mkTech('Advanced Numerals', 'locked', 'Locked')] },
+    ];
+
+    const laws = [
+      { k: 'Government', v: 'Feudal Monarchy' }, { k: 'Succession', v: 'Primogeniture' }, { k: 'Conscription', v: 'Levy' },
+      { k: 'Military funding', v: 'Standard' }, { k: 'Magic stance', v: 'Regulated' }, { k: 'Centralization', v: 'Decentralized' },
+      { k: 'Citizenship', v: 'Residency' }, { k: 'Foreign acceptance', v: 'Open' }, { k: 'Subject stance', v: 'Autonomous' },
+      { k: 'Land doctrine', v: 'Defensive' }, { k: 'Naval doctrine', v: 'Riverine' }, { k: 'Diplomatic stance', v: 'Cooperative' },
+      { k: 'Scientific stance', v: 'Patronage' }, { k: 'Economy type', v: 'Agrarian' }, { k: 'Expansion', v: 'Consolidating' },
+      { k: 'Mercenary law', v: 'Permitted' }, { k: 'Consumption', v: 'Standard' }, { k: 'Tax stance', v: 'Moderate' },
+    ];
+
+    const ovB = [
+      { k: 'Stability gain / loss', v: '45% · 10%' }, { k: 'Karma (rolling · temp)', v: '12 (4 · 0)' },
+      { k: 'Infamy', v: '3' }, { k: 'Diplomatic range', v: '12' }, { k: 'Administration', v: '52' },
+      { k: 'Routes', v: '3 / 5' }, { k: 'Origin', v: 'Riverfolk Confederacy' }, { k: 'Primary culture', v: 'Thornish' },
+      { k: 'Primary religion', v: 'The Verdant Flame' }, { k: 'Quests', v: '1 active · 1 complete' },
+    ];
+
+    const relations = [
+      { name: 'Ashenreach', relation: 'Friendly', pact: 'Military Alliance', dot: '#a8d88a' },
+      { name: 'Vharlom', relation: 'Neutral', pact: 'Non-Aggression Pact', dot: 'rgba(240,229,210,.4)' },
+      { name: 'Duskmere', relation: 'Hostile', pact: '—', dot: '#e08a6a' },
+    ];
+
+    const cBodies = {
+      dev: 'Districts: Farmstead (T1, food), Mage Tower (T2, magic), Grand Bazaar (T2), 1 empty slot. City: Briarhold (Fortified Town). Wonder: The Everbloom Arbor. Tech: 3 researched, Telescope investing 2/3 — full tier list and quest tracker render here, as in 1a.',
+      mil: 'Land 18/20 — Levy Spears ×12, Longbowmen ×4, Hearth Mages ×2 ✦. Support 1/2 — Supply Wagons. Naval 2/4 — River Galleys. Full stat table with breakdown tooltips renders here.',
+      dip: 'Ashenreach — Friendly, Military Alliance · Vharlom — Neutral, NAP · Duskmere — Hostile. Slots: alliance 1, defensive 2, NAP 3. Vassal & overlord tables appear here when they exist.',
+      law: 'All 19 stances in a two-column ledger (Feudal Monarchy · Primogeniture · Levy · Regulated magic · Agrarian economy · Moderate tax …), with pending-change arrows inline.',
+      mods: 'Fertile Valleys +2 Food (permanent) · Post-War Weariness +5% stability loss (3 ticks) · Royal Wedding +1 diplo check (5) · Mage College Patronage +1 Research per Researcher. Plus demographics, notes, diseases and pending modifier diffs.',
+    };
+    const cTitles = { ec: 'Hall of Coin — economy', dev: 'The Builders\u2019 Hall — development', mil: 'War Room — military', dip: 'Embassy — diplomacy', law: 'Hall of Law — governance', mods: 'The Archive — modifiers & records' };
+    const domainCards = [
+      { key: 'ec', title: 'Hall of Coin', big: '+185', bigLabel: 'income / tick', big2: '1,240', big2Label: 'treasury', preview: 'Food +3 · Wood −1 · Magic −2 ⚠ · 29/42 pops working · 2 trade deals' },
+      { key: 'dev', title: 'Builders\u2019 Hall', big: '3/4', bigLabel: 'districts', big2: '2/3', big2Label: 'telescope', preview: 'Farmstead, Mage Tower, Grand Bazaar · Briarhold · Everbloom Arbor · 2 quests' },
+      { key: 'mil', title: 'War Room', big: '18/20', bigLabel: 'land units', big2: '2/4', big2Label: 'naval', preview: 'Levy Spears ×12 · Longbowmen ×4 · Hearth Mages ×2 ✦ · no active wars' },
+      { key: 'dip', title: 'Embassy', big: '3', bigLabel: 'relations', big2: '0', big2Label: 'vassals', preview: 'Ashenreach allied · Vharlom NAP · Duskmere hostile · diplo range 12' },
+      { key: 'law', title: 'Hall of Law', big: '19', bigLabel: 'stances', big2: '6', big2Label: 'stability', preview: 'Feudal Monarchy · Primogeniture · Regulated magic · Moderate tax' },
+      { key: 'mods', title: 'The Archive', big: '4', bigLabel: 'modifiers', big2: '42', big2Label: 'pops', preview: 'Fertile Valleys +2 Food · Post-War Weariness · demographics & notes' },
+    ].map(d => ({ ...d, onClick: () => this.setState({ c: d.key }) }));
+
+    return {
+      accent, showPending,
+      tabsA, statsA, laws, resources, districts, techTiers,
+      aOv: s.a === 'ov', aEc: s.a === 'ec', aDev: s.a === 'dev', aMil: s.a === 'mil', aDip: s.a === 'dip', aLaw: s.a === 'law',
+      navB, statsB, ovB, relations, bTitle: bTitles[s.b],
+      bOv: s.b === 'ov', bEc: s.b === 'ec', bDev: s.b === 'dev', bMil: s.b === 'mil', bDip: s.b === 'dip', bLaw: s.b === 'law',
+      domainCards,
+      cDash: s.c === 'dash', cDetail: s.c !== 'dash',
+      cEconomy: s.c === 'ec', cOther: s.c !== 'dash' && s.c !== 'ec',
+      cTitle: cTitles[s.c] || '', cBody: cBodies[s.c] || '', cBack: () => this.setState({ c: 'dash' }),
+    };
+  }
+}
+</script>
+</body>
+</html>

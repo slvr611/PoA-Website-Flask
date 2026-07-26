@@ -154,11 +154,14 @@
         "calculated": true,
         "hidden": true
       },
-      "market_luxury_resource": {
-        "bsonType": "string",
-        "label": "Luxury Resource",
-        "description": "The luxury resource this Luxury market generates each session. Auto-assigned on first tick if empty.",
-        "hidden": true
+      "market_luxury_resources": {
+        "bsonType": "array",
+        "label": "Luxury Resources",
+        "description": "The luxury resources this Luxury market has available to buy this session (1 rolled per market tier, duplicates allowed, at that resource's base price). Re-rolled every session; not carried over between sessions.",
+        "hidden": true,
+        "items": {
+          "bsonType": "string"
+        }
       },
       "minimum_trade_risk": {
         "bsonType": "number",

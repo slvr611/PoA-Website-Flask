@@ -8,6 +8,7 @@ from routes.nation_routes import edit_nation, nation_edit_request, nation_edit_a
 from app_core import category_data, mongo, rarity_rankings, json_data, find_dict_in_list, upload_bytes_to_s3
 from helpers.auth_helpers import admin_required
 from helpers.visibility_helpers import gate_item_view, gate_item_edit, ITEM_VIEW_FIELD_TIERS
+from helpers.data_item_view_helpers import build_item_view
 from calculations.field_calculations import calculate_all_fields
 from pymongo import ASCENDING
 from bson import ObjectId
@@ -574,6 +575,14 @@ def data_item(data_type, item_ref):
     def _names_set(col):
         return {d["name"] for d in category_data[col]["database"].find({}, {"_id": 0, "name": 1})}
 
+    item_view = None
+    if template_name == "dataItem.html":
+        item_view = build_item_view(
+            schema, item, breakdowns, linked_objects, json_data,
+            field_tiers, visibility_level, visibility_bypassed, g.view_access_level,
+            find_dict_in_list, json_data.get("scope_definitions", {}),
+        )
+
     return render_template(
         template_name,
         title=item.get("name", str(item.get("_id", ""))),
@@ -592,6 +601,7 @@ def data_item(data_type, item_ref):
         visibility_bypassed=visibility_bypassed,
         field_tiers=field_tiers,
         primary_nations=primary_nations,
+        item_view=item_view,
         **disease_extras,
     )
 
@@ -649,22 +659,24 @@ def data_item_new(data_type):
     if data_type == "units":
         extras = _build_unit_edit_extras(item=None)
         return render_template(
-            "units_edit.html",
+            "units_item.html",
             title="New Unit",
             schema=schema,
             form=form,
             item=None,
             dropdown_options=dropdown_options,
+            editable=True,
             **extras
         )
 
     if data_type == "diseases":
         return render_template(
-            "diseases_edit.html",
+            "diseases_item.html",
             title="New Disease",
             schema=schema,
             form=form,
             item=None,
+            editable=True,
         )
 
     SOURCE_TYPE_MAP = {
@@ -674,12 +686,15 @@ def data_item_new(data_type):
         "wonders": "wonder", "regions": "region", "global_modifiers": "global",
     }
     return render_template(
-        "dataItemNew.html",
+        "dataItem.html",
         title="New " + category_data[data_type]["singularName"],
         schema=schema,
         form=form,
+        item=None,
         dropdown_options=dropdown_options,
-        entity_source_type=SOURCE_TYPE_MAP.get(data_type, "")
+        entity_source_type=SOURCE_TYPE_MAP.get(data_type, ""),
+        data_type=data_type,
+        editable=True,
     )
 
 @data_item_routes.route("/<data_type>/new/request", methods=["POST"])
@@ -831,22 +846,24 @@ def data_item_edit(data_type, item_ref):
     if data_type == "units":
         extras = _build_unit_edit_extras(item=item)
         return render_template(
-            "units_edit.html",
+            "units_item.html",
             title=f"Edit {item_ref}",
             schema=schema,
             form=form,
             item=item,
             dropdown_options=dropdown_options,
+            editable=True,
             **extras
         )
 
     if data_type == "diseases":
         return render_template(
-            "diseases_edit.html",
+            "diseases_item.html",
             title=f"Edit {item_ref}",
             schema=schema,
             form=form,
             item=item,
+            editable=True,
         )
 
     SOURCE_TYPE_MAP = {
@@ -856,7 +873,7 @@ def data_item_edit(data_type, item_ref):
         "wonders": "wonder", "regions": "region", "global_modifiers": "global",
     }
     return render_template(
-        "dataItemEdit.html",
+        "dataItem.html",
         title=f"Edit {item_ref}",
         schema=schema,
         form=form,
@@ -864,6 +881,7 @@ def data_item_edit(data_type, item_ref):
         dropdown_options=dropdown_options,
         entity_source_type=SOURCE_TYPE_MAP.get(data_type, ""),
         data_type=data_type,
+        editable=True,
     )
 
 @data_item_routes.route("/<data_type>/edit/<item_ref>/request", methods=["POST"])

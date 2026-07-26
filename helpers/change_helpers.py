@@ -1206,7 +1206,31 @@ def get_dependent_objects(changed_data_type, changed_object_id, changed_object):
             
         # Check if this category depends on the changed data type
         for local_field, foreign_fields in external_reqs.items():
-            if _depends_on_data_type(changed_data_type, schema["properties"][local_field]):
+            field_schema = schema["properties"].get(local_field, {})
+
+            # Indirect link through a join/link table (e.g. nations.markets and
+            # markets.members both resolve through market_links). The field's
+            # own `collections` list names the FINAL linked entity (nations or
+            # markets), never the link table itself, so _depends_on_data_type
+            # can't see this case — a change to the link document (e.g. a
+            # market_safety_stance edit) would otherwise never propagate to
+            # either side, silently going stale (collect_external_requirements
+            # reads the link document's own fields directly, per
+            # collect_external_modifiers_from_object's linkCollection branch).
+            if field_schema.get("linkCollection") == changed_data_type:
+                target_field = field_schema.get("linkQueryTarget")
+                target_id = changed_object.get(target_field) if target_field else None
+                if target_id:
+                    try:
+                        dependent_objects.append({
+                            "data_type": category,
+                            "object_id": {"_id": ObjectId(target_id)},
+                        })
+                    except Exception:
+                        pass
+                continue
+
+            if _depends_on_data_type(changed_data_type, field_schema):
                 # Find objects that reference the changed object
                 dependent_ids = []
                 if schema.get("properties")[local_field].get("queryTargetAttribute"):

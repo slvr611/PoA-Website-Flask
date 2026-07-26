@@ -50,7 +50,15 @@
       "Bash(env)",
       "Bash(grep -n \"^import forms\\\\|from forms import\\\\|import forms$\" helpers/change_helpers.py helpers/form_helpers.py)",
       "Bash(node --check \"static/js/mobile-nav.js\")",
-      "Bash(node --check _map_extracted.js)"
+      "Bash(node --check _map_extracted.js)",
+      "Bash(jobs -l)",
+      "Bash(git diff *)",
+      "Bash(ls \"C:\\\\Users\\\\orion\\\\.claude\\\\projects\\\\c--Programming-Projects-PoA-Website-Flask\\\\memory\\\\\" 2>/dev/null; cat \"C:\\\\Users\\\\orion\\\\.claude\\\\projects\\\\c--Programming-Projects-PoA-Website-Flask\\\\memory\\\\MEMORY.md\" 2>/dev/null)",
+      "Read(//c/Users/orion/.claude/projects/c--Programming-Projects-PoA-Website-Flask/memory\" 2>/dev/null; cat C:Usersorion.claudeprojectsc--Programming-Projects-PoA-Website-FlaskmemoryMEMORY.md 2>/dev/**)",
+      "Bash(powershell -Command \"if \\(Test-Path 'C:\\\\Users\\\\orion\\\\.claude\\\\projects\\\\c--Programming-Projects-PoA-Website-Flask\\\\memory\\\\MEMORY.md'\\) { Get-Content 'C:\\\\Users\\\\orion\\\\.claude\\\\projects\\\\c--Programming-Projects-PoA-Website-Flask\\\\memory\\\\MEMORY.md' } else { 'NO_FILE' }\")",
+      "Bash(grep -n \"stat-strip\\\\|stat-card\\\\|Stability</\\\\|class=\\\\\"stat\" templates/nation_owner.html)",
+      "Bash(PYTHONPATH=. python -X utf8 \"C:\\\\Users\\\\orion\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Programming-Projects-PoA-Website-Flask\\\\4e2b9b97-545a-4b46-bd70-320c206433fb\\\\scratchpad\\\\seed_training_mrp_defs.py\")",
+      "Bash(PYTHONPATH=. python -X utf8 \"C:\\\\Users\\\\orion\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Programming-Projects-PoA-Website-Flask\\\\4e2b9b97-545a-4b46-bd70-320c206433fb\\\\scratchpad\\\\seed_expand_convert_mrp_defs.py\")"
     ]
   }
 }

@@ -77,7 +77,8 @@
         "description": "Which code-side handler resolves this mech RP's outcome",
         "enum": [
           "grant_resources", "adjust_stability", "expand_territory",
-          "change_law", "gain_money", "grant_temp_modifier"
+          "change_law", "gain_money", "grant_temp_modifier",
+          "character_training", "heir_training", "convert_population"
         ]
       },
       "law_axis": {
@@ -102,6 +103,36 @@
             }
           }
         }
+      },
+      "tiles_requested": {
+        "bsonType": "number",
+        "label": "Tiles Requested (Expand Territory only)",
+        "description": "Only used when Effect Type is Expand Territory. How many tiles this mech RP is themed around claiming — feeds Difficulty Per Tile to set the DC. Does not itself cap how many tiles are actually claimed on success; that's still set by the Tier Magnitude fields below.",
+        "default": 1
+      },
+      "difficulty_per_tile": {
+        "bsonType": "number",
+        "label": "Difficulty Per Tile (Expand Territory only)",
+        "description": "Only used when Effect Type is Expand Territory. Added to Base Difficulty for each tile in Tiles Requested.",
+        "default": 0
+      },
+      "difficulty_reduction_per_admin": {
+        "bsonType": "number",
+        "label": "Difficulty Reduction Per Administration (Expand Territory only)",
+        "description": "Only used when Effect Type is Expand Territory. Subtracted from the DC for each point of the nation's Administration field.",
+        "default": 0
+      },
+      "conversion_field": {
+        "bsonType": "enum",
+        "label": "Conversion Field (Convert Population only)",
+        "description": "Only used when Effect Type is Convert Population. Whether this mech RP converts pops' culture or religion to the nation's own primary value.",
+        "enum": ["culture", "religion"]
+      },
+      "foreign_conversion_difficulty_modifier": {
+        "bsonType": "number",
+        "label": "Foreign Conversion Difficulty Modifier (Convert Population only)",
+        "description": "Only used when Effect Type is Convert Population. Added to Base Difficulty when the AI has no domestic candidates (pops of a different culture/religion within its own borders) and targets a nearby foreign nation's pops instead.",
+        "default": 0
       },
       "tier_magnitude_critical_success": {
         "bsonType": "number",

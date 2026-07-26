@@ -1,6 +1,6 @@
 {% extends "layout.html" %}
 {% from "macros/tech_tree.html" import render_tech_tree %}
-{% from "_modifier_macros.html" import modifier_row with context %}
+{% from "_modifier_macros.html" import modifier_row, modifier_table, modifier_shared_js with context %}
 {% from "_district_macros.html" import district_card with context %}
 
 {% block title %}{{ nation["name"] }}{% endblock %}
@@ -8,31 +8,8 @@
 {% block content %}
 <style>
 .nation-page-container {
-    --nation-accent: {{ nation.get('accent_color', '#4a90d9') }};
+    --accent: {{ nation.get('accent_color', '#d98a54') }};
 }
-.header-bar { border-bottom-color: var(--nation-accent) !important; }
-.section-header h2 { color: var(--nation-accent); }
-.nation-flag {
-    max-height: 90px;
-    max-width: 180px;
-    border: 2px solid var(--nation-accent);
-    border-radius: 4px;
-    margin-bottom: 0.5rem;
-    object-fit: contain;
-}
-.header-bar-has-banner {
-    background-size: cover;
-    background-position: center;
-    position: relative;
-}
-.header-bar-has-banner::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: rgba(18, 18, 18, 0.72);
-    z-index: 0;
-}
-.header-bar-has-banner > * { position: relative; z-index: 1; }
 .pending-value { color: #f0c040; font-weight: bold; }
 .modifier-added { color: #f0c040; }
 .modifier-removed { color: #e05555; text-decoration: line-through; }
@@ -62,16 +39,6 @@
 .dc-node-tag { font-size:0.72rem; color:#fa8; margin-top:0.15rem; }
 .dc-unlocked-upg { font-size:0.74rem; color:#8f8; margin-top:0.1rem; }
 .dc-dim { opacity: 0.45; }
-.visibility-locked { color: #888; font-style: italic; padding: 0.75rem 1rem; }
-.visibility-locked-inline {
-    color: #777;
-    font-style: italic;
-    font-size: 0.85em;
-    border: 1px solid #444;
-    border-radius: 3px;
-    padding: 0 5px;
-    white-space: nowrap;
-}
 </style>
 
 {# ── Pending-change display macros ─────────────────────────────────────────── #}
@@ -102,14 +69,14 @@
 {%- endmacro %}
 
 {# pfbd_stab_pct: stab gain/loss chance — shows "actual% / cap%" with uncapped total in tooltip #}
-{% macro pfbd_stab_pct(current, cap, pending, pending_cap, breakdown, pending_bd, title) -%}
+{% macro pfbd_stab_pct(current, cap, pending, pending_cap, breakdown, pending_bd, title, cap_breakdown=[], pending_cap_bd=[]) -%}
 {%- set c = (current * 100)|int -%}
 {%- set cap_pct = (cap * 100)|int -%}
-<span class="context-tooltip" data-tooltip-title="{{ title }}" data-breakdown='{{ breakdown|tojson }}'>{{ c }}% / {{ cap_pct }}%</span>
+<span class="context-tooltip bd-number" data-tooltip-title="{{ title }}" data-breakdown='{{ breakdown|tojson }}'>{{ c }}%</span> / <span class="context-tooltip bd-number" data-tooltip-title="{{ title }} Cap" data-breakdown='{{ cap_breakdown|tojson }}'>{{ cap_pct }}%</span>
 {%- if pending is not none and ((pending * 100)|int != c or (pending_cap * 100)|int != cap_pct) %}
   {%- set pc = (pending * 100)|int -%}
   {%- set pcap = (pending_cap * 100)|int -%}
-  <span class="pending-value context-tooltip" data-tooltip-title="Pending: {{ title }}" data-breakdown='{{ pending_bd|tojson }}'>→ {{ pc }}% / {{ pcap }}%</span>
+  <span class="pending-value">→ <span class="context-tooltip bd-number" data-tooltip-title="Pending: {{ title }}" data-breakdown='{{ pending_bd|tojson }}'>{{ pc }}%</span> / <span class="context-tooltip bd-number" data-tooltip-title="Pending: {{ title }} Cap" data-breakdown='{{ pending_cap_bd|tojson }}'>{{ pcap }}%</span></span>
 {%- endif %}
 {%- endmacro %}
 
@@ -126,78 +93,138 @@
 {%- endif -%}
 {%- endmacro %}
 
+{# kv: one dotted-leader row inside a <dl class="kh-kv"> ledger card #}
+{% macro kv(label, value, color=none) -%}
+<dt>{{ label }}</dt><dd{% if color %} style="color:{{ color }};"{% endif %}>{{ value }}</dd>
+{%- endmacro %}
+
 {% set pn  = pending_nation or {} %}
 {% set pbd = pending_breakdowns or {} %}
+{% set breakdowns = breakdowns if breakdowns is defined else {} %}
 
 <div class="nation-page-container">
-	<div class="header-bar{% if nation.get('banner_url') %} header-bar-has-banner{% endif %}"
+	<div class="nation-header-bar{% if nation.get('banner_url') %} nation-header-bar-has-banner{% endif %}"
 		{% if nation.get('banner_url') %}style="background-image: url('{{ nation.banner_url | e }}');"{% endif %}>
-		{% if nation.get('flag_url') %}
-			<img src="{{ nation.flag_url | e }}" alt="{{ nation.name }} flag" class="nation-flag">
-		{% endif %}
-		<h1>{{ nation.name }}</h1>
-		{% if g.user is not none %}
-			<a href="{{ request.path.replace('item', 'edit') }}" class="edit-button">Edit</a>
-		{% endif %}
-		{% if user_is_owner or (g.user and g.user.get('is_admin')) %}
-			<a href="/nations/cosmetics/{{ nation.name }}" class="edit-button">Customize</a>
-		{% endif %}
-		{% if is_non_player_admin or g.is_non_player_rp_mod %}
-			<span class="edit-button" style="background:#2d4a5a;cursor:default;">Visibility: Bypassed (RP)</span>
-		{% elif g.user and (g.user.get('is_admin') or g.is_rp_mod) %}
-			{% if visibility_bypassed %}
-				<a href="{{ request.path }}" class="edit-button" style="background:#2d5a2d">Visibility: Bypassed</a>
-			{% else %}
-				<form method="POST" action="/visibility/toggle_bypass" style="display:inline;">
-					<input type="hidden" name="page_url" value="{{ request.full_path }}">
-					<input type="hidden" name="nation_name" value="{{ nation.name }}">
-					<button type="submit" class="edit-button" style="background:#5a2d2d">Visibility: Filtered (Tier {{ visibility_level }})</button>
-				</form>
+		<div class="nation-identity">
+			{% if nation.get('flag_url') %}
+				<img src="{{ nation.flag_url | e }}" alt="{{ nation.name }} flag" class="nation-flag">
 			{% endif %}
-		{% endif %}
-		<div class="action-links">
-			<a href="{{ request.path }}/changes/pending">View Pending Changes</a>
-			<a href="{{ request.path }}/changes/archived">View Change History</a>
-			<a href="{{ request.path }}/recalculate">Recalculate</a>
+			<div>
+				<h1 class="font-heading">{{ nation.name }}</h1>
+				<div class="nation-subtitle">
+					{% if linked_objects["region"] %}<a href="{{ linked_objects['region']['link'] }}">{{ linked_objects["region"]["name"] }}</a>{% else %}{{ schema.properties.region.label }}: None{% endif %}
+					{% if "rulers" in linked_objects and linked_objects["rulers"] is not none %}
+						· Ruled by
+						{% for ruler in linked_objects["rulers"] %}<a href="/characters/item/{{ ruler.name }}">{{ ruler.name }}</a>{% if not loop.last %}, {% endif %}{% endfor %}
+					{% endif %}
+					{% if user_is_owner or visibility_bypassed or visibility_level >= nation_field_tier("government_type") %} · {{ pf(nation.government_type, pn.get("government_type")) }}{% endif %}
+					{% if user_is_owner or visibility_bypassed or visibility_level >= nation_field_tier("temperament") %} · {{ pf(nation.temperament, pn.get("temperament")) }}{% endif %}
+				</div>
+			</div>
 		</div>
-		<div class="nation-summary">
-			<span>{{ schema.properties.region.label }}:
-				{% if linked_objects["region"] %}
-					<td><a href="{{ linked_objects['region']['link'] }}">{{ linked_objects["region"]["name"] }}</a></td>
-				{% else %}
-					None
+		<div class="nation-actions">
+			<a href="{{ request.path }}/changes/pending" class="pill-btn-outline pill-btn-sm">Pending</a>
+			<a href="{{ request.path }}/changes/archived" class="pill-btn-outline pill-btn-sm">History</a>
+			<a href="{{ request.path }}/recalculate" class="pill-btn-outline pill-btn-sm">Recalculate</a>
+			{% if editable %}
+				<a href="{{ request.path.replace('edit', 'item') }}" class="pill-btn-outline pill-btn-sm">Back to View</a>
+			{% else %}
+				{% if user_is_owner or (g.user and g.user.get('is_admin')) %}
+					<a href="/nations/cosmetics/{{ nation.name }}" class="pill-btn-outline pill-btn-sm">Customize</a>
 				{% endif %}
-			</span>
-			<span>{{ schema.properties.pop_count.label }}: {{ pf(nation.pop_count, pn.get("pop_count")) }}{% if visibility_level >= nation_field_tier("effective_pop_capacity") %} / {{ pfbd(nation.effective_pop_capacity, pn.get("effective_pop_capacity"), breakdowns.get("effective_pop_capacity", []), pbd.get("effective_pop_capacity", []), "Effective Pop Capacity") }}{% endif %}</span>
-			{% if (nation.slave_capacity | default(0)) > 0 %}
-			<span>Slaves: {{ pf(nation.slave_count | default(0), pn.get("slave_count")) }} / {{ pfbd(nation.slave_capacity | default(0), pn.get("slave_capacity"), breakdowns.get("slave_capacity", []), pbd.get("slave_capacity", []), "Slave Capacity") }}</span>
+				{% if g.user is not none %}
+					<a href="{{ request.path.replace('item', 'edit') }}" class="pill-btn pill-btn-sm">Edit</a>
+				{% endif %}
 			{% endif %}
-			{% if nation.empire %}
-				<span>Empire</span>
-				<span>{{ schema.properties.prestige.label }}: {{ pf(nation.prestige, pn.get("prestige")) }}</span>
-				<span>{{ schema.properties.prestige_gain.label }}: {{ pfbd(nation.prestige_gain, pn.get("prestige_gain"), breakdowns.get("prestige_gain", []), pbd.get("prestige_gain", []), "Prestige Gain") }}</span>
-			{% endif %}
-			{% if "rulers" in linked_objects and linked_objects["rulers"] is not none %}
-				<span>
-					{{ schema.properties.rulers.label }}:
-					{% for ruler in linked_objects["rulers"] %}
-						<a href="/characters/item/{{ ruler.name }}">{{ ruler.name }}</a>{% if not loop.last %}, {% endif %}
-					{% endfor %}
-				</span>
+			{% if is_non_player_admin or g.is_non_player_rp_mod %}
+				<span class="chip chip-sage">Visibility: Bypassed{{ ' (Full Edit)' if editable else ' (RP)' }}</span>
+			{% elif g.user and (g.user.get('is_admin') or g.is_rp_mod) %}
+				{% if visibility_bypassed %}
+					<a href="{{ request.path }}" class="chip chip-sage">Visibility: Bypassed{{ ' (Full Edit)' if editable else '' }}</a>
+				{% else %}
+					<form method="POST" action="/visibility/toggle_bypass" style="display:inline;">
+						<input type="hidden" name="page_url" value="{{ request.full_path }}">
+						<input type="hidden" name="nation_name" value="{{ nation.name }}">
+						<button type="submit" class="chip chip-ember" style="border:0;cursor:pointer;">Visibility: Filtered (Tier {{ visibility_level }})</button>
+					</form>
+				{% endif %}
 			{% endif %}
 		</div>
 	</div>
 
+	{% if not editable %}
+	<div class="stat-strip">
+		<div class="stat-card">
+			<div class="label">Stability</div>
+			{% set _stab_tier = nation_field_tier("stability") %}
+			{% if visibility_bypassed or visibility_level >= _stab_tier %}
+				<div class="value">{{ pf(nation.stability, pn.get("stability")) }}</div>
+				<div class="sub">{{ pf_pct(nation.stability_gain_chance, pn.get("stability_gain_chance")) }} gain · {{ pf_pct(nation.stability_loss_chance, pn.get("stability_loss_chance")) }} loss</div>
+			{% else %}
+				<div class="value"><span class="visibility-locked-inline" title="Requires Tier {{ _stab_tier }} visibility to view">Tier {{ _stab_tier }}+</span></div>
+			{% endif %}
+		</div>
+		<div class="stat-card">
+			<div class="label">Population</div>
+			<div class="value">{{ pf(nation.pop_count, pn.get("pop_count")) }}</div>
+			{% if visibility_level >= nation_field_tier("effective_pop_capacity") %}<div class="sub">/ {{ pfbd(nation.effective_pop_capacity, pn.get("effective_pop_capacity"), breakdowns.get("effective_pop_capacity", []), pbd.get("effective_pop_capacity", []), "Effective Pop Capacity") }} cap</div>{% endif %}
+		</div>
+		<div class="stat-card">
+			<div class="label">Territory</div>
+			<div class="value">{{ gate("current_territory", pf(nation.current_territory, pn.get("current_territory"))) }}</div>
+			<div class="sub">/ {{ gate("effective_territory", pfbd(nation.effective_territory, pn.get("effective_territory"), breakdowns.get("effective_territory", []), pbd.get("effective_territory", []), "Effective Territory")) }} eff.</div>
+		</div>
+		<div class="stat-card">
+			<div class="label">Administration</div>
+			<div class="value">{{ gate("administration", pfbd(nation.administration, pn.get("administration"), breakdowns.get("administration", []), pbd.get("administration", []), "Administration")) }}</div>
+		</div>
+		<div class="stat-card">
+			<div class="label">Infamy</div>
+			<div class="value">{{ gate("infamy", pf(nation.infamy, pn.get("infamy"))) }}</div>
+		</div>
+		{% if (nation.slave_capacity | default(0)) > 0 %}
+		<div class="stat-card">
+			<div class="label">Slaves</div>
+			<div class="value">{{ pf(nation.slave_count | default(0), pn.get("slave_count")) }}</div>
+			<div class="sub">/ {{ pfbd(nation.slave_capacity | default(0), pn.get("slave_capacity"), breakdowns.get("slave_capacity", []), pbd.get("slave_capacity", []), "Slave Capacity") }} cap</div>
+		</div>
+		{% endif %}
+		{% if nation.empire %}
+		<div class="stat-card">
+			<div class="label">Prestige <span class="chip chip-sage" style="padding:1px 8px;font-size:10px;">Empire</span></div>
+			<div class="value">{{ pf(nation.prestige, pn.get("prestige")) }}</div>
+			<div class="sub">{{ schema.properties.prestige_gain.label }}: {{ pfbd(nation.prestige_gain, pn.get("prestige_gain"), breakdowns.get("prestige_gain", []), pbd.get("prestige_gain", []), "Prestige Gain") }}</div>
+		</div>
+		{% endif %}
+	</div>
+	{% endif %}
+
+	<div class="tab-bar">
+		<button type="button" class="tab-btn active" data-tab="overview">Overview</button>
+		<button type="button" class="tab-btn" data-tab="demographics">Demographics</button>
+		<button type="button" class="tab-btn" data-tab="economy">Economy</button>
+		<button type="button" class="tab-btn" data-tab="development">Development</button>
+		<button type="button" class="tab-btn" data-tab="military">Military</button>
+		<button type="button" class="tab-btn" data-tab="diplomacy">Diplomacy</button>
+		<button type="button" class="tab-btn" data-tab="laws">Laws</button>
+	</div>
+
+	{% if editable %}
+		{% set default_action = (request.path ~ '/save') if g.user.is_admin else (request.path ~ '/request') %}
+		<form method="POST" action="{{ default_action }}" data-prevent-enter-submit="true">
+			{{ form.csrf_token }}
+	{% endif %}
+	<div class="expandable-sections">
 	{% if visibility_bypassed and nation.get('temperament', 'Player') != 'Player' %}
-	<div style="background:#1a2a1a;border:1px solid #3a6a3a;border-radius:6px;padding:1rem;margin-bottom:1rem;">
+	<div class="tab-panel active surface-card" data-tab="overview" style="margin:16px 28px;">
 		<div style="display:flex;align-items:baseline;gap:0.75rem;margin-bottom:0.5rem;">
-			<strong style="color:#7ec87e;">RP Mod Notes</strong>
-			<span style="font-size:0.8rem;color:var(--text-muted,#888);">Visible to RP mods only</span>
+			<h3 style="margin:0;">RP Mod Notes</h3>
+			<span style="font-size:0.8rem;color:var(--text-dim);">Visible to RP mods only</span>
 		</div>
 		{% if nation.get('rp_mod_notes') %}
 			<p style="margin:0;white-space:pre-wrap;">{{ nation.rp_mod_notes }}</p>
 		{% else %}
-			<p style="margin:0;color:var(--text-muted,#888);font-style:italic;">No notes recorded.</p>
+			<p class="empty-state" style="margin:0;">No notes recorded.</p>
 		{% endif %}
 	</div>
 	{% endif %}
@@ -207,10 +234,10 @@
 	{% set ai_plan = (nation.get('ai_state') or {}).get('planned_district') or {} %}
 	{% set ai_mech_rps = (nation.get('ai_state') or {}).get('mech_rps') or [] %}
 	{% if ai_goal.get('display_name') or ai_plan.get('display_name') or ai_mech_rps %}
-	<div style="background:#1a1f2a;border:1px solid #3a4a6a;border-radius:6px;padding:1rem;margin-bottom:1rem;">
+	<div class="tab-panel active surface-card" data-tab="overview" style="margin:16px 28px;">
 		<div style="display:flex;align-items:baseline;gap:0.75rem;margin-bottom:0.5rem;">
-			<strong style="color:#7ea8e8;">National Ambitions</strong>
-			<span style="font-size:0.8rem;color:var(--text-muted,#888);">Requires Tier {{ nation_field_tier("ai_state") }} visibility</span>
+			<h3 style="margin:0;">National Ambitions</h3>
+			<span style="font-size:0.8rem;color:var(--text-dim);">Requires Tier {{ nation_field_tier("ai_state") }} visibility</span>
 		</div>
 		{% if ai_goal.get('display_name') %}
 			<p style="margin:0 0 0.35rem 0;">Current focus: <strong>{{ ai_goal.display_name }}</strong></p>
@@ -224,7 +251,7 @@
 				{% endif %}
 			</p>
 		{% else %}
-			<p style="margin:0;color:var(--text-muted,#888);font-style:italic;">No construction currently planned.</p>
+			<p class="empty-state" style="margin:0;">No construction currently planned.</p>
 		{% endif %}
 		{% if ai_mech_rps %}
 			<p style="margin:0.35rem 0 0 0;">
@@ -236,512 +263,423 @@
 	{% endif %}
 	{% endif %}
 
-	<div class="expandable-sections">
-		<div class="expandable-section"  id="general-info-section">
-			<div class="section-header" onclick="toggleSection(this)">
-				<h2>General Information</h2>
-				<span class="toggle-icon">▼</span>
-			</div>
-			<div class="section-content">
+		<div class="tab-panel active surface-card" data-tab="overview" style="margin:16px 28px;">
+			<h3>At a Glance</h3>
 			{% set _tier = nation_field_tier("stability") %}
 			{% if visibility_level >= _tier %}
-				<div class="table-wrapper">
-					<table class="info-table">
-						<tr class="resources-header-row">
-							<th colspan="2" class="resources-header">General</th>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.stability.label }}:</th>
-							<td>{{ pf(nation.stability, pn.get("stability")) }}</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.stability_gain_chance.label }}:</th>
-							<td>
-								{{ pfbd_stab_pct(
-									nation.stability_gain_chance,
-									nation.get("stability_gain_chance_cap", 1),
-									pn.get("stability_gain_chance"),
-									pn.get("stability_gain_chance_cap", 1),
-									breakdowns["stability_gain_chance"],
-									pbd.get("stability_gain_chance", []),
-									"Stability Gain Chance"
-								) }}
-							</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.stability_loss_chance.label }}:</th>
-							<td>
-								{{ pfbd_stab_pct(
-									nation.stability_loss_chance,
-									nation.get("stability_loss_chance_cap", 3),
-									pn.get("stability_loss_chance"),
-									pn.get("stability_loss_chance_cap", 3),
-									breakdowns["stability_loss_chance"],
-									pbd.get("stability_loss_chance", []),
-									"Stability Loss Chance"
-								) }}
-							</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.stability_loss_chance_on_leader_death.label }}:</th>
-							<td>{{ pf_pct(nation.stability_loss_chance_on_leader_death, pn.get("stability_loss_chance_on_leader_death")) }}</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.infamy.label }}:</th>
-							<td>{{ pf(nation.infamy, pn.get("infamy")) }}</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.diplomatic_check_modifier.label }}:</th>
-							<td>{{ pf(nation.diplomatic_check_modifier, pn.get("diplomatic_check_modifier")) }}</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.prosperity_role.label }}:</th>
-							<td>{{ pf(nation.get("prosperity_role", "None"), pn.get("prosperity_role")) }}</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.karma.label }}:</th>
-							<td>
-								{{ pfbd(
-									nation.karma,
-									pn.get("karma"),
-									breakdowns.get("karma", []),
-									pbd.get("karma", []),
-									"Karma"
-								) }}
-							</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.rolling_karma.label }}:</th>
-							<td>{{ pf(nation.rolling_karma, pn.get("rolling_karma")) }}</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.temporary_karma.label }}:</th>
-							<td>{{ pf(nation.temporary_karma, pn.get("temporary_karma")) }}</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.diplomatic_range.label }}:</th>
-							<td>{{ pf(nation.diplomatic_range, pn.get("diplomatic_range")) }}</td>
-						</tr>
+				{% if editable %}
+					<dl class="kh-kv" style="grid-template-columns:max-content 1fr max-content 1fr;">
+						<dt>{{ form.name.label.text }}</dt><dd>{{ form.name(class="form-control") }}</dd>
+						<dt>{{ form.region.label.text }}</dt><dd>{{ form.region(class="form-control") }}</dd>
+						{% if nation.empire %}<dt>{{ form.prestige.label.text }}</dt><dd>{{ form.prestige(class="form-control") }}</dd>{% endif %}
+						<dt>{{ form.stability.label.text }}</dt><dd>{{ form.stability(class="form-control") }}</dd>
+						<dt>{{ schema.properties.stability_gain_chance.label }}</dt><dd>{{ (nation.stability_gain_chance * 100)|int }}%</dd>
+						<dt>{{ schema.properties.stability_loss_chance.label }}</dt><dd>{{ (nation.stability_loss_chance * 100)|int }}%</dd>
+						<dt>{{ form.infamy.label.text }}</dt><dd>{{ form.infamy(class="form-control") }}</dd>
+						<dt>{{ form.prosperity_role.label.text }}</dt><dd>{{ form.prosperity_role(class="form-control") }}</dd>
+						<dt>{{ form.temporary_karma.label.text }}</dt><dd>{{ form.temporary_karma(class="form-control") }}</dd>
 						{% if nation.nomadic > 0 %}
-							<tr>
-								<th>{{ schema.properties.migration_distance.label }}:</th>
-								<td>{{ pf(nation.migration_distance, pn.get("migration_distance")) }}</td>
-							</tr>
-							<tr>
-								<th>{{ schema.properties.stationary_delay.label }}:</th>
-								<td>{{ pf(nation.stationary_delay, pn.get("stationary_delay")) }}</td>
-							</tr>
+							<dt>{{ schema.properties.migration_distance.label }}</dt><dd>{{ nation.migration_distance }}</dd>
+							<dt>{{ schema.properties.stationary_delay.label }}</dt><dd>{{ nation.stationary_delay }}</dd>
 						{% endif %}
 						{% if nation.pop_loss_chance > 0 %}
-							<tr>
-								<th>{{ schema.properties.pop_loss_chance.label }}:</th>
-								<td>{{ pf_pct(nation.pop_loss_chance, pn.get("pop_loss_chance")) }}</td>
-							</tr>
+							<dt>{{ schema.properties.pop_loss_chance.label }}</dt><dd>{{ (nation.pop_loss_chance * 100)|int }}%</dd>
 						{% endif %}
-					</table>
-				</div>
-				<div class="table-wrapper">
-					<table class="info-table">
-						<tr class="resources-header-row">
-							<th colspan="2" class="resources-header">Miscellaneous</th>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.origin.label }}:</th>
-							<td>{{ pf(nation.origin, pn.get("origin")) }}</td>
-						</tr>
-						{% if view_access_level >= schema.properties.temperament.view_access_level %}
-							<tr>
-								<th>{{ schema.properties.temperament.label }}:</th>
-								<td>{{ pf(nation.temperament, pn.get("temperament")) }}</td>
-							</tr>
+						<dt>{{ form.origin.label.text }}</dt><dd>{{ form.origin(class="form-control") }}</dd>
+						{% if visibility_bypassed or visibility_level >= nation_field_tier("temperament") %}
+							<dt>{{ form.temperament.label.text }}</dt><dd>{{ form.temperament(class="form-control") }}</dd>
+						{% else %}
+							<input type="hidden" name="temperament" value="{{ nation.temperament }}">
 						{% endif %}
-					</table>
-				</div>
-				<h2>Notes</h2>
-				<div class="multiline-text">
-					{{ nation.notes }}
-				</div>
+					</dl>
+				{% else %}
+				<dl class="kh-kv" style="grid-template-columns:max-content 1fr max-content 1fr;">
+					{{ kv(schema.properties.stability_gain_chance.label, pfbd_stab_pct(nation.stability_gain_chance, nation.get("stability_gain_chance_cap", 1), pn.get("stability_gain_chance"), pn.get("stability_gain_chance_cap", 1), breakdowns["stability_gain_chance"], pbd.get("stability_gain_chance", []), "Stability Gain Chance", breakdowns.get("stability_gain_chance_cap", []), pbd.get("stability_gain_chance_cap", []))) }}
+					{{ kv(schema.properties.stability_loss_chance.label, pfbd_stab_pct(nation.stability_loss_chance, nation.get("stability_loss_chance_cap", 3), pn.get("stability_loss_chance"), pn.get("stability_loss_chance_cap", 3), breakdowns["stability_loss_chance"], pbd.get("stability_loss_chance", []), "Stability Loss Chance", breakdowns.get("stability_loss_chance_cap", []), pbd.get("stability_loss_chance_cap", []))) }}
+					{{ kv(schema.properties.stability_loss_chance_on_leader_death.label, pf_pct(nation.stability_loss_chance_on_leader_death, pn.get("stability_loss_chance_on_leader_death"))) }}
+					{{ kv(schema.properties.infamy.label, pf(nation.infamy, pn.get("infamy"))) }}
+					{{ kv(schema.properties.diplomatic_check_modifier.label, pf(nation.diplomatic_check_modifier, pn.get("diplomatic_check_modifier"))) }}
+					{{ kv(schema.properties.prosperity_role.label, pf(nation.get("prosperity_role", "None"), pn.get("prosperity_role"))) }}
+					<dt>{{ schema.properties.karma.label }}</dt>
+					<dd>{{ pfbd(nation.karma, pn.get("karma"), breakdowns.get("karma", []), pbd.get("karma", []), "Karma") }} <span style="opacity:.6;font-weight:400;">(rolling {{ pf(nation.rolling_karma, pn.get("rolling_karma")) }} · temp {{ pf(nation.temporary_karma, pn.get("temporary_karma")) }})</span></dd>
+					{{ kv(schema.properties.diplomatic_range.label, pf(nation.diplomatic_range, pn.get("diplomatic_range"))) }}
+					{% if nation.nomadic > 0 %}
+						{{ kv(schema.properties.migration_distance.label, pf(nation.migration_distance, pn.get("migration_distance"))) }}
+						{{ kv(schema.properties.stationary_delay.label, pf(nation.stationary_delay, pn.get("stationary_delay"))) }}
+					{% endif %}
+					{% if nation.pop_loss_chance > 0 %}
+						{{ kv(schema.properties.pop_loss_chance.label, pf_pct(nation.pop_loss_chance, pn.get("pop_loss_chance"))) }}
+					{% endif %}
+					{{ kv(schema.properties.origin.label, pf(nation.origin, pn.get("origin"))) }}
+					{% if visibility_bypassed or visibility_level >= nation_field_tier("temperament") %}
+						{{ kv(schema.properties.temperament.label, pf(nation.temperament, pn.get("temperament"))) }}
+					{% endif %}
+				</dl>
+				{% endif %}
 			{% else %}
 				<p class="visibility-locked">Requires Tier {{ _tier }} visibility.</p>
 			{% endif %}
-			</div>
 		</div>
 
-		<div class="expandable-section" id="administration-section">
-			<div class="section-header" onclick="toggleSection(this)">
-				<h2>Administration & Holdings</h2>
-				<span class="toggle-icon">▼</span>
-			</div>
-			<div class="section-content">
-			{% set _tier = nation_field_tier("administration") %}
-			{% if visibility_level >= _tier %}
-				<div class="table-wrapper">
-					<table class="info-table">
-						<tr class="resources-header-row">
-							<th colspan="2" class="resources-header">Administration</th>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.administration.label }}:</th>
-							<td>{{ pfbd(nation.administration, pn.get("administration"), breakdowns.get("administration", []), pbd.get("administration", []), "Administration") }}</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.passive_expansion_chance.label }}:</th>
-							<td>{{ pf_pct(nation.get("passive_expansion_chance", 0), pn.get("passive_expansion_chance")) }}</td>
-						</tr>
-						<tr>
-							<th>Territory:</th>
-							<td>{{ pf(nation.current_territory, pn.get("current_territory")) }} / {{ pfbd(nation.effective_territory, pn.get("effective_territory"), breakdowns.get("effective_territory", []), pbd.get("effective_territory", []), "Effective Territory") }}</td>
-						</tr>
-						<tr>
-							<th>Routes:</th>
-							<td>{{ pf(nation.road_usage, pn.get("road_usage")) }} / {{ pfbd(nation.route_capacity, pn.get("route_capacity"), breakdowns.get("route_capacity", []), pbd.get("route_capacity", []), "Route Capacity") }}</td>
-						</tr>
-					</table>
-					<table class="info-table">
-						<tr class="resources-header-row">
-							<th colspan="2" class="resources-header">Territory Holdings</th>
-						</tr>
-						{% set eff_territory = nation.get("effective_territory_types", nation.get("territory_types", {})) %}
-						{% for terrain, details in json_data["terrains"].items() %}
-							<tr>
-								<th>{{ details["display_name"] }}</th>
-								<td>{{ eff_territory.get(terrain, 0) }}</td>
-							</tr>
-						{% endfor %}
-					</table>
-					{% if nation.nomadic > 0 %}
-						<table class="info-table">
-							<tr class="resources-header-row">
-								<th colspan="2" class="resources-header">Nodes</th>
-							</tr>
-							{% for resource in json_data["general_resources"] + json_data["unique_resources"] %}
-								<tr>
-									<th>{{ resource["name"] }}</th>
-									<td>{{ nation.get("nodes", {}).get(resource["key"], 0) }}</td>
-								</tr>
+		<div class="tab-panel active surface-card" data-tab="overview" style="margin:16px 28px;">
+			<h3>Territory &amp; Infrastructure</h3>
+			{% set _terr_tier = nation_field_tier("territory_types") %}
+			{% if visibility_level >= _terr_tier %}
+				{% if editable %}
+					<h3 style="margin-top:0;">Territory Holdings <span class="card-count">{{ nation.get("current_territory", 0) }} total</span></h3>
+					<div class="table-wrapper">
+						<table class="kh-table">
+							{% for terrain, details in json_data["terrains"].items() %}
+								<tr><th>{{ details["display_name"] }}</th><td>{{ nation.get("territory_types", {}).get(terrain, 0) }}</td></tr>
 							{% endfor %}
 						</table>
+					</div>
+				{% else %}
+				<h3 style="margin-top:0;">Territory Holdings <span class="card-count">{{ pf(nation.current_territory, pn.get("current_territory")) }} total</span></h3>
+				<div style="display:flex;flex-wrap:wrap;gap:6px;">
+					{% if visibility_bypassed or visibility_level >= nation_field_tier("effective_territory") %}
+						{% set eff_territory = nation.get("effective_territory_types", nation.get("territory_types", {})) %}
+					{% else %}
+						{% set eff_territory = nation.get("territory_types", {}) %}
 					{% endif %}
+					{% for terrain, details in json_data["terrains"].items() %}
+						{% if eff_territory.get(terrain, 0) > 0 %}<span class="chip">{{ details["display_name"] }}: {{ eff_territory.get(terrain, 0) }}</span>{% endif %}
+					{% endfor %}
 				</div>
+				{% endif %}
 			{% else %}
-				<p class="visibility-locked">Requires Tier {{ _tier }} visibility.</p>
+				<p class="visibility-locked">Requires Tier {{ _terr_tier }} visibility.</p>
 			{% endif %}
+
+			{% set _tier = nation_field_tier("administration") %}
+			{% if visibility_level >= _tier %}
+				{% if editable %}
+					<dl class="kh-kv" style="grid-template-columns:max-content 1fr max-content 1fr;margin-top:16px;">
+						<dt>{{ schema.properties.passive_expansion_chance.label }}</dt><dd>{{ (nation.get("passive_expansion_chance", 0) * 100)|int }}%</dd>
+						<dt>Routes</dt><dd>{{ nation.road_usage }} / {{ nation.route_capacity }}</dd>
+					</dl>
+					{% if nation.nomadic > 0 %}
+						<h3 style="margin-top:16px;">Nodes</h3>
+						<div class="table-wrapper">
+							<table class="kh-table">
+								{% for resource in json_data["general_resources"] + json_data["unique_resources"] %}
+									<tr><th>{{ resource["name"] }}</th><td>{{ form.nodes[resource["key"]](class="form-control") }}</td></tr>
+								{% endfor %}
+							</table>
+						</div>
+					{% endif %}
+				{% else %}
+				<dl class="kh-kv" style="grid-template-columns:max-content 1fr max-content 1fr;margin-top:16px;">
+					{{ kv(schema.properties.passive_expansion_chance.label, pf_pct(nation.get("passive_expansion_chance", 0), pn.get("passive_expansion_chance"))) }}
+					<dt>Routes</dt>
+					<dd>{{ pf(nation.road_usage, pn.get("road_usage")) }} / {{ pfbd(nation.route_capacity, pn.get("route_capacity"), breakdowns.get("route_capacity", []), pbd.get("route_capacity", []), "Route Capacity") }}</dd>
+				</dl>
+				{% if nation.nomadic > 0 %}
+					<h3 style="margin-top:16px;">Nodes</h3>
+					<div style="display:flex;flex-wrap:wrap;gap:6px;">
+						{% for resource in json_data["general_resources"] + json_data["unique_resources"] %}
+							{% if nation.get("nodes", {}).get(resource["key"], 0) > 0 %}<span class="chip">{{ resource["name"] }}: {{ nation.get("nodes", {}).get(resource["key"], 0) }}</span>{% endif %}
+						{% endfor %}
+					</div>
+				{% endif %}
+				{% endif %}
+			{% else %}
+				<p class="visibility-locked" style="margin-top:16px;">Requires Tier {{ _tier }} visibility.</p>
+			{% endif %}
+		</div>
+
+		<div class="tab-panel active surface-card" data-tab="overview" style="margin:16px 28px;">
+			<h3>Chronicle Notes</h3>
+			{% if editable %}
+				<div style="margin-bottom:8px;">
+					<label for="{{ form.notes.id }}" style="display:block;margin-bottom:4px;color:var(--text-dim);">{{ form.notes.label.text }}</label>
+					{{ form.notes(class="form-control") }}
+				</div>
+				{% if visibility_bypassed and nation.get('temperament', 'Player') != 'Player' %}
+				<div style="border-top:1px solid var(--border);padding-top:10px;margin-top:10px;">
+					<label for="{{ form.rp_mod_notes.id }}" style="display:block;margin-bottom:4px;color:var(--pos);">
+						{{ form.rp_mod_notes.label.text }}
+						<span style="font-size:0.8rem;color:var(--text-dim);font-weight:normal;"> — visible to RP mods only</span>
+					</label>
+					{{ form.rp_mod_notes(class="form-control", rows=4) }}
+				</div>
+				{% endif %}
+			{% else %}
+			<div class="multiline-text" style="margin-top:0;font-style:italic;">
+				{{ nation.notes or "No notes recorded." }}
 			</div>
+			{% endif %}
 		</div>
 
 
-		<div class="expandable-section" id="demographics-section">
-			<div class="section-header" onclick="toggleSection(this)">
-				<h2>Demographics & Population</h2>
-				<span class="toggle-icon">▼</span>
-			</div>
-			<div class="section-content">
-				{% set _tier = nation_field_tier("primary_race") %}
-				{% if visibility_level >= _tier %}
-				<div class="table-wrapper">
-					<table class="info-table">
-						<tr class="resources-header-row">
-							<th colspan="2" class="resources-header">Demographics</th>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.primary_race.label }}:</th>
-							{% if linked_objects['primary_race'] %}
-								<td><a href="{{ linked_objects['primary_race']['link'] }}">{{ linked_objects['primary_race']['name'] }}</a></td>
-							{% else %}
-								None
-							{% endif %}
-						</tr>
-						<tr>
-							<th>{{ schema.properties.primary_culture.label }}:</th>
-							{% if linked_objects['primary_culture'] %}
-								<td><a href="{{ linked_objects['primary_culture']['link'] }}">{{ linked_objects['primary_culture']['name'] }}</a></td>
-							{% else %}
-								None
-							{% endif %}
-						</tr>
-						<tr>
-							<th>{{ schema.properties.primary_religion.label }}:</th>
-							{% if linked_objects['primary_religion'] %}
-								<td><a href="{{ linked_objects['primary_religion']['link'] }}">{{ linked_objects['primary_religion']['name'] }}</a></td>
-							{% else %}
-								None
-							{% endif %}
-						</tr>
-						<tr>
-							<th>{{ schema.properties.unique_minority_count.label }}:</th>
-							<td>{{ pf(nation.unique_minority_count, pn.get("unique_minority_count")) }}</td>
-						</tr>
-					</table>
-					<table class="info-table">
+		<div class="tab-panel surface-card" data-tab="demographics" style="margin:16px 28px;">
+			<h3>Demographics</h3>
+			{% set _tier = nation_field_tier("primary_race") %}
+			{% if visibility_level >= _tier %}
+				{% set _minority_tier = nation_field_tier("unique_minority_count") %}
+				{% if editable %}
+					<dl class="kh-kv">
+						<dt>{{ form.primary_race.label.text }}</dt><dd>{{ form.primary_race(class="form-control") }}</dd>
+						<dt>{{ form.primary_culture.label.text }}</dt><dd>{{ form.primary_culture(class="form-control") }}</dd>
+						<dt>{{ form.primary_religion.label.text }}</dt><dd>{{ form.primary_religion(class="form-control") }}</dd>
+						{% if visibility_level >= _minority_tier %}
+							<dt>{{ schema.properties.unique_minority_count.label }}</dt><dd>{{ nation.unique_minority_count }}</dd>
+						{% endif %}
+					</dl>
+				{% else %}
+				<dl class="kh-kv">
+					<dt>{{ schema.properties.primary_race.label }}</dt>
+					<dd>{% if linked_objects['primary_race'] %}<a href="{{ linked_objects['primary_race']['link'] }}">{{ linked_objects['primary_race']['name'] }}</a>{% else %}None{% endif %}</dd>
+					<dt>{{ schema.properties.primary_culture.label }}</dt>
+					<dd>{% if linked_objects['primary_culture'] %}<a href="{{ linked_objects['primary_culture']['link'] }}">{{ linked_objects['primary_culture']['name'] }}</a>{% else %}None{% endif %}</dd>
+					<dt>{{ schema.properties.primary_religion.label }}</dt>
+					<dd>{% if linked_objects['primary_religion'] %}<a href="{{ linked_objects['primary_religion']['link'] }}">{{ linked_objects['primary_religion']['name'] }}</a>{% else %}None{% endif %}</dd>
+					{% if visibility_level >= _minority_tier %}
+						<dt>{{ schema.properties.unique_minority_count.label }}</dt>
+						<dd>{{ pf(nation.unique_minority_count, pn.get("unique_minority_count")) }}</dd>
+					{% endif %}
+				</dl>
+				{% endif %}
+			{% else %}
+				<p class="visibility-locked">Requires Tier {{ _tier }} visibility.</p>
+			{% endif %}
+		</div>
+
+		{% set _tier = nation_field_tier("pops") %}
+		{% if visibility_level >= _tier %}
+		<div class="tab-panel surface-card" data-tab="demographics" style="margin:16px 28px;">
+			{% if editable %}
+				<h3>Population <span class="card-count">{{ linked_objects["pops"]|length }} pops</span></h3>
+				<div style="max-height:420px;overflow:auto;">
+					<table class="kh-table" id="pop-edit-table">
 						<thead>
-							<tr class="resources-header-row">
-								<th colspan="4" class="resources-header">Population Details</th>
-							</tr>
 							<tr>
-								<th colspan="4">
-									Showing {{ linked_objects["pops"]|length }} of {{ pop_pagination.total_items }} pops
-									(page {{ pop_pagination.page }} of {{ pop_pagination.total_pages }})
-								</th>
-							</tr>
-							<tr>
-								<th>#</th>
-								<th>Race</th>
-								<th>Culture</th>
-								<th>Religion</th>
-								<th>Status</th>
+								<th><input type="checkbox" id="select-all-pops" title="Select all"></th>
+								<th>#</th><th>Race</th><th>Culture</th><th>Religion</th><th>Disease</th><th>Reason</th>
+								{% if g.user.is_admin %}<th>Clone Now</th>{% endif %}
+								<th>Request Clone</th>
 							</tr>
 						</thead>
 						<tbody>
 							{% for pop in linked_objects["pops"] %}
+								<tr data-pop-id="{{ pop._id }}" data-nation="{{ nation._id }}"
+									data-race="{{ pop.get('race', '') }}" data-culture="{{ pop.get('culture', '') }}" data-religion="{{ pop.get('religion', '') }}">
+									<td><input type="checkbox" class="pop-select"></td>
+									<td><a href="{{ pop['link'] }}">{{ loop.index }}</a></td>
+									<td class="pop-race-cell">{% if pop["linked_objects"]["race"] %}<a href="{{ pop['linked_objects']['race']['link'] }}">{{ pop['linked_objects']['race']['name'] }}</a>{% else %}None{% endif %}</td>
+									<td class="pop-culture-cell">{% if pop["linked_objects"]["culture"] %}<a href="{{ pop['linked_objects']['culture']['link'] }}">{{ pop['linked_objects']['culture']['name'] }}</a>{% else %}None{% endif %}</td>
+									<td class="pop-religion-cell">{% if pop["linked_objects"]["religion"] %}<a href="{{ pop['linked_objects']['religion']['link'] }}">{{ pop['linked_objects']['religion']['name'] }}</a>{% else %}None{% endif %}</td>
+									<td>{% if pop.get("disease") %}<span style="color:var(--crit);">{{ disease_name_map.get(pop.get("disease")|string, "Diseased") }}</span>{% endif %}</td>
+									<td><input type="text" name="pop_reason" value="" form="pop-clone-{{ pop['_id'] }}"></td>
+									{% if g.user.is_admin %}
+										<td><button type="submit" form="pop-clone-{{ pop['_id'] }}" formaction="{{ pop['link'].replace('item', 'clone') }}/save" class="btn btn-primary">Clone Now</button></td>
+									{% endif %}
+									<td><button type="submit" form="pop-clone-{{ pop['_id'] }}" formaction="{{ pop['link'].replace('item', 'clone') }}/request" class="btn btn-primary">Request Clone</button></td>
+								</tr>
+							{% endfor %}
+						</tbody>
+					</table>
+				</div>
+				<p id="bulk-edit-hint" style="margin-top:8px;font-size:0.85em;color:var(--text-dim);">Check boxes in the first column to select pops for bulk editing.</p>
+				<div id="bulk-edit-bar" style="display:none;margin-top:12px;padding:12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);">
+					<div style="margin-bottom:8px;font-weight:bold;"><span id="selected-count">0 pops selected</span></div>
+					<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:8px;">
+						<label style="display:flex;flex-direction:column;gap:3px;font-size:0.9em;">Move to Nation
+							<select id="bulk-nation" class="form-control" style="min-width:160px;">
+								<option value="">— no change —</option>
+								{% for opt in bulk_edit_options.nations %}<option value="{{ opt.id }}">{{ opt.name }}</option>{% endfor %}
+							</select>
+						</label>
+						<label style="display:flex;flex-direction:column;gap:3px;font-size:0.9em;">Change Race
+							<select id="bulk-race" class="form-control" style="min-width:140px;">
+								<option value="">— no change —</option>
+								{% for opt in bulk_edit_options.races %}<option value="{{ opt.id }}">{{ opt.name }}</option>{% endfor %}
+							</select>
+						</label>
+						<label style="display:flex;flex-direction:column;gap:3px;font-size:0.9em;">Change Culture
+							<select id="bulk-culture" class="form-control" style="min-width:140px;">
+								<option value="">— no change —</option>
+								{% for opt in bulk_edit_options.cultures %}<option value="{{ opt.id }}">{{ opt.name }}</option>{% endfor %}
+							</select>
+						</label>
+						<label style="display:flex;flex-direction:column;gap:3px;font-size:0.9em;">Change Religion
+							<select id="bulk-religion" class="form-control" style="min-width:140px;">
+								<option value="">— no change —</option>
+								{% for opt in bulk_edit_options.religions %}<option value="{{ opt.id }}">{{ opt.name }}</option>{% endfor %}
+							</select>
+						</label>
+						<label style="display:flex;flex-direction:column;gap:3px;font-size:0.9em;">Reason
+							<input type="text" id="bulk-edit-reason" class="form-control" placeholder="Optional reason" style="min-width:200px;">
+						</label>
+						<button type="button" id="bulk-edit-submit" class="pill-btn pill-btn-sm">Apply to Selected Pops</button>
+						{% if g.user.is_admin %}<button type="button" id="bulk-delete-submit" class="pill-btn pill-btn-sm" style="background:var(--crit);">Delete Selected Pops</button>{% endif %}
+					</div>
+				</div>
+			{% else %}
+				<h3>Population <span class="card-count">Showing {{ linked_objects["pops"]|length }} of {{ pop_pagination.total_items }} (page {{ pop_pagination.page }} of {{ pop_pagination.total_pages }})</span></h3>
+				<div style="max-height:360px;overflow:auto;">
+					<table class="kh-table">
+						<thead><tr><th>#</th><th>Race</th><th>Culture</th><th>Religion</th><th>Status</th></tr></thead>
+						<tbody>
+							{% for pop in linked_objects["pops"] %}
 								<tr{% if pop.get("slave") %} class="pop-slave-row"{% endif %}>
 									<td><a href="{{ pop['link'] }}">{{ loop.index }}</a></td>
-									<td>
-									{% if pop["linked_objects"]["race"] %}
-										<a href="{{ pop['linked_objects']['race']['link'] }}">{{ pop['linked_objects']['race']['name'] }}</a>
-									{% else %}
-										None
-									{% endif %}
-									</td>
-									<td>
-									{% if pop['linked_objects']['culture'] %}
-										<a href="{{ pop['linked_objects']['culture']['link'] }}">{{ pop['linked_objects']['culture']['name'] }}</a>
-									{% else %}
-										None
-									{% endif %}
-									</td>
-									<td>
-									{% if pop["linked_objects"]["religion"] %}
-										<a href="{{ pop['linked_objects']['religion']['link'] }}">{{ pop["linked_objects"]["religion"]["name"] }}</a>
-									{% else %}
-										None
-									{% endif %}
-									</td>
+									<td>{% if pop["linked_objects"]["race"] %}<a href="{{ pop['linked_objects']['race']['link'] }}">{{ pop['linked_objects']['race']['name'] }}</a>{% else %}None{% endif %}</td>
+									<td>{% if pop['linked_objects']['culture'] %}<a href="{{ pop['linked_objects']['culture']['link'] }}">{{ pop['linked_objects']['culture']['name'] }}</a>{% else %}None{% endif %}</td>
+									<td>{% if pop["linked_objects"]["religion"] %}<a href="{{ pop['linked_objects']['religion']['link'] }}">{{ pop["linked_objects"]["religion"]["name"] }}</a>{% else %}None{% endif %}</td>
 									<td>
 										{% if pop.get("slave") %}<span class="slave-badge">Slave</span>{% endif %}
-										{% if pop.get("disease") %}<span style="color:#c66;">{{ disease_name_map.get(pop.get("disease")|string, "Diseased") }}</span>{% endif %}
+										{% if pop.get("disease") %}<span style="color:var(--crit);">{{ disease_name_map.get(pop.get("disease")|string, "Diseased") }}</span>{% endif %}
 									</td>
 								</tr>
 							{% endfor %}
 						</tbody>
 					</table>
-					<div class="pagination-controls" style="margin-top: 8px;">
-						{% if pop_pagination.has_prev %}
-							<a href="{{ url_for('nation_routes.nation_item', item_ref=nation.name, pop_page=pop_pagination.prev_page) }}">Previous</a>
-						{% endif %}
-						{% if pop_pagination.has_prev and pop_pagination.has_next %}
-							<span> | </span>
-						{% endif %}
-						{% if pop_pagination.has_next %}
-							<a href="{{ url_for('nation_routes.nation_item', item_ref=nation.name, pop_page=pop_pagination.next_page) }}">Next</a>
-						{% endif %}
-					</div>
 				</div>
-				{% else %}
-				<p class="visibility-locked">Requires Tier {{ _tier }} visibility.</p>
-				{% endif %}
-			</div>
+				<div class="pagination-controls" style="margin-top: 8px;">
+					{% if pop_pagination.has_prev %}
+						<a href="{{ url_for('nation_routes.nation_item', item_ref=nation.name, pop_page=pop_pagination.prev_page) }}">Previous</a>
+					{% endif %}
+					{% if pop_pagination.has_prev and pop_pagination.has_next %}
+						<span> | </span>
+					{% endif %}
+					{% if pop_pagination.has_next %}
+						<a href="{{ url_for('nation_routes.nation_item', item_ref=nation.name, pop_page=pop_pagination.next_page) }}">Next</a>
+					{% endif %}
+				</div>
+			{% endif %}
 		</div>
+		{% endif %}
 
-		<div class="expandable-section" id="government-section">
-			<div class="section-header" onclick="toggleSection(this)">
-				<h2>Government & Laws</h2>
-				<span class="toggle-icon">▼</span>
-			</div>
-			<div class="section-content">
+		<div class="tab-panel surface-card" data-tab="laws" id="government-section" style="margin:16px 28px;">
+			<h3>Government &amp; Laws</h3>
 			{% set _tier = nation_field_tier("government_type") %}
 			{% if visibility_level >= _tier %}
-				<div class="table-wrapper">
-					<table class="info-table">
-						<tr class="resources-header-row">
-							<th colspan="2" class="resources-header">Government & Laws</th>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.government_type.label }}:</th>
-							<td>{{ pf(nation.government_type, pn.get("government_type")) }}</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.succession_type.label }}:</th>
-							<td>{{ pf(nation.succession_type, pn.get("succession_type")) }}</td>
-						</tr>
-						{% if nation.nomadic > 0 %}
-							<tr>
-								<th>{{ schema.properties.nomad_camp_type.label }}:</th>
-								<td>{{ pf(nation.nomad_camp_type, pn.get("nomad_camp_type")) }}</td>
-							</tr>
-						{% endif %}
-						<tr>
-							<th>{{ schema.properties.conscription_type.label }}:</th>
-							<td>{{ pf(nation.conscription_type, pn.get("conscription_type")) }}</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.military_funding.label }}:</th>
-							<td>{{ pf(nation.military_funding, pn.get("military_funding")) }}</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.magic_stance.label }}:</th>
-							<td>{{ pf(nation.magic_stance, pn.get("magic_stance")) }}</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.centralization_law.label }}:</th>
-							<td>{{ pf(nation.centralization_law, pn.get("centralization_law")) }}</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.citizenship_stance.label }}:</th>
-							<td>{{ pf(nation.citizenship_stance, pn.get("citizenship_stance")) }}</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.foreign_acceptance.label }}:</th>
-							<td>{{ pf(nation.foreign_acceptance, pn.get("foreign_acceptance")) }}</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.subject_stance.label }}:</th>
-							<td>{{ pf(nation.subject_stance, pn.get("subject_stance")) }}</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.land_doctrine.label }}:</th>
-							<td>{{ pf(nation.land_doctrine, pn.get("land_doctrine")) }}</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.naval_doctrine.label }}:</th>
-							<td>{{ pf(nation.naval_doctrine, pn.get("naval_doctrine")) }}</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.diplomatic_stance.label }}:</th>
-							<td>{{ pf(nation.diplomatic_stance, pn.get("diplomatic_stance")) }}</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.scientific_stance.label }}:</th>
-							<td>{{ pf(nation.scientific_stance, pn.get("scientific_stance")) }}</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.economy_type.label }}:</th>
-							<td>{{ pf(nation.economy_type, pn.get("economy_type")) }}</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.expansion_stance.label }}:</th>
-							<td>{{ pf(nation.expansion_stance, pn.get("expansion_stance")) }}</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.mercenary_law.label }}:</th>
-							<td>{{ pf(nation.mercenary_law, pn.get("mercenary_law")) }}</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.consumption_stance.label }}:</th>
-							<td>{{ pf(nation.consumption_stance, pn.get("consumption_stance")) }}</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.tax_stance.label }}:</th>
-							<td>{{ pf(nation.tax_stance, pn.get("tax_stance")) }}</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.slavery_stance.label }}:</th>
-							<td>{{ pf(nation.slavery_stance, pn.get("slavery_stance")) }}</td>
-						</tr>
-					</table>
+				{% if editable %}
+					<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px 28px;font-size:13.5px;">
+						{% for law in schema.laws %}
+							{% if law != "stability" and law != "vassal_type" and law != "compliance" and law in form._fields.keys() %}
+								<div style="display:flex;align-items:baseline;padding:5px 0;border-bottom:1px solid var(--border);">
+									<span style="color:var(--text-dim);">{{ form[law].label.text }}</span>
+									<span style="flex:1;"></span>
+									{{ form[law](class="form-control") }}
+								</div>
+							{% endif %}
+						{% endfor %}
+					</div>
+				{% else %}
+				{% set law_rows = [
+					(schema.properties.government_type.label, pf(nation.government_type, pn.get("government_type"))),
+					(schema.properties.succession_type.label, pf(nation.succession_type, pn.get("succession_type"))),
+					(schema.properties.conscription_type.label, pf(nation.conscription_type, pn.get("conscription_type"))),
+					(schema.properties.military_funding.label, pf(nation.military_funding, pn.get("military_funding"))),
+					(schema.properties.magic_stance.label, pf(nation.magic_stance, pn.get("magic_stance"))),
+					(schema.properties.centralization_law.label, pf(nation.centralization_law, pn.get("centralization_law"))),
+					(schema.properties.citizenship_stance.label, pf(nation.citizenship_stance, pn.get("citizenship_stance"))),
+					(schema.properties.foreign_acceptance.label, pf(nation.foreign_acceptance, pn.get("foreign_acceptance"))),
+					(schema.properties.subject_stance.label, pf(nation.subject_stance, pn.get("subject_stance"))),
+					(schema.properties.land_doctrine.label, pf(nation.land_doctrine, pn.get("land_doctrine"))),
+					(schema.properties.naval_doctrine.label, pf(nation.naval_doctrine, pn.get("naval_doctrine"))),
+					(schema.properties.diplomatic_stance.label, pf(nation.diplomatic_stance, pn.get("diplomatic_stance"))),
+					(schema.properties.scientific_stance.label, pf(nation.scientific_stance, pn.get("scientific_stance"))),
+					(schema.properties.economy_type.label, pf(nation.economy_type, pn.get("economy_type"))),
+					(schema.properties.expansion_stance.label, pf(nation.expansion_stance, pn.get("expansion_stance"))),
+					(schema.properties.mercenary_law.label, pf(nation.mercenary_law, pn.get("mercenary_law"))),
+					(schema.properties.consumption_stance.label, pf(nation.consumption_stance, pn.get("consumption_stance"))),
+					(schema.properties.tax_stance.label, pf(nation.tax_stance, pn.get("tax_stance"))),
+					(schema.properties.slavery_stance.label, pf(nation.slavery_stance, pn.get("slavery_stance"))),
+				] %}
+				{% if nation.nomadic > 0 %}
+					{% set law_rows = law_rows + [(schema.properties.nomad_camp_type.label, pf(nation.nomad_camp_type, pn.get("nomad_camp_type")))] %}
+				{% endif %}
+				<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px 28px;font-size:13.5px;">
+					{% for label, value in law_rows %}
+						<div style="display:flex;align-items:baseline;padding:5px 0;border-bottom:1px solid var(--border);">
+							<span style="color:var(--text-dim);">{{ label }}</span>
+							<span style="flex:1;"></span>
+							<b>{{ value }}</b>
+						</div>
+					{% endfor %}
 				</div>
+				{% endif %}
 			{% else %}
 				<p class="visibility-locked">Requires Tier {{ _tier }} visibility.</p>
 			{% endif %}
-			</div>
 		</div>
 
-		{% if "overlord" in nation and nation["overlord"] is not none and nation["overlord"] != "" %}
-			<div class="expandable-section" id="vassalship-section">
-					<div class="section-header" onclick="toggleSection(this)">
-					<h2>Vassalship</h2>
-					<span class="toggle-icon">▼</span>
-				</div>
-				<div class="section-content">
-			{% set _tier = nation_field_tier("overlord") %}
-			{% if visibility_level >= _tier %}
-					<div class="table-wrapper">
-						<table class="info-table">
-							<tr class="resources-header-row">
-								<th colspan="2" class="resources-header">Vassalship</th>
-							</tr>
-							<tr>
-								<th>{{ schema.properties.overlord.label }}:</th>
-								<td>
-									{% if linked_objects["overlord"] %}
-										<a href="{{ linked_objects['overlord']['link'] }}">{{ linked_objects["overlord"]["name"] }}</a>
-									{% else %}
-										None
-									{% endif %}
-								</td>
-							</tr>
-							<tr>
-								<th>{{ schema.properties.vassal_type.label }}:</th>
-								<td>{{ pf(nation.vassal_type, pn.get("vassal_type")) }}</td>
-							</tr>
-							<tr>
-								<th>{{ schema.properties.compliance.label }}:</th>
-								<td>{{ pf(nation.compliance, pn.get("compliance")) }}</td>
-							</tr>
-							<tr>
-								<th>{{ schema.properties.disobey_chance.label }}:</th>
-								<td>{{ pf_pct(nation.disobey_chance, pn.get("disobey_chance")) }}</td>
-							</tr>
-							<tr>
-								<th>{{ schema.properties.rebellion_chance.label }}:</th>
-								<td>{{ pf_pct(nation.rebellion_chance, pn.get("rebellion_chance")) }}</td>
-							</tr>
-							<tr>
-								<th>{{ schema.properties.compliance_gain_chance.label }}:</th>
-								<td>{{ pf_pct(nation.get("compliance_gain_chance") or 0, pn.get("compliance_gain_chance")) }}</td>
-							</tr>
-							<tr>
-								<th>{{ schema.properties.compliance_loss_chance.label }}:</th>
-								<td>{{ pf_pct(nation.get("compliance_loss_chance") or 0, pn.get("compliance_loss_chance")) }}</td>
-							</tr>
-							<tr>
-								<th>{{ schema.properties.concessions_chance.label }}:</th>
-								<td>{{ pf_pct(nation.concessions_chance, pn.get("concessions_chance")) }}</td>
-							</tr>
-							<tr>
-								<th>{{ schema.properties.concessions_qty.label }}:</th>
-								<td>{{ pf(nation.concessions_qty, pn.get("concessions_qty")) }}</td>
-							</tr>
-							<tr>
-								<th>{{ schema.properties.get("concessions").label }}:</th>
-								<td>
-									{% if nation.get("concessions", None) is mapping %}
-										{% for resource, amount in nation.get("concessions", {}).items() %}
-											{{ resource }}: {{ amount }}<br>
-										{% endfor %}
-									{% endif %}
-								</td>
-							</tr>
-						</table>
-					</div>
+		{% if editable or ("overlord" in nation and nation["overlord"] is not none and nation["overlord"] != "") %}
+			<div class="tab-panel surface-card" data-tab="diplomacy" id="vassalship-section" style="margin:16px 28px;">
+				<h3>Vassalship</h3>
+				{% set _tier = nation_field_tier("overlord") %}
+				{% if visibility_level >= _tier %}
+					{% if editable %}
+					<dl class="kh-kv">
+						<dt>{{ form.overlord.label.text }}</dt><dd>{{ form.overlord(class="form-control") }}</dd>
+						<dt>{{ form.vassal_type.label.text }}</dt><dd>{{ form.vassal_type(class="form-control") }}</dd>
+						<dt>{{ form.compliance.label.text }}</dt><dd>{{ form.compliance(class="form-control") }}</dd>
+						<dt>{{ schema.properties.disobey_chance.label }}</dt><dd>{{ (nation.disobey_chance * 100)|int }}%</dd>
+						<dt>{{ schema.properties.rebellion_chance.label }}</dt><dd>{{ (nation.rebellion_chance * 100)|int }}%</dd>
+						<dt>{{ schema.properties.compliance_gain_chance.label }}</dt><dd>{{ ((nation.get("compliance_gain_chance") or 0) * 100)|int }}%</dd>
+						<dt>{{ schema.properties.compliance_loss_chance.label }}</dt><dd>{{ ((nation.get("compliance_loss_chance") or 0) * 100)|int }}%</dd>
+						<dt>{{ schema.properties.concessions_chance.label }}</dt><dd>{{ (nation.concessions_chance * 100)|int }}%</dd>
+						<dt>{{ schema.properties.concessions_qty.label }}</dt><dd>{{ nation.concessions_qty }}</dd>
+						<dt>{{ schema.properties.concessions.label }}</dt>
+						<dd>
+							<div id="concessions">
+								{% if nation.get("concessions", None) is mapping %}
+									{% for resource, amount in nation.get("concessions", {}).items() %}
+										{{ resource }}: {{ amount }}<br>
+									{% endfor %}
+								{% endif %}
+							</div>
+							{{ form.concessions(id="concessions-field") }}
+							<input type="hidden" name="paid_concessions" id="paid-concessions-field" value="">
+							<button type="button" class="btn btn-primary" onclick="resetConcessions()" title="Clear the concession demands and add the demanded resources to this nation's stockpile on save">Reset Concessions</button>
+						</dd>
+					</dl>
+					{% else %}
+					<dl class="kh-kv">
+						<dt>{{ schema.properties.overlord.label }}</dt>
+						<dd>{% if linked_objects["overlord"] %}<a href="{{ linked_objects['overlord']['link'] }}">{{ linked_objects["overlord"]["name"] }}</a>{% else %}None{% endif %}</dd>
+						<dt>{{ schema.properties.vassal_type.label }}</dt>
+						<dd>{{ pf(nation.vassal_type, pn.get("vassal_type")) }}</dd>
+						<dt>{{ schema.properties.compliance.label }}</dt>
+						<dd>{{ pf(nation.compliance, pn.get("compliance")) }}</dd>
+						<dt>{{ schema.properties.disobey_chance.label }}</dt>
+						<dd>{{ pf_pct(nation.disobey_chance, pn.get("disobey_chance")) }}</dd>
+						<dt>{{ schema.properties.rebellion_chance.label }}</dt>
+						<dd>{{ pf_pct(nation.rebellion_chance, pn.get("rebellion_chance")) }}</dd>
+						<dt>{{ schema.properties.compliance_gain_chance.label }}</dt>
+						<dd>{{ pf_pct(nation.get("compliance_gain_chance") or 0, pn.get("compliance_gain_chance")) }}</dd>
+						<dt>{{ schema.properties.compliance_loss_chance.label }}</dt>
+						<dd>{{ pf_pct(nation.get("compliance_loss_chance") or 0, pn.get("compliance_loss_chance")) }}</dd>
+						<dt>{{ schema.properties.concessions_chance.label }}</dt>
+						<dd>{{ pf_pct(nation.concessions_chance, pn.get("concessions_chance")) }}</dd>
+						<dt>{{ schema.properties.concessions_qty.label }}</dt>
+						<dd>{{ pf(nation.concessions_qty, pn.get("concessions_qty")) }}</dd>
+						<dt>{{ schema.properties.get("concessions").label }}</dt>
+						<dd>
+							{% if nation.get("concessions", None) is mapping %}
+								{% for resource, amount in nation.get("concessions", {}).items() %}
+									{{ resource }}: {{ amount }}<br>
+								{% endfor %}
+							{% endif %}
+						</dd>
+					</dl>
+					{% endif %}
 				{% else %}
 				<p class="visibility-locked">Requires Tier {{ _tier }} visibility.</p>
 			{% endif %}
 			</div>
-			</div>
 		{% endif %}
 		{% if "vassals" in linked_objects and linked_objects["vassals"] is not none %}
-			<div class="expandable-section" id="vassals-section">
-				<div class="section-header" onclick="toggleSection(this)">
-					<h2>Vassals</h2>
-					<span class="toggle-icon">▼</span>
-				</div>
-				<div class="section-content">
-			{% set _tier = nation_field_tier("vassal_slots") %}
-			{% if visibility_level >= _tier %}
-					<div class="table-wrapper">
-						<table class="info-table">
-							<tr>
-								<th>{{ schema.properties.vassal_slots.label }}:</th>
-								<td>{{ pf(nation.vassal_slots, pn.get("vassal_slots")) }}</td>
-							</tr>
-						</table>
-					</div>
-					<div class="table-wrapper">
-						<table class="info-table">
+			<div class="tab-panel surface-card" data-tab="diplomacy" id="vassals-section" style="margin:16px 28px;">
+				<h3>Vassals <span class="card-count">{{ schema.properties.vassal_slots.label }}: {{ pf(nation.vassal_slots, pn.get("vassal_slots")) }}</span></h3>
+				{% set _tier = nation_field_tier("vassal_slots") %}
+				{% if visibility_level >= _tier %}
+					<div style="max-height:340px;overflow:auto;">
+						<table class="kh-table">
 							<thead>
-								<tr class="resources-header-row">
-									<th colspan="9" class="resources-header">Vassals</th>
-								</tr>
 								<tr>
 									<th>Nation</th>
 									<th>Vassal Type</th>
@@ -759,21 +697,13 @@
 								{% for vassal in linked_objects["vassals"] %}
 									<tr>
 										<td><a href="{{ vassal['link'] }}">{{ vassal["name"] }}</a></td>
-
 										<td>{{ vassal["vassal_type"] }}</td>
-
 										<td>{{ vassal["compliance"] }}</td>
-
 										<td>{{ (vassal.get("disobey_chance", 0) * 100)|int }}%</td>
-
 										<td>{{ (vassal.get("rebellion_chance", 0) * 100)|int }}%</td>
-
 										<td>{{ (vassal.get("compliance_gain_chance", 0) * 100)|int }}%</td>
-
 										<td>{{ (vassal.get("compliance_loss_chance", 0) * 100)|int }}%</td>
-
 										<td>{{ (vassal.get("concessions_chance", 0) * 100)|int }}%</td>
-
 										<td>
 											{% if vassal.get("concessions", None) is mapping %}
 												{% for resource, amount in vassal.get("concessions", {}).items() %}
@@ -781,7 +711,7 @@
 												{% endfor %}
 											{% endif %}
 										</td>
-										{% if user_is_owner or view_access_level >= schema.properties.temperament.view_access_level %}
+										{% if user_is_owner or visibility_bypassed or visibility_level >= nation_field_tier("temperament") %}
 											<td>{{ vassal.get("temperament", "Unknown") }}</td>
 										{% else %}
 											<td>Hidden</td>
@@ -795,44 +725,18 @@
 				<p class="visibility-locked">Requires Tier {{ _tier }} visibility.</p>
 			{% endif %}
 			</div>
-			</div>
 		{% endif %}
 
-		<div class="expandable-section" id="diplomacy-section">
-			<div class="section-header" onclick="toggleSection(this)">
-				<h2>Diplomacy</h2>
-				<span class="toggle-icon">▼</span>
-			</div>
-			<div class="section-content">
+		<div class="tab-panel surface-card" data-tab="diplomacy" id="diplomacy-section" style="margin:16px 28px;">
+			<h3>Relations <span class="card-count">diplomatic range {{ pf(nation.diplomatic_range, pn.get("diplomatic_range")) }}</span></h3>
 			{% set _tier = nation_field_tier("military_alliance_slots") %}
 			{% if visibility_level >= _tier %}
-				<div class="table-wrapper">
-					<table class="info-table">
-						<tr class="resources-header-row">
-							<th colspan="2" class="resources-header">General</th>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.military_alliance_slots.label }}:</th>
-							<td>{{ pf(nation.military_alliance_slots, pn.get("military_alliance_slots")) }}</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.defensive_pact_slots.label }}:</th>
-							<td>{{ pf(nation.defensive_pact_slots, pn.get("defensive_pact_slots")) }}</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.non_aggression_pact_slots.label }}:</th>
-							<td>{{ pf(nation.non_aggression_pact_slots, pn.get("non_aggression_pact_slots")) }}</td>
-						</tr>
-					</table>
-				</div>
-				<div class="table-wrapper">
-					<table class="info-table">
+				{% set rel_dot = {"Hostile": "var(--crit)", "Unfriendly": "var(--warn)", "Neutral": "var(--text-dim)", "Friendly": "var(--pos)"} %}
+				<div style="max-height:340px;overflow:auto;">
+					<table class="kh-table">
 						<thead>
-							<tr class="resources-header-row">
-								<th colspan="5" class="resources-header">Diplomatic Relations</th>
-							</tr>
 							<tr>
-								<th>Diplomatic Relation</th>
+								<th>#</th>
 								<th>Nation</th>
 								<th>Relation</th>
 								<th>Pact Type</th>
@@ -844,7 +748,6 @@
 							{% for relation in linked_objects.get("diplomatic_relations_1", {})%}
 								<tr>
 									<td><a href="{{ relation['link'] }}">{{ diplo_index.value }}</a></td>
-
 									<td>
 									{% if relation["linked_objects"]["nation_2"] %}
 										<a href="{{ relation['linked_objects'].get('nation_2', {}).get('link', '') }}">{{ relation['linked_objects'].get('nation_2', {}).get('name', 'None') }}</a>
@@ -852,14 +755,11 @@
 										None
 									{% endif %}
 									</td>
-
-									<td>{{ relation.get("relation", "Neutral") }}</td>
-
+									<td><span style="display:inline-flex;align-items:center;gap:7px;"><span style="width:9px;height:9px;border-radius:50%;background:{{ rel_dot.get(relation.get("relation", "Neutral"), "var(--text-dim)") }};display:inline-block;"></span>{{ relation.get("relation", "Neutral") }}</span></td>
 									<td>{{ relation.get("pact_type", "None") }}</td>
-
 									<td>
 										{% if relation.get("pact_type", "None") in ["Defensive Pact", "Military Alliance"] %}
-											{% if user_is_owner or view_access_level >= schema.properties.temperament.view_access_level %}
+											{% if user_is_owner or visibility_bypassed or visibility_level >= nation_field_tier("temperament") %}
 												{{ relation['linked_objects'].get('nation_2', {}).get('temperament', 'None') }}
 											{% else %}
 												Hidden
@@ -874,7 +774,6 @@
 							{% for relation in linked_objects.get("diplomatic_relations_2", {})%}
 								<tr>
 									<td><a href="{{ relation['link'] }}">{{ diplo_index.value }}</a></td>
-
 									<td>
 									{% if relation["linked_objects"].get("nation_1", None) %}
 										<a href="{{ relation['linked_objects'].get('nation_1', {}).get('link', '') }}">{{ relation['linked_objects'].get('nation_1', {}).get('name', 'None') }}</a>
@@ -882,14 +781,11 @@
 										None
 									{% endif %}
 									</td>
-
-									<td>{{ relation.get("relation", "Neutral") }}</td>
-
+									<td><span style="display:inline-flex;align-items:center;gap:7px;"><span style="width:9px;height:9px;border-radius:50%;background:{{ rel_dot.get(relation.get("relation", "Neutral"), "var(--text-dim)") }};display:inline-block;"></span>{{ relation.get("relation", "Neutral") }}</span></td>
 									<td>{{ relation.get("pact_type", "None") }}</td>
-
 									<td>
 										{% if relation.get("pact_type", "None") in ["Defensive Pact", "Military Alliance"] %}
-											{% if user_is_owner or view_access_level >= schema.properties.temperament.view_access_level %}
+											{% if user_is_owner or visibility_bypassed or visibility_level >= nation_field_tier("temperament") %}
 												{{ relation['linked_objects'].get('nation_1', {}).get('temperament', 'None') }}
 											{% else %}
 												Hidden
@@ -904,71 +800,108 @@
 						</tbody>
 					</table>
 				</div>
+				<div style="font-size:12.5px;color:var(--text-dim);margin-top:10px;">
+					Slots — Alliance {{ pf(nation.military_alliance_slots, pn.get("military_alliance_slots")) }} · Defensive {{ pf(nation.defensive_pact_slots, pn.get("defensive_pact_slots")) }} · Non-aggression {{ pf(nation.non_aggression_pact_slots, pn.get("non_aggression_pact_slots")) }}
+				</div>
 			{% else %}
 				<p class="visibility-locked">Requires Tier {{ _tier }} visibility.</p>
 			{% endif %}
-			</div>
 		</div>
 
-		<div class="expandable-section" id="trade-routes-section">
-			<div class="section-header" onclick="toggleSection(this)">
-				<h2>Trade</h2>
-				<span class="toggle-icon">▼</span>
-			</div>
-			<div class="section-content">
+		<div style="display:grid;grid-template-columns:1.2fr .8fr;gap:18px;margin:16px 28px;">
+		<div class="tab-panel surface-card" data-tab="economy" id="trade-routes-section">
+			<h3>Trade</h3>
 			{% set _tier = nation_field_tier("trade_routes") %}
 			{% if visibility_level >= _tier %}
-			<div class="table-wrapper">
-				<table class="info-table">
-					<tr class="resources-header-row">
-						<th colspan="2" class="resources-header">Trade</th>
-					</tr>
-					<tr>
-						<th>{{ schema.properties.money.label }}:</th>
-						<td>{{ gate("money", pf(nation.money, pn.get("money")) ~ " / " ~ pf(nation.money_capacity, pn.get("money_capacity"))) }}</td>
-					</tr>
-					<tr>
-						<th>{{ schema.properties.money_income.label }}:</th>
-						<td>
-							{{ gate("money_income", pfbd(
-								nation.money_income,
-								pn.get("money_income"),
-								breakdowns["money_income"],
-								pbd.get("money_income", []),
-								"Money Income"
-							)) }}
-						</td>
-					</tr>
-					<tr>
-						<th>Import Slots:</th>
-						<td>{{ pfbd(nation.remaining_import_slots, pn.get("remaining_import_slots"), breakdowns.get("remaining_import_slots", []), pbd.get("remaining_import_slots", []), "Remaining Import Slots") }} / {{ pfbd(nation.import_slots, pn.get("import_slots"), breakdowns.get("import_slots", []), pbd.get("import_slots", []), "Import Slots") }}</td>
-					</tr>
-					<tr>
-						<th>Export Slots:</th>
-						<td>{{ pfbd(nation.remaining_export_slots, pn.get("remaining_export_slots"), breakdowns.get("remaining_export_slots", []), pbd.get("remaining_export_slots", []), "Remaining Export Slots") }} / {{ pfbd(nation.export_slots, pn.get("export_slots"), breakdowns.get("export_slots", []), pbd.get("export_slots", []), "Export Slots") }}</td>
-					</tr>
-					<tr>
-						<th>{{ schema.properties.trade_speed.label }}:</th>
-						<td>{{ pfbd(nation.trade_speed, pn.get("trade_speed"), breakdowns.get("trade_speed", []), pbd.get("trade_speed", []), "Trade Speed") }}</td>
-					</tr>
-				</table>
-			</div>
-			<h2>Ongoing Trade Deals</h2>
+			{% if editable %}
+				<dl class="kh-kv">
+					<dt>{{ schema.properties.money_income.label }}</dt>
+					<dd>{{ gate("money_income", nation.money_income) }}</dd>
+					<dt>{{ schema.properties.remaining_import_slots.label }}</dt>
+					<dd>{{ nation.remaining_import_slots }}</dd>
+					<dt>{{ schema.properties.remaining_export_slots.label }}</dt>
+					<dd>{{ nation.remaining_export_slots }}</dd>
+					<dt>{{ schema.properties.trade_speed.label }}</dt>
+					<dd>{{ nation.trade_speed }}</dd>
+				</dl>
+				<h3 style="margin-top:16px;">Ongoing Trade Deals</h3>
+				{% with editable = True %}
+				{% include "trade_routes_section.html" with context %}
+				{% endwith %}
+			{% else %}
+			<dl class="kh-kv">
+				<dt>{{ schema.properties.money_income.label }}</dt>
+				<dd>{{ gate("money_income", pfbd(nation.money_income, pn.get("money_income"), breakdowns["money_income"], pbd.get("money_income", []), "Money Income")) }}</dd>
+				<dt>Import Slots</dt>
+				<dd>{{ pfbd(nation.remaining_import_slots, pn.get("remaining_import_slots"), breakdowns.get("remaining_import_slots", []), pbd.get("remaining_import_slots", []), "Remaining Import Slots") }} / {{ pfbd(nation.import_slots, pn.get("import_slots"), breakdowns.get("import_slots", []), pbd.get("import_slots", []), "Import Slots") }}</dd>
+				<dt>Export Slots</dt>
+				<dd>{{ pfbd(nation.remaining_export_slots, pn.get("remaining_export_slots"), breakdowns.get("remaining_export_slots", []), pbd.get("remaining_export_slots", []), "Remaining Export Slots") }} / {{ pfbd(nation.export_slots, pn.get("export_slots"), breakdowns.get("export_slots", []), pbd.get("export_slots", []), "Export Slots") }}</dd>
+				<dt>{{ schema.properties.trade_speed.label }}</dt>
+				<dd>{{ pfbd(nation.trade_speed, pn.get("trade_speed"), breakdowns.get("trade_speed", []), pbd.get("trade_speed", []), "Trade Speed") }}</dd>
+			</dl>
+			<h3 style="margin-top:16px;">Ongoing Trade Deals</h3>
 			{% include "trade_routes_section.html" with context %}
+			{% endif %}
 			{% else %}
 			<p class="visibility-locked">Requires Tier {{ _tier }} visibility.</p>
 			{% endif %}
-			</div>
 		</div>
 
-		<div class="expandable-section" id="war-section">
-			<div class="section-header" onclick="toggleSection(this)">
-				<h2>War</h2>
-				<span class="toggle-icon">▼</span>
+		{% if not editable and visibility_level >= nation_field_tier("money_income") and breakdowns.get("money_income") %}
+		<div class="tab-panel surface-card" data-tab="economy">
+			<h3>Income Ledger</h3>
+			{% for row in breakdowns["money_income"] %}
+			<div class="dotted-row">
+				<span class="k">{{ row.label }}</span>
+				<span class="leader"></span>
+				<span class="v" style="color:{{ 'var(--pos)' if (row.value or 0) >= 0 else 'var(--crit)' }};">{{ '+' if (row.value or 0) > 0 else '' }}{{ row.value }}</span>
 			</div>
-			<div class="section-content">
+			{% endfor %}
+		</div>
+		{% endif %}
+		</div>
+
+		<div class="tab-panel surface-card" data-tab="military" style="margin:16px 28px;text-align:center;padding:26px 24px;">
+			{% set _mil_tier = nation_field_tier("land_units") %}
+			{% if visibility_level >= _mil_tier %}
+				<div class="font-heading" style="font-size:20px;color:var(--heading);">
+					{{ pf(nation.get("land_unit_count", 0), pn.get("land_unit_count")) }} land · {{ pf(nation.get("naval_unit_count", 0), pn.get("naval_unit_count")) }} naval · {{ pf(nation.get("support_unit_count", 0), pn.get("support_unit_count")) }} support units
+				</div>
+				<div style="font-size:13px;color:var(--text-mid);margin-top:6px;">
+					Conscription: {{ pf(nation.conscription_type, pn.get("conscription_type")) }} · Funding: {{ pf(nation.military_funding, pn.get("military_funding")) }} · Land Doctrine: {{ pf(nation.land_doctrine, pn.get("land_doctrine")) }} · Naval Doctrine: {{ pf(nation.naval_doctrine, pn.get("naval_doctrine")) }}
+				</div>
+			{% else %}
+				<p class="visibility-locked">Requires Tier {{ _mil_tier }} visibility.</p>
+			{% endif %}
+		</div>
+
+		<div class="tab-panel surface-card" data-tab="military" id="war-section" style="margin:16px 28px;">
 			{% set _tier = nation_field_tier("land_units") %}
 			{% if visibility_level >= _tier %}
+			{% if editable %}
+				<div class="table-wrapper">
+					{%- macro unit_edit_table(unit_details, form_units) %}
+					<table class="kh-table">
+						<thead><tr><th>Unit</th><th>Unit Count</th><th>Upkeep</th></tr></thead>
+						<tbody>
+							{% for unit, details in unit_details.items() %}
+								<tr>
+									<td>{{ details.display_name }}</td>
+									<td>{{ form_units[unit] }}</td>
+									<td>{% if details.upkeep is defined %}{% for resource, cost in details.upkeep.items() %}{{ resource }}: {{ cost }}<br>{% endfor %}{% endif %}</td>
+								</tr>
+							{% endfor %}
+						</tbody>
+					</table>
+					{%- endmacro %}
+					<h3>Land Units <span class="card-count">{{ nation.get("land_unit_count", 0) }} / {{ nation.get("land_unit_capacity", 0) }}</span></h3>
+					{{ unit_edit_table(nation.get("land_unit_details", {}), form.land_units) }}
+					<h3 style="margin-top:16px;">Support Units <span class="card-count">{{ nation.get("support_unit_count", 0) }} / {{ nation.get("support_unit_capacity", 0) }}</span></h3>
+					{{ unit_edit_table(nation.get("support_unit_details", {}), form.support_units) }}
+					<h3 style="margin-top:16px;">Naval Units <span class="card-count">{{ nation.get("naval_unit_count", 0) }} / {{ nation.get("naval_unit_capacity", 0) }}</span></h3>
+					{{ unit_edit_table(nation.get("naval_unit_details", {}), form.naval_units) }}
+				</div>
+			{% else %}
 				<div class="table-wrapper">
 					{%- macro stat_cell(eff, base, stat, breakdown) -%}
 					{%- set ev = eff.get(stat) -%}
@@ -1035,56 +968,123 @@
 					</div>
 					{%- endmacro %}
 
-					<h2>Land Units</h2>
-					<p>Land Units: {{ pf(nation.get("land_unit_count", 0), pn.get("land_unit_count")) }}/{{ pf(nation.get("land_unit_capacity", 0), pn.get("land_unit_capacity")) }}</p>
+					<h3>Land Units <span class="card-count">{{ pf(nation.get("land_unit_count", 0), pn.get("land_unit_count")) }} / {{ pf(nation.get("land_unit_capacity", 0), pn.get("land_unit_capacity")) }}</span></h3>
 					{{ unit_table(nation.land_unit_details, nation.get("land_units", {})) }}
 
-					<h2>Support Units</h2>
-					<p>Support Units: {{ pf(nation.get("support_unit_count", 0), pn.get("support_unit_count")) }}/{{ pf(nation.get("support_unit_capacity", 0), pn.get("support_unit_capacity")) }}</p>
+					<h3 style="margin-top:16px;">Support Units <span class="card-count">{{ pf(nation.get("support_unit_count", 0), pn.get("support_unit_count")) }} / {{ pf(nation.get("support_unit_capacity", 0), pn.get("support_unit_capacity")) }}</span></h3>
 					{{ unit_table(nation.get("support_unit_details", {}), nation.get("support_units", {})) }}
 
-					<h2>Naval Units</h2>
-					<p>Naval Units: {{ pf(nation.get("naval_unit_count", 0), pn.get("naval_unit_count")) }}/{{ pf(nation.get("naval_unit_capacity", 0), pn.get("naval_unit_capacity")) }}</p>
+					<h3 style="margin-top:16px;">Naval Units <span class="card-count">{{ pf(nation.get("naval_unit_count", 0), pn.get("naval_unit_count")) }} / {{ pf(nation.get("naval_unit_capacity", 0), pn.get("naval_unit_capacity")) }}</span></h3>
 					{{ unit_table(nation.get("naval_unit_details", {}), nation.get("naval_units", {})) }}
 				</div>
+			{% endif %}
 			{% else %}
 				<p class="visibility-locked">Requires Tier {{ _tier }} visibility.</p>
 			{% endif %}
-			</div>
 		</div>
 
-		<div class="expandable-section" id="resources-jobs-section">
-			<div class="section-header" onclick="toggleSection(this)">
-				<h2>Resources & Jobs</h2>
-				<span class="toggle-icon">▼</span>
-			</div>
-			<div class="section-content">
+		<div class="tab-panel surface-card" data-tab="economy" id="resources-jobs-section" style="margin:16px 28px;">
+			<h3>Resources <span class="card-count">— dotted numbers open breakdowns</span></h3>
 			{% set _tier = nation_field_tier("resource_production") %}
 			{% if visibility_level >= _tier %}
-				<h2>Resources</h2>
+			{% if editable %}
+				<dl class="kh-kv" style="margin-bottom:14px;">
+					<dt>{{ form.money.label.text }}</dt>
+					<dd>{{ form.money(class="form-control") }} / {{ nation.money_capacity }}</dd>
+					<dt>{{ schema.properties.money_income.label }}</dt>
+					<dd>{{ nation.money_income }}</dd>
+				</dl>
 				<div class="table-wrapper">
-					<table class="info-table">
-						<tr class="resources-header-row">
-							<th colspan="2" class="resources-header">Income</th>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.money.label }}:</th>
-							<td>{{ pf(nation.money, pn.get("money")) }} / {{ pf(nation.money_capacity, pn.get("money_capacity")) }}</td>
-						</tr>
-						<tr>
-							<th>{{ schema.properties.money_income.label }}:</th>
-							<td>
-								{{ pfbd(
-									nation.money_income,
-									pn.get("money_income"),
-									breakdowns["money_income"],
-									pbd.get("money_income", []),
-									"Money Income"
-								) }}
-							</td>
-						</tr>
+					<table class="kh-table">
+						<thead><tr><th colspan="6">General Resources</th></tr><tr><th>Resource</th><th>Production</th><th>Consumption</th><th>Excess</th><th>Storage</th></tr></thead>
+						<tbody>
+							{% for resource in json_data["general_resources"] %}
+								{% set rkey = resource["key"] %}
+								{% set excess_value = nation.get("resource_excess", {}).get(rkey, 0) %}
+								{% set storage = nation.get("resource_storage", {}).get(rkey, 0) %}
+								{% set capacity = nation.get("nation_resource_capacity", {}).get(rkey, 0) %}
+								<tr>
+									<td>{{ resource.name }}</td>
+									<td>{{ nation.resource_production[rkey] if rkey in nation.resource_production else 0 }}</td>
+									<td>{{ nation.resource_consumption[rkey] if rkey in nation.resource_consumption else 0 }}</td>
+									{% if excess_value + storage < 0 %}<td class="excess-critical-negative">{{ excess_value }}</td>
+									{% elif excess_value < 0 %}<td class="excess-negative">{{ excess_value }}</td>
+									{% elif excess_value + storage > capacity %}<td class="excess-overflow">{{ excess_value }}</td>
+									{% elif excess_value > 0 %}<td class="excess-positive">{{ excess_value }}</td>
+									{% else %}<td>{{ excess_value }}</td>{% endif %}
+									<td>{{ form.resource_storage[rkey](class="form-control") }} / {{ nation.nation_resource_capacity[rkey] if rkey in nation.nation_resource_capacity else 0 }}</td>
+								</tr>
+							{% endfor %}
+						</tbody>
+						<thead><tr><th colspan="6">Unique Resources</th></tr><tr><th>Resource</th><th>Production</th><th>Consumption</th><th>Excess</th><th>Storage</th></tr></thead>
+						<tbody>
+							{% for resource in json_data["unique_resources"] %}
+								{% set rkey = resource["key"] %}
+								{% set excess_value = nation.get("resource_excess", {}).get(rkey, 0) %}
+								{% set storage = nation.get("resource_storage", {}).get(rkey, 0) %}
+								{% set capacity = nation.get("nation_resource_capacity", {}).get(rkey, 0) %}
+								<tr>
+									<td>{{ resource.name }}</td>
+									<td>{{ nation.resource_production[rkey] if rkey in nation.resource_production else 0 }}</td>
+									<td>{{ nation.resource_consumption[rkey] if rkey in nation.resource_consumption else 0 }}</td>
+									{% if excess_value + storage < 0 %}<td class="excess-critical-negative">{{ excess_value }}</td>
+									{% elif excess_value < 0 %}<td class="excess-negative">{{ excess_value }}</td>
+									{% elif excess_value + storage > capacity %}<td class="excess-overflow">{{ excess_value }}</td>
+									{% elif excess_value > 0 %}<td class="excess-positive">{{ excess_value }}</td>
+									{% else %}<td>{{ excess_value }}</td>{% endif %}
+									<td>{{ form.resource_storage[rkey](class="form-control") }} / {{ nation.nation_resource_capacity[rkey] if rkey in nation.nation_resource_capacity else 0 }}</td>
+								</tr>
+							{% endfor %}
+						</tbody>
 					</table>
 				</div>
+				<div class="table-wrapper">
+					<table class="kh-table">
+						<thead><tr><th colspan="4">Luxury Resources</th></tr><tr><th>Resource</th><th>Production</th><th>Excess</th><th>Storage</th></tr></thead>
+						<tbody>
+							{% for resource in json_data["luxury_resources"] %}
+								{% set rkey = resource["key"] %}
+								{% set cur_prod = nation.get("resource_production", {}).get(rkey, 0) %}
+								{% set excess_value = nation.get("resource_excess", {}).get(rkey, 0) %}
+								{% set storage = nation.get("resource_storage", {}).get(rkey, 0) %}
+								{% set capacity = nation.get("nation_resource_capacity", {}).get(rkey, 0) %}
+								<tr>
+									<td>{{ resource.name }}</td>
+									<td>{{ cur_prod }}</td>
+									{% if excess_value + storage < 0 %}<td class="excess-critical-negative">{{ excess_value }}</td>
+									{% elif excess_value < 0 %}<td class="excess-negative">{{ excess_value }}</td>
+									{% elif excess_value + storage > capacity %}<td class="excess-overflow">{{ excess_value }}</td>
+									{% elif excess_value > 0 %}<td class="excess-positive">{{ excess_value }}</td>
+									{% else %}<td>{{ excess_value }}</td>{% endif %}
+									<td>{{ form.resource_storage[rkey](class="form-control") }} / {{ capacity }}</td>
+								</tr>
+							{% endfor %}
+						</tbody>
+					</table>
+				</div>
+				<h3 style="margin-top:20px;">Jobs <span class="card-count">Pop Count: {{ nation.pop_count }}</span></h3>
+				<div class="table-wrapper">
+					<table class="kh-table">
+						<thead><tr><th>Job</th><th>Assigned Pops</th><th>Upkeep</th><th>Production</th></tr></thead>
+						<tbody>
+							{% for job_key, job in nation.job_details.items() %}
+								<tr>
+									<td>{{ job.display_name }}</td>
+									<td>{{ form.jobs[job_key] }}</td>
+									<td>{% if "upkeep" in job %}{% for resource, cost in job.upkeep.items() %}{{ resource }}: {{ cost }}<br>{% endfor %}{% endif %}</td>
+									<td>{% if "production" in job %}{% for resource, prod in job.production.items() %}{{ resource }}: {{ prod }}<br>{% endfor %}{% endif %}</td>
+								</tr>
+							{% endfor %}
+						</tbody>
+					</table>
+				</div>
+			{% else %}
+				<dl class="kh-kv" style="margin-bottom:14px;">
+					<dt>{{ schema.properties.money.label }}</dt>
+					<dd>{{ pf(nation.money, pn.get("money")) }} / {{ pf(nation.money_capacity, pn.get("money_capacity")) }}</dd>
+					<dt>{{ schema.properties.money_income.label }}</dt>
+					<dd>{{ pfbd(nation.money_income, pn.get("money_income"), breakdowns["money_income"], pbd.get("money_income", []), "Money Income") }}</dd>
+				</dl>
 				<div class="table-wrapper">
 					<table class="resources-table">
 						<thead>
@@ -1171,8 +1171,8 @@
 								{% set pend_cons = pn.get("resource_consumption", {}).get(rkey) %}
 								{% set pend_excess = pn.get("resource_excess", {}).get(rkey) %}
 								{% set pend_storage = pn.get("resource_storage", {}).get(rkey) %}
-								{% if cur_prod > 0 or storage > 0 or pend_prod or pend_storage %}
 								{% set pend_capacity = pn.get("nation_resource_capacity", {}).get(rkey) %}
+								{% if cur_prod > 0 or storage > 0 or capacity > 0 or pend_prod or pend_storage or pend_capacity %}
 								<tr>
 									<td>{{ resource.name }}</td>
 									<td>
@@ -1311,13 +1311,10 @@
 					</table>
 					{% endif %}
 				</div>
-				<h2>Jobs</h2>
-				{% set ns = namespace(disease_forced=0) %}
-				{% for job in nation.job_details.values() %}
-					{% if job.get("disease") %}{% set ns.disease_forced = ns.disease_forced + job.get("forced_count", 0) %}{% endif %}
-				{% endfor %}
-				<p>Working Pops: {{ pf(nation.working_pop_count, pn.get("working_pop_count")) }}/{{ pf(nation.pop_count, pn.get("pop_count")) }}
-				{% if ns.disease_forced %} <span style="color:#888; font-size:0.85em;">({{ ns.disease_forced }} forced by disease)</span>{% endif %}</p>
+				<h3 style="margin-top:20px;display:flex;justify-content:space-between;align-items:baseline;">
+					<span>Jobs <span class="card-count">{{ pf(nation.working_pop_count, pn.get("working_pop_count")) }} / {{ pf(nation.pop_count, pn.get("pop_count")) }} pops working{% set ns = namespace(disease_forced=0) %}{% for job in nation.job_details.values() %}{% if job.get("disease") %}{% set ns.disease_forced = ns.disease_forced + job.get("forced_count", 0) %}{% endif %}{% endfor %}{% if ns.disease_forced %} · {{ ns.disease_forced }} forced by disease{% endif %}</span></span>
+					{% if user_is_owner %}<a href="{{ request.path.replace('item', 'edit_jobs') }}" class="pill-btn pill-btn-sm">Edit Jobs</a>{% endif %}
+				</h3>
 				<div class="table-wrapper">
 					<table class="jobs-table">
 						<thead>
@@ -1368,29 +1365,96 @@
 						</tbody>
 					</table>
 				</div>
-				{% if user_is_owner %}
-					<a href="{{ request.path.replace('item', 'edit_jobs') }}">Edit Jobs</a>
-				{% endif %}
+			{% endif %}
 			{% else %}
 				<p class="visibility-locked">Requires Tier {{ _tier }} visibility.</p>
 			{% endif %}
-			</div>
 		</div>
 
-		<div class="expandable-section" id="districts-cities-wonders-section">
-			<div class="section-header" onclick="toggleSection(this)">
-				<h2>Districts, Cities, & Wonders</h2>
-				<span class="toggle-icon">▼</span>
-			</div>
-			<div class="section-content">
+		<div class="tab-panel surface-card" data-tab="development" id="districts-cities-wonders-section" style="margin:16px 28px;">
 			{% set _tier = nation_field_tier("districts") %}
 			{% if visibility_level >= _tier %}
 				{% set has_pending = pending_nation is not none %}
 				{% set pending_districts = pn.get("districts") or [] %}
 				{% set pending_cities = pn.get("cities") or [] %}
 
-				<h2>Districts</h2>
-				<p>{{ schema.properties.district_slots.label }}: {{ pf(nation.district_slots, pn.get("district_slots")) }}</p>
+				{% if editable %}
+				<h3>Districts <span class="card-count">{{ schema.properties.district_slots.label }}: {{ nation.district_slots }}</span></h3>
+				<div class="districts-grid">
+					{% for district_field in form.districts %}
+					{% set idx = loop.index0 %}
+					<div class="district-slot">
+						{{ district_field.item_id() }}
+						{{ district_field.form.type(id="district_type_" ~ idx, style="display:none") }}
+						{{ district_field.form.def_key(id="district_defkey_" ~ idx) }}
+						<label>Slot {{ loop.index }}</label><br><br>
+						<label>District:</label>
+						<select class="form-control district-combined-select"
+								id="district_combined_{{ idx }}"
+								data-idx="{{ idx }}"
+								data-init-type="{{ district_field.form.type.data or '' }}"
+								data-init-defkey="{{ district_field.form.def_key.data or '' }}">
+							<option value="">— Empty Slot —</option>
+							<optgroup label="Legacy Districts">
+								{% for val, label in district_field.form.type.choices if val %}
+								<option value="legacy:{{ val }}">{{ label }}</option>
+								{% endfor %}
+							</optgroup>
+							{% for cat_key, cat_name in district_categories.items() %}
+							{% set cat_defs = district_defs | selectattr("category", "equalto", cat_key) | list %}
+							{% if cat_defs %}
+							<optgroup label="{{ cat_name }}">
+								{% for d in (cat_defs | sort(attribute='tier')) %}
+								<option value="db:{{ d.key }}">T{{ d.tier }} – {{ d.display_name }}</option>
+								{% endfor %}
+							</optgroup>
+							{% endif %}
+							{% endfor %}
+						</select>
+						{% set cur_def_key_edit = district_field.form.def_key.data or '' %}
+						{% set cur_node_edit = district_field.form.node.data or '' %}
+						{% set cur_upgrades_raw = district_field.form.upgrades.data or '[]' %}
+						{% set cur_upgrades_edit = cur_upgrades_raw | from_json %}
+						{{ district_field.form.node() }}
+						{{ district_field.form.upgrades(id="district_upgrades_" ~ idx) }}
+						{{ district_field.form.upgrades_snapshot() }}
+						<div id="district_card_preview_{{ idx }}"
+							 data-init-defkey="{{ cur_def_key_edit }}"
+							 data-init-node="{{ cur_node_edit }}"
+							 data-init-upgrades="{{ cur_upgrades_raw }}">
+							{% set dd_edit = district_defs_map.get(cur_def_key_edit, {}) %}
+							{% if dd_edit %}
+							{{ district_card(dd_edit, cur_node_edit, cur_upgrades_edit, editable=True, idx=idx, nation=nation) }}
+							{% endif %}
+						</div>
+					</div>
+					{% endfor %}
+				</div>
+				<br>
+				{% if nation.get("empire", False) %}
+					<h3>Imperial District</h3>
+					<div class="district-slot">
+						{{ form.imperial_district.form.type.label }}: {{ form.imperial_district.form.type(class="form-control") }}
+						{{ form.imperial_district.form.node() }}
+					</div>
+				{% endif %}
+				{% if nation.city_slots > 0 %}
+					<h3 style="margin-top:20px;">Cities <span class="card-count">{{ schema.properties.city_slots.label }}: {{ nation.city_slots }}</span></h3>
+					<div class="districts-grid">
+						{% for city_field in form.cities %}
+							<div class="district-slot">
+								{{ city_field.item_id() }}
+								<label for="{{ city_field.id }}">Slot {{ loop.index }}</label><br><br>
+								{{ city_field.form.name.label }}: {{ city_field.form.name(class="form-control") }}<br>
+								{{ city_field.form.type.label }}: {{ city_field.form.type(class="form-control") }}
+								{{ city_field.form.node() }}
+								{{ city_field.form.wall.label }}: {{ city_field.form.wall(class="form-control") }}
+							</div>
+						{% endfor %}
+					</div>
+				{% endif %}
+				{% else %}
+				<h3>Districts <span class="card-count">{{ schema.properties.district_slots.label }}: {{ pf(nation.district_slots, pn.get("district_slots")) }}</span></h3>
 				<div style="display:flex; flex-wrap:wrap; gap:1.25rem; margin-top:0.75rem;">
 					{# nation.districts can hold more entries than district_slots (e.g. AI append bug).
 					   Extend the loop so real districts beyond the nominal slot count stay visible
@@ -1501,8 +1565,7 @@
 					{% endif %}
 				{% endif %}
 				{% if nation.city_slots > 0 %}
-					<h2>Cities</h2>
-					<p>{{ schema.properties.city_slots.label }}: {{ pf(nation.city_slots, pn.get("city_slots")) }}</p>
+					<h3 style="margin-top:20px;">Cities <span class="card-count">{{ schema.properties.city_slots.label }}: {{ pf(nation.city_slots, pn.get("city_slots")) }}</span></h3>
 					<div class="districts-grid">
 						{# nation.cities can hold more entries than city_slots (e.g. legacy padding
 						   ahead of real cities) — extend the loop to cover the full array so real
@@ -1577,14 +1640,12 @@
 						{% endfor %}
 					</div>
 				{% endif %}
+				{% endif %}
 				{% if "wonders" in linked_objects and linked_objects["wonders"] is not none %}
-					<h2>Wonders</h2>
+					<h3 style="margin-top:20px;">Wonders</h3>
 					<div class="table-wrapper">
-						<table class="info-table">
+						<table class="kh-table">
 							<thead>
-								<tr class="resources-header-row">
-									<th colspan="7" class="resources-header">Wonders</th>
-								</tr>
 								<tr>
 									<th>Name</th>
 									<th>Node</th>
@@ -1628,208 +1689,165 @@
 			{% else %}
 				<p class="visibility-locked">Requires Tier {{ _tier }} visibility.</p>
 			{% endif %}
-			</div>
 		</div>
 
-	<div class="expandable-section" id="tech-section">
-		<div class="section-header" onclick="toggleSection(this)">
-			<h2>Technologies</h2>
-			<span class="toggle-icon">▼</span>
-		</div>
-		<div class="section-content">
-			{% set _tier = nation_field_tier("technologies") %}
+	<div class="tab-panel surface-card" data-tab="development" id="tech-section" style="margin:16px 28px;">
+		<h3>Technologies — Tier List</h3>
+		{% set _tier = nation_field_tier("technologies") %}
 			{% if visibility_level >= _tier %}
+			{% if editable %}
+			{{ render_tech_tree(nation.get("technologies", {"political_philosophy": {"researched": true}}), nation.get("technology_cost_modifier", 0), nation.get("technology_cost_minimum", 2), json_data, editable=True, form=form, form_json=form_json["technologies"], tech_category_cost_modifiers=nation.get("technology_category_cost_modifiers", {})) }}
+			{% else %}
 			{{ render_tech_tree(nation.get("technologies", {"political_philosophy": {"researched": true}}), nation.get("technology_cost_modifier", 0), nation.get("technology_cost_minimum", 2), json_data, tech_category_cost_modifiers=nation.get("technology_category_cost_modifiers", {})) }}
-		{% else %}
-				<p class="visibility-locked">Requires Tier {{ _tier }} visibility.</p>
 			{% endif %}
-			</div>
+		{% else %}
+			<p class="visibility-locked">Requires Tier {{ _tier }} visibility.</p>
+		{% endif %}
 	</div>
 
-	<div class="expandable-section" id="progress-quests-section">
-		<div class="section-header" onclick="toggleSection(this)">
-			<h2>Progress Quests</h2>
-			<span class="toggle-icon">▼</span>
-		</div>
-		<div class="section-content">
-			{% set _tier = nation_field_tier("progress_quests") %}
-			{% if visibility_level >= _tier %}
+	<div class="tab-panel active surface-card" data-tab="overview" style="margin:16px 28px;background:rgba(90,122,68,.16);border-color:rgba(168,184,138,.25);">
+		<h3>Progress Quests <span class="card-count">({{ nation.get("progress_quests", [])|length }})</span></h3>
+		{% set _tier = nation_field_tier("progress_quests") %}
+		{% if visibility_level >= _tier %}
+			{% if editable %}
 			<div class="table-wrapper">
-				<h3>Progress Slots</h3>
-				<table class="info-table">
-					<thead>
-						<tr>
-							<th>Progress</th>
-							<th>Count</th>
-						</tr>
-					</thead>
-					<tbody>
-						{% if nation.get("0_progress_slots", 0) > 0 %}
-							<tr>
-								<td>0</td>
-								<td>{{ nation.get("0_progress_slots", 0) }}</td>
+				<table class="kh-table">
+					<thead><tr><th>Name</th><th>Slot</th><th>Bonus/Tick</th><th>Current</th><th>Required</th><th>Link</th><th>Actions</th></tr></thead>
+					<tbody id="progress_quests-tbody" class="sortable-tbody">
+						{% for quest_field in form.progress_quests %}
+							<tr class="sortable-row">
+								<td>{{ quest_field.item_id() }}{{ quest_field.quest_name(class="form-control") }}</td>
+								<td>{{ quest_field.slot(class="form-control") }}</td>
+								<td>{{ quest_field.bonus_progress_per_tick(class="form-control") }}</td>
+								<td>{{ quest_field.current_progress(class="form-control") }}</td>
+								<td>{{ quest_field.required_progress(class="form-control") }}</td>
+								<td>{{ quest_field.link(class="form-control") }}</td>
+								<td><span class="drag-handle">⋮⋮</span><button type="button" class="btn btn-danger" onclick="removeFromArray(this, 'progress_quests')">Remove</button></td>
 							</tr>
-						{% endif %}
-						{% if nation.get("1_progress_slots", 0) > 0 %}
-							<tr>
-								<td>1</td>
-								<td>{{ nation.get("1_progress_slots", 0) }}</td>
-							</tr>
-						{% endif %}
-						{% if nation.get("2_progress_slots", 0) > 0 %}
-							<tr>
-								<td>2</td>
-								<td>{{ nation.get("2_progress_slots", 0) }}</td>
-							</tr>
-						{% endif %}
-						{% if nation.get("3_progress_slots", 0) > 0 %}
-							<tr>
-								<td>3</td>
-								<td>{{ nation.get("3_progress_slots", 0) }}</td>
-							</tr>
-						{% endif %}
-						{% if nation.get("4_progress_slots", 0) > 0 %}
-							<tr>
-								<td>4</td>
-								<td>{{ nation.get("4_progress_slots", 0) }}</td>
-							</tr>
-						{% endif %}
-						{% if nation.get("5_progress_slots", 0) > 0 %}
-							<tr>
-								<td>5</td>
-								<td>{{ nation.get("5_progress_slots", 0) }}</td>
-							</tr>
-						{% endif %}
+						{% endfor %}
 					</tbody>
 				</table>
 			</div>
+			<button type="button" class="pill-btn pill-btn-sm" onclick="addToArray('progress_quests')">Add Quest</button>
+
+			<h3 style="margin-top:18px;">Shared Cure Quests</h3>
+			<p class="empty-state">Contributions to shared disease-cure research. Every contributing nation's progress is added to the disease's total cure progress each tick.</p>
 			<div class="table-wrapper">
-				<table class="info-table">
-					<thead>
-						<tr>
-							<th>Quest Name</th>
-							<th>Slot</th>
-							<th>Total Progress Per Tick</th>
-							<th>Current Progress</th>
-							<th>Link</th>
-						</tr>
-					</thead>
+				<table class="kh-table">
+					<thead><tr><th>Disease</th><th>Slot</th><th>Bonus/Tick</th><th>Link</th><th>Actions</th></tr></thead>
+					<tbody id="shared_quests-tbody">
+						{% for sq_field in form.shared_quests %}
+							<tr>
+								<td>{{ sq_field.item_id() }}{{ sq_field.disease(class="form-control") }}</td>
+								<td>{{ sq_field.slot(class="form-control") }}</td>
+								<td>{{ sq_field.bonus_progress_per_tick(class="form-control") }}</td>
+								<td>{{ sq_field.link(class="form-control") }}</td>
+								<td><button type="button" class="btn btn-danger" onclick="removeFromArray(this, 'shared_quests')">Remove</button></td>
+							</tr>
+						{% endfor %}
+					</tbody>
+				</table>
+			</div>
+			<button type="button" class="pill-btn pill-btn-sm" onclick="addSharedQuest()">Add Shared Quest</button>
+			{% else %}
+			<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">
+				{% for slot_tier in range(0, 6) %}
+					{% set slot_count = nation.get(slot_tier|string ~ "_progress_slots", 0) %}
+					{% if slot_count > 0 %}<span class="chip chip-sage">{{ slot_count }}× tier-{{ slot_tier }}</span>{% endif %}
+				{% endfor %}
+			</div>
+			<div style="max-height:320px;overflow:auto;">
+				<table class="kh-table">
+					<thead><tr><th>Quest Name</th><th>Slot</th><th>Per Tick</th><th>Progress</th><th>Link</th></tr></thead>
 					<tbody>
 						{% for quest in nation.get("progress_quests", []) %}
-							{% if quest.get("current_progress", 0) >= quest.get("required_progress", 0) %}
-								{% set completed_class = "completed-quest" %}
-							{% else %}
-								{% set completed_class = "" %}
-							{% endif %}
+							{% set is_done = quest.get("current_progress", 0) >= quest.get("required_progress", 0) %}
 							<tr>
 								<td>{{ quest.get("quest_name", "Unknown Quest") }}</td>
 								<td>{{ json_data["slot_types"].get(quest.get("slot", "no_slot"), {"name":"Unknown Slot"})["name"] }}</td>
 								<td>{{ quest.get("total_progress_per_tick", 0) }}</td>
-								<td class="{{ completed_class }}">{{ quest.get("current_progress", 0) }} / {{ quest.get("required_progress", 0) }}</td>
+								<td{% if is_done %} style="color:var(--pos);font-weight:700;"{% endif %}>{{ quest.get("current_progress", 0) }} / {{ quest.get("required_progress", 0) }}</td>
 								<td>{{ quest.link|format_discord_link|safe }}</td>
 							</tr>
 						{% endfor %}
 					</tbody>
 				</table>
 			</div>
-		{% else %}
-				<p class="visibility-locked">Requires Tier {{ _tier }} visibility.</p>
 			{% endif %}
-			</div>
+		{% else %}
+			<p class="visibility-locked">Requires Tier {{ _tier }} visibility.</p>
+		{% endif %}
 	</div>
 
 	{% if nation_disease_rows or shared_quest_rows %}
-	<div class="expandable-section" id="diseases-section">
-		<div class="section-header" onclick="toggleSection(this)">
-			<h2>Diseases</h2>
-			<span class="toggle-icon">▼</span>
-		</div>
-		<div class="section-content">
-			{% set _tier = nation_field_tier("diseases") %}
-			{% if visibility_level >= _tier %}
-			{% if nation_disease_rows %}
-			<div class="table-wrapper">
-				<table class="info-table">
-					<thead>
+	<div class="tab-panel active surface-card" data-tab="overview" style="margin:16px 28px;">
+		<h3>Diseases</h3>
+		{% set _tier = nation_field_tier("diseases") %}
+		{% if visibility_level >= _tier %}
+		{% if nation_disease_rows %}
+		<div style="max-height:300px;overflow:auto;">
+			<table class="kh-table">
+				<thead><tr><th>Disease</th><th>Rating</th><th>Infected Pops</th><th>Stage</th><th>Cure Progress</th></tr></thead>
+				<tbody>
+					{% for row in nation_disease_rows %}
 						<tr>
-							<th>Disease</th>
-							<th>Rating</th>
-							<th>Infected Pops</th>
-							<th>Stage</th>
-							<th>Cure Progress</th>
+							<td><a href="/diseases/item/{{ row.name }}">{{ row.name }}</a>{% if row.cured %} <span style="color:var(--pos);">(Cured)</span>{% endif %}</td>
+							<td>{{ row.rating }}</td>
+							<td>{{ row.infected }} / {{ nation.pop_count }}</td>
+							<td>{{ row.stage_name or "—" }}</td>
+							<td{% if row.cure_progress >= row.required_progress %} style="color:var(--pos);font-weight:700;"{% endif %}>{{ row.cure_progress }} / {{ row.required_progress }}</td>
 						</tr>
-					</thead>
-					<tbody>
-						{% for row in nation_disease_rows %}
-							<tr>
-								<td><a href="/diseases/item/{{ row.name }}">{{ row.name }}</a>{% if row.cured %} <span style="color:#6c6;">(Cured)</span>{% endif %}</td>
-								<td>{{ row.rating }}</td>
-								<td>{{ row.infected }} / {{ nation.pop_count }}</td>
-								<td>{{ row.stage_name or "—" }}</td>
-								<td>{{ row.cure_progress }} / {{ row.required_progress }}</td>
-							</tr>
-						{% endfor %}
-					</tbody>
-				</table>
-			</div>
-			{% else %}
-				<p style="color:#888;">No infected pops.</p>
-			{% endif %}
-			{% set _shared_tier = nation_field_tier("shared_quests") %}
-			{% if visibility_level >= _shared_tier and shared_quest_rows %}
-			<h3>Shared Cure Quests</h3>
-			<div class="table-wrapper">
-				<table class="info-table">
-					<thead>
-						<tr>
-							<th>Disease</th>
-							<th>Slot</th>
-							<th>Contribution / Tick</th>
-							<th>Total Cure Progress</th>
-							<th>Status</th>
-							<th>Link</th>
-						</tr>
-					</thead>
-					<tbody>
-						{% for row in shared_quest_rows %}
-							<tr>
-								<td><a href="/diseases/item/{{ row.disease_name }}">{{ row.disease_name }}</a></td>
-								<td>{{ json_data["slot_types"].get(row.slot, {"name": "Unknown Slot"})["name"] }}</td>
-								<td>{{ row.total_progress_per_tick }}</td>
-								<td class="{{ 'completed-quest' if row.cure_progress >= row.required_progress else '' }}">{{ row.cure_progress }} / {{ row.required_progress }}</td>
-								<td>
-									{% if row.cured %}
-										<span style="color:#6c6;">Cured</span>
-									{% elif row.gated %}
-										<span style="color:#fa8;">Gated — needs {{ row.min_infected_pops }} total infected pops ({{ row.total_infected }} now)</span>
-									{% else %}
-										<span style="color:#6c6;">Research active</span>
-									{% endif %}
-								</td>
-								<td>{% if row.link %}{{ row.link|format_discord_link|safe }}{% endif %}</td>
-							</tr>
-						{% endfor %}
-					</tbody>
-				</table>
-			</div>
-			{% endif %}
-			{% else %}
-				<p class="visibility-locked">Requires Tier {{ _tier }} visibility.</p>
-			{% endif %}
+					{% endfor %}
+				</tbody>
+			</table>
 		</div>
+		{% else %}
+			<p class="empty-state">No infected pops.</p>
+		{% endif %}
+		{% set _shared_tier = nation_field_tier("shared_quests") %}
+		{% if visibility_level >= _shared_tier and shared_quest_rows %}
+		<h3 style="margin-top:16px;">Shared Cure Quests</h3>
+		<div style="max-height:300px;overflow:auto;">
+			<table class="kh-table">
+				<thead><tr><th>Disease</th><th>Slot</th><th>Contribution / Tick</th><th>Total Cure Progress</th><th>Status</th><th>Link</th></tr></thead>
+				<tbody>
+					{% for row in shared_quest_rows %}
+						<tr>
+							<td><a href="/diseases/item/{{ row.disease_name }}">{{ row.disease_name }}</a></td>
+							<td>{{ json_data["slot_types"].get(row.slot, {"name": "Unknown Slot"})["name"] }}</td>
+							<td>{{ row.total_progress_per_tick }}</td>
+							<td{% if row.cure_progress >= row.required_progress %} style="color:var(--pos);font-weight:700;"{% endif %}>{{ row.cure_progress }} / {{ row.required_progress }}</td>
+							<td>
+								{% if row.cured %}
+									<span style="color:var(--pos);">Cured</span>
+								{% elif row.gated %}
+									<span style="color:var(--warn);">Gated — needs {{ row.min_infected_pops }} total infected pops ({{ row.total_infected }} now)</span>
+								{% else %}
+									<span style="color:var(--pos);">Research active</span>
+								{% endif %}
+							</td>
+							<td>{% if row.link %}{{ row.link|format_discord_link|safe }}{% endif %}</td>
+						</tr>
+					{% endfor %}
+				</tbody>
+			</table>
+		</div>
+		{% endif %}
+		{% else %}
+			<p class="visibility-locked">Requires Tier {{ _tier }} visibility.</p>
+		{% endif %}
 	</div>
 	{% endif %}
 
-	<div class="expandable-section" id="modifiers-section">
-		<div class="section-header" onclick="toggleSection(this)">
-			<h2>Modifiers</h2>
-			<span class="toggle-icon">▼</span>
-		</div>
-		<div class="section-content">
+	<div class="tab-panel active surface-card" data-tab="overview" style="margin:16px 28px;">
+		<h3>Blessings &amp; Burdens <span class="card-count">({{ nation.modifiers|length }} modifiers)</span></h3>
 			{% set _tier = nation_field_tier("modifiers") %}
 			{% if visibility_level >= _tier %}
-			<div class="table-wrapper">
-				<table class="info-table">
+			{% if editable %}
+				{{ modifier_table(form.modifiers, scopes_by_source_type.get('nation', []), entity_source_type='nation', show_scaling=True, show_drag=True) }}
+			{% else %}
+			<div style="max-height:360px;overflow:auto;">
+				<table class="kh-table">
 					<thead>
 						<tr>
 							<th>Modifier Type</th>
@@ -1955,8 +1973,8 @@
 						</tr>
 					{% endmacro %}
 					<h3 class="pending-value" style="margin-top:1rem;">Pending Modifier Changes</h3>
-					<div class="table-wrapper">
-						<table class="info-table">
+					<div style="max-height:280px;overflow:auto;">
+						<table class="kh-table">
 							<thead>
 								<tr>
 									<th>Modifier Type</th>
@@ -1978,15 +1996,15 @@
 					</div>
 				{% endif %}
 			{% endif %}
-		{% else %}
-				<p class="visibility-locked">Requires Tier {{ _tier }} visibility.</p>
 			{% endif %}
-			</div>
+		{% else %}
+			<p class="visibility-locked">Requires Tier {{ _tier }} visibility.</p>
+		{% endif %}
 	</div>
 
-	{% if g.user and g.user.get('is_admin') %}
-	<div style="margin-top:1.5rem;padding:1rem;background:#1a1a2a;border:1px solid #334;border-radius:6px;">
-		<h3 style="margin:0 0 0.75rem;color:var(--nation-accent);">Admin: Assigned Players</h3>
+	{% if g.user and g.user.get('is_admin') and not editable %}
+	<div class="tab-panel surface-card" data-tab="laws" style="margin:16px 28px;">
+		<h3 style="margin:0 0 0.75rem;color:var(--heading);">Admin: Assigned Players</h3>
 		{% if nation_players %}
 		<ul style="margin:0 0 0.75rem;padding-left:1.5rem;">
 			{% for player in nation_players %}
@@ -2017,51 +2035,835 @@
 		</form>
 	</div>
 	{% endif %}
-{% endblock %}
+	</div>
+	{% if editable %}
+		<div class="surface-card" style="margin:16px 28px;">
+			<div style="margin-bottom:10px;">
+				<label for="{{ form.reason.id }}" style="display:block;margin-bottom:4px;color:var(--text-dim);">{{ form.reason.label.text }}</label>
+				{{ form.reason(class="form-control") }}
+			</div>
+			<div style="display:flex;gap:8px;">
+				{% if g.user.is_admin %}
+					<button type="submit" formaction="{{ request.path }}/save" class="pill-btn">Save</button>
+				{% endif %}
+				<button type="submit" formaction="{{ request.path }}/request" class="pill-btn-outline">Request</button>
+			</div>
+		</div>
+		</form>
+		{% for pop in linked_objects.get("pops", []) %}
+			<form id="pop-clone-{{ pop['_id'] }}" method="POST"></form>
+		{% endfor %}
+		{% with editable = True %}
+		{% include "trade_routes_forms.html" with context %}
+		{% endwith %}
+		{{ modifier_shared_js() }}
+
+		<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+		<script>
+			function initDistrictCombinedSelects() {
+				document.querySelectorAll('.district-combined-select').forEach(function(sel) {
+					var idx = sel.dataset.idx;
+					var initType = sel.dataset.initType || '';
+					var initDefkey = sel.dataset.initDefkey || '';
+
+					if (initDefkey) {
+						var opt = sel.querySelector('option[value="db:' + initDefkey + '"]');
+						if (opt) sel.value = 'db:' + initDefkey;
+					} else if (initType) {
+						var opt2 = sel.querySelector('option[value="legacy:' + initType + '"]');
+						if (opt2) sel.value = 'legacy:' + initType;
+					}
+
+					sel.addEventListener('change', function() {
+						var val = this.value;
+						var typeEl = document.getElementById('district_type_' + idx);
+						var defkeyEl = document.getElementById('district_defkey_' + idx);
+						var container = document.getElementById('district_card_preview_' + idx);
+						var initDefkey = container ? (container.dataset.initDefkey || '') : '';
+						var initNode = container ? (container.dataset.initNode || '') : '';
+						if (val.startsWith('db:')) {
+							var defKey = val.slice(3);
+							if (typeEl) typeEl.value = '';
+							if (defkeyEl) defkeyEl.value = defKey;
+							var upgrades = [];
+							if (defKey === initDefkey && container) {
+								try { upgrades = JSON.parse(container.dataset.initUpgrades || '[]'); } catch(e) {}
+							}
+							updateDistrictCardPreview(parseInt(idx), defKey, initNode, upgrades);
+						} else if (val.startsWith('legacy:')) {
+							if (typeEl) typeEl.value = val.slice(7);
+							if (defkeyEl) defkeyEl.value = '';
+							updateDistrictCardPreview(parseInt(idx), '', '', []);
+						} else {
+							if (typeEl) typeEl.value = '';
+							if (defkeyEl) defkeyEl.value = '';
+							updateDistrictCardPreview(parseInt(idx), '', '', []);
+						}
+					});
+				});
+			}
+
+			document.addEventListener('DOMContentLoaded', function() {
+				initDistrictCombinedSelects();
+				const progressQuestsTbody = document.getElementById('progress_quests-tbody');
+				if (progressQuestsTbody) {
+					new Sortable(progressQuestsTbody, {
+						handle: '.drag-handle',
+						animation: 150,
+						onEnd: function() { reindexProgressQuests(); }
+					});
+				}
+				const modifiersTbody = document.getElementById('modifiers-tbody');
+				if (modifiersTbody) {
+					new Sortable(modifiersTbody, {
+						handle: '.drag-handle',
+						animation: 150,
+						onEnd: function() { reindexModifiers(); }
+					});
+				}
+			});
+
+			const MODIFIER_TYPES = {{ modifier_types | tojson | safe }};
+			const SORTED_MODIFIER_KEYS = {{ sorted_modifier_types | map(attribute=0) | list | tojson | safe }};
+			const ALL_RESOURCES = {{ all_resources | tojson | safe }};
+			const ALL_MRP_DEFS = {{ all_mrp_defs | tojson | safe }};
+			const ALL_JOBS = {{ all_jobs | tojson | safe }};
+			const ALL_ATTRIBUTES = {{ all_attributes | tojson | safe }};
+			const ALL_UNIT_CATEGORIES = {{ all_unit_categories | tojson | safe }};
+			const ALL_UNIT_STATS = {{ all_unit_stats | tojson | safe }};
+			const ALL_PROGRESS_TIERS = {{ all_progress_tiers | tojson | safe }};
+			const ALL_TECH_CATEGORIES = {{ all_tech_categories | tojson | safe }};
+			const SCOPE_DEFINITIONS = {{ scope_definitions | tojson | safe }};
+			const SCOPE_OPTIONS = {{ scopes_by_source_type.get('nation', []) | tojson | safe }};
+			const SCALING_TYPES = {{ scaling_types | tojson | safe }};
+			const SORTED_SCALING_KEYS = {{ sorted_scaling_type_keys | tojson | safe }};
+			const ALL_TERRAINS = {{ all_terrains | tojson | safe }};
+			const ALL_DISTRICT_CATEGORIES = {{ all_district_categories | tojson | safe }};
+			const ALL_DISTRICT_DEFS = {{ all_district_defs | tojson | safe }};
+			const DISTRICT_DEFS_MAP = {{ district_defs_map | tojson | safe }};
+			const NATION_TECHNOLOGIES = {{ nation.get("technologies", {}) | tojson | safe }};
+			const ALL_NATIONS_LIST = {{ bulk_edit_options.nations | tojson | safe }};
+			const VISIBILITY_TARGET_TYPES = [
+				{key: 'all_nations', name: 'All Nations'},
+				{key: 'region', name: 'Region'},
+				{key: 'specific_nation', name: 'Specific Nation'},
+			];
+
+			function escHtml(s) {
+				return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+			}
+			function toTitleCaseDc(s) {
+				return String(s).replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase());
+			}
+			function lookupDcName(arr, key) {
+				const found = arr.find(x => x.key === key);
+				return found ? found.name : toTitleCaseDc(key);
+			}
+
+			function buildDcScalingSuffix(mod) {
+				const sc = mod.scaling || '';
+				if (!sc || sc === 'flat') return '';
+				const sx = parseFloat(mod.scaling_x || 1);
+				const se = mod.scaling_extra || '';
+				let label = '';
+				if      (sc === 'per_x_money')                        label = 'Gold';
+				else if (sc === 'per_x_resource')                     label = lookupDcName(ALL_RESOURCES, se);
+				else if (sc === 'per_x_shallow_and_deep_water_tiles') label = 'Water Tile';
+				else if (sc === 'per_x_magic_nodes')                  label = 'Magic Node';
+				else if (sc === 'per_x_bloodthirsty_pops')            label = 'Bloodthirsty Pop';
+				else if (sc === 'per_x_primary_culture_pops_world')   label = 'Primary Culture Pop';
+				else if (sc === 'per_x_primary_religion_pops_world')  label = 'Primary Religion Pop';
+				else if (sc === 'per_x_naval_units')                  label = 'Naval Unit';
+				else if (sc === 'per_x_land_units')                   label = 'Land Unit';
+				else if (sc === 'per_x_turns_library')                label = 'Library Turn';
+				else if (sc === 'per_x_terrain_tiles')                label = lookupDcName(ALL_TERRAINS, se) + ' Tile';
+				else if (sc === 'per_x_district_category')            label = lookupDcName(ALL_DISTRICT_CATEGORIES, se) + ' District';
+				else if (sc === 'per_x_administration')               label = 'Administration';
+				else if (sc === 'per_x_resource_produced')            label = lookupDcName(ALL_RESOURCES, se) + ' Produced';
+				if (!label) return '';
+				const xStr = (sx !== 1) ? (Number.isInteger(sx) ? sx + ' ' : sx + ' ') : '';
+				return `<span class="mod-scale-suffix">per ${xStr}${label}</span>`;
+			}
+
+			function buildDcModifierRow(mod, opts) {
+				opts = opts || {};
+				const indent     = opts.indent     || false;
+				const dimmed     = opts.dimmed     || false;
+				const labelColor = opts.labelColor || null;
+				const rowClass   = opts.rowClass   || 'dc-mod-row';
+				const keyClass   = opts.keyClass   || 'dc-mod-key';
+				const valClass   = opts.valClass   || 'dc-mod-val';
+
+				const modType  = mod.modifier_type || '';
+				const typeDef  = MODIFIER_TYPES[modType] || {};
+				const ruleType = typeDef.is_terrain_rule ? (typeDef.rule_type || '') : '';
+				const val      = mod.value;
+				const scope    = mod.scope || '';
+
+				let label;
+				if (ruleType) {
+					const tName = lookupDcName(ALL_TERRAINS, mod.terrain || '');
+					const rName = lookupDcName(ALL_RESOURCES, mod.resource || '');
+					if      (ruleType === 'multiplier')           label = tName + ' Production Multiplier' + (mod.resource ? ` (${rName})` : '');
+					else if (ruleType === 'count_required_delta') label = tName + ' Tiles Required';
+					else if (ruleType === 'extra_resource')       label = tName + ' → Extra ' + rName;
+					else if (ruleType === 'swap_resource')        label = tName + ' → ' + rName;
+					else                                          label = typeDef.name || toTitleCaseDc(modType);
+				} else if (Object.keys(typeDef).length) {
+					const parts = (typeDef.extra_fields || []).map(ef => {
+						const v = mod[ef.key] || '';
+						if (!v) return null;
+						const srcMap = {
+							all_resources: ALL_RESOURCES, terrains: ALL_TERRAINS,
+							attributes: ALL_ATTRIBUTES, jobs: ALL_JOBS,
+							unit_categories: ALL_UNIT_CATEGORIES, unit_stats: ALL_UNIT_STATS,
+							progress_tiers: ALL_PROGRESS_TIERS, tech_categories: ALL_TECH_CATEGORIES
+						};
+						const arr = srcMap[ef.source];
+						return arr ? lookupDcName(arr, v) : toTitleCaseDc(v);
+					}).filter(Boolean);
+					label = (typeDef.name || toTitleCaseDc(modType)) + (parts.length ? ` (${parts.join(', ')})` : '');
+				} else {
+					label = toTitleCaseDc(mod._display_key || mod.modifier || modType);
+				}
+
+				let scopeHtml = '';
+				if (scope && scope !== 'nation_self') {
+					const sName = (SCOPE_DEFINITIONS[scope] || {}).name || scope;
+					scopeHtml = `<span style="color:#88a;font-size:0.7rem;">(${escHtml(sName)})</span>`;
+				}
+
+				let valHtml;
+				if (ruleType === 'multiplier') {
+					valHtml = `<span class="${valClass}">&times;${Number.isInteger(val) ? val : val}</span>`;
+				} else if (ruleType === 'extra_resource') {
+					valHtml = `<span class="${valClass}">1 / ${Number.isInteger(val) ? val : val} tiles</span>`;
+				} else if (ruleType === 'swap_resource') {
+					valHtml = `<span class="${valClass}" style="color:#88a;">active</span>`;
+				} else {
+					const sign = val > 0 ? '+' : '';
+					let valStr;
+					if (typeDef.value_format === 'percentage') {
+						const pct = Math.round(val * 100 * 10) / 10;
+						valStr = (Number.isInteger(pct) ? pct : pct) + '%';
+					} else {
+						valStr = Number.isInteger(val) ? String(val) : String(val);
+					}
+					valHtml = `<span class="${valClass}${val < 0 ? ' neg' : ''}">${sign}${valStr}</span>`;
+				}
+
+				const scaleSuffix = ruleType ? '' : buildDcScalingSuffix(mod);
+				const styleAttr  = indent ? ' style="padding-left:0.75rem;"' : '';
+				const dimClass   = dimmed ? ' dc-dim' : '';
+				const colorStyle = labelColor ? ` style="color:${labelColor};"` : '';
+
+				return `<div class="${rowClass}${dimClass}"${styleAttr}><span class="${keyClass}"${colorStyle}>${escHtml(label)} ${scopeHtml}</span><span style="display:inline-flex;align-items:baseline;flex-shrink:0;">${valHtml}${scaleSuffix}</span></div>`;
+			}
+
+			function buildDistrictCard(defKey, curNode, curUpgrades, slotIdx) {
+				const dd = DISTRICT_DEFS_MAP[defKey];
+				if (!dd) return '';
+				const tier = dd.tier || 1;
+				let h = `<div class="dc dc--t${tier}">`;
+
+				h += `<header><div>`;
+				h += `<div class="dc-title">${escHtml(dd.display_name || defKey)}</div>`;
+				h += `<div class="dc-node-tag">Map node: ${escHtml(curNode || 'unset')}</div>`;
+				h += `</div><span class="dc-tier-badge">T${tier}</span></header>`;
+
+				if (dd.image) h += `<div class="dc-image-wrap"><img class="dc-image" src="${escHtml(dd.image)}" alt="${escHtml(dd.display_name||'')}"></div>`;
+
+				h += `<div class="dc-body">`;
+				if (dd.description) h += `<p class="dc-desc">${escHtml(dd.description)}</p>`;
+
+				const mods = dd.modifiers || [];
+				if (mods.length) {
+					h += `<div class="dc-mods">`;
+					for (const m of mods) h += buildDcModifierRow(m);
+					h += `</div>`;
+				}
+
+				const syns = dd.synergies || [];
+				if (syns.length) {
+					if (mods.length) h += `<div class="dc-rule"></div>`;
+					h += `<div class="dc-syn-label">Synergies</div>`;
+					for (const syn of syns) {
+						const req = syn.requirement || '';
+						const reqList = Array.isArray(req) ? req : [req];
+						const isActive = reqList.includes('any') || reqList.includes(curNode);
+						h += `<div class="dc-syn-item">`;
+						h += `<span class="dc-syn-node">${reqList.map(r => toTitleCaseDc(r)).join(', ')}</span>`;
+						if (isActive) h += `<span class="dc-syn-active"> ✓ active</span>`;
+						if (syn.node_active) h += `<span class="dc-syn-flag"> (node active)</span>`;
+						for (const m of (Array.isArray(syn.modifiers) ? syn.modifiers : []))
+							h += buildDcModifierRow(m, {indent:true, dimmed:!isActive, labelColor:'#99a'});
+						h += `</div>`;
+					}
+				}
+
+				const upgrades = (dd.upgrades || []).filter(function(upg) {
+					if (curUpgrades.includes(upg.key)) return true;
+					const techReqs = (upg.requirements || []).filter(r => r.type === 'technology');
+					return techReqs.every(r => NATION_TECHNOLOGIES[r.value] && NATION_TECHNOLOGIES[r.value].researched);
+				});
+				if (upgrades.length) {
+					if (mods.length || syns.length) h += `<div class="dc-rule"></div>`;
+					h += `<div class="dc-upg-label">Upgrades</div>`;
+					for (const upg of upgrades) {
+						const unlocked = curUpgrades.includes(upg.key);
+						h += `<div class="dc-upg-item"><label class="dc-upg-toggle">`;
+						h += `<input type="checkbox" class="upg-checkbox" data-upg-slot="${slotIdx}" data-upg-key="${escHtml(upg.key)}" onchange="syncDistrictUpgrades(${slotIdx})"${unlocked?' checked':''}>`;
+						h += `<span class="dc-upg-name">${escHtml(upg.display_name || upg.key)}</span>`;
+						h += `</label>`;
+						if (upg.requirements && upg.requirements.length)
+							h += `<span class="dc-upg-req"> — requires ${upg.requirements.map(r=>escHtml(r.value)).join(', ')}</span>`;
+						if (unlocked && upg.modifiers)
+							for (const m of upg.modifiers) h += buildDcModifierRow(m, {indent:true, labelColor:'#99a'});
+						h += `</div>`;
+					}
+				}
+
+				h += `</div>`;
+
+				const costParts = Object.entries(dd.cost||{}).map(([r,a])=>`${a} ${toTitleCaseDc(r)}`);
+				const upkParts  = Object.entries(dd.upkeep||{}).map(([r,a])=>`${a} ${toTitleCaseDc(r)}`);
+				h += `<div class="dc-footer"><div class="dc-cost-heading">Build Cost${upkParts.length?' / Upkeep':''}</div>`;
+				h += `<span class="dc-cost">${costParts.length ? costParts.join(', ') : '<span class="muted">Free</span>'}`;
+				if (upkParts.length) h += ` / ${upkParts.join(', ')}/tick`;
+				h += `</span></div></div>`;
+				return h;
+			}
+
+			function updateDistrictCardPreview(slotIdx, defKey, curNode, curUpgrades) {
+				const container = document.getElementById('district_card_preview_' + slotIdx);
+				if (!container) return;
+				const upgradesField = document.getElementById('district_upgrades_' + slotIdx);
+				if (upgradesField) upgradesField.value = JSON.stringify(curUpgrades);
+				container.innerHTML = defKey ? buildDistrictCard(defKey, curNode, curUpgrades, slotIdx) : '';
+			}
+
+			function syncDistrictUpgrades(slotIdx) {
+				const keys = [];
+				document.querySelectorAll('.upg-checkbox[data-upg-slot="' + slotIdx + '"]').forEach(function(cb) {
+					if (cb.checked) keys.push(cb.dataset.upgKey);
+				});
+				const field = document.getElementById('district_upgrades_' + slotIdx);
+				if (field) field.value = JSON.stringify(keys);
+			}
+
+			function buildScalingOptions(selectedValue) {
+				const sel = selectedValue || 'flat';
+				let opts = '';
+				for (const key of SORTED_SCALING_KEYS) {
+					const st = SCALING_TYPES[key];
+					opts += '<option value="' + key + '" ' + (key === sel ? 'selected' : '') + '>' + st.name + '</option>';
+				}
+				return opts;
+			}
+
+			function buildModifierTypeOptions(selectedValue, targetType) {
+				let options = '<option value="">-- Select Modifier --</option>';
+				for (const key of SORTED_MODIFIER_KEYS) {
+					const mt = MODIFIER_TYPES[key];
+					if (targetType && mt.applicable_to && !mt.applicable_to.includes(targetType)) continue;
+					const sel = key === selectedValue ? 'selected' : '';
+					options += `<option value="${key}" ${sel}>${mt.name}</option>`;
+				}
+				return options;
+			}
+
+			function buildScopeOptions(selectedValue) {
+				const effective = selectedValue || 'nation_self';
+				return SCOPE_OPTIONS.map(s =>
+					`<option value="${s.key}" ${s.key === effective ? 'selected' : ''}>${s.name}</option>`
+				).join('');
+			}
+
+			function onScopeChange(select) {
+				const row = select.closest('tr');
+				const scopeKey = select.value;
+				const scopeDef = SCOPE_DEFINITIONS[scopeKey] || {};
+				const targetType = scopeDef.target_type || '';
+				const typeSelect = row ? row.querySelector('.modifier-type-select') : null;
+				if (typeSelect) {
+					const currentVal = typeSelect.value;
+					typeSelect.innerHTML = buildModifierTypeOptions(currentVal, targetType);
+				}
+			}
+
+			function updateVisTargetValue(fieldName, index) {
+				const typeEl = document.getElementById(`${fieldName}-${index}-target_type`);
+				const container = document.getElementById(`${fieldName}-${index}-target_value-container`);
+				if (!container) return;
+				const typeVal = typeEl ? typeEl.value : '';
+				const cur = container.dataset.cur || '';
+				if (typeVal === 'specific_nation') {
+					let opts = '<option value="">-- Select Nation --</option>';
+					for (const n of ALL_NATIONS_LIST) {
+						opts += `<option value="${escHtml(n.name)}" ${n.name === cur ? 'selected' : ''}>${escHtml(n.name)}</option>`;
+					}
+					container.innerHTML = `<select class="form-control" name="${fieldName}-${index}-target_value" id="${fieldName}-${index}-target_value">${opts}</select>`;
+					container.style.display = '';
+				} else if (typeVal === 'region') {
+					container.innerHTML = `<input type="text" class="form-control" name="${fieldName}-${index}-target_value" id="${fieldName}-${index}-target_value" value="${escHtml(cur)}" placeholder="Region name">`;
+					container.style.display = '';
+				} else {
+					container.innerHTML = `<input type="hidden" name="${fieldName}-${index}-target_value" id="${fieldName}-${index}-target_value" value="">`;
+					container.style.display = 'none';
+				}
+			}
+
+			function buildExtraFieldsHTML(fieldName, index, modifierType, currentData) {
+				const typeDef = MODIFIER_TYPES[modifierType] || {};
+				const extraFields = typeDef.extra_fields || [];
+				const ALL_EXTRA_KEYS = ['resource', 'resource_from', 'resource_to', 'job', 'attribute', 'unit_category', 'unit_stat', 'tier', 'tech_category', 'terrain', 'node_resource', 'terrain_as', 'target_type', 'target_value', 'unit_name', 'district_key'];
+				const renderedKeys = new Set();
+				let html = '';
+				for (const extra of extraFields) {
+					renderedKeys.add(extra.key);
+					const cur = (currentData && currentData[extra.key]) || '';
+					if (extra.source === 'all_resources') {
+						let opts = '<option value="">-- Select Resource --</option>';
+						for (const res of ALL_RESOURCES) opts += `<option value="${res.key}" ${res.key === cur ? 'selected' : ''}>${res.name}</option>`;
+						html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label><select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+					} else if (extra.source === 'mrp_defs') {
+						let opts = '<option value="">-- Select Mech RP --</option>';
+						for (const mrp of ALL_MRP_DEFS) opts += `<option value="${mrp.key}" ${mrp.key === cur ? 'selected' : ''}>${mrp.name}</option>`;
+						html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label><select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+					} else if (extra.source === 'jobs') {
+						let opts = '<option value="">-- Select Job --</option>';
+						for (const job of ALL_JOBS) opts += `<option value="${job.key}" ${job.key === cur ? 'selected' : ''}>${job.name}</option>`;
+						html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label><select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+					} else if (extra.source === 'attributes') {
+						let opts = '<option value="">-- Select Attribute --</option>';
+						for (const attr of ALL_ATTRIBUTES) opts += `<option value="${attr.key}" ${attr.key === cur ? 'selected' : ''}>${attr.name}</option>`;
+						html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label><select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+					} else if (extra.source === 'unit_categories') {
+						let opts = '<option value="">-- Select Category --</option>';
+						for (const uc of ALL_UNIT_CATEGORIES) opts += `<option value="${uc.key}" ${uc.key === cur ? 'selected' : ''}>${uc.name}</option>`;
+						html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label><select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+					} else if (extra.source === 'unit_stats') {
+						let opts = '<option value="">-- Select Stat --</option>';
+						for (const us of ALL_UNIT_STATS) opts += `<option value="${us.key}" ${us.key === cur ? 'selected' : ''}>${us.name}</option>`;
+						html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label><select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+					} else if (extra.source === 'progress_tiers') {
+						let opts = '<option value="">-- Select Tier --</option>';
+						for (const pt of ALL_PROGRESS_TIERS) opts += `<option value="${pt.key}" ${pt.key === cur ? 'selected' : ''}>${pt.name}</option>`;
+						html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label><select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+					} else if (extra.source === 'tech_categories') {
+						let opts = '<option value="">-- Select Category --</option>';
+						for (const tc of ALL_TECH_CATEGORIES) opts += `<option value="${tc.key}" ${tc.key === cur ? 'selected' : ''}>${tc.name}</option>`;
+						html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label><select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+					} else if (extra.source === 'terrains') {
+						let opts = '<option value="">-- Select Terrain --</option>';
+						for (const t of ALL_TERRAINS) opts += `<option value="${t.key}" ${t.key === cur ? 'selected' : ''}>${t.name}</option>`;
+						html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label><select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+					} else if (extra.source === 'visibility_target_types') {
+						let opts = '';
+						for (const t of VISIBILITY_TARGET_TYPES) opts += `<option value="${t.key}" ${t.key === cur ? 'selected' : ''}>${t.name}</option>`;
+						html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label><select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}" onchange="updateVisTargetValue('${fieldName}', ${index})">${opts}</select></div>`;
+					} else if (modifierType === 'offensive_visibility' && extra.key === 'target_value') {
+						const tvCur = (currentData && currentData.target_value) || '';
+						const tvType = (currentData && currentData.target_type) || 'all_nations';
+						html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label><span id="${fieldName}-${index}-target_value-container" data-cur="${escHtml(tvCur)}" style="${tvType === 'all_nations' ? 'display:none;' : ''}"></span></div>`;
+					} else {
+						html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label><input type="text" class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}" value="${escHtml(cur)}" placeholder="${escHtml(extra.label)}"></div>`;
+					}
+				}
+				for (const key of ALL_EXTRA_KEYS) {
+					if (!renderedKeys.has(key)) html += `<input type="hidden" name="${fieldName}-${index}-${key}" id="${fieldName}-${index}-${key}" value="">`;
+				}
+				return html;
+			}
+
+			function onModifierTypeChange(select) {
+				const fieldName = select.dataset.field;
+				const index     = parseInt(select.dataset.idx);
+				const modType   = select.value;
+				const cell      = select.closest('td');
+				const extraDiv  = cell ? cell.querySelector('.modifier-extra-fields') : null;
+				if (extraDiv) {
+					const currentData = {};
+					extraDiv.querySelectorAll('select, input').forEach(el => {
+						const parts = el.name.split('-');
+						const key = parts.slice(2).join('-');
+						if (key) currentData[key] = el.value;
+					});
+					extraDiv.innerHTML = buildExtraFieldsHTML(fieldName, index, modType, currentData);
+					if (modType === 'offensive_visibility') updateVisTargetValue(fieldName, index);
+				}
+				const row  = select.closest('tr');
+				const hint = row ? row.querySelector('.modifier-value-hint') : null;
+				if (hint) {
+					const typeDef = MODIFIER_TYPES[modType] || {};
+					hint.textContent = 'Decimal (0.1 = 10%)';
+					hint.style.display = typeDef.value_format === 'percentage' ? '' : 'none';
+				}
+			}
+
+			function reindexProgressQuests() {
+				const tbody = document.getElementById('progress_quests-tbody');
+				Array.from(tbody.children).forEach((row, index) => {
+					row.querySelectorAll('select, input').forEach(input => {
+						const fieldName = input.name.split('-').pop();
+						input.name = `progress_quests-${index}-${fieldName}`;
+						input.id = `progress_quests-${index}-${fieldName}`;
+					});
+				});
+			}
+
+			function reindexModifiers() {
+				const tbody = document.getElementById('modifiers-tbody');
+				Array.from(tbody.children).forEach((row, index) => {
+					row.querySelectorAll('input, select').forEach(input => {
+						const parts = input.name.split('-');
+						const fieldPart = parts.slice(2).join('-');
+						input.name = `modifiers-${index}-${fieldPart}`;
+						input.id   = `modifiers-${index}-${fieldPart}`;
+					});
+					const typeSelect = row.querySelector('.modifier-type-select');
+					if (typeSelect) typeSelect.dataset.idx = index;
+					const scopeSelect = row.querySelector('.modifier-scope-select');
+					if (scopeSelect) scopeSelect.dataset.idx = index;
+				});
+			}
+
+			function addToArray(fieldName) {
+				const tbody = document.getElementById(`${fieldName}-tbody`);
+				const currentCount = tbody.children.length;
+
+				const newRow = document.createElement('tr');
+				if (fieldName === "progress_quests") newRow.className = 'sortable-row';
+
+				if (fieldName === "modifiers") {
+					const defaultScope = SCOPE_OPTIONS.length ? SCOPE_OPTIONS[0].key : '';
+					const defaultTargetType = defaultScope ? (SCOPE_DEFINITIONS[defaultScope] || {}).target_type || '' : '';
+					const typeSelect = `<select class="form-control modifier-type-select"
+						name="${fieldName}-${currentCount}-modifier_type"
+						id="${fieldName}-${currentCount}-modifier_type"
+						data-field="${fieldName}" data-idx="${currentCount}"
+						onchange="onModifierTypeChange(this)">
+						${buildModifierTypeOptions('', defaultTargetType)}
+					</select>`;
+					const scopeSelect = `<select class="form-control modifier-scope-select"
+						name="${fieldName}-${currentCount}-scope"
+						id="${fieldName}-${currentCount}-scope"
+						data-field="${fieldName}" data-idx="${currentCount}"
+						onchange="onScopeChange(this)">
+						${buildScopeOptions(defaultScope)}
+					</select>`;
+					const extraFields = buildExtraFieldsHTML(fieldName, currentCount, '', {});
+					const scalingSelect = `<select class="form-control modifier-scaling-select"
+						name="${fieldName}-${currentCount}-scaling"
+						id="${fieldName}-${currentCount}-scaling"
+						onchange="onScalingChange(this)">
+						${buildScalingOptions('flat')}
+					</select><small class="modifier-scaling-x-field" style="display:none">Per <input type="number" step="any" class="form-control d-inline" style="width:70px" placeholder="1" name="${fieldName}-${currentCount}-scaling_x" id="${fieldName}-${currentCount}-scaling_x" value=""></small><small class="modifier-scaling-extra-field" style="display:none"><input type="hidden" name="${fieldName}-${currentCount}-scaling_extra" id="${fieldName}-${currentCount}-scaling_extra" value=""></small><small class="form-text text-muted modifier-max-field" style="display:none">Max: <input type="number" step="any" class="form-control d-inline" style="width:80px" placeholder="None" name="${fieldName}-${currentCount}-max_value" id="${fieldName}-${currentCount}-max_value"></small>`;
+					const conditionHtml = (typeof buildConditionHTML === 'function') ? buildConditionHTML(fieldName, currentCount) : '';
+					newRow.innerHTML = `
+						<td>
+							${typeSelect}
+							<div class="modifier-extra-fields mt-1">${extraFields}</div>
+						</td>
+						<td>${scopeSelect}</td>
+						<td>
+							<input type="number" step="any" class="form-control" name="${fieldName}-${currentCount}-value" id="${fieldName}-${currentCount}-value" value="1">
+							<small class="form-text text-muted modifier-value-hint" style="display:none">Decimal (0.1 = 10%)</small>
+						</td>
+						<td>${scalingSelect}${conditionHtml}</td>
+						<td><input type="number" class="form-control" name="${fieldName}-${currentCount}-duration" id="${fieldName}-${currentCount}-duration" value="-1"></td>
+						<td><input type="text" class="form-control" name="${fieldName}-${currentCount}-source" id="${fieldName}-${currentCount}-source"></td>
+						<td>
+							<span class="drag-handle">⋮⋮</span>
+							<button type="button" class="btn btn-danger" onclick="removeFromArray(this, 'modifiers')">Remove</button>
+						</td>
+					`;
+				} else if (fieldName === "progress_quests") {
+					newRow.innerHTML = `
+						<td><input type="text" class="form-control" name="${fieldName}-${currentCount}-quest_name" id="${fieldName}-${currentCount}-name" required></td>
+						<td>
+							<select class="form-control" name="${fieldName}-${currentCount}-slot" id="${fieldName}-${currentCount}-slot">
+								<option value="no_slot">No Slot</option>
+								<option value="tier_1_spell_slot">Tier 1 Spell Slot</option>
+								<option value="tier_2_spell_slot">Tier 2 Spell Slot</option>
+								<option value="tier_3_spell_slot">Tier 3 Spell Slot</option>
+							</select>
+						</td>
+						<td><input type="number" class="form-control" name="${fieldName}-${currentCount}-bonus_progress_per_tick" id="${fieldName}-${currentCount}-bonus_progress_per_tick" value="0" required></td>
+						<td><input type="number" class="form-control" name="${fieldName}-${currentCount}-current_progress" id="${fieldName}-${currentCount}-current_progress" value="0" required></td>
+						<td><input type="number" class="form-control" name="${fieldName}-${currentCount}-required_progress" id="${fieldName}-${currentCount}-required_progress" value="0" required></td>
+						<td><input type="text" class="form-control" name="${fieldName}-${currentCount}-link" id="${fieldName}-${currentCount}-link" required></td>
+						<td>
+							<span class="drag-handle">⋮⋮</span>
+							<button type="button" class="btn btn-danger" onclick="removeFromArray(this, '${fieldName}')">Remove</button>
+						</td>
+					`;
+				}
+
+				tbody.appendChild(newRow);
+				if (fieldName === "progress_quests") updateProgressQuestSlots();
+			}
+
+			const DISEASE_OPTIONS = {{ disease_options | tojson | safe }};
+
+			function addSharedQuest() {
+				const tbody = document.getElementById('shared_quests-tbody');
+				const i = tbody.children.length;
+				const diseaseOpts = ['<option value="">None</option>']
+					.concat(DISEASE_OPTIONS.map(d => `<option value="${d.id}">${d.name}</option>`))
+					.join('');
+				const newRow = document.createElement('tr');
+				newRow.innerHTML = `
+					<td><input type="hidden" name="shared_quests-${i}-item_id" id="shared_quests-${i}-item_id" value="">
+						<select class="form-control" name="shared_quests-${i}-disease" id="shared_quests-${i}-disease">${diseaseOpts}</select></td>
+					<td>
+						<select class="form-control" name="shared_quests-${i}-slot" id="shared_quests-${i}-slot">
+							<option value="no_slot">No Slot</option>
+							<option value="tier_1_spell_slot">Tier 1 Spell Slot</option>
+							<option value="tier_2_spell_slot">Tier 2 Spell Slot</option>
+							<option value="tier_3_spell_slot">Tier 3 Spell Slot</option>
+						</select>
+					</td>
+					<td><input type="number" class="form-control" name="shared_quests-${i}-bonus_progress_per_tick" id="shared_quests-${i}-bonus_progress_per_tick" value="0"></td>
+					<td><input type="text" class="form-control" name="shared_quests-${i}-link" id="shared_quests-${i}-link" value=""></td>
+					<td><button type="button" class="btn btn-danger" onclick="removeFromArray(this, 'shared_quests')">Remove</button></td>
+				`;
+				tbody.appendChild(newRow);
+			}
+
+			function removeFromArray(button, categoryName) {
+				const row = button.closest('tr');
+				row.remove();
+
+				if (categoryName === 'progress_quests') {
+					reindexProgressQuests();
+				} else {
+					const tbody = document.getElementById(`${categoryName}-tbody`);
+					Array.from(tbody.children).forEach((row, index) => {
+						row.querySelectorAll('select, input').forEach(input => {
+							const fieldName = input.name.split('-').pop();
+							input.name = `${categoryName}-${index}-${fieldName}`;
+							input.id = `${categoryName}-${index}-${fieldName}`;
+						});
+					});
+				}
+			}
+
+			function resetConcessions() {
+				const concessionsField = document.getElementById('concessions-field');
+				const paidField = document.getElementById('paid-concessions-field');
+				if (paidField) paidField.value = concessionsField.value || '{}';
+
+				const concessionsDiv = document.getElementById('concessions');
+				concessionsDiv.textContent = '';
+				concessionsField.value = JSON.stringify({});
+			}
+
+			document.addEventListener('DOMContentLoaded', function() {
+				const centralizationField = document.querySelector('select[name="centralization_law"]');
+				if (centralizationField) {
+					centralizationField.addEventListener('change', function() {
+						updateProgressQuestSlots();
+					});
+				}
+			});
+
+			function updateProgressQuestSlots() {
+				const nation_centralization = {{ nation.get("centralization_law", "Standard")|tojson|safe }};
+				const nation_0_progress_slots = {{ nation.get("0_progress_slots", 0)|tojson|safe }};
+				const nation_1_progress_slots = {{ nation.get("1_progress_slots", 0)|tojson|safe }};
+				const nation_2_progress_slots = {{ nation.get("2_progress_slots", 0)|tojson|safe }};
+				const nation_3_progress_slots = {{ nation.get("3_progress_slots", 0)|tojson|safe }};
+				const nation_4_progress_slots = {{ nation.get("4_progress_slots", 0)|tojson|safe }};
+				const nation_5_progress_slots = {{ nation.get("5_progress_slots", 0)|tojson|safe }};
+				const centralizationLaw = document.querySelector('select[name="centralization_law"]').value;
+
+				const slotAvailability = {
+					'Autonomous': { 'zero_slots': 4 },
+					'Decentralized': { 'one_slots': 3 },
+					'Standard': { 'two_slots': 2 },
+					'Focused': { 'three_slots': 1, 'one_slots': 1 },
+					'Absolute': { 'four_slots': 1 }
+				};
+
+				const availableSlots = slotAvailability[centralizationLaw] || {};
+
+				const extra_slots = {
+					zero_slots: nation_0_progress_slots,
+					one_slots: nation_1_progress_slots,
+					two_slots: nation_2_progress_slots,
+					three_slots: nation_3_progress_slots,
+					four_slots: nation_4_progress_slots,
+					five_slots: nation_5_progress_slots
+				};
+
+				for (const slotType in extra_slots) {
+					const baseSlots = (slotAvailability[centralizationLaw] || {})[slotType] || 0;
+					extra_slots[slotType] = Math.max(0, extra_slots[slotType] - baseSlots);
+				}
+
+				const totalSlots = {
+					zero_slots: (availableSlots.zero_slots || 0) + extra_slots.zero_slots,
+					one_slots: (availableSlots.one_slots || 0) + extra_slots.one_slots,
+					two_slots: (availableSlots.two_slots || 0) + extra_slots.two_slots,
+					three_slots: (availableSlots.three_slots || 0) + extra_slots.three_slots,
+					four_slots: (availableSlots.four_slots || 0) + extra_slots.four_slots,
+					five_slots: (availableSlots.five_slots || 0) + extra_slots.five_slots
+				};
+
+				document.querySelectorAll('select[name*="progress_quests"][name*="slot"]').forEach(select => {
+					const currentValue = select.value;
+					select.innerHTML = '<option value="no_slot">No Slot</option>';
+					if (totalSlots.zero_slots > 0) select.innerHTML += '<option value="0_progress_slot">0 Progress Slot</option>';
+					if (totalSlots.one_slots > 0) select.innerHTML += '<option value="1_progress_slot">1 Progress Slot</option>';
+					if (totalSlots.two_slots > 0) select.innerHTML += '<option value="2_progress_slot">2 Progress Slot</option>';
+					if (totalSlots.three_slots > 0) select.innerHTML += '<option value="3_progress_slot">3 Progress Slot</option>';
+					if (totalSlots.four_slots > 0) select.innerHTML += '<option value="4_progress_slot">4 Progress Slot</option>';
+					if (totalSlots.five_slots > 0) select.innerHTML += '<option value="5_progress_slot">5 Progress Slot</option>';
+					select.innerHTML += '<option value="tier_1_spell_slot">Tier 1 Spell Slot</option>';
+					select.innerHTML += '<option value="tier_2_spell_slot">Tier 2 Spell Slot</option>';
+					select.innerHTML += '<option value="tier_3_spell_slot">Tier 3 Spell Slot</option>';
+					if (Array.from(select.options).some(option => option.value === currentValue)) {
+						select.value = currentValue;
+					}
+				});
+			}
+
+			document.addEventListener('DOMContentLoaded', function() {
+				document.getElementById('select-all-pops') && document.getElementById('select-all-pops').addEventListener('change', function() {
+					document.querySelectorAll('.pop-select').forEach(cb => cb.checked = this.checked);
+					updatePopBar();
+				});
+				document.querySelectorAll('.pop-select').forEach(cb => cb.addEventListener('change', updatePopBar));
+
+				function updatePopBar() {
+					const checked = document.querySelectorAll('.pop-select:checked');
+					const count = checked.length;
+					const countEl = document.getElementById('selected-count');
+					if (countEl) countEl.textContent = count + ' pop' + (count !== 1 ? 's' : '') + ' selected';
+					const bar = document.getElementById('bulk-edit-bar');
+					const hint = document.getElementById('bulk-edit-hint');
+					if (bar) bar.style.display = count > 0 ? 'block' : 'none';
+					if (hint) hint.style.display = count > 0 ? 'none' : '';
+				}
+
+				function propagateField(fieldName, newId, newName) {
+					if (!newId) return;
+					const cellClass = { race: 'pop-race-cell', culture: 'pop-culture-cell', religion: 'pop-religion-cell' };
+					document.querySelectorAll('.pop-select:checked').forEach(cb => {
+						const row = cb.closest('tr');
+						row.dataset[fieldName] = newId;
+						const cls = cellClass[fieldName];
+						if (cls) {
+							const cell = row.querySelector('.' + cls);
+							if (cell) cell.textContent = newName;
+						}
+					});
+				}
+
+				['bulk-nation', 'bulk-race', 'bulk-culture', 'bulk-religion'].forEach(id => {
+					const el = document.getElementById(id);
+					if (el) el.addEventListener('change', function() {
+						propagateField(id.replace('bulk-', ''), this.value, this.options[this.selectedIndex].text);
+					});
+				});
+
+				const submitBtn = document.getElementById('bulk-edit-submit');
+				if (submitBtn) submitBtn.addEventListener('click', async function() {
+					const checked = Array.from(document.querySelectorAll('.pop-select:checked'));
+					if (!checked.length) return;
+					const updates = checked.map(cb => {
+						const row = cb.closest('tr');
+						return {
+							pop_id: row.dataset.popId,
+							nation: row.dataset.nation,
+							race: row.dataset.race,
+							culture: row.dataset.culture,
+							religion: row.dataset.religion,
+						};
+					});
+					const reason = document.getElementById('bulk-edit-reason').value.trim();
+					this.disabled = true;
+					this.textContent = 'Applying…';
+					try {
+						const res = await fetch('/pops/bulk_edit', {
+							method: 'POST',
+							headers: {'Content-Type': 'application/json'},
+							body: JSON.stringify({ updates, reason: reason || 'Bulk pop edit' }),
+						});
+						const data = await res.json();
+						const verb = data.approved ? 'Applied' : 'Submitted';
+						let msg = verb + ' ' + data.changes_created + ' change(s)';
+						if (!data.approved) msg += ' — awaiting admin approval';
+						if (data.errors && data.errors.length) msg += '\n\nErrors:\n' + data.errors.join('\n');
+						alert(msg);
+						if (data.changes_created > 0) location.reload();
+					} catch(e) {
+						alert('Request failed: ' + e.message);
+					} finally {
+						this.disabled = false;
+						this.textContent = 'Apply to Selected Pops';
+					}
+				});
+
+				const deleteBtn = document.getElementById('bulk-delete-submit');
+				if (deleteBtn) deleteBtn.addEventListener('click', async function() {
+					const checked = Array.from(document.querySelectorAll('.pop-select:checked'));
+					if (!checked.length) return;
+					if (!confirm('Permanently delete ' + checked.length + ' pop(s)? This cannot be undone.')) return;
+					const pop_ids = checked.map(cb => cb.closest('tr').dataset.popId);
+					const reason = document.getElementById('bulk-edit-reason').value.trim();
+					this.disabled = true;
+					this.textContent = 'Deleting…';
+					try {
+						const res = await fetch('/pops/bulk_delete', {
+							method: 'POST',
+							headers: {'Content-Type': 'application/json'},
+							body: JSON.stringify({ pop_ids, reason: reason || 'Bulk pop deletion' }),
+						});
+						const data = await res.json();
+						if (data.error) { alert('Error: ' + data.error); return; }
+						let msg = 'Deleted ' + data.deleted + ' pop(s).';
+						if (data.errors && data.errors.length) msg += '\n\nErrors:\n' + data.errors.join('\n');
+						alert(msg);
+						if (data.deleted > 0) location.reload();
+					} catch(e) {
+						alert('Request failed: ' + e.message);
+					} finally {
+						this.disabled = false;
+						this.textContent = 'Delete Selected Pops';
+					}
+				});
+			});
+		</script>
+	{% endif %}
 
 <script>
-function toggleSection(header) {
-    const section = header.parentElement;
-    const content = section.querySelector('.section-content');
-    const icon = header.querySelector('.toggle-icon');
+(function() {
+    const tabBtns = document.querySelectorAll('.tab-bar .tab-btn');
+    const tabPanels = document.querySelectorAll('.tab-panel');
 
-    if (content.style.display === 'none' || content.style.display === '') {
-        content.style.display = 'block';
-        icon.textContent = '▼';
-    } else {
-        content.style.display = 'none';
-        icon.textContent = '►';
-    }
-}
-
-// Expand the first section by default
-document.addEventListener('DOMContentLoaded', function() {
-    const firstSection = document.querySelector('.expandable-section');
-    if (firstSection) {
-        const content = firstSection.querySelector('.section-content');
-        content.style.display = 'block';
-    }
-});
-
-// Add event listener to recenter tech tree when its section is expanded
-document.addEventListener('DOMContentLoaded', function() {
-    const techSection = document.getElementById('tech-section');
-    if (techSection) {
-        // Listen for section expansion
-        techSection.addEventListener('section:expanded', function() {
-            if (typeof recenterTechTree === 'function') {
-                recenterTechTree();
-            }
-        });
-
-        // If section is already expanded on page load, recenter after a delay
-        if (techSection.classList.contains('section-expanded')) {
-            setTimeout(function() {
-                if (typeof recenterTechTree === 'function') {
-                    recenterTechTree();
-                }
-            }, 500); // Longer delay to ensure everything is loaded
+    function activateTab(tabName) {
+        tabBtns.forEach(function(btn) { btn.classList.toggle('active', btn.dataset.tab === tabName); });
+        tabPanels.forEach(function(panel) { panel.classList.toggle('active', panel.dataset.tab === tabName); });
+        // Cytoscape sizes itself to its container at init time; if the Development
+        // tab (which holds the tech graph) was hidden then, force a resize now.
+        if (tabName === 'development' && typeof window.recenterTechTree === 'function') {
+            setTimeout(window.recenterTechTree, 50);
         }
     }
-});
+
+    tabBtns.forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            activateTab(btn.dataset.tab);
+            history.replaceState(null, '', '#' + btn.dataset.tab);
+        });
+    });
+
+    const hashTab = window.location.hash.replace('#', '');
+    if (hashTab && document.querySelector('.tab-bar .tab-btn[data-tab="' + hashTab + '"]')) {
+        activateTab(hashTab);
+    }
+})();
 </script>
+{% endblock %}
