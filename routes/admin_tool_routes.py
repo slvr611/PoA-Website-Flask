@@ -1990,13 +1990,15 @@ def region_resource_adjustment():
     regions = list(mongo.db.regions.find({}, {"name": 1}).sort("name", ASCENDING))
 
     schema, db = get_data_on_category("nations")
-    nation_region_counts = {}
+    nation_ids_by_region = {}
     for nation in db.find({}, {"region": 1}):
         region_id = nation.get("region")
         if region_id:
-            nation_region_counts[region_id] = nation_region_counts.get(region_id, 0) + 1
+            nation_ids_by_region.setdefault(region_id, []).append(str(nation["_id"]))
     for region in regions:
-        region["nation_count"] = nation_region_counts.get(str(region["_id"]), 0)
+        ids = nation_ids_by_region.get(str(region["_id"]), [])
+        region["nation_count"] = len(ids)
+        region["nation_ids"] = ids
 
     general_resources = json_data.get("general_resources", [])
     unique_resources = json_data.get("unique_resources", [])
@@ -2020,6 +2022,7 @@ def region_resource_adjustment_apply():
     region_id = (data.get("region_id") or "").strip()
     adjustments = data.get("adjustments") or {}
     reason = (data.get("reason") or "").strip()
+    nation_ids = data.get("nation_ids")
 
     # Keep only non-zero, numeric adjustments — a resource left at 0 (or
     # blank) means "don't touch this resource" rather than "set it to 0".
@@ -2048,7 +2051,20 @@ def region_resource_adjustment_apply():
         return jsonify({"error": "No non-zero resource or money adjustments given"}), 400
 
     schema, db = get_data_on_category("nations")
-    nations = list(db.find({"region": region_id}))
+    # Large regions can take long enough (each nation goes through the full
+    # request/approve/recalculate pipeline against a remote DB) to exceed a
+    # platform request timeout, so the frontend chunks the nation list into
+    # batches of one /apply call each. nation_ids restricts a call to just
+    # that batch — still filtered by region_id server-side so a caller can
+    # never touch a nation outside the region they selected.
+    query = {"region": region_id}
+    if nation_ids:
+        try:
+            object_ids = [ObjectId(nid) for nid in nation_ids]
+        except Exception:
+            return jsonify({"error": "Invalid nation_ids"}), 400
+        query["_id"] = {"$in": object_ids}
+    nations = list(db.find(query))
     if not nations:
         return jsonify({"error": "No nations found in that region"}), 400
 

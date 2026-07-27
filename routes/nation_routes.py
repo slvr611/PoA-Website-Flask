@@ -412,9 +412,10 @@ def nation_item(item_ref):
                 nation_players = []
 
     # ── Disease info: active infections (derived from pops) + shared cure quests ──
+    import math
     from helpers.disease_helpers import (
         get_nation_infection_counts, get_global_infection_counts, get_global_accepted_count, resolve_diseases,
-        active_stage_index, get_stage, get_difficulty_settings,
+        active_stage_index, get_stage, get_difficulty_settings, get_infectivity_settings, nation_accepts_disease,
     )
     _infection_counts = get_nation_infection_counts(str(nation["_id"]))
     _shared_qs = [q for q in (nation.get("shared_quests") or []) if isinstance(q, dict)]
@@ -430,6 +431,29 @@ def nation_item(item_ref):
             continue
         _stage = get_stage(_d, active_stage_index(_d, _count, nation.get("pop_count", 0)))
         _diff = get_difficulty_settings(_d)
+
+        # Domestic/foreign spread chance this tick, mirroring
+        # nation_disease_spread_tick's own gating exactly: accepted nations
+        # never roll this (they spread only via accepted-spread job
+        # assignment instead), and halted/capped/fully-infected nations have
+        # a flat 0% chance regardless of infectivity settings.
+        _accepted = nation_accepts_disease(nation, _d)
+        _domestic_chance = _foreign_chance = None
+        if not _accepted:
+            _settings = get_infectivity_settings(_d)
+            _pop_count = nation.get("pop_count", 0)
+            _cap = math.floor(_settings.get("max_infected_pct", 0) * _pop_count)
+            _halted = bool(_stage and _stage.get("halts_spread"))
+            if _halted or _count >= _cap or _count >= _pop_count:
+                _domestic_chance = _foreign_chance = 0.0
+            else:
+                _spread_chance = min(
+                    _settings.get("base_chance", 0) + _settings.get("chance_per_infected", 0) * _count,
+                    1.0,
+                )
+                # 50/50 internal-vs-external targeting (attempt_dual_spread)
+                _domestic_chance = _foreign_chance = _spread_chance / 2
+
         nation_disease_rows.append({
             "name": _d.get("name", ""),
             "rating": _d.get("rating", ""),
@@ -438,6 +462,9 @@ def nation_item(item_ref):
             "cure_progress": _d.get("cure_progress", 0),
             "required_progress": _diff.get("required_progress", 0),
             "cured": bool(_d.get("cured")),
+            "accepted": _accepted,
+            "domestic_spread_chance": _domestic_chance,
+            "foreign_spread_chance": _foreign_chance,
         })
 
     shared_quest_rows = []

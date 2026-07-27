@@ -77,7 +77,9 @@
       "Bash(grep -n \"job_death_chance\" \"C:\\\\Users\\\\orion\\\\.claude\\\\projects\\\\c--Programming-Projects-PoA-Website-Flask\\\\d2927e54-cca2-4bfc-8fc7-f399e9ee391e.jsonl\" 2>/dev/null | cut -c1-200 | head -60)",
       "Bash(wc -l /tmp_incident_dump.txt)",
       "Read(//c/Users/orion/AppData/Local/Temp/claude/**)",
-      "Bash(node --check _bulk_modifiers_extracted.js)"
+      "Bash(node --check _bulk_modifiers_extracted.js)",
+      "Bash(node --check _rra_extracted.js)",
+      "Bash(rm -f _rra_extracted.js)"
     ]
   }
 }

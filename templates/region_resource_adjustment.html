@@ -27,7 +27,7 @@
         <select id="rra-region-select">
             <option value="">-- Select a region --</option>
             {% for region in regions %}
-                <option value="{{ region._id }}">{{ region.name }} ({{ region.nation_count }} nation{{ 's' if region.nation_count != 1 else '' }})</option>
+                <option value="{{ region._id }}" data-nation-ids="{{ region.nation_ids | join(',') }}">{{ region.name }} ({{ region.nation_count }} nation{{ 's' if region.nation_count != 1 else '' }})</option>
             {% endfor %}
         </select>
     </div>
@@ -97,16 +97,30 @@ function collectAdjustments() {
     return adjustments;
 }
 
+// Each nation goes through the full request/approve/recalculate pipeline
+// server-side, which is slow enough against a remote DB (~2-3s/nation) that
+// a large region in one request can exceed the platform's request timeout —
+// the backend keeps running and finishes, but the browser gets a timeout
+// error page and the operator has no idea what actually landed. Chunking
+// into small batches keeps every single request comfortably short, and lets
+// us report exactly which nations succeeded if one batch does fail.
+const RRA_BATCH_SIZE = 8;
+
+function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+
 async function applyRegionAdjustment() {
     const regionSelect = document.getElementById('rra-region-select');
     const regionId = regionSelect.value;
-    const regionLabel = regionSelect.options[regionSelect.selectedIndex]?.textContent || '';
+    const selectedOption = regionSelect.options[regionSelect.selectedIndex];
+    const regionLabel = selectedOption?.textContent || '';
+    const nationIds = (selectedOption?.dataset.nationIds || '').split(',').filter(Boolean);
     const adjustments = collectAdjustments();
     const moneyRaw = document.getElementById('rra-money').value.trim();
     const money = moneyRaw === '' ? 0 : parseFloat(moneyRaw);
     const reason = document.getElementById('rra-reason').value.trim();
 
     if (!regionId) { alert('Select a region.'); return; }
+    if (!nationIds.length) { alert('That region has no nations.'); return; }
     if (!Object.keys(adjustments).length && !(money && !isNaN(money))) {
         alert('Enter at least one non-zero resource or money adjustment.');
         return;
@@ -118,26 +132,39 @@ async function applyRegionAdjustment() {
     if (!confirm(`Apply ${summary} to every nation in ${regionLabel}?`)) return;
 
     const status = document.getElementById('rra-status');
-    status.textContent = 'Applying...';
-    status.style.color = 'var(--link)';
-    try {
-        const resp = await fetch('/admin/region_resource_adjustment/apply', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({region_id: regionId, adjustments, money, reason}),
-        });
-        const data = await resp.json();
-        if (data.ok) {
-            status.textContent = `Applied to ${data.updated} of ${data.total} nation(s).`;
-            status.style.color = 'var(--pos)';
-        } else {
-            status.textContent = `Error: ${data.error}`;
-            status.style.color = 'var(--crit)';
-        }
-    } catch (err) {
-        status.textContent = `Failed: ${err.message}`;
-        status.style.color = 'var(--crit)';
+    const batches = [];
+    for (let i = 0; i < nationIds.length; i += RRA_BATCH_SIZE) {
+        batches.push(nationIds.slice(i, i + RRA_BATCH_SIZE));
     }
+
+    let totalUpdated = 0;
+    for (let i = 0; i < batches.length; i++) {
+        status.textContent = `Applying batch ${i + 1}/${batches.length} (${totalUpdated}/${nationIds.length} nations so far)...`;
+        status.style.color = 'var(--link)';
+        try {
+            const resp = await fetch('/admin/region_resource_adjustment/apply', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({region_id: regionId, adjustments, money, reason, nation_ids: batches[i]}),
+            });
+            const data = await resp.json();
+            if (!data.ok) {
+                status.textContent = `Stopped after ${totalUpdated}/${nationIds.length} nations — error: ${data.error}`;
+                status.style.color = 'var(--crit)';
+                return;
+            }
+            totalUpdated += data.updated;
+        } catch (err) {
+            status.textContent = `Stopped after ${totalUpdated}/${nationIds.length} nations — request failed: ${err.message}`;
+            status.style.color = 'var(--crit)';
+            return;
+        }
+        // Small pause between batches so this doesn't hammer the DB/API back-to-back.
+        if (i < batches.length - 1) await sleep(250);
+    }
+
+    status.textContent = `Applied to ${totalUpdated} of ${nationIds.length} nation(s).`;
+    status.style.color = 'var(--pos)';
 }
 </script>
 {% endblock %}

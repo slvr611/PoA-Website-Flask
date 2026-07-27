@@ -1790,7 +1790,7 @@
 		{% if nation_disease_rows %}
 		<div style="max-height:300px;overflow:auto;">
 			<table class="kh-table">
-				<thead><tr><th>Disease</th><th>Rating</th><th>Infected Pops</th><th>Stage</th><th>Cure Progress</th></tr></thead>
+				<thead><tr><th>Disease</th><th>Rating</th><th>Infected Pops</th><th>Stage</th><th>Cure Progress</th><th>New Domestic Pop Sick</th><th>Spreads to Foreign Pop</th></tr></thead>
 				<tbody>
 					{% for row in nation_disease_rows %}
 						<tr>
@@ -1799,6 +1799,12 @@
 							<td>{{ row.infected }} / {{ nation.pop_count }}</td>
 							<td>{{ row.stage_name or "—" }}</td>
 							<td{% if row.cure_progress >= row.required_progress %} style="color:var(--pos);font-weight:700;"{% endif %}>{{ row.cure_progress }} / {{ row.required_progress }}</td>
+							{% if row.accepted %}
+								<td colspan="2" style="color:var(--text-dim);">Accepted — spreads only via job-assigned pops</td>
+							{% else %}
+								<td>{{ (row.domestic_spread_chance * 100)|round(1) }}% / tick</td>
+								<td>{{ (row.foreign_spread_chance * 100)|round(1) }}% / tick</td>
+							{% endif %}
 						</tr>
 					{% endfor %}
 				</tbody>
