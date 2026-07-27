@@ -75,14 +75,46 @@ def get_global_accepted_count(disease):
     """Return the number of pops permanently converted to `disease`'s derived
     race across all nations ('accepted' pops — convert_pop_to_accepted clears
     their disease marker, so get_global_infection_counts alone misses them,
-    even though they're still hosts of the disease's identity)."""
+    even though they're still hosts of the disease's identity).
+
+    Excludes pops that still carry the disease marker (mid-infection, not yet
+    accepted — infect_pop flips race to the derived race immediately on
+    infection, before the disease field is ever cleared) so this never
+    overlaps with get_global_infection_counts's count of the same pop."""
     derived_ids = _derived_race_ids(disease)
     if not derived_ids:
         return 0
     try:
-        return mongo.db.pops.count_documents({"race": {"$in": list(derived_ids)}})
+        return mongo.db.pops.count_documents({
+            "race": {"$in": list(derived_ids)},
+            "$or": [{"disease": {"$exists": False}}, {"disease": {"$in": [None, ""]}}],
+        })
     except Exception:
         return 0
+
+
+def get_accepted_counts_by_nation(disease):
+    """Per-nation breakdown of get_global_accepted_count — {nation_id_str: count}
+    of pops permanently converted to `disease`'s derived race with no active
+    infection marker. Companion for display pages that need a per-nation
+    "Infected Nations" table rather than just the global total."""
+    derived_ids = _derived_race_ids(disease)
+    if not derived_ids:
+        return {}
+    counts = {}
+    try:
+        cursor = mongo.db.pops.aggregate([
+            {"$match": {
+                "race": {"$in": list(derived_ids)},
+                "$or": [{"disease": {"$exists": False}}, {"disease": {"$in": [None, ""]}}],
+            }},
+            {"$group": {"_id": "$nation", "count": {"$sum": 1}}},
+        ])
+        for doc in cursor:
+            counts[str(doc["_id"])] = doc["count"]
+    except Exception:
+        pass
+    return counts
 
 
 def infection_counts_from_pops(pops):

@@ -15,6 +15,12 @@
    ═══════════════════════════════════════════════════════════════════════════ */
 :root,
 :root[data-theme="dark"] {
+  /* Tells the browser to render native controls (select dropdown popups,
+     scrollbars, etc.) with dark chrome — without this, those popups default
+     to light regardless of our --surface/--text tokens, leaving unselected
+     option text nearly illegible against a white popup background. */
+  color-scheme: dark;
+
   /* Grounds */
   --bg-page:      #191309;   /* page behind the card */
   --bg-card:      #221a12;   /* main content card */
@@ -44,6 +50,8 @@
 }
 
 :root[data-theme="light"] {
+  color-scheme: light;
+
   /* Grounds — parchment */
   --bg-page:      #e8ddc2;
   --bg-card:      #f6f0e1;

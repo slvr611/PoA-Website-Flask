@@ -520,7 +520,9 @@ def data_item(data_type, item_ref):
 
     disease_extras = {}
     if data_type == "diseases":
-        from helpers.disease_helpers import get_infectivity_settings, get_difficulty_settings
+        from helpers.disease_helpers import (
+            get_infectivity_settings, get_difficulty_settings, get_accepted_counts_by_nation,
+        )
         infected_rows = []
         total_infected = 0
         nation_ids = []
@@ -533,6 +535,18 @@ def data_item(data_type, item_ref):
             total_infected += doc["count"]
             try:
                 nation_ids.append(ObjectId(str(doc["_id"])))
+            except Exception:
+                pass
+        # Accepted pops (permanently converted to the disease's derived race,
+        # disease marker cleared) are still hosts of the disease but invisible
+        # to the query above — add them per-nation so both the total and the
+        # breakdown table match the cure-progress gating check's real count.
+        accepted_by_nation = get_accepted_counts_by_nation(item)
+        for nid, count in accepted_by_nation.items():
+            counts_by_nation[nid] = counts_by_nation.get(nid, 0) + count
+            total_infected += count
+            try:
+                nation_ids.append(ObjectId(nid))
             except Exception:
                 pass
         nation_names = {str(n["_id"]): n.get("name", "") for n in
