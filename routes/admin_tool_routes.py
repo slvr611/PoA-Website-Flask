@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, redirect, request, flash, url_for, send_file
+from flask import Blueprint, render_template, redirect, request, flash, url_for, send_file, jsonify
 from helpers.auth_helpers import admin_required
 from helpers.data_helpers import get_data_on_category
 from helpers.admin_tool_helpers import grow_all_population_async, roll_events_async, recalculate_all_items_async
@@ -1984,6 +1984,93 @@ def bulk_modifiers_apply():
     return jsonify({"ok": True, "updated": updated})
 
 
+# ---------------------------------------------------------------------------
+# Region Resource Adjustment
+# ---------------------------------------------------------------------------
+
+@admin_tool_routes.route("/admin/region_resource_adjustment", methods=["GET"])
+@admin_required
+def region_resource_adjustment():
+    regions = list(mongo.db.regions.find({}, {"name": 1}).sort("name", ASCENDING))
+
+    schema, db = get_data_on_category("nations")
+    nation_region_counts = {}
+    for nation in db.find({}, {"region": 1}):
+        region_id = nation.get("region")
+        if region_id:
+            nation_region_counts[region_id] = nation_region_counts.get(region_id, 0) + 1
+    for region in regions:
+        region["nation_count"] = nation_region_counts.get(str(region["_id"]), 0)
+
+    general_resources = json_data.get("general_resources", [])
+    unique_resources = json_data.get("unique_resources", [])
+    luxury_resources = json_data.get("luxury_resources", [])
+    return render_template(
+        "region_resource_adjustment.html",
+        regions=regions,
+        all_resources=general_resources + unique_resources + luxury_resources,
+        general_keys={r["key"] for r in general_resources},
+        unique_keys={r["key"] for r in unique_resources},
+        luxury_keys={r["key"] for r in luxury_resources},
+    )
+
+
+@admin_tool_routes.route("/admin/region_resource_adjustment/apply", methods=["POST"])
+@admin_required
+def region_resource_adjustment_apply():
+    from helpers.change_helpers import system_request_change, system_approve_change
+
+    data = request.get_json() or {}
+    region_id = (data.get("region_id") or "").strip()
+    adjustments = data.get("adjustments") or {}
+
+    # Keep only non-zero, numeric adjustments — a resource left at 0 (or
+    # blank) means "don't touch this resource" rather than "set it to 0".
+    clean_adjustments = {}
+    for key, val in adjustments.items():
+        try:
+            amt = float(val)
+        except (ValueError, TypeError):
+            continue
+        if amt == int(amt):
+            amt = int(amt)
+        if amt != 0:
+            clean_adjustments[key] = amt
+
+    if not region_id:
+        return jsonify({"error": "No region selected"}), 400
+    if not clean_adjustments:
+        return jsonify({"error": "No non-zero resource adjustments given"}), 400
+
+    schema, db = get_data_on_category("nations")
+    nations = list(db.find({"region": region_id}))
+    if not nations:
+        return jsonify({"error": "No nations found in that region"}), 400
+
+    updated = 0
+    for nation in nations:
+        old_data = deepcopy(nation)
+        new_data = deepcopy(nation)
+        # Flat, unclamped adjustment — deliberately allowed to go negative;
+        # nothing here floors at 0 or caps at nation_resource_capacity.
+        storage = dict(new_data.get("resource_storage", {}))
+        for key, amt in clean_adjustments.items():
+            storage[key] = storage.get(key, 0) + amt
+        new_data["resource_storage"] = storage
+
+        change_id = system_request_change(
+            data_type="nations",
+            item_id=nation["_id"],
+            change_type="Update",
+            before_data=old_data,
+            after_data=new_data,
+            reason=f"Bulk region resource adjustment via admin tool: {clean_adjustments}",
+        )
+        if change_id is not None:
+            system_approve_change(change_id)
+            updated += 1
+
+    return jsonify({"ok": True, "updated": updated, "total": len(nations)})
 
 
 # ---------------------------------------------------------------------------

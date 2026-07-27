@@ -66,7 +66,12 @@
       "Bash(grep -n \"^header\\\\s*{\\\\|^\\\\.navbar\\\\s*{\\\\|header\\\\s*{$\" static/styles.css)",
       "Bash(grep -n \"a\\\\s*{\\\\|a,\\\\|a\\\\.{0}\\\\s*:hover\\\\|nav-pill\\\\|dropdown-content a\\\\|\\\\.dc-upg-name\\\\|tr-add-row\\\\|\\\\.tr-resource\\\\b\" static/styles.css)",
       "Bash(grep -n \"^\\\\.env\\\\|\\\\.env$\" .gitignore)",
-      "Bash(git check-ignore *)"
+      "Bash(git check-ignore *)",
+      "Bash(node --check templates_dataItem_extracted.js)",
+      "Bash(python3 -c ' *)",
+      "Bash(node --check _region_edit_extracted.js)",
+      "Bash(node --check _new_character_extracted.js)",
+      "Bash(node --check _district_defs_edit_extracted.js)"
     ]
   }
 }

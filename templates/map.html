@@ -55,7 +55,7 @@
             <span class="map-btn-separator"></span>
             <button id="layer-trade-distance"   class="map-btn layer-btn" data-layer="trade_distance"   title="Trade distance from selected nation's cities">Trade Dist</button>
             <button id="layer-diplomatic-range" class="map-btn layer-btn" data-layer="diplomatic_range" title="Diplomatic range from selected nation">Diplo Range</button>
-            <span id="overlay-nation-label" style="font-size:0.78rem;color:#aaa;margin-left:4px;display:none;"></span>
+            <span id="overlay-nation-label" style="font-size:0.78rem;color:var(--text-dim);margin-left:4px;display:none;"></span>
 
             {# ── Edit Mode — available to any logged-in user ── #}
             {% if g.user %}
@@ -90,12 +90,12 @@
                     <option value="__erase__">Erase Node</option>
                 </select>
                 <span class="map-btn-separator"></span>
-                <span id="edit-mode-count" style="font-size:0.8em;color:#aaa;align-self:center;"></span>
-                <button id="cancel-edit-btn"  class="map-btn" style="background:#7b2020;color:#fff;" title="Discard all edits and exit edit mode">Cancel</button>
+                <span id="edit-mode-count" style="font-size:0.8em;color:var(--text-dim);align-self:center;"></span>
+                <button id="cancel-edit-btn"  class="map-btn" style="background:var(--crit);color:var(--bg-card);" title="Discard all edits and exit edit mode">Cancel</button>
                 {% if g.edit_access_level >= 10 %}
-                <button id="save-direct-btn" class="map-btn" style="background:#1a5276;color:#fff;" title="Save edits directly to the map (admin)">Save Directly</button>
+                <button id="save-direct-btn" class="map-btn" style="background:var(--accent);color:var(--bg-card);" title="Save edits directly to the map (admin)">Save Directly</button>
                 {% endif %}
-                <button id="submit-change-btn" class="map-btn" style="background:#1e6b3f;color:#fff;" title="Submit edits as a change request for moderator review">Submit Change</button>
+                <button id="submit-change-btn" class="map-btn" style="background:var(--pos);color:var(--bg-card);" title="Submit edits as a change request for moderator review">Submit Change</button>
             </div>
 
             {# Map changes log link #}
@@ -138,7 +138,7 @@
     <div id="hex-section" style="display:none"
          data-is-admin="{{ (g.edit_access_level >= 10) | tojson }}"
          data-is-logged-in="{{ (g.user is not none) | tojson }}">
-        <div id="hex-paint-error" style="display:none; color:#e03030; font-size:0.85em; padding:3px 4px; min-height:1.3em;"></div>
+        <div id="hex-paint-error" style="display:none; color:var(--crit); font-size:0.85em; padding:3px 4px; min-height:1.3em;"></div>
         <div class="hex-map-layout">
             <div class="hex-map-canvas-wrap">
                 <div id="hex-bg-viewer"></div>
@@ -159,17 +159,17 @@
     {# Submit change modal #}
     {% if g.user %}
     <div id="map-change-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:2000;align-items:center;justify-content:center;">
-        <div style="background:#1e1e2e;padding:1.5rem;border-radius:8px;max-width:520px;width:92%;border:1px solid #444;box-shadow:0 8px 32px rgba(0,0,0,0.6);">
+        <div style="background:var(--bg-card);padding:1.5rem;border-radius:8px;max-width:520px;width:92%;border:1px solid var(--border-strong);box-shadow:0 8px 32px rgba(0,0,0,0.6);color:var(--text);">
             <h3 style="margin-top:0;">Submit Map Change Request</h3>
-            <p id="map-change-summary" style="color:#aaa;margin-bottom:1rem;"></p>
-            <label for="map-change-reason" style="display:block;margin-bottom:0.3rem;">Reason / description <span style="color:#888;">(optional)</span>:</label>
+            <p id="map-change-summary" style="color:var(--text-dim);margin-bottom:1rem;"></p>
+            <label for="map-change-reason" style="display:block;margin-bottom:0.3rem;">Reason / description <span style="color:var(--text-dim);">(optional)</span>:</label>
             <textarea id="map-change-reason" rows="3"
-                      style="width:100%;background:#252535;color:#eee;border:1px solid #555;border-radius:4px;padding:0.4rem;box-sizing:border-box;resize:vertical;"></textarea>
+                      style="width:100%;background:var(--surface);color:var(--text);border:1px solid var(--border-strong);border-radius:4px;padding:0.4rem;box-sizing:border-box;resize:vertical;"></textarea>
             <div style="margin-top:1rem;display:flex;gap:0.5rem;justify-content:flex-end;">
                 <button id="map-change-cancel-btn" class="btn btn-secondary">Back</button>
                 <button id="map-change-submit-btn" class="btn btn-success">Submit</button>
             </div>
-            <div id="map-change-status" style="margin-top:0.6rem;font-size:0.85rem;color:#888;min-height:1.2em;"></div>
+            <div id="map-change-status" style="margin-top:0.6rem;font-size:0.85rem;color:var(--text-dim);min-height:1.2em;"></div>
         </div>
     </div>
     {% endif %}

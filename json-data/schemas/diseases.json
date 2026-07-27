@@ -79,6 +79,11 @@
         "label": "Natural Cure Chance",
         "description": "Per-tick chance for EACH infected pop to naturally recover on its own, independent of shared-quest cure research. Doubles permanently once the disease's cure has been discovered (cure_progress reaches the difficulty's required amount) — discovering the cure does not remove the disease everywhere, it just makes natural recovery twice as likely."
       },
+      "job_death_chance": {
+        "bsonType": "number",
+        "label": "Job Death Chance",
+        "description": "Per-tick chance for EACH pop currently infected with this disease to die from its forced job. A pop that dies has a Remove change automatically requested and approved against it (same as a manual pop deletion), rather than being deleted directly. 0 (default) means the job never kills anyone."
+      },
       "infectivity": {
         "bsonType": "enum",
         "label": "Infectivity",

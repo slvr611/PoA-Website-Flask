@@ -185,10 +185,18 @@ function onScopeChange(select) {
 	}
 }
 
+function escHtml(s) {
+	return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
 function buildExtraFieldsHTML(fieldName, index, modifierType, currentData) {
 	const typeDef = MODIFIER_TYPES[modifierType] || {};
 	const extraFields = typeDef.extra_fields || [];
-	const ALL_EXTRA_KEYS = ['resource', 'resource_from', 'resource_to', 'job', 'attribute', 'unit_category', 'unit_stat', 'tier', 'tech_category', 'terrain', 'node_resource', 'terrain_as'];
+	// Must match _modifier_macros.html's used_keys clearing list — anything
+	// missing here (e.g. target_value) is left with no hidden fallback input,
+	// so a stale value from a previously-selected modifier type can leak
+	// into whatever gets submitted for the newly-selected one.
+	const ALL_EXTRA_KEYS = ['resource', 'resource_from', 'resource_to', 'job', 'attribute', 'unit_category', 'unit_stat', 'tier', 'tech_category', 'terrain', 'node_resource', 'terrain_as', 'target_type', 'target_value', 'unit_name', 'district_key'];
 	const renderedKeys = new Set();
 	let html = '';
 	for (const extra of extraFields) {
@@ -257,6 +265,12 @@ function buildExtraFieldsHTML(fieldName, index, modifierType, currentData) {
 			}
 			html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
 				<select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+		} else {
+			// Plain text extra field (no dropdown source) — previously
+			// unhandled: none of the branches above matched, so nothing was
+			// rendered at all and the field could never be set from here.
+			html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
+				<input type="text" class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}" value="${escHtml(cur)}" placeholder="${escHtml(extra.label)}"></div>`;
 		}
 	}
 	for (const key of ALL_EXTRA_KEYS) {

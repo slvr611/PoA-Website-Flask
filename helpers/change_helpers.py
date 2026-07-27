@@ -653,6 +653,11 @@ def system_approve_change(change_id):
                     reason=f"Dependency update from change #{change_id}"
                 )
             return True
+        print(f"system_approve_change blocked: change #{change_id} on "
+              f"{change['target_collection']} #{change['target']} failed "
+              f"check_no_other_changes (target was modified since the change "
+              f"was requested, or before_requested_data doesn't reflect the "
+              f"target's actual state).")
     return False
 
 

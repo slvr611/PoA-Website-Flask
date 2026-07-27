@@ -1604,6 +1604,91 @@ def nation_vassal_compliance_tick(old_nation, new_nation, schema):
     return ""
 
 
+def ai_vassal_concessions_payment_tick(old_nations, new_nations, schema):
+    """Cross-nation tick: AI overlords pay the resources listed in a vassal's
+    pending concessions demand (see nation_concessions_tick, which runs
+    earlier in the same session and is what actually rolls/expires demands).
+
+    Paying normally just prevents the demand from going unpaid into next
+    session — nation_concessions_tick drops a vassal's compliance a level
+    (or risks immediate rebellion) if its concessions dict is still non-empty
+    when that tick next runs, so clearing it here (in the same session it was
+    demanded) avoids that loss entirely without otherwise touching compliance.
+
+    When the overlord's subject_stance law is Benevolence, the demand is
+    already inflated by that law's vassal_nation_concessions_qty_mult (a flat
+    x2 on the vassal's own concessions_qty, applied generically the same way
+    every other vassal_nation_* law modifier is) — paying that larger, already
+    more expensive demand also raises the vassal's compliance by a level,
+    instead of merely preventing a loss.
+
+    Registered in NATION_CROSS_TICK_FUNCTIONS (not NATION_TICK_FUNCTIONS)
+    because it must write to a DIFFERENT nation's (the vassal's) document.
+    An ordinary per-nation tick function only ever touches its own
+    old_nation/new_nation pair — mutating a sibling nation's Mongo document
+    directly from inside one would get silently overwritten later, when the
+    tick's own batch save loop commits that sibling's separately-tracked
+    new_nations[i] snapshot back over it. Cross tick functions instead
+    receive the full old_nations/new_nations lists and mutate new_nations[i]
+    by index directly, exactly like ai_market_matching_tick — the batch save
+    loop picks up those in-place edits naturally.
+    """
+    result = ""
+    id_to_idx = {str(n.get("_id", "")): i for i, n in enumerate(old_nations)}
+
+    for vidx, old_vassal in enumerate(old_nations):
+        # Read from new_vassal, not old_vassal — nation_concessions_tick (an
+        # earlier NATION_TICK_FUNCTIONS pass, same session) is what actually
+        # rolls a fresh demand, so by the time this cross tick runs,
+        # new_nations[vidx] already holds this session's current demand.
+        new_vassal = new_nations[vidx]
+        concessions = new_vassal.get("concessions")
+        if not isinstance(concessions, dict) or not concessions:
+            continue
+
+        overlord_id = str(old_vassal.get("overlord") or "")
+        overlord_idx = id_to_idx.get(overlord_id)
+        if overlord_idx is None:
+            continue
+        old_overlord = old_nations[overlord_idx]
+        if old_overlord.get("temperament", "Player") == "Player":
+            continue
+        new_overlord = new_nations[overlord_idx]
+
+        overlord_storage = dict(new_overlord.get("resource_storage") or {})
+        if any(overlord_storage.get(res, 0) < qty for res, qty in concessions.items()):
+            continue  # can't afford the full demand this session — leave it pending
+
+        for res, qty in concessions.items():
+            overlord_storage[res] = overlord_storage.get(res, 0) - qty
+        new_overlord["resource_storage"] = overlord_storage
+
+        vassal_storage = dict(new_vassal.get("resource_storage") or {})
+        vassal_caps = _resource_storage_capacity(new_vassal) or _resource_storage_capacity(old_vassal)
+        for res, qty in concessions.items():
+            new_amount = vassal_storage.get(res, 0) + qty
+            cap = vassal_caps.get(res)
+            if cap is not None:
+                new_amount = min(new_amount, cap)
+            vassal_storage[res] = new_amount
+        new_vassal["resource_storage"] = vassal_storage
+        new_vassal["concessions"] = {}
+
+        demand_desc = ", ".join(f"{qty} {res}" for res, qty in concessions.items())
+        result += (
+            f"{old_overlord.get('name', 'Unknown')} paid {old_vassal.get('name', 'Unknown')}'s "
+            f"concessions demand ({demand_desc}).\n"
+        )
+
+        if old_overlord.get("subject_stance") == "Benevolence":
+            result += adjust_compliance(
+                new_vassal, new_vassal, schema, [1],
+                ["its overlord's benevolent payment of concessions"],
+            )
+
+    return result
+
+
 def nation_enclave_compliance_tick(old_nation, new_nation, schema):
     if not old_nation.get("overlord") or old_nation.get("vassal_type") != "Enclave":
         return ""
@@ -2070,6 +2155,45 @@ def disease_cure_cross_tick(old_nations, new_nations, schema):
 
     return result
 
+def disease_job_death_tick(_old_nations, _new_nations, _schema):
+    """Cross-nation tick: roll job_death_chance for every pop currently
+    infected with a disease that has one set (> 0). A pop that dies has a
+    Remove change auto-requested and approved against it — mirroring the
+    manual pop-deletion flow (routes/pops_routes.py's bulk delete) — rather
+    than being deleted directly, so it shows up in change history like any
+    other pop removal."""
+    result = ""
+    diseases = list(mongo.db.diseases.find({"job_death_chance": {"$gt": 0}}))
+    if not diseases:
+        return ""
+
+    for disease in diseases:
+        death_chance = disease.get("job_death_chance", 0)
+        disease_id = str(disease["_id"])
+        disease_name = disease.get("name", disease_id)
+        infected_pops = list(mongo.db.pops.find({"disease": disease_id}))
+
+        died = 0
+        for pop in infected_pops:
+            if random.random() <= death_chance:
+                before = {k: v for k, v in pop.items() if k != "_id"}
+                change_id = system_request_change(
+                    data_type="pops",
+                    item_id=pop["_id"],
+                    change_type="Remove",
+                    before_data=before,
+                    after_data={},
+                    reason=f"Died from {disease_name} (job death chance)",
+                )
+                if change_id is not None:
+                    system_approve_change(change_id)
+                    died += 1
+
+        if died:
+            result += f"{disease_name}: {died} pop(s) died from job death chance.\n"
+
+    return result
+
 def _forced_flee_destination_for_region(region_id):
     """If the region has a "Forced Flee Destination" modifier, return the
     named destination nation doc ({_id, name}); otherwise None.
@@ -2134,9 +2258,15 @@ def pop_flee_tick(old_nation, new_nation, schema):
 
     nation_id_str = str(old_nation["_id"])
     try:
+        # "nation" must be projected even though it's also the query filter —
+        # system_approve_change's check_no_other_changes compares before_data
+        # against the pop's live document field-by-field, and a field entirely
+        # absent from before_data can never match the pop's actual current
+        # nation. That made this change fail its own approval every time,
+        # silently stranding it as "Pending" forever with no error anywhere.
         pops = list(mongo.db.pops.find(
             {"nation": nation_id_str},
-            {"_id": 1, "race": 1, "culture": 1, "religion": 1},
+            {"_id": 1, "race": 1, "culture": 1, "religion": 1, "nation": 1},
         ))
     except Exception:
         return ""
@@ -2838,6 +2968,8 @@ NATION_CROSS_TICK_FUNCTIONS = {
     "AI Market Matching Tick": ai_market_matching_tick,
     "Market Price Tick": market_price_tick,
     "Disease Cure Tick": disease_cure_cross_tick,
+    "Disease Job Death Tick": disease_job_death_tick,
+    "AI Vassal Concessions Payment Tick": ai_vassal_concessions_payment_tick,
 }
 
 def generate_all_ai_rulers_tick():

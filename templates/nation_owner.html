@@ -124,12 +124,13 @@
 				</div>
 			</div>
 		</div>
+		{% set view_path = request.path.replace('edit', 'item') if editable else request.path %}
 		<div class="nation-actions">
-			<a href="{{ request.path }}/changes/pending" class="pill-btn-outline pill-btn-sm">Pending</a>
-			<a href="{{ request.path }}/changes/archived" class="pill-btn-outline pill-btn-sm">History</a>
-			<a href="{{ request.path }}/recalculate" class="pill-btn-outline pill-btn-sm">Recalculate</a>
+			<a href="{{ view_path }}/changes/pending" class="pill-btn-outline pill-btn-sm">Pending</a>
+			<a href="{{ view_path }}/changes/archived" class="pill-btn-outline pill-btn-sm">History</a>
+			<a href="{{ view_path }}/recalculate" class="pill-btn-outline pill-btn-sm">Recalculate</a>
 			{% if editable %}
-				<a href="{{ request.path.replace('edit', 'item') }}" class="pill-btn-outline pill-btn-sm">Back to View</a>
+				<a href="{{ view_path }}" class="pill-btn-outline pill-btn-sm">Back to View</a>
 			{% else %}
 				{% if user_is_owner or (g.user and g.user.get('is_admin')) %}
 					<a href="/nations/cosmetics/{{ nation.name }}" class="pill-btn-outline pill-btn-sm">Customize</a>
@@ -328,7 +329,7 @@
 			{% set _terr_tier = nation_field_tier("territory_types") %}
 			{% if visibility_level >= _terr_tier %}
 				{% if editable %}
-					<h3 style="margin-top:0;">Territory Holdings <span class="card-count">{{ nation.get("current_territory", 0) }} total</span></h3>
+					<h3 style="margin-top:0;">Territory Holdings <span class="card-count">{{ nation.get("current_territory", 0) }} / {{ nation.get("effective_territory", 0) }} eff.</span></h3>
 					<div class="table-wrapper">
 						<table class="kh-table">
 							{% for terrain, details in json_data["terrains"].items() %}
@@ -337,7 +338,7 @@
 						</table>
 					</div>
 				{% else %}
-				<h3 style="margin-top:0;">Territory Holdings <span class="card-count">{{ pf(nation.current_territory, pn.get("current_territory")) }} total</span></h3>
+				<h3 style="margin-top:0;">Territory Holdings <span class="card-count">{{ pf(nation.current_territory, pn.get("current_territory")) }} / {{ gate("effective_territory", pfbd(nation.effective_territory, pn.get("effective_territory"), breakdowns.get("effective_territory", []), pbd.get("effective_territory", []), "Effective Territory")) }} eff.</span></h3>
 				<div style="display:flex;flex-wrap:wrap;gap:6px;">
 					{% if visibility_bypassed or visibility_level >= nation_field_tier("effective_territory") %}
 						{% set eff_territory = nation.get("effective_territory_types", nation.get("territory_types", {})) %}

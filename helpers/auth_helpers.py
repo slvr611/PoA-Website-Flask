@@ -1,6 +1,23 @@
+import os
+import hmac
 from functools import wraps
-from flask import g, redirect, url_for, flash
+from flask import g, redirect, url_for, flash, request, jsonify
 from app_core import mongo
+
+def api_key_required(f):
+    """Gate a JSON API route behind a shared-secret key (BOT_API_KEY in .env),
+    sent as the X-API-Key header. For external integrations (e.g. a Discord
+    bot) that have no browser session to authenticate with. Fails closed: if
+    BOT_API_KEY isn't configured, every request is rejected rather than
+    silently allowed through."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        expected_key = os.getenv("BOT_API_KEY", "")
+        provided_key = request.headers.get("X-API-Key", "")
+        if not expected_key or not hmac.compare_digest(provided_key, expected_key):
+            return jsonify({"error": "Unauthorized"}), 401
+        return f(*args, **kwargs)
+    return decorated_function
 
 def admin_required(f):
     @wraps(f)

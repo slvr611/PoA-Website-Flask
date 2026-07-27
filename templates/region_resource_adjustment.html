@@ -1,0 +1,124 @@
+{% extends "layout.html" %}
+{% block title %}Region Resource Adjustment{% endblock %}
+
+{% block content %}
+<style>
+.rra-container { max-width: 900px; margin: 0 auto; }
+.rra-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 1rem 1.25rem; margin-bottom: 1rem; }
+.rra-panel h3 { margin: 0 0 0.75rem 0; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; color: var(--text-dim); border-bottom: 1px solid var(--border-strong); padding-bottom: 0.3rem; }
+.rra-resource-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0.6rem; }
+.rra-resource-row { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; font-size: 0.85rem; }
+.rra-resource-row input { width: 90px; padding: 0.25rem 0.4rem; background: var(--surface-hi); color: var(--text); border: 1px solid var(--border-strong); border-radius: 4px; }
+.rra-category-label { grid-column: 1 / -1; font-size: 0.78rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 0.5rem; margin-bottom: 0.1rem; }
+.rra-category-label:first-child { margin-top: 0; }
+#rra-region-select { padding: 0.35rem 0.5rem; background: var(--surface-hi); color: var(--text); border: 1px solid var(--border-strong); border-radius: 4px; min-width: 260px; }
+</style>
+
+<div class="rra-container">
+    <h1 class="font-heading">Region Resource Adjustment</h1>
+    <p style="color:var(--text-mid);margin-bottom:1rem;">
+        Apply a flat, unclamped resource storage adjustment to every nation in a region at once.
+        The same amount is added (or subtracted) for every nation — negative stockpiles are allowed.
+        Changes go through the change system, auto-approved by System.
+    </p>
+
+    <div class="rra-panel">
+        <h3>Region</h3>
+        <select id="rra-region-select">
+            <option value="">-- Select a region --</option>
+            {% for region in regions %}
+                <option value="{{ region._id }}">{{ region.name }} ({{ region.nation_count }} nation{{ 's' if region.nation_count != 1 else '' }})</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="rra-panel">
+        <h3>Resource Adjustments <span style="font-weight:400;text-transform:none;letter-spacing:normal;">(positive to add, negative to subtract — leave blank/0 to skip a resource)</span></h3>
+        <div class="rra-resource-grid">
+            <div class="rra-category-label">General Resources</div>
+            {% for resource in all_resources %}
+                {% if resource.key in general_keys %}
+                <div class="rra-resource-row">
+                    <label for="rra-res-{{ resource.key }}">{{ resource.name }}</label>
+                    <input type="number" step="any" id="rra-res-{{ resource.key }}" data-resource-key="{{ resource.key }}" placeholder="0">
+                </div>
+                {% endif %}
+            {% endfor %}
+            <div class="rra-category-label">Unique Resources</div>
+            {% for resource in all_resources %}
+                {% if resource.key in unique_keys %}
+                <div class="rra-resource-row">
+                    <label for="rra-res-{{ resource.key }}">{{ resource.name }}</label>
+                    <input type="number" step="any" id="rra-res-{{ resource.key }}" data-resource-key="{{ resource.key }}" placeholder="0">
+                </div>
+                {% endif %}
+            {% endfor %}
+            <div class="rra-category-label">Luxury Resources</div>
+            {% for resource in all_resources %}
+                {% if resource.key in luxury_keys %}
+                <div class="rra-resource-row">
+                    <label for="rra-res-{{ resource.key }}">{{ resource.name }}</label>
+                    <input type="number" step="any" id="rra-res-{{ resource.key }}" data-resource-key="{{ resource.key }}" placeholder="0">
+                </div>
+                {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+
+    <div style="display:flex;gap:1rem;align-items:center;">
+        <button type="button" onclick="applyRegionAdjustment()" class="pill-btn">Apply Adjustment</button>
+        <a href="/admin_tools" class="pill-btn-outline">Back</a>
+        <span id="rra-status" style="font-size:0.85rem;"></span>
+    </div>
+</div>
+
+<script>
+function collectAdjustments() {
+    const adjustments = {};
+    document.querySelectorAll('[data-resource-key]').forEach(input => {
+        const raw = input.value.trim();
+        if (raw === '') return;
+        const val = parseFloat(raw);
+        if (!isNaN(val) && val !== 0) adjustments[input.dataset.resourceKey] = val;
+    });
+    return adjustments;
+}
+
+async function applyRegionAdjustment() {
+    const regionSelect = document.getElementById('rra-region-select');
+    const regionId = regionSelect.value;
+    const regionLabel = regionSelect.options[regionSelect.selectedIndex]?.textContent || '';
+    const adjustments = collectAdjustments();
+
+    if (!regionId) { alert('Select a region.'); return; }
+    if (!Object.keys(adjustments).length) { alert('Enter at least one non-zero resource adjustment.'); return; }
+
+    const summary = Object.entries(adjustments)
+        .map(([k, v]) => `${v > 0 ? '+' : ''}${v} ${k}`)
+        .join(', ');
+    if (!confirm(`Apply ${summary} to every nation in ${regionLabel}?`)) return;
+
+    const status = document.getElementById('rra-status');
+    status.textContent = 'Applying...';
+    status.style.color = 'var(--link)';
+    try {
+        const resp = await fetch('/admin/region_resource_adjustment/apply', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({region_id: regionId, adjustments}),
+        });
+        const data = await resp.json();
+        if (data.ok) {
+            status.textContent = `Applied to ${data.updated} of ${data.total} nation(s).`;
+            status.style.color = 'var(--pos)';
+        } else {
+            status.textContent = `Error: ${data.error}`;
+            status.style.color = 'var(--crit)';
+        }
+    } catch (err) {
+        status.textContent = `Failed: ${err.message}`;
+        status.style.color = 'var(--crit)';
+    }
+}
+</script>
+{% endblock %}

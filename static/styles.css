@@ -454,6 +454,7 @@ header {
 
 /* Each dropdown item */
 .dropdown-content li a {
+  color: var(--text);
   padding: 0.5rem 1rem;
   white-space: nowrap;
   border-radius: var(--radius-sm);
@@ -1986,27 +1987,28 @@ h1, h2 {
 
 .map-btn {
     padding: 0.5rem 1rem;
-    background-color: #333;
-    color: #e0e0e0;
-    border: 1px solid #555;
+    background-color: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border-strong);
     border-radius: 4px;
     cursor: pointer;
     transition: background-color 0.2s;
 }
 
 .map-btn:hover {
-    background-color: #444;
+    background-color: var(--surface-hi);
 }
 
 .map-btn.active {
-    background-color: #0066cc;
-    border-color: #0055aa;
+    background-color: var(--accent);
+    color: var(--bg-card);
+    border-color: var(--accent);
 }
 
 .map-btn-separator {
     width: 1px;
     height: 1.4rem;
-    background: #555;
+    background: var(--border-strong);
     align-self: center;
     flex-shrink: 0;
 }
@@ -2022,8 +2024,8 @@ h1, h2 {
     position: absolute;
     top: calc(100% + 4px);
     right: 0;
-    background: #2a2a2a;
-    border: 1px solid #555;
+    background: var(--bg-card);
+    border: 1px solid var(--border-strong);
     border-radius: 4px;
     min-width: 170px;
     z-index: 200;
@@ -2042,7 +2044,7 @@ h1, h2 {
     padding: 0.45rem 1rem;
     background: none;
     border: none;
-    color: #ccc;
+    color: var(--text);
     font-size: 0.85rem;
     text-align: left;
     cursor: pointer;
@@ -2051,7 +2053,7 @@ h1, h2 {
 }
 
 .map-tools-item:hover {
-    background: #3a3a3a;
+    background: var(--surface-hi);
     color: #fff;
 }
 
@@ -2070,7 +2072,7 @@ input[type="text"].map-btn {
 }
 
 input[type="text"].map-btn::placeholder {
-    color: #999;
+    color: var(--text-dim);
 }
 
 input[type="text"].map-btn:focus {
