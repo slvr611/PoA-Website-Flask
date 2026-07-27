@@ -7,7 +7,8 @@
     ],
     "preview": [
       "era_created",
-      "owner_nation"
+      "owner_nation",
+      "archived"
     ],
     "properties": {
       "name": {
@@ -73,6 +74,11 @@
         "collections": [
           "nations"
         ]
+      },
+      "archived": {
+        "bsonType": "boolean",
+        "label": "Archived",
+        "description": "The wonder still exists and remains viewable, but is not owned by any nation and is excluded from the running total wonder cost."
       },
       "external_modifiers": {
         "bsonType": "array",

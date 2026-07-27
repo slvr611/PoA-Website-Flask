@@ -327,7 +327,7 @@ def get_item_visibility(
 
     Never writes to the DB — callers decide whether to log.
     """
-    from calculations.visibility import get_viewer_nation, compute_visibility
+    from calculations.visibility import get_viewer_nations, compute_visibility
 
     # 1. Non-player admin or non-player RP mod → always full access, no log
     if is_non_player_admin or getattr(g, "is_non_player_rp_mod", False):
@@ -347,11 +347,11 @@ def get_item_visibility(
         return (4, True)
 
     # 5. Compute via viewer nation
-    viewer_nation = get_viewer_nation(user)
-    if not viewer_nation:
+    viewer_nations = get_viewer_nations(user)
+    if not viewer_nations:
         return (0, False)
 
-    tier = compute_visibility(viewer_nation, nation_id)
+    tier = compute_visibility(viewer_nations, nation_id)
     return (tier, False)
 
 
@@ -476,16 +476,16 @@ def build_nation_visibility_map():
     perspective, or None if visibility is unrestricted (admin bypass or non-player-admin).
     Empty dict means the user has no ruling nation → no nation changes visible.
     """
-    from calculations.visibility import get_viewer_nation, compute_all_visibilities
+    from calculations.visibility import get_viewer_nations, compute_all_visibilities
 
     if is_change_visibility_bypassed() or getattr(g, "is_non_player_admin", False):
         return None
 
-    viewer_nation = get_viewer_nation(g.user)
-    if not viewer_nation:
+    viewer_nations = get_viewer_nations(g.user)
+    if not viewer_nations:
         return {}
 
-    name_to_tier = compute_all_visibilities(viewer_nation)
+    name_to_tier = compute_all_visibilities(viewer_nations)
     id_to_tier = {}
     for nation in mongo.db.nations.find({}, {"_id": 1, "name": 1}):
         id_to_tier[str(nation["_id"])] = name_to_tier.get(nation.get("name", ""), 0)

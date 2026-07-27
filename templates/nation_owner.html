@@ -151,6 +151,8 @@
 						<button type="submit" class="chip chip-ember" style="border:0;cursor:pointer;">Visibility: Filtered (Tier {{ visibility_level }})</button>
 					</form>
 				{% endif %}
+			{% elif g.user %}
+				<span class="chip {{ 'chip-sage' if visibility_level >= 4 else 'chip-ember' }}">Visibility: Tier {{ visibility_level }}</span>
 			{% endif %}
 		</div>
 	</div>

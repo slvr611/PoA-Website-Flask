@@ -96,10 +96,10 @@ def hex_map_config():
     # Resolve the current user's ruling nation for overlay default
     viewer_nation_name = ""
     if g.user:
-        from calculations.visibility import get_viewer_nation
-        vn = get_viewer_nation(g.user)
-        if vn:
-            viewer_nation_name = vn.get("name", "")
+        from calculations.visibility import get_viewer_nations
+        vns = get_viewer_nations(g.user)
+        if vns:
+            viewer_nation_name = vns[0].get("name", "")
 
     return jsonify(
         {
@@ -1185,11 +1185,11 @@ def save_hex_map_edits():
 
 @hex_map_routes.route("/api/hex-map/visibility")
 def hex_map_visibility():
-    from calculations.visibility import get_viewer_nation, compute_all_visibilities
-    viewer_nation = get_viewer_nation(g.user)
-    if not viewer_nation:
+    from calculations.visibility import get_viewer_nations, compute_all_visibilities
+    viewer_nations = get_viewer_nations(g.user)
+    if not viewer_nations:
         return jsonify({})
-    return jsonify(compute_all_visibilities(viewer_nation))
+    return jsonify(compute_all_visibilities(viewer_nations))
 
 
 @hex_map_routes.route("/api/hex-map/admin-view-log", methods=["POST"])

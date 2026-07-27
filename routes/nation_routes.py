@@ -318,7 +318,7 @@ def nation_item(item_ref):
     user_can_edit_pops = user_is_owner or bool(g.user and g.user.get("is_admin"))
 
     # --- Visibility ---
-    from calculations.visibility import get_viewer_nation, compute_visibility, collect_visibility_modifiers
+    from calculations.visibility import get_viewer_nations, compute_visibility, collect_visibility_modifiers
     if has_cached_breakdowns or "visibility_modifiers" not in nation:
         nation["visibility_modifiers"] = collect_visibility_modifiers(nation)
         mongo.db.nations.update_one(
@@ -336,11 +336,11 @@ def nation_item(item_ref):
     elif user_is_owner:
         visibility_level = 4
     else:
-        viewer_nation = get_viewer_nation(g.user) if g.user else None
-        if viewer_nation is None:
+        viewer_nations = get_viewer_nations(g.user) if g.user else []
+        if not viewer_nations:
             visibility_level = 0
         else:
-            visibility_level = compute_visibility(viewer_nation, str(nation["_id"]))
+            visibility_level = compute_visibility(viewer_nations, str(nation["_id"]))
 
     pending_nation = None
     pending_breakdowns = None

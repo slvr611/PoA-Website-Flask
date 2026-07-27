@@ -35,6 +35,8 @@
 					<button type="submit" class="chip chip-ember" style="border:0;cursor:pointer;">Visibility: Filtered</button>
 				</form>
 			{% endif %}
+		{% elif g.user %}
+			<span class="chip chip-ember">Visibility: Filtered</span>
 		{% endif %}
 	{% endif %}
 	{% block pre_table %}{% endblock %}

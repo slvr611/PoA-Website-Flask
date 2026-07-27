@@ -50,6 +50,8 @@
 					<button type="submit" class="edit-button" style="background:#5a2d2d;">Visibility: Filtered</button>
 				</form>
 			{% endif %}
+		{% elif g.user %}
+			<span class="edit-button" style="background:#5a2d2d;cursor:default;">Visibility: Filtered</span>
 		{% endif %}
 	{% endif %}
 

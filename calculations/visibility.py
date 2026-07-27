@@ -28,13 +28,59 @@ def collect_visibility_modifiers(nation: dict) -> list:
     Returns a structured list for use in compute_visibility.
     """
     from calculations.field_calculations import _resolve_def
+    from calculations.scaling_methods import get_scaling_multiplier
 
     result = []
 
     def _extract(m: dict, source_label: str = ""):
         mod_type = m.get("modifier_type", "")
+        if mod_type not in ("offensive_visibility", "defensive_visibility"):
+            return
         value = m.get("value", 0)
         src = m.get("source", source_label)
+
+        # Same conditional-modifier gate every other modifier type respects
+        # (see sum_modifier_totals in field_calculations.py) — without this,
+        # an offensive/defensive visibility modifier set up with a condition
+        # (e.g. "only while at war") would silently ignore it and always
+        # apply, unlike every other modifier type built on the same editor.
+        condition_scaling = m.get("condition_scaling") or ""
+        if condition_scaling:
+            try:
+                cond_x = float(m.get("condition_scaling_x") or 1)
+                cond_extra = m.get("condition_scaling_extra") or ""
+                cond_op = m.get("condition_operator") or ">="
+                cond_val = float(m.get("condition_value") or 0)
+                actual = get_scaling_multiplier(condition_scaling, nation, scaling_x=cond_x, scaling_extra=cond_extra)
+                met = (
+                    (cond_op == ">=" and actual >= cond_val) or
+                    (cond_op == ">" and actual > cond_val) or
+                    (cond_op == "<=" and actual <= cond_val) or
+                    (cond_op == "<" and actual < cond_val) or
+                    (cond_op == "==" and actual == cond_val)
+                )
+                if not met:
+                    return
+            except Exception:
+                return
+
+        # Same scaling support every other modifier type gets (e.g.
+        # per-district or per-pop scaling) — previously ignored here, so a
+        # scaled offensive/defensive visibility modifier always applied its
+        # raw flat value regardless of the scaling factor.
+        scaling = m.get("scaling", "flat")
+        if scaling and scaling != "flat":
+            scaling_x = float(m.get("scaling_x") or 1)
+            scaling_extra = m.get("scaling_extra") or ""
+            value = value * get_scaling_multiplier(scaling, nation, scaling_x=scaling_x, scaling_extra=scaling_extra)
+
+        max_value = m.get("max_value")
+        if max_value is not None:
+            try:
+                value = min(value, float(max_value))
+            except (TypeError, ValueError):
+                pass
+
         if mod_type == "offensive_visibility":
             result.append({
                 "type": "offensive",
@@ -43,7 +89,7 @@ def collect_visibility_modifiers(nation: dict) -> list:
                 "target_value": m.get("target_value") or "",
                 "source": src,
             })
-        elif mod_type == "defensive_visibility":
+        else:
             result.append({
                 "type": "defensive",
                 "value": value,
@@ -69,47 +115,56 @@ def collect_visibility_modifiers(nation: dict) -> list:
 _NATION_PROJECTION = {"_id": 1, "region": 1, "overlord": 1, "name": 1, "visibility_modifiers": 1}
 
 
-def get_viewer_nation(g_user) -> dict | None:
+def get_viewer_nations(g_user) -> list:
     """
-    Return the minimal nation document for the logged-in user's ruling nation,
-    or None if they have no nation access. Checks ruling character first, then
-    direct player attribution via nation.players.
+    Return every nation document the logged-in user has viewer access
+    through: the ruling nation of EVERY character they have (not just
+    whichever one a query happens to return first), plus any nation whose
+    `players` array lists them directly. A player can rule more than one
+    nation (multiple characters, or a character plus a direct nation link);
+    visibility should reflect whichever affiliation sees the most, so this
+    returns the full candidate list for compute_visibility/
+    compute_all_visibilities to take the max across.
 
     Result is cached in Flask g for the lifetime of the request so multiple
     visibility checks in the same request only hit the DB once.
     """
     if not g_user:
-        return None
+        return []
 
     # Per-request cache keyed by user id so multi-user edge cases stay isolated
     try:
         from flask import g as _g
-        cache_key = f"_viewer_nation_{g_user.get('id', '')}"
+        cache_key = f"_viewer_nations_{g_user.get('id', '')}"
         if hasattr(_g, cache_key):
             return getattr(_g, cache_key)
     except RuntimeError:
         cache_key = None
 
     player = mongo.db.players.find_one({"id": g_user.get("id")}, {"_id": 1})
-    if not player:
-        result = None
-    else:
+    result = []
+    if player:
         player_id_str = str(player["_id"])
+        nation_ids = set()
 
-        character = mongo.db.characters.find_one(
-            {"player": player_id_str, "ruling_nation_org": {"$exists": True, "$ne": None}},
+        # Every character's ruling nation — $nin (not just $ne: None) is
+        # required since ruling_nation_org defaults to "" (not null) on a
+        # character that isn't currently ruling anything.
+        for character in mongo.db.characters.find(
+            {"player": player_id_str, "ruling_nation_org": {"$exists": True, "$nin": [None, ""]}},
             {"ruling_nation_org": 1}
-        )
-        result = None
-        if character and character.get("ruling_nation_org"):
+        ):
             try:
-                nation_id = ObjectId(str(character["ruling_nation_org"]))
-                result = mongo.db.nations.find_one({"_id": nation_id}, _NATION_PROJECTION)
+                nation_ids.add(ObjectId(str(character["ruling_nation_org"])))
             except Exception:
-                pass
+                continue
 
-        if result is None:
-            result = mongo.db.nations.find_one({"players": player_id_str}, _NATION_PROJECTION)
+        # Direct player attribution via nation.players
+        for nation in mongo.db.nations.find({"players": player_id_str}, {"_id": 1}):
+            nation_ids.add(nation["_id"])
+
+        if nation_ids:
+            result = list(mongo.db.nations.find({"_id": {"$in": list(nation_ids)}}, _NATION_PROJECTION))
 
     if cache_key:
         try:
@@ -120,12 +175,29 @@ def get_viewer_nation(g_user) -> dict | None:
     return result
 
 
-def compute_all_visibilities(viewer_nation: dict) -> dict:
+def compute_all_visibilities(viewer_nations) -> dict:
     """
-    Efficiently compute visibility tier (0-4) for every nation at once.
-    Uses bulk DB queries instead of per-nation round-trips.
+    Efficiently compute visibility tier (0-4) for every nation at once, from
+    the perspective of every nation the viewer has access to (see
+    get_viewer_nations), taking the HIGHEST tier reachable from any of them.
+    Accepts either a list of nation docs or a single nation dict.
     Returns {nation_name: tier}.
     """
+    if isinstance(viewer_nations, dict):
+        viewer_nations = [viewer_nations]
+    if not viewer_nations:
+        return {}
+
+    result = {}
+    for viewer_nation in viewer_nations:
+        for name, tier in _compute_all_visibilities_for_one(viewer_nation).items():
+            if tier > result.get(name, -1):
+                result[name] = tier
+    return result
+
+
+def _compute_all_visibilities_for_one(viewer_nation: dict) -> dict:
+    """Single-viewer-nation implementation — see compute_all_visibilities."""
     viewer_id     = str(viewer_nation["_id"])
     viewer_region = str(viewer_nation.get("region") or "")
 
@@ -221,10 +293,21 @@ def compute_all_visibilities(viewer_nation: dict) -> dict:
     return result
 
 
-def compute_visibility(viewer_nation: dict, target_nation_id: str) -> int:
+def compute_visibility(viewer_nations, target_nation_id: str) -> int:
     """
-    Compute the visibility tier (0-4) that viewer_nation has into target_nation_id.
+    Compute the HIGHEST visibility tier (0-4) that any of the viewer's
+    nations (see get_viewer_nations) has into target_nation_id. Accepts
+    either a list of nation docs or a single nation dict.
     """
+    if isinstance(viewer_nations, dict):
+        viewer_nations = [viewer_nations]
+    if not viewer_nations:
+        return 0
+    return max(_compute_visibility_for_one(vn, target_nation_id) for vn in viewer_nations)
+
+
+def _compute_visibility_for_one(viewer_nation: dict, target_nation_id: str) -> int:
+    """Single-viewer-nation implementation — see compute_visibility."""
     viewer_id = str(viewer_nation["_id"])
     if viewer_id == target_nation_id:
         return 4

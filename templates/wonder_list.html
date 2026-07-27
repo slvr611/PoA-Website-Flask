@@ -74,7 +74,7 @@ function wonderDefaultUpload(input) {
 	</thead>
 	<tbody>
 		<tr>
-			{% set wonder_count = items|length %}
+			{% set wonder_count = active_wonder_count %}
 			<td>{{ 1500 + (100 * wonder_count) }}</td>
 			<td>{{ 15 + (1 * wonder_count) }}</td>
 			<td>{{ 10 + (1 * wonder_count) }}</td>

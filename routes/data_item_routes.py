@@ -26,16 +26,16 @@ def _get_visible_pop_nations():
     (visibility tier ≥ 1), or None if the user sees all pops (admin / non-player-admin).
     Returns an empty set when the user has no ruling nation.
     """
-    from calculations.visibility import get_viewer_nation, compute_all_visibilities
+    from calculations.visibility import get_viewer_nations, compute_all_visibilities
 
     if getattr(g, "view_access_level", 0) >= 7:
         return None  # admin / non-player-admin: no filtering
 
-    viewer_nation = get_viewer_nation(g.user)
-    if not viewer_nation:
+    viewer_nations = get_viewer_nations(g.user)
+    if not viewer_nations:
         return set()  # no nation → can't see any pops in detail
 
-    visibility_map = compute_all_visibilities(viewer_nation)
+    visibility_map = compute_all_visibilities(viewer_nations)
     return {name for name, tier in visibility_map.items() if tier >= 1}
 
 
@@ -373,7 +373,7 @@ def _apply_artifact_list_visibility(items, preview_references):
     Otherwise → False (filtered).
     """
     from helpers.visibility_helpers import log_visibility_bypass, ITEM_VIEW_FIELD_TIERS
-    from calculations.visibility import get_viewer_nation, compute_all_visibilities
+    from calculations.visibility import get_viewer_nations, compute_all_visibilities
 
     explicit_bypass = bool(
         g.user and g.user.get("is_admin")
@@ -396,9 +396,9 @@ def _apply_artifact_list_visibility(items, preview_references):
     owner_tier_required = ITEM_VIEW_FIELD_TIERS["artifacts"].get("owner", 0)
 
     # Build nation_id → visibility tier for the current viewer
-    viewer_nation = get_viewer_nation(g.user) if g.user else None
-    if viewer_nation:
-        name_to_tier = compute_all_visibilities(viewer_nation)
+    viewer_nations = get_viewer_nations(g.user) if g.user else []
+    if viewer_nations:
+        name_to_tier = compute_all_visibilities(viewer_nations)
         nation_id_to_tier = {
             str(nation["_id"]): name_to_tier.get(nation.get("name", ""), 0)
             for nation in mongo.db.nations.find({}, {"_id": 1, "name": 1})
@@ -1169,12 +1169,18 @@ def wonder_list():
     else:
         items = list(db.find({}, query_dict).sort(sort_by, ASCENDING))
 
+    # Archived wonders still exist and stay visible in the list, but are
+    # excluded from the running total cost — they aren't owned by any
+    # nation, so they shouldn't count against the pool everyone draws from.
+    active_wonder_count = sum(1 for item in items if not item.get("archived"))
+
     return render_template(
         "wonder_list.html",
         title=category_data["wonders"]["pluralName"],
         items=items,
         schema=schema,
-        preview_references=preview_overall_lookup_dict
+        preview_references=preview_overall_lookup_dict,
+        active_wonder_count=active_wonder_count
     )
 
 @data_item_routes.route("/races")
