@@ -1,38 +1,32 @@
 {% extends "layout.html" %}
+{% from '_modifier_macros.html' import modifier_table, modifier_shared_js with context %}
 {% block title %}Bulk Add Modifiers{% endblock %}
 
 {% block content %}
 <style>
 .bm-container { max-width: 1200px; margin: 0 auto; }
-.bm-panel { background: var(--card-bg, #1e1e2e); border: 1px solid var(--border-color, #333); border-radius: 6px; padding: 1rem; margin-bottom: 1rem; }
-.bm-panel h3 { margin: 0 0 0.75rem 0; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; color: #aaa; border-bottom: 1px solid #333; padding-bottom: 0.3rem; }
-.mod-row { display: grid; grid-template-columns: 200px 120px 80px 160px 80px 80px 120px 40px; gap: 0.4rem; align-items: start; margin-bottom: 0.4rem; font-size: 0.82rem; }
-.mod-row select, .mod-row input { font-size: 0.82rem; padding: 0.2rem 0.3rem; background: #2a2a2a; color: #eee; border: 1px solid #555; border-radius: 3px; }
-.mod-row .extra-fields { grid-column: 1 / -1; display: flex; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.2rem; }
-.mod-row .extra-fields select, .mod-row .extra-fields input { font-size: 0.8rem; }
+.bm-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 1rem 1.25rem; margin-bottom: 1rem; }
+.bm-panel h3 { margin: 0 0 0.75rem 0; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; color: var(--text-dim); border-bottom: 1px solid var(--border-strong); padding-bottom: 0.3rem; }
 .nation-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.3rem; max-height: 500px; overflow-y: auto; }
 .nation-item { display: flex; align-items: center; gap: 0.4rem; font-size: 0.82rem; padding: 0.2rem 0.4rem; border-radius: 3px; }
-.nation-item:hover { background: rgba(255,255,255,0.03); }
+.nation-item:hover { background: var(--surface-hi); }
 .nation-item input[type="checkbox"] { margin: 0; }
-.region-header { font-size: 0.78rem; color: #888; font-weight: 600; margin-top: 0.5rem; margin-bottom: 0.2rem; border-bottom: 1px solid #333; padding-bottom: 0.15rem; }
+.region-header { font-size: 0.78rem; color: var(--text-dim); font-weight: 600; margin-top: 0.5rem; margin-bottom: 0.2rem; border-bottom: 1px solid var(--border-strong); padding-bottom: 0.15rem; }
 .select-bar { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; font-size: 0.82rem; }
-.select-bar button { font-size: 0.78rem; padding: 0.15rem 0.5rem; background: #333; border: 1px solid #555; color: #aaa; border-radius: 3px; cursor: pointer; }
-.select-bar button:hover { color: #fff; border-color: #888; }
+.select-bar button { font-size: 0.78rem; padding: 0.15rem 0.5rem; background: var(--surface-hi); border: 1px solid var(--border-strong); color: var(--text-dim); border-radius: 3px; cursor: pointer; }
+.select-bar button:hover { color: var(--text); border-color: var(--accent); }
 </style>
 
 <div class="bm-container">
-    <h1>Bulk Add Modifiers</h1>
-    <p class="text-muted" style="margin-bottom:1rem;">Add one or more modifiers to multiple nations at once. Changes go through the change system.</p>
+    <h1 class="font-heading">Bulk Add Modifiers</h1>
+    <p style="color:var(--text-mid);margin-bottom:1rem;">Add one or more modifiers to multiple nations at once. Changes go through the change system.</p>
 
     <div class="bm-panel">
         <h3>Modifiers to Add</h3>
-        <div style="overflow-x:auto;">
-            <div style="font-size:0.75rem;color:#888;margin-bottom:0.3rem;display:grid;grid-template-columns:200px 120px 80px 160px 80px 80px 120px 40px;gap:0.4rem;">
-                <span>Type</span><span>Scope</span><span>Value</span><span>Scaling</span><span>Per X</span><span>Duration</span><span>Source</span><span></span>
-            </div>
-            <div id="mod-rows"></div>
-        </div>
-        <button type="button" onclick="addModRow()" style="margin-top:0.5rem;" class="btn btn-primary btn-sm">+ Add Modifier</button>
+        {{ modifier_table([], scopes_by_source_type.get('nation', []), field_name='modifiers',
+                          entity_source_type='nation',
+                          show_scope=True, show_scaling=True, show_duration=True, show_source=True,
+                          show_drag=False, remove_fn='removeFromArray', add_fn='addToArray') }}
     </div>
 
     <div class="bm-panel">
@@ -40,7 +34,7 @@
         <div class="select-bar">
             <button type="button" onclick="selectAll(true)">Select All</button>
             <button type="button" onclick="selectAll(false)">Deselect All</button>
-            <span id="selected-count" style="color:#8af;">0 selected</span>
+            <span id="selected-count" style="color:var(--link);">0 selected</span>
         </div>
         <div class="nation-grid" id="nation-grid">
             {% set ns = namespace(cur_region='') %}
@@ -58,166 +52,272 @@
     </div>
 
     <div style="display:flex;gap:1rem;align-items:center;">
-        <button type="button" onclick="applyModifiers()" class="btn btn-primary">Apply Modifiers</button>
-        <a href="/admin_tools" class="btn btn-secondary">Back</a>
+        <button type="button" onclick="applyModifiers()" class="pill-btn">Apply Modifiers</button>
+        <a href="/admin_tools" class="pill-btn-outline">Back</a>
         <span id="status" style="font-size:0.85rem;"></span>
     </div>
 </div>
 
+{{ modifier_shared_js() }}
 <script>
-const MODIFIER_TYPES = {{ modifier_types|tojson }};
-const SCALING_TYPES = {{ scaling_types|tojson }};
-const SCOPE_DEFS = {{ scope_definitions|tojson }};
-const ALL_RESOURCES = {{ all_resources|tojson }};
-const ALL_MRP_DEFS = {{ all_mrp_defs|tojson }};
-const ALL_JOBS = {{ all_jobs|tojson }};
-const ALL_TERRAINS = {{ all_terrains|tojson }};
-const ALL_NATIONS = {{ nations | map(attribute='name') | list | tojson }};
-
-const _ATTRIBUTES = [
-    {key: 'rulership', name: 'Rulership'}, {key: 'cunning', name: 'Cunning'},
-    {key: 'charisma', name: 'Charisma'}, {key: 'prowess', name: 'Prowess'},
-    {key: 'magic', name: 'Magic'}, {key: 'strategy', name: 'Strategy'},
-];
-
+const MODIFIER_TYPES = {{ modifier_types | tojson | safe }};
+const SORTED_MODIFIER_KEYS = {{ sorted_modifier_types | map(attribute=0) | list | tojson | safe }};
+const ALL_RESOURCES = {{ all_resources | tojson | safe }};
+const ALL_MRP_DEFS = {{ all_mrp_defs | tojson | safe }};
+const ALL_JOBS = {{ all_jobs | tojson | safe }};
+const ALL_ATTRIBUTES = {{ all_attributes | tojson | safe }};
+const ALL_UNIT_CATEGORIES = {{ all_unit_categories | tojson | safe }};
+const ALL_UNIT_STATS = {{ all_unit_stats | tojson | safe }};
+const ALL_PROGRESS_TIERS = {{ all_progress_tiers | tojson | safe }};
+const ALL_TECH_CATEGORIES = {{ all_tech_categories | tojson | safe }};
+const ALL_TERRAINS = {{ all_terrains | tojson | safe }};
+const SCOPE_DEFINITIONS = {{ scope_definitions | tojson | safe }};
+const SCOPE_OPTIONS = {{ scopes_by_source_type.get('nation', []) | tojson | safe }};
+const SCALING_TYPES = {{ scaling_types | tojson | safe }};
+const SORTED_SCALING_KEYS = {{ sorted_scaling_type_keys | tojson | safe }};
+const ALL_NATIONS_LIST = {{ nations | map(attribute='name') | list | tojson | safe }}.map(n => ({name: n}));
 const VISIBILITY_TARGET_TYPES = [
     {key: 'all_nations', name: 'All Nations'},
     {key: 'region', name: 'Region'},
     {key: 'specific_nation', name: 'Specific Nation'},
 ];
 
-let modRowCount = 0;
-
-function _esc(s) { return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
-
-function buildModTypeOptions(selected) {
-    let html = '<option value="">-- Select Modifier --</option>';
-    for (const [key, def] of Object.entries(MODIFIER_TYPES)) {
-        html += `<option value="${_esc(key)}"${key===selected?' selected':''}>${_esc(def.name)}</option>`;
-    }
-    return html;
+function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-function buildScopeOptions(selected) {
-    let html = '';
-    for (const [key, def] of Object.entries(SCOPE_DEFS)) {
-        html += `<option value="${_esc(key)}"${key===selected?' selected':''}>${_esc(def.name)}</option>`;
+function buildScalingOptions(selectedValue) {
+    const sel = selectedValue || 'flat';
+    let opts = '';
+    for (const key of SORTED_SCALING_KEYS) {
+        const st = SCALING_TYPES[key];
+        opts += '<option value="' + key + '" ' + (key === sel ? 'selected' : '') + '>' + st.name + '</option>';
     }
-    return html;
+    return opts;
 }
 
-function buildScalingOptions(selected) {
-    let html = '<option value="">Flat</option>';
-    for (const [key, def] of Object.entries(SCALING_TYPES)) {
-        if (key === 'flat') continue;
-        html += `<option value="${_esc(key)}"${key===selected?' selected':''}>${_esc(def.name)}</option>`;
+function buildModifierTypeOptions(selectedValue, targetType) {
+    let options = '<option value="">-- Select Modifier --</option>';
+    for (const key of SORTED_MODIFIER_KEYS) {
+        const mt = MODIFIER_TYPES[key];
+        if (targetType && mt.applicable_to && !mt.applicable_to.includes(targetType)) continue;
+        const sel = key === selectedValue ? 'selected' : '';
+        options += `<option value="${key}" ${sel}>${mt.name}</option>`;
     }
-    return html;
+    return options;
 }
 
-function buildSelectFrom(list, keyField, nameField, selected) {
-    let html = '<option value="">--</option>';
-    for (const item of list) {
-        const k = item[keyField], n = item[nameField];
-        html += `<option value="${_esc(k)}"${k===selected?' selected':''}>${_esc(n)}</option>`;
-    }
-    return html;
+function buildScopeOptions(selectedValue) {
+    const effective = selectedValue || (SCOPE_OPTIONS.length ? SCOPE_OPTIONS[0].key : '');
+    return SCOPE_OPTIONS.map(s =>
+        `<option value="${s.key}" ${s.key === effective ? 'selected' : ''}>${s.name}</option>`
+    ).join('');
 }
 
-function updateVisTargetValue(idx) {
-    const typeEl = document.getElementById(`mod-${idx}-target_type`);
-    const container = document.getElementById(`mod-${idx}-target_value-container`);
+function onScopeChange(select) {
+    const row = select.closest('tr');
+    const scopeKey = select.value;
+    const scopeDef = SCOPE_DEFINITIONS[scopeKey] || {};
+    const targetType = scopeDef.target_type || '';
+    const typeSelect = row ? row.querySelector('.modifier-type-select') : null;
+    if (typeSelect) {
+        const currentVal = typeSelect.value;
+        typeSelect.innerHTML = buildModifierTypeOptions(currentVal, targetType);
+    }
+}
+
+function updateVisTargetValue(fieldName, index) {
+    const typeEl = document.getElementById(`${fieldName}-${index}-target_type`);
+    const container = document.getElementById(`${fieldName}-${index}-target_value-container`);
     if (!container) return;
     const typeVal = typeEl ? typeEl.value : '';
+    const cur = container.dataset.cur || '';
     if (typeVal === 'specific_nation') {
         let opts = '<option value="">-- Select Nation --</option>';
-        for (const n of ALL_NATIONS) opts += `<option value="${_esc(n)}">${_esc(n)}</option>`;
-        container.innerHTML = `<select name="target_value" id="mod-${idx}-target_value" style="min-width:140px;">${opts}</select>`;
+        for (const n of ALL_NATIONS_LIST) {
+            opts += `<option value="${escHtml(n.name)}" ${n.name === cur ? 'selected' : ''}>${escHtml(n.name)}</option>`;
+        }
+        container.innerHTML = `<select class="form-control" name="${fieldName}-${index}-target_value" id="${fieldName}-${index}-target_value">${opts}</select>`;
         container.style.display = '';
     } else if (typeVal === 'region') {
-        container.innerHTML = `<input type="text" name="target_value" id="mod-${idx}-target_value" placeholder="Region name" style="width:120px;">`;
+        container.innerHTML = `<input type="text" class="form-control" name="${fieldName}-${index}-target_value" id="${fieldName}-${index}-target_value" value="${escHtml(cur)}" placeholder="Region name">`;
         container.style.display = '';
     } else {
-        container.innerHTML = '';
+        container.innerHTML = `<input type="hidden" name="${fieldName}-${index}-target_value" id="${fieldName}-${index}-target_value" value="">`;
         container.style.display = 'none';
     }
 }
 
-function updateExtraFields(idx) {
-    const container = document.getElementById(`mod-extra-${idx}`);
-    const typeKey = document.getElementById(`mod-type-${idx}`).value;
-    const def = MODIFIER_TYPES[typeKey] || {};
-    const extras = def.extra_fields || [];
+function buildExtraFieldsHTML(fieldName, index, modifierType, currentData) {
+    const typeDef = MODIFIER_TYPES[modifierType] || {};
+    const extraFields = typeDef.extra_fields || [];
+    const ALL_EXTRA_KEYS = ['resource', 'resource_from', 'resource_to', 'job', 'attribute', 'unit_category', 'unit_stat', 'tier', 'tech_category', 'terrain', 'node_resource', 'terrain_as', 'target_type', 'target_value', 'unit_name', 'district_key'];
+    const renderedKeys = new Set();
     let html = '';
-    for (const extra of extras) {
-        let fieldHtml = '';
+    for (const extra of extraFields) {
+        renderedKeys.add(extra.key);
+        const cur = (currentData && currentData[extra.key]) || '';
         if (extra.source === 'all_resources') {
-            fieldHtml = `<select name="${extra.key}" id="mod-${idx}-${extra.key}">${buildSelectFrom(ALL_RESOURCES, 'key', 'name', '')}</select>`;
+            let opts = '<option value="">-- Select Resource --</option>';
+            for (const res of ALL_RESOURCES) opts += `<option value="${res.key}" ${res.key === cur ? 'selected' : ''}>${res.name}</option>`;
+            html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label><select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
         } else if (extra.source === 'mrp_defs') {
-            fieldHtml = `<select name="${extra.key}" id="mod-${idx}-${extra.key}">${buildSelectFrom(ALL_MRP_DEFS, 'key', 'name', '')}</select>`;
+            let opts = '<option value="">-- Select Mech RP --</option>';
+            for (const mrp of ALL_MRP_DEFS) opts += `<option value="${mrp.key}" ${mrp.key === cur ? 'selected' : ''}>${mrp.name}</option>`;
+            html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label><select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
         } else if (extra.source === 'jobs') {
-            fieldHtml = `<select name="${extra.key}" id="mod-${idx}-${extra.key}">${buildSelectFrom(ALL_JOBS, 'key', 'name', '')}</select>`;
-        } else if (extra.source === 'terrains') {
-            fieldHtml = `<select name="${extra.key}" id="mod-${idx}-${extra.key}">${buildSelectFrom(ALL_TERRAINS, 'key', 'name', '')}</select>`;
+            let opts = '<option value="">-- Select Job --</option>';
+            for (const job of ALL_JOBS) opts += `<option value="${job.key}" ${job.key === cur ? 'selected' : ''}>${job.name}</option>`;
+            html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label><select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
         } else if (extra.source === 'attributes') {
-            fieldHtml = `<select name="${extra.key}" id="mod-${idx}-${extra.key}">${buildSelectFrom(_ATTRIBUTES, 'key', 'name', '')}</select>`;
+            let opts = '<option value="">-- Select Attribute --</option>';
+            for (const attr of ALL_ATTRIBUTES) opts += `<option value="${attr.key}" ${attr.key === cur ? 'selected' : ''}>${attr.name}</option>`;
+            html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label><select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+        } else if (extra.source === 'unit_categories') {
+            let opts = '<option value="">-- Select Category --</option>';
+            for (const uc of ALL_UNIT_CATEGORIES) opts += `<option value="${uc.key}" ${uc.key === cur ? 'selected' : ''}>${uc.name}</option>`;
+            html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label><select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+        } else if (extra.source === 'unit_stats') {
+            let opts = '<option value="">-- Select Stat --</option>';
+            for (const us of ALL_UNIT_STATS) opts += `<option value="${us.key}" ${us.key === cur ? 'selected' : ''}>${us.name}</option>`;
+            html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label><select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+        } else if (extra.source === 'progress_tiers') {
+            let opts = '<option value="">-- Select Tier --</option>';
+            for (const pt of ALL_PROGRESS_TIERS) opts += `<option value="${pt.key}" ${pt.key === cur ? 'selected' : ''}>${pt.name}</option>`;
+            html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label><select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+        } else if (extra.source === 'tech_categories') {
+            let opts = '<option value="">-- Select Category --</option>';
+            for (const tc of ALL_TECH_CATEGORIES) opts += `<option value="${tc.key}" ${tc.key === cur ? 'selected' : ''}>${tc.name}</option>`;
+            html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label><select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+        } else if (extra.source === 'terrains') {
+            let opts = '<option value="">-- Select Terrain --</option>';
+            for (const t of ALL_TERRAINS) opts += `<option value="${t.key}" ${t.key === cur ? 'selected' : ''}>${t.name}</option>`;
+            html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label><select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
         } else if (extra.source === 'visibility_target_types') {
             let opts = '';
-            for (const t of VISIBILITY_TARGET_TYPES) {
-                opts += `<option value="${_esc(t.key)}">${_esc(t.name)}</option>`;
-            }
-            fieldHtml = `<select name="${extra.key}" id="mod-${idx}-${extra.key}" onchange="updateVisTargetValue(${idx})">${opts}</select>`;
-        } else if (typeKey === 'offensive_visibility' && extra.key === 'target_value') {
-            fieldHtml = `<span id="mod-${idx}-target_value-container" style="display:none;"></span>`;
+            for (const t of VISIBILITY_TARGET_TYPES) opts += `<option value="${t.key}" ${t.key === cur ? 'selected' : ''}>${t.name}</option>`;
+            html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label><select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}" onchange="updateVisTargetValue('${fieldName}', ${index})">${opts}</select></div>`;
+        } else if (modifierType === 'offensive_visibility' && extra.key === 'target_value') {
+            const tvCur = (currentData && currentData.target_value) || '';
+            const tvType = (currentData && currentData.target_type) || 'all_nations';
+            html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label><span id="${fieldName}-${index}-target_value-container" data-cur="${escHtml(tvCur)}" style="${tvType === 'all_nations' ? 'display:none;' : ''}"></span></div>`;
         } else {
-            fieldHtml = `<input type="text" name="${extra.key}" id="mod-${idx}-${extra.key}" placeholder="${_esc(extra.label)}" style="width:100px;">`;
+            html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label><input type="text" class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}" value="${escHtml(cur)}" placeholder="${escHtml(extra.label)}"></div>`;
         }
-        html += `<label style="font-size:0.78rem;color:#888;">${_esc(extra.label)}: ${fieldHtml}</label>`;
     }
-    container.innerHTML = html;
+    for (const key of ALL_EXTRA_KEYS) {
+        if (!renderedKeys.has(key)) html += `<input type="hidden" name="${fieldName}-${index}-${key}" id="${fieldName}-${index}-${key}" value="">`;
+    }
+    return html;
 }
 
-function addModRow() {
-    const idx = modRowCount++;
-    const row = document.createElement('div');
-    row.className = 'mod-row';
-    row.id = `mod-row-${idx}`;
-    row.innerHTML = `
-        <select id="mod-type-${idx}" onchange="updateExtraFields(${idx})">${buildModTypeOptions('')}</select>
-        <select id="mod-scope-${idx}">${buildScopeOptions('nation_self')}</select>
-        <input type="number" id="mod-value-${idx}" step="any" placeholder="Value">
-        <select id="mod-scaling-${idx}">${buildScalingOptions('')}</select>
-        <input type="number" id="mod-scalingx-${idx}" step="any" placeholder="X" value="1">
-        <input type="number" id="mod-duration-${idx}" value="-1" title="Duration (-1 = permanent)">
-        <input type="text" id="mod-source-${idx}" placeholder="Source label">
-        <button type="button" onclick="document.getElementById('mod-row-${idx}').remove()" style="background:none;border:none;color:#f66;cursor:pointer;font-size:1.1rem;">×</button>
-        <div class="extra-fields" id="mod-extra-${idx}"></div>
+function onModifierTypeChange(select) {
+    const fieldName = select.dataset.field;
+    const index     = parseInt(select.dataset.idx);
+    const modType   = select.value;
+    const cell      = select.closest('td');
+    const extraDiv  = cell ? cell.querySelector('.modifier-extra-fields') : null;
+    if (extraDiv) {
+        const currentData = {};
+        extraDiv.querySelectorAll('select, input').forEach(el => {
+            const parts = el.name.split('-');
+            const key = parts.slice(2).join('-');
+            if (key) currentData[key] = el.value;
+        });
+        extraDiv.innerHTML = buildExtraFieldsHTML(fieldName, index, modType, currentData);
+        if (modType === 'offensive_visibility') updateVisTargetValue(fieldName, index);
+    }
+    const row  = select.closest('tr');
+    const hint = row ? row.querySelector('.modifier-value-hint') : null;
+    if (hint) {
+        const typeDef = MODIFIER_TYPES[modType] || {};
+        hint.textContent = 'Decimal (0.1 = 10%)';
+        hint.style.display = typeDef.value_format === 'percentage' ? '' : 'none';
+    }
+}
+
+function addToArray(fieldName) {
+    const tbody = document.getElementById(`${fieldName}-tbody`);
+    const currentCount = tbody.children.length;
+    const defaultScope = SCOPE_OPTIONS.length ? SCOPE_OPTIONS[0].key : '';
+    const defaultTargetType = defaultScope ? (SCOPE_DEFINITIONS[defaultScope] || {}).target_type || '' : '';
+    const typeSelect = `<select class="form-control modifier-type-select"
+        name="${fieldName}-${currentCount}-modifier_type"
+        id="${fieldName}-${currentCount}-modifier_type"
+        data-field="${fieldName}" data-idx="${currentCount}"
+        onchange="onModifierTypeChange(this)">
+        ${buildModifierTypeOptions('', defaultTargetType)}
+    </select>`;
+    const scopeSelect = `<select class="form-control modifier-scope-select"
+        name="${fieldName}-${currentCount}-scope"
+        id="${fieldName}-${currentCount}-scope"
+        data-field="${fieldName}" data-idx="${currentCount}"
+        onchange="onScopeChange(this)">
+        ${buildScopeOptions(defaultScope)}
+    </select>`;
+    const extraFields = buildExtraFieldsHTML(fieldName, currentCount, '', {});
+    const scalingSelect = `<select class="form-control modifier-scaling-select"
+        name="${fieldName}-${currentCount}-scaling"
+        id="${fieldName}-${currentCount}-scaling"
+        onchange="onScalingChange(this)">
+        ${buildScalingOptions('flat')}
+    </select><small class="modifier-scaling-x-field" style="display:none">Per <input type="number" step="any" class="form-control d-inline" style="width:70px" placeholder="1" name="${fieldName}-${currentCount}-scaling_x" id="${fieldName}-${currentCount}-scaling_x" value=""></small><small class="modifier-scaling-extra-field" style="display:none"><input type="hidden" name="${fieldName}-${currentCount}-scaling_extra" id="${fieldName}-${currentCount}-scaling_extra" value=""></small><small class="form-text text-muted modifier-max-field" style="display:none">Max: <input type="number" step="any" class="form-control d-inline" style="width:80px" placeholder="None" name="${fieldName}-${currentCount}-max_value" id="${fieldName}-${currentCount}-max_value"></small>`;
+    const conditionHtml = (typeof buildConditionHTML === 'function') ? buildConditionHTML(fieldName, currentCount) : '';
+    const newRow = document.createElement('tr');
+    newRow.innerHTML = `
+        <td>
+            ${typeSelect}
+            <div class="modifier-extra-fields mt-1">${extraFields}</div>
+        </td>
+        <td>${scopeSelect}</td>
+        <td>
+            <input type="number" step="any" class="form-control" name="${fieldName}-${currentCount}-value" id="${fieldName}-${currentCount}-value" value="1">
+            <small class="form-text text-muted modifier-value-hint" style="display:none">Decimal (0.1 = 10%)</small>
+        </td>
+        <td>${scalingSelect}${conditionHtml}</td>
+        <td><input type="number" class="form-control" name="${fieldName}-${currentCount}-duration" id="${fieldName}-${currentCount}-duration" value="-1"></td>
+        <td><input type="text" class="form-control" name="${fieldName}-${currentCount}-source" id="${fieldName}-${currentCount}-source"></td>
+        <td>
+            <button type="button" class="btn btn-danger" onclick="removeFromArray(this, '${fieldName}')">Remove</button>
+        </td>
     `;
-    document.getElementById('mod-rows').appendChild(row);
+    tbody.appendChild(newRow);
+}
+
+function removeFromArray(button, fieldName) {
+    const row = button.closest('tr');
+    row.remove();
+    const tbody = document.getElementById(`${fieldName}-tbody`);
+    Array.from(tbody.children).forEach((row, index) => {
+        row.querySelectorAll('select, input').forEach(input => {
+            const parts = input.name.split('-');
+            const subfield = parts.slice(2).join('-');
+            input.name = `${fieldName}-${index}-${subfield}`;
+            input.id = `${fieldName}-${index}-${subfield}`;
+        });
+        const typeSelect = row.querySelector('.modifier-type-select');
+        if (typeSelect) typeSelect.dataset.idx = index;
+        const scopeSelect = row.querySelector('.modifier-scope-select');
+        if (scopeSelect) scopeSelect.dataset.idx = index;
+    });
 }
 
 function collectModifiers() {
     const mods = [];
-    for (let i = 0; i < modRowCount; i++) {
-        const row = document.getElementById(`mod-row-${i}`);
-        if (!row) continue;
-        const mod = {
-            modifier_type: document.getElementById(`mod-type-${i}`).value,
-            scope: document.getElementById(`mod-scope-${i}`).value,
-            value: document.getElementById(`mod-value-${i}`).value,
-            scaling: document.getElementById(`mod-scaling-${i}`).value || undefined,
-            scaling_x: document.getElementById(`mod-scalingx-${i}`).value || undefined,
-            duration: document.getElementById(`mod-duration-${i}`).value,
-            source: document.getElementById(`mod-source-${i}`).value || undefined,
-        };
-        const extras = document.getElementById(`mod-extra-${i}`);
-        if (extras) {
-            for (const el of extras.querySelectorAll('select, input')) {
-                if (el.name && el.value) mod[el.name] = el.value;
-            }
-        }
-        if (mod.modifier_type) mods.push(mod);
-    }
+    const tbody = document.getElementById('modifiers-tbody');
+    if (!tbody) return mods;
+    Array.from(tbody.children).forEach(row => {
+        const typeSelect = row.querySelector('.modifier-type-select');
+        if (!typeSelect || !typeSelect.value) return;
+        const mod = {};
+        row.querySelectorAll('input, select').forEach(el => {
+            if (!el.name) return;
+            const parts = el.name.split('-');
+            const key = parts.slice(2).join('-');
+            if (key) mod[key] = el.value;
+        });
+        mods.push(mod);
+    });
     return mods;
 }
 
@@ -245,7 +345,7 @@ async function applyModifiers() {
 
     const status = document.getElementById('status');
     status.textContent = 'Applying...';
-    status.style.color = '#8af';
+    status.style.color = 'var(--link)';
     try {
         const resp = await fetch('/admin/bulk_modifiers/apply', {
             method: 'POST',
@@ -255,17 +355,17 @@ async function applyModifiers() {
         const data = await resp.json();
         if (data.ok) {
             status.textContent = `Applied to ${data.updated} nation(s).`;
-            status.style.color = '#8f8';
+            status.style.color = 'var(--pos)';
         } else {
             status.textContent = `Error: ${data.error}`;
-            status.style.color = '#f88';
+            status.style.color = 'var(--crit)';
         }
     } catch (err) {
         status.textContent = `Failed: ${err.message}`;
-        status.style.color = '#f88';
+        status.style.color = 'var(--crit)';
     }
 }
 
-addModRow();
+addToArray('modifiers');
 </script>
 {% endblock %}

@@ -1902,18 +1902,14 @@ def bulk_modifiers():
     for n in nations:
         n["region_name"] = region_names.get(str(n.get("region", "")), "No Region")
 
-    modifier_types = json_data.get("modifier_types", {})
-    scaling_types = json_data.get("scaling_types", {})
-    scope_definitions = json_data.get("scope_definitions", {})
+    # modifier_types/scaling_types/scope_definitions/all_resources/all_jobs/
+    # all_terrains etc. all come from the inject_modifier_data context
+    # processor (routes/__init__.py) — the same source every other modifier
+    # table (nation edit, district defs, etc.) uses, so this tool stays in
+    # sync with them automatically.
     return render_template(
         "bulk_modifiers.html",
         nations=nations,
-        modifier_types=modifier_types,
-        scaling_types=scaling_types,
-        scope_definitions=scope_definitions,
-        all_resources=json_data.get("general_resources", []) + json_data.get("unique_resources", []),
-        all_jobs=[{"key": k, "name": v.get("display_name", k)} for k, v in json_data.get("jobs", {}).items()],
-        all_terrains=[{"key": k, "name": v.get("display_name", k)} for k, v in json_data.get("terrains", {}).items()],
     )
 
 
@@ -2023,6 +2019,7 @@ def region_resource_adjustment_apply():
     data = request.get_json() or {}
     region_id = (data.get("region_id") or "").strip()
     adjustments = data.get("adjustments") or {}
+    reason = (data.get("reason") or "").strip()
 
     # Keep only non-zero, numeric adjustments — a resource left at 0 (or
     # blank) means "don't touch this resource" rather than "set it to 0".
@@ -2037,15 +2034,29 @@ def region_resource_adjustment_apply():
         if amt != 0:
             clean_adjustments[key] = amt
 
+    money_amt = 0
+    try:
+        money_amt = float(data.get("money") or 0)
+    except (ValueError, TypeError):
+        money_amt = 0
+    if money_amt == int(money_amt):
+        money_amt = int(money_amt)
+
     if not region_id:
         return jsonify({"error": "No region selected"}), 400
-    if not clean_adjustments:
-        return jsonify({"error": "No non-zero resource adjustments given"}), 400
+    if not clean_adjustments and not money_amt:
+        return jsonify({"error": "No non-zero resource or money adjustments given"}), 400
 
     schema, db = get_data_on_category("nations")
     nations = list(db.find({"region": region_id}))
     if not nations:
         return jsonify({"error": "No nations found in that region"}), 400
+
+    change_summary = dict(clean_adjustments)
+    if money_amt:
+        change_summary["money"] = money_amt
+    default_reason = f"Bulk region resource adjustment via admin tool: {change_summary}"
+    final_reason = f"{reason} ({default_reason})" if reason else default_reason
 
     updated = 0
     for nation in nations:
@@ -2057,6 +2068,8 @@ def region_resource_adjustment_apply():
         for key, amt in clean_adjustments.items():
             storage[key] = storage.get(key, 0) + amt
         new_data["resource_storage"] = storage
+        if money_amt:
+            new_data["money"] = new_data.get("money", 0) + money_amt
 
         change_id = system_request_change(
             data_type="nations",
@@ -2064,7 +2077,7 @@ def region_resource_adjustment_apply():
             change_type="Update",
             before_data=old_data,
             after_data=new_data,
-            reason=f"Bulk region resource adjustment via admin tool: {clean_adjustments}",
+            reason=final_reason,
         )
         if change_id is not None:
             system_approve_change(change_id)

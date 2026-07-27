@@ -535,6 +535,13 @@
         "field_template": "stability_loss_chance",
         "applicable_to": ["nation"]
     },
+    "max_stability_loss_chance": {
+        "name": "Stability Loss Chance Cap",
+        "description": "Increases the maximum stability loss chance. Base cap is 300%.",
+        "value_format": "percentage",
+        "field_template": "max_stability_loss_chance",
+        "applicable_to": ["nation"]
+    },
     "stat_gain_chance": {
         "name": "Stat Gain Chance",
         "value_format": "percentage",

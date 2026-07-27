@@ -33,6 +33,14 @@
     </div>
 
     <div class="rra-panel">
+        <h3>Money Adjustment <span style="font-weight:400;text-transform:none;letter-spacing:normal;">(positive to add, negative to subtract — leave blank/0 to skip)</span></h3>
+        <div class="rra-resource-row" style="max-width:270px;">
+            <label for="rra-money">Money</label>
+            <input type="number" step="any" id="rra-money" placeholder="0">
+        </div>
+    </div>
+
+    <div class="rra-panel">
         <h3>Resource Adjustments <span style="font-weight:400;text-transform:none;letter-spacing:normal;">(positive to add, negative to subtract — leave blank/0 to skip a resource)</span></h3>
         <div class="rra-resource-grid">
             <div class="rra-category-label">General Resources</div>
@@ -65,6 +73,11 @@
         </div>
     </div>
 
+    <div class="rra-panel">
+        <h3>Reason <span style="font-weight:400;text-transform:none;letter-spacing:normal;">(recorded on each change request)</span></h3>
+        <input type="text" id="rra-reason" placeholder="e.g. Compensation for regional event" style="width:100%;box-sizing:border-box;padding:0.4rem 0.5rem;background:var(--surface-hi);color:var(--text);border:1px solid var(--border-strong);border-radius:4px;">
+    </div>
+
     <div style="display:flex;gap:1rem;align-items:center;">
         <button type="button" onclick="applyRegionAdjustment()" class="pill-btn">Apply Adjustment</button>
         <a href="/admin_tools" class="pill-btn-outline">Back</a>
@@ -89,13 +102,19 @@ async function applyRegionAdjustment() {
     const regionId = regionSelect.value;
     const regionLabel = regionSelect.options[regionSelect.selectedIndex]?.textContent || '';
     const adjustments = collectAdjustments();
+    const moneyRaw = document.getElementById('rra-money').value.trim();
+    const money = moneyRaw === '' ? 0 : parseFloat(moneyRaw);
+    const reason = document.getElementById('rra-reason').value.trim();
 
     if (!regionId) { alert('Select a region.'); return; }
-    if (!Object.keys(adjustments).length) { alert('Enter at least one non-zero resource adjustment.'); return; }
+    if (!Object.keys(adjustments).length && !(money && !isNaN(money))) {
+        alert('Enter at least one non-zero resource or money adjustment.');
+        return;
+    }
 
-    const summary = Object.entries(adjustments)
-        .map(([k, v]) => `${v > 0 ? '+' : ''}${v} ${k}`)
-        .join(', ');
+    const summaryParts = Object.entries(adjustments).map(([k, v]) => `${v > 0 ? '+' : ''}${v} ${k}`);
+    if (money && !isNaN(money)) summaryParts.push(`${money > 0 ? '+' : ''}${money} money`);
+    const summary = summaryParts.join(', ');
     if (!confirm(`Apply ${summary} to every nation in ${regionLabel}?`)) return;
 
     const status = document.getElementById('rra-status');
@@ -105,7 +124,7 @@ async function applyRegionAdjustment() {
         const resp = await fetch('/admin/region_resource_adjustment/apply', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({region_id: regionId, adjustments}),
+            body: JSON.stringify({region_id: regionId, adjustments, money, reason}),
         });
         const data = await resp.json();
         if (data.ok) {
