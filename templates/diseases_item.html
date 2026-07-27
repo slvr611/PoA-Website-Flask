@@ -94,6 +94,10 @@
                     <td>{{ form.natural_cure_chance(class="form-control") }}
                         <small style="color:#888;">Per tick, per infected pop, independent of shared-quest cure research (e.g. 0.03 = 3%). Doubles permanently once the cure is discovered below.</small>
                     </td></tr>
+                <tr><th>{{ form.job_death_chance.label }}</th>
+                    <td>{{ form.job_death_chance(class="form-control") }}
+                        <small style="color:#888;">Per tick, per infected pop (e.g. 0.02 = 2%). A pop that dies has a Remove change auto-requested and approved, same as a manual pop deletion. 0 = the job never kills anyone.</small>
+                    </td></tr>
             </table>
         </div>
 
@@ -198,6 +202,7 @@
     <div class="action-links">
         <a href="{{ request.path }}/changes/pending">View Pending Changes</a>
         <a href="{{ request.path }}/changes/archived">View Change History</a>
+        <a href="{{ request.path }}/recalculate">Recalculate</a>
     </div>
     <div class="content">
         <h1>{{ item.name }}{% if item.get("cured") %} <span style="color:#6c6; font-size:0.6em;">(CURE DISCOVERED)</span>{% endif %}</h1>
@@ -233,6 +238,14 @@
                         {{ ((item.get("natural_cure_chance", 0) or 0) * 100)|round(1) }}% per infected pop per tick
                         {% if item.get("cured") %}
                             (<strong>{{ ((item.get("natural_cure_chance", 0) or 0) * 200)|round(1) }}%</strong> — doubled, cure discovered)
+                        {% endif %}
+                    </td></tr>
+                <tr><th>Job Death Chance:</th>
+                    <td>
+                        {% if item.get("job_death_chance", 0) %}
+                            {{ ((item.get("job_death_chance", 0) or 0) * 100)|round(1) }}% per infected pop per tick
+                        {% else %}
+                            0% — the forced job never kills anyone
                         {% endif %}
                     </td></tr>
                 <tr><th>Total Infected Pops:</th>

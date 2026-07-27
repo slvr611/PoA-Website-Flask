@@ -1570,6 +1570,7 @@ class DiseaseForm(BaseSchemaForm):
     job_production = FieldList(FormField(KeyValueEffectForm), min_entries=0)
     job_upkeep = FieldList(FormField(KeyValueEffectForm), min_entries=0)
     natural_cure_chance = FloatField("Natural Cure Chance", validators=[Optional()], default=0)
+    job_death_chance = FloatField("Job Death Chance", validators=[Optional()], default=0)
     infectivity = SelectField("Infectivity", choices=[])
     difficulty = SelectField("Cure Difficulty", choices=[])
     cure_progress = IntegerField("Cure Progress", validators=[Optional()], default=0)
