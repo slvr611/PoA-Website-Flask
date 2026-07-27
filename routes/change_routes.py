@@ -239,10 +239,15 @@ def change_item(item_ref):
 def approve_change_route(item_ref):
     try:
         change_id = ObjectId(item_ref)
-        approve_change(change_id)
-        flash(f"Change #{item_ref} has been approved.")
+        # approve_change returns False (without raising) when it can't approve
+        # — e.g. the target changed since the request was made, or a name
+        # collision — and already flashes its own specific "error" message in
+        # that case. Flashing "has been approved" unconditionally here would
+        # show a false success message right alongside the real error.
+        if approve_change(change_id):
+            flash(f"Change #{item_ref} has been approved.", "success")
     except Exception as e:
-        flash(f"Error approving change: {e}")
+        flash(f"Error approving change: {e}", "error")
 
     return redirect("/changes")
 
@@ -251,10 +256,10 @@ def approve_change_route(item_ref):
 def force_approve_change_route(item_ref):
     try:
         change_id = ObjectId(item_ref)
-        force_approve_change(change_id)
-        flash(f"Change #{item_ref} has been force-approved.")
+        if force_approve_change(change_id):
+            flash(f"Change #{item_ref} has been force-approved.", "success")
     except Exception as e:
-        flash(f"Error force-approving change: {e}")
+        flash(f"Error force-approving change: {e}", "error")
 
     return redirect("/changes")
 
@@ -264,10 +269,12 @@ def force_approve_change_route(item_ref):
 def deny_change_route(item_ref):
     try:
         change_id = ObjectId(item_ref)
-        deny_change(change_id)
-        flash(f"Change #{item_ref} has been denied.")
+        if deny_change(change_id):
+            flash(f"Change #{item_ref} has been denied.", "success")
+        else:
+            flash(f"Could not deny change #{item_ref}.", "error")
     except Exception as e:
-        flash(f"Error denying change: {e}")
+        flash(f"Error denying change: {e}", "error")
 
     return redirect("/changes")
 
@@ -717,21 +724,21 @@ def revert_change_route(item_ref):
     try:
         change_id = ObjectId(item_ref)
         if revert_change(change_id):
-            flash(f"Change #{item_ref} has been reverted.")
+            flash(f"Change #{item_ref} has been reverted.", "success")
     except Exception as e:
-        flash(f"Error reverting change: {e}")
+        flash(f"Error reverting change: {e}", "error")
     return redirect(request.referrer or "/changes/archived")
 
 
 @change_routes.route("/changes/item/<item_ref>/rescind", methods=["POST"])
 def rescind_change_route(item_ref):
     if not g.user:
-        flash("You must be logged in.")
+        flash("You must be logged in.", "error")
         return redirect("/")
     try:
         change_id = ObjectId(item_ref)
         if rescind_change(change_id):
-            flash(f"Change has been rescinded.")
+            flash(f"Change has been rescinded.", "success")
     except Exception as e:
-        flash(f"Error rescinding change: {e}")
+        flash(f"Error rescinding change: {e}", "error")
     return redirect(request.referrer or "/my_changes")

@@ -9,6 +9,7 @@
 		<h1>
 			Change #{{ item._id }}:
 		</h1>
+		<div class="table-wrapper">
 		<table class="info-table">
 			<tr>
 				<th><strong>{{ schema.properties.target.label }}:</strong></th>
@@ -105,7 +106,8 @@
 				<td>{{ item["request_reason"] }}</td>
 			</tr>
 		</table>
-		
+		</div>
+
 		{% if item["status"] == "Pending" and g.user.is_admin %}
 			<div class="action-buttons">
 				<a href="{{ request.path }}/approve" class="btn btn-approve">Approve</a>
@@ -123,6 +125,7 @@
 		{% if view_access_level >= 8 %}
 		<details>
 			<summary>Show Detailed Changes</summary>
+			<div class="table-wrapper">
 			<table class="info-table">
 				{% for field, properties in schema.properties.items() %}
 					{% if not properties.hidden
@@ -164,6 +167,7 @@
 					{% endif %}
 				{% endfor %}
 			</table>
+			</div>
 		</details>
 		{% endif %}
 	</div>

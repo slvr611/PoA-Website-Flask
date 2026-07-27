@@ -276,7 +276,7 @@ def _calculate_and_attach_fields(data_type, target):
 def request_change(data_type, item_id, change_type, before_data, after_data, reason):
     requester = mongo.db.players.find_one({"id": g.user.get("id", None)})["_id"]
     if requester is None:
-        flash("You must be logged in to request changes.")
+        flash("You must be logged in to request changes.", "error")
         return None
 
     changes_collection = mongo.db.changes
@@ -432,7 +432,7 @@ def _find_name_collision(target_collection, data_type, name, era=None, exclude_i
 def approve_change(change_id):
     approver = mongo.db.players.find_one({"id": g.user.get("id", None)})
     if approver is None or not approver.get("is_admin", False):
-        flash("You must be an admin to approve changes.")
+        flash("You must be an admin to approve changes.", "error")
         return None
 
     changes_collection = mongo.db.changes
@@ -456,7 +456,7 @@ def approve_change(change_id):
                 except Exception:
                     member_nation = None
                 if member_nation and member_nation.get("infamy", 0) >= 50:
-                    flash("Cannot add nation to market: that nation has 50 or more infamy.")
+                    flash("Cannot add nation to market: that nation has 50 or more infamy.", "error")
                     return False
 
         if change["target_collection"] == "trade_routes" and after_data.get("status") == "pending":
@@ -474,7 +474,7 @@ def approve_change(change_id):
             after_data.get("name"), era=after_data.get("era"),
         )
         if collision:
-            flash(f"Cannot approve: the name '{after_data.get('name')}' is already in use.")
+            flash(f"Cannot approve: the name '{after_data.get('name')}' is already in use.", "error")
             return False
 
         after_data = _calculate_and_attach_fields(change["target_collection"], after_data)
@@ -511,7 +511,7 @@ def approve_change(change_id):
                     except Exception:
                         patron_nation = None
                     if patron_nation and patron_nation.get("infamy", 0) >= 50:
-                        flash("Cannot hire this mercenary company: the prospective patron nation has 50 or more infamy.")
+                        flash("Cannot hire this mercenary company: the prospective patron nation has 50 or more infamy.", "error")
                         return False
 
                 existing = target_collection.find_one({"_id": change["target"]})
@@ -524,7 +524,7 @@ def approve_change(change_id):
                         era=merged.get("era"), exclude_id=change["target"],
                     )
                     if collision:
-                        flash(f"Cannot approve: the name '{new_name}' is already in use.")
+                        flash(f"Cannot approve: the name '{new_name}' is already in use.", "error")
                         return False
 
                 merged = _calculate_and_attach_fields(change["target_collection"], merged)
@@ -553,7 +553,7 @@ def approve_change(change_id):
             )
             return True
         else:
-            flash("Change approval failed because the target has changed since the request was made.")
+            flash("Change approval failed because the target has changed since the request was made.", "error")
     return False
 
 def system_approve_change(change_id):
@@ -669,7 +669,7 @@ def force_approve_change(change_id):
     """
     approver = mongo.db.players.find_one({"id": g.user.get("id", None)})
     if approver is None or not approver.get("is_admin", False):
-        flash("You must be an admin to approve changes.")
+        flash("You must be an admin to approve changes.", "error")
         return None
 
     changes_collection = mongo.db.changes
@@ -692,7 +692,7 @@ def force_approve_change(change_id):
                 era=merged.get("era"), exclude_id=change["target"],
             )
             if collision:
-                flash(f"Cannot approve: the name '{new_name}' is already in use.")
+                flash(f"Cannot approve: the name '{new_name}' is already in use.", "error")
                 return False
 
         merged = _calculate_and_attach_fields(change["target_collection"], merged)
@@ -706,7 +706,7 @@ def force_approve_change(change_id):
             after_data.get("name"), era=after_data.get("era"),
         )
         if collision:
-            flash(f"Cannot approve: the name '{after_data.get('name')}' is already in use.")
+            flash(f"Cannot approve: the name '{after_data.get('name')}' is already in use.", "error")
             return False
 
         after_data = _calculate_and_attach_fields(change["target_collection"], after_data)
@@ -826,23 +826,23 @@ def deny_change(change_id):
 def rescind_change(change_id):
     """Allow the original requester (or an admin) to withdraw a pending change."""
     if not g.user:
-        flash("You must be logged in to rescind a change.")
+        flash("You must be logged in to rescind a change.", "error")
         return False
     player = mongo.db.players.find_one({"id": g.user.get("id")})
     if player is None:
-        flash("Could not find your player record.")
+        flash("Could not find your player record.", "error")
         return False
 
     changes_collection = mongo.db.changes
     change = changes_collection.find_one({"_id": change_id, "status": "Pending"})
     if change is None:
-        flash("Change not found or is no longer pending.")
+        flash("Change not found or is no longer pending.", "error")
         return False
 
     is_admin = player.get("is_admin", False)
     is_requester = change.get("requester") == player["_id"]
     if not is_admin and not is_requester:
-        flash("You can only rescind your own changes.")
+        flash("You can only rescind your own changes.", "error")
         return False
 
     now = datetime.now(timezone.utc)
@@ -859,16 +859,16 @@ def revert_change(change_id):
     """Restore a target object to its state before an approved change was applied."""
     reverter = mongo.db.players.find_one({"id": g.user.get("id", None)})
     if reverter is None or not reverter.get("is_admin", False):
-        flash("You must be an admin to revert changes.")
+        flash("You must be an admin to revert changes.", "error")
         return False
 
     changes_collection = mongo.db.changes
     change = changes_collection.find_one({"_id": change_id})
     if change is None:
-        flash("Change not found.")
+        flash("Change not found.", "error")
         return False
     if change["status"] != "Approved":
-        flash("Only approved changes can be reverted.")
+        flash("Only approved changes can be reverted.", "error")
         return False
 
     now = datetime.now(timezone.utc)
@@ -894,10 +894,10 @@ def revert_change(change_id):
         )
     elif change["change_type"] == "Remove":
         if target_collection.find_one({"_id": change["target"]}) is not None:
-            flash("Cannot revert: the target object already exists in the collection.")
+            flash("Cannot revert: the target object already exists in the collection.", "error")
             return False
         if not before_data:
-            flash("Cannot revert: no before-data was recorded for this change.")
+            flash("Cannot revert: no before-data was recorded for this change.", "error")
             return False
         restored = dict(before_data)
         restored["_id"] = change["target"]
@@ -920,7 +920,7 @@ def revert_change(change_id):
     else:
         existing = target_collection.find_one({"_id": change["target"]})
         if existing is None:
-            flash("Target object no longer exists.")
+            flash("Target object no longer exists.", "error")
             return False
         restored = deep_merge(existing, before_data)
         restored = _calculate_and_attach_fields(change["target_collection"], restored)

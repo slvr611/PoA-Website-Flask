@@ -2846,6 +2846,7 @@ input[type="text"].map-btn:focus {
     margin-bottom: 8px;
     padding-bottom: 8px;
     border-bottom: 1px solid #eee;
+    overflow-wrap: anywhere;
 }
 
 .field-label {
@@ -2946,6 +2947,26 @@ input[type="text"].map-btn:focus {
     padding: 10px 16px;
     color: var(--text);
     font-size: 13.5px;
+}
+/* flash() categories ("error"/"danger", "success", "warning") were already
+   being passed at ~50 call sites across the codebase, but the block above
+   rendered every category identically — a failed change approval looked
+   exactly like a success confirmation. Color by category using the same
+   pos/warn/crit tokens the rest of the site already uses for this meaning. */
+.flashes li.flash-error, .flashes li.flash-danger {
+    background: rgba(224,138,106,.14);
+    border-color: var(--crit);
+    color: var(--crit);
+}
+.flashes li.flash-success {
+    background: rgba(168,216,138,.14);
+    border-color: var(--pos);
+    color: var(--pos);
+}
+.flashes li.flash-warning {
+    background: rgba(232,212,106,.14);
+    border-color: var(--warn);
+    color: var(--warn);
 }
 
 .revert-warning-banner {
@@ -3114,6 +3135,11 @@ h1, h2, h3 {
     background: transparent;
     color: var(--text);
     text-align: left;
+    /* Long unbroken strings (Discord links in change reasons, raw IDs in
+       diff previews) would otherwise force the table wider than its
+       .table-wrapper and push page content sideways instead of just
+       scrolling the table itself. */
+    overflow-wrap: anywhere;
 }
 .info-table th, .compact-table th, .linked-objects-table th,
 .resources-table th, .jobs-table th, .modifiers-table th,
@@ -3190,8 +3216,8 @@ h1, h2, h3 {
     cursor: pointer;
     font-family: var(--font-body);
 }
-.btn-approve { background: rgba(168,216,138,.18); color: var(--pos); }
-.btn-deny { background: rgba(224,138,106,.16); color: var(--crit); }
+.btn-approve { background: rgba(168,216,138,.26); color: color-mix(in oklch, var(--pos) 82%, white 18%); }
+.btn-deny { background: rgba(224,138,106,.24); color: color-mix(in oklch, var(--crit) 82%, white 18%); }
 .btn-primary {
     padding: 9px 20px;
     background: var(--accent);
