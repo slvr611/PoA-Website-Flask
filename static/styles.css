@@ -3216,6 +3216,18 @@ h1, h2, h3 {
 select, textarea, input[type="text"], input[type="number"], input[type="password"], input[type="email"] {
     font-family: var(--font-body);
 }
+/* `color-scheme` (set on :root per theme, above) isn't consistently honored
+   by every browser for the <select> popup's own background — Chromium in
+   particular still renders unstyled <option>s on a plain white list. Setting
+   background/color directly on <option> is more forcefully respected, but
+   it needs a SOLID color (not --surface's translucent rgba): the popup is
+   its own compositing surface, not layered over the page, so a translucent
+   fill shows through to an undefined native backdrop instead of the page. */
+select { background-color: var(--bg-card); }
+select option {
+    background-color: var(--bg-card);
+    color: var(--text);
+}
 
 /* Expandable sections (edit pages / admin tools still use these) */
 .expandable-section {
