@@ -719,7 +719,7 @@ def generate_ai_character(org, org_schema, character_schema, previous_leader=Non
             data_type="nations",
             item_id=org["_id"],
             change_type="Update",
-            before_data=org,
+            before_data=deepcopy(org),
             after_data=new_org,
             reason=f"{'; '.join(reasons)} for {org_name}",
         )

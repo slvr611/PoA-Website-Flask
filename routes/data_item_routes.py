@@ -655,29 +655,49 @@ def data_list_edit(data_type):
         preview_references=preview_overall_lookup_dict
     )
 
-@data_item_routes.route("/<data_type>/new", methods=["GET"])
-def data_item_new(data_type):
-    schema, db = get_data_on_category(data_type)
+_SOURCE_TYPE_MAP = {
+    "characters": "character", "nations": "nation", "artifacts": "artifact",
+    "merchants": "merchant", "mercenaries": "mercenary",
+    "laws": "nation", "titles": "character",
+    "wonders": "wonder", "regions": "region", "global_modifiers": "global",
+}
 
+
+def _build_dropdown_options(schema):
     dropdown_options = {}
     for field, attributes in schema["properties"].items():
         dropdown_options[field] = []
-        if attributes.get("collections") != None:
-            related_collections = attributes.get("collections")
-            for related_collection in related_collections:
-                dropdown_options[field] += list(mongo.db[related_collection].find({}, {"name": 1, "_id": 1}).sort("name", ASCENDING))
+        if attributes.get("collections") is not None:
+            for related_collection in attributes.get("collections"):
+                dropdown_options[field] += list(
+                    mongo.db[related_collection].find({}, {"name": 1, "_id": 1}).sort("name", ASCENDING)
+                )
+    return dropdown_options
 
-    form = form_generator.get_form(data_type, schema)
+
+def _render_item_form(data_type, schema, form, item=None, item_ref=None, title=None):
+    """Render the new/edit form for a data_type (units, diseases, or the
+    generic dataItem), given an already-built `form`.
+
+    Shared by the GET new/edit routes and by the POST request/save routes'
+    validation-failure branches — passing the form built from the submitted
+    request.form re-renders it with the user's entered values intact,
+    instead of redirecting back to a blank form.
+    """
+    dropdown_options = _build_dropdown_options(schema)
     form.populate_linked_fields(schema, dropdown_options)
 
+    if title is None:
+        title = f"Edit {item_ref}" if item_ref else "New " + category_data[data_type]["singularName"]
+
     if data_type == "units":
-        extras = _build_unit_edit_extras(item=None)
+        extras = _build_unit_edit_extras(item=item)
         return render_template(
             "units_item.html",
-            title="New Unit",
+            title=title,
             schema=schema,
             form=form,
-            item=None,
+            item=item,
             dropdown_options=dropdown_options,
             editable=True,
             **extras
@@ -686,71 +706,65 @@ def data_item_new(data_type):
     if data_type == "diseases":
         return render_template(
             "diseases_item.html",
-            title="New Disease",
+            title=title,
             schema=schema,
             form=form,
-            item=None,
+            item=item,
             editable=True,
         )
 
-    SOURCE_TYPE_MAP = {
-        "characters": "character", "nations": "nation", "artifacts": "artifact",
-        "merchants": "merchant", "mercenaries": "mercenary",
-        "laws": "nation", "titles": "character",
-        "wonders": "wonder", "regions": "region", "global_modifiers": "global",
-    }
     return render_template(
         "dataItem.html",
-        title="New " + category_data[data_type]["singularName"],
+        title=title,
         schema=schema,
         form=form,
-        item=None,
+        item=item,
         dropdown_options=dropdown_options,
-        entity_source_type=SOURCE_TYPE_MAP.get(data_type, ""),
+        entity_source_type=_SOURCE_TYPE_MAP.get(data_type, ""),
         data_type=data_type,
         editable=True,
     )
 
+
+@data_item_routes.route("/<data_type>/new", methods=["GET"])
+def data_item_new(data_type):
+    schema, db = get_data_on_category(data_type)
+    form = form_generator.get_form(data_type, schema)
+    return _render_item_form(data_type, schema, form, item=None)
+
 @data_item_routes.route("/<data_type>/new/request", methods=["POST"])
 def data_item_new_request(data_type):
     schema, db = get_data_on_category(data_type)
-        
-    dropdown_options = {}
-    for field, attributes in schema["properties"].items():
-        if attributes.get("collections") != None:
-            related_collections = attributes.get("collections")
-            dropdown_options[field] = []
-            for related_collection in related_collections:
-                dropdown_options[field] += list(mongo.db[related_collection].find({}, {"name": 1, "_id": 1}).sort("name", ASCENDING))
-    
+
+    dropdown_options = _build_dropdown_options(schema)
     form = form_generator.get_form(data_type, schema, formdata=request.form)
     form.populate_linked_fields(schema, dropdown_options)
-    
+
     if not form.validate():
         flash("Form validation failed!")
-        return redirect("/" + data_type + "/new")
-    
+        return _render_item_form(data_type, schema, form, item=None)
+
     # Get form data
     form_data = form.data.copy()
     form_data.pop('csrf_token', None)
     form_data.pop('submit', None)
     if "name" in form_data:
         form_data["name"] = form_data.get("name", "").strip()
-    
+
     # Additional JSON schema validation
     valid, error = validate_form_with_jsonschema(form, schema)
     if not valid:
         flash(f"Validation Error: {error}")
-        return redirect("/" + data_type + "/new")
-    
+        return _render_item_form(data_type, schema, form, item=None)
+
     if "name" in form_data:
         if data_type == "units":
             if db.find_one({"name": form_data["name"], "era": form_data.get("era")}):
                 flash("A unit with this name already exists in this era!")
-                return redirect("/units/new")
+                return _render_item_form(data_type, schema, form, item=None)
         elif db.find_one({"name": form_data["name"]}):
             flash("Name must be unique!")
-            return redirect("/" + data_type + "/new")
+            return _render_item_form(data_type, schema, form, item=None)
 
     reason = form_data.pop("reason", "No Reason Given")
     after_data = form_data
@@ -765,50 +779,43 @@ def data_item_new_request(data_type):
     )
 
     flash(f"Create request #{change_id} created and awaits admin approval.")
-    
+
     return redirect("/" + data_type)
 
 @data_item_routes.route("/<data_type>/new/save", methods=["POST"])
 @admin_required
 def data_item_new_approve(data_type):
     schema, db = get_data_on_category(data_type)
-        
-    dropdown_options = {}
-    for field, attributes in schema["properties"].items():
-        if attributes.get("collections") != None:
-            related_collections = attributes.get("collections")
-            dropdown_options[field] = []
-            for related_collection in related_collections:
-                dropdown_options[field] += list(mongo.db[related_collection].find({}, {"name": 1, "_id": 1}).sort("name", ASCENDING))
-    
+
+    dropdown_options = _build_dropdown_options(schema)
     form = form_generator.get_form(data_type, schema, formdata=request.form)
     form.populate_linked_fields(schema, dropdown_options)
-    
+
     if not form.validate():
         flash("Form validation failed!")
-        return redirect("/" + data_type + "/new")
-    
+        return _render_item_form(data_type, schema, form, item=None)
+
     # Get form data
     form_data = form.data.copy()
     form_data.pop('csrf_token', None)
     form_data.pop('submit', None)
     if "name" in form_data:
         form_data["name"] = form_data.get("name", "").strip()
-    
+
     # Additional JSON schema validation
     valid, error = validate_form_with_jsonschema(form, schema)
     if not valid:
         flash(f"Validation Error: {error}")
-        return redirect("/" + data_type + "/new")
-    
+        return _render_item_form(data_type, schema, form, item=None)
+
     if "name" in form_data:
         if data_type == "units":
             if db.find_one({"name": form_data["name"], "era": form_data.get("era")}):
                 flash("A unit with this name already exists in this era!")
-                return redirect("/units/new")
+                return _render_item_form(data_type, schema, form, item=None)
         elif db.find_one({"name": form_data["name"]}):
             flash("Name must be unique!")
-            return redirect("/" + data_type + "/new")
+            return _render_item_form(data_type, schema, form, item=None)
 
     reason = form_data.pop("reason", "No Reason Given")
     after_data = form_data
@@ -825,7 +832,7 @@ def data_item_new_approve(data_type):
     approve_change(change_id)
 
     flash(f"Create request #{change_id} created and approved.")
-    
+
     return redirect("/" + data_type)
 
 @data_item_routes.route("/<data_type>/edit/<item_ref>", methods=["GET"])
@@ -842,61 +849,8 @@ def data_item_edit(data_type, item_ref):
         if result is not True:
             return result
 
-    dropdown_options = {}
-    for field, attrs in schema["properties"].items():
-        if attrs.get("collections"):
-            related_collections = attrs.get("collections")
-            dropdown_options[field] = []
-            for related_collection in related_collections:
-                dropdown_options[field] += list(
-                    mongo.db[related_collection].find(
-                        {}, {"name": 1, "_id": 1}
-                    ).sort("name", ASCENDING)
-                )
-
     form = form_generator.get_form(data_type, schema, item=item)
-    form.populate_linked_fields(schema, dropdown_options)
-
-    if data_type == "units":
-        extras = _build_unit_edit_extras(item=item)
-        return render_template(
-            "units_item.html",
-            title=f"Edit {item_ref}",
-            schema=schema,
-            form=form,
-            item=item,
-            dropdown_options=dropdown_options,
-            editable=True,
-            **extras
-        )
-
-    if data_type == "diseases":
-        return render_template(
-            "diseases_item.html",
-            title=f"Edit {item_ref}",
-            schema=schema,
-            form=form,
-            item=item,
-            editable=True,
-        )
-
-    SOURCE_TYPE_MAP = {
-        "characters": "character", "nations": "nation", "artifacts": "artifact",
-        "merchants": "merchant", "mercenaries": "mercenary",
-        "laws": "nation", "titles": "character",
-        "wonders": "wonder", "regions": "region", "global_modifiers": "global",
-    }
-    return render_template(
-        "dataItem.html",
-        title=f"Edit {item_ref}",
-        schema=schema,
-        form=form,
-        item=item,
-        dropdown_options=dropdown_options,
-        entity_source_type=SOURCE_TYPE_MAP.get(data_type, ""),
-        data_type=data_type,
-        editable=True,
-    )
+    return _render_item_form(data_type, schema, form, item=item, item_ref=item_ref)
 
 @data_item_routes.route("/<data_type>/edit/<item_ref>/request", methods=["POST"])
 def data_item_edit_request(data_type, item_ref):
@@ -907,41 +861,33 @@ def data_item_edit_request(data_type, item_ref):
         return nation_edit_request(item_ref)
     
     form = form_generator.get_form(data_type, schema, formdata=request.form)
-    
-    dropdown_options = {}
-    for field, attributes in schema["properties"].items():
-        if attributes.get("collections") != None:
-            related_collections = attributes.get("collections")
-            dropdown_options[field] = []
-            for related_collection in related_collections:
-                dropdown_options[field] += list(mongo.db[related_collection].find({}, {"name": 1, "_id": 1}).sort("name", ASCENDING))
-    
+    dropdown_options = _build_dropdown_options(schema)
     form.populate_linked_fields(schema, dropdown_options)
-    
+
     if not form.validate():
         flash("Form validation failed!")
         flash(form.errors)
-        return redirect(f"/{data_type}/edit/{item_ref}")
-    
+        return _render_item_form(data_type, schema, form, item=item, item_ref=item_ref)
+
     form_data = form.data.copy()
     form_data.pop('csrf_token', None)
     form_data.pop('submit', None)
     if "name" in form_data:
         form_data["name"] = form_data.get("name", "").strip()
-    
+
     valid, error = validate_form_with_jsonschema(form, schema)
     if not valid:
         flash(f"Validation Error: {error}")
-        return redirect("/" + data_type + "/edit/" + item_ref)
-    
+        return _render_item_form(data_type, schema, form, item=item, item_ref=item_ref)
+
     if "name" in form_data:
         if data_type == "units":
             if db.find_one({"name": form_data["name"], "era": form_data.get("era"), "_id": {"$ne": item["_id"]}}):
                 flash("A unit with this name already exists in this era!")
-                return redirect(f"/units/edit/{item_ref}")
+                return _render_item_form(data_type, schema, form, item=item, item_ref=item_ref)
         elif form_data["name"] != item.get("name") and db.find_one({"name": form_data["name"]}):
             flash("Name must be unique!")
-            return redirect(f"/{data_type}/edit/{item_ref}")
+            return _render_item_form(data_type, schema, form, item=item, item_ref=item_ref)
 
     item_id = item["_id"]
     reason = form_data.get("reason", "No Reason Given")
@@ -965,47 +911,39 @@ def data_item_edit_request(data_type, item_ref):
 @admin_required
 def data_item_edit_approve(data_type, item_ref):
     schema, db, item = get_data_on_item(data_type, item_ref)
-    
+
     if data_type == "nations": #This should never happen, but just a good fallback
         print("Had to redirect from data_item_routes to nation_routes")
         return nation_edit_request(item_ref)
-    
+
     form = form_generator.get_form(data_type, schema, formdata=request.form)
-    
-    dropdown_options = {}
-    for field, attributes in schema["properties"].items():
-        if attributes.get("collections") != None:
-            related_collections = attributes.get("collections")
-            dropdown_options[field] = []
-            for related_collection in related_collections:
-                dropdown_options[field] += list(mongo.db[related_collection].find({}, {"name": 1, "_id": 1}).sort("name", ASCENDING))
-    
+    dropdown_options = _build_dropdown_options(schema)
     form.populate_linked_fields(schema, dropdown_options)
-    
+
     if not form.validate():
         flash("Form validation failed!")
         flash(form.errors)
-        return redirect("/" + data_type + "/edit/" + item_ref)
-    
+        return _render_item_form(data_type, schema, form, item=item, item_ref=item_ref)
+
     form_data = form.data.copy()
     form_data.pop('csrf_token', None)
     form_data.pop('submit', None)
     if "name" in form_data:
         form_data["name"] = form_data.get("name", "").strip()
-    
+
     valid, error = validate_form_with_jsonschema(form, schema)
     if not valid:
         flash(f"Validation Error: {error}")
-        return redirect("/" + data_type + "/edit/" + item_ref)
-    
+        return _render_item_form(data_type, schema, form, item=item, item_ref=item_ref)
+
     if "name" in form_data:
         if data_type == "units":
             if db.find_one({"name": form_data["name"], "era": form_data.get("era"), "_id": {"$ne": item["_id"]}}):
                 flash("A unit with this name already exists in this era!")
-                return redirect(f"/units/edit/{item_ref}")
+                return _render_item_form(data_type, schema, form, item=item, item_ref=item_ref)
         elif form_data["name"] != item.get("name") and db.find_one({"name": form_data["name"]}):
             flash("Name must be unique!")
-            return redirect(f"/{data_type}/edit/{item_ref}")
+            return _render_item_form(data_type, schema, form, item=item, item_ref=item_ref)
 
     item_id = item["_id"]
     reason = form_data.get("reason", "No Reason Given")

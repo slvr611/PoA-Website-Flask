@@ -3141,6 +3141,25 @@ h1, h2, h3 {
        scrolling the table itself. */
     overflow-wrap: anywhere;
 }
+/* Changes tables (pending/archived/item/data-type changes lists — all share
+   the render_changes_table macro) mix short fixed-vocabulary columns (ID,
+   Target Collection, Change Type, Status, Time, User) with two intentionally
+   wrap-heavy ones (Changes/Reason, via .wrap-content below, which already
+   has its own word-break:break-word for their occasional long unbroken
+   strings). The overflow-wrap:anywhere above tells table-layout:auto every
+   column's minimum content width is effectively zero, so it squeezes the
+   short columns until words break mid-character instead of the table simply
+   growing wider. Restoring the default here lets each short column claim
+   its natural single-line width; if that overflows a narrow viewport,
+   .table-wrapper's own horizontal scroll handles it — scoped to the table,
+   never the whole page. */
+.changes-table th,
+.changes-table td {
+    overflow-wrap: normal;
+}
+.changes-table {
+    min-width: 1000px;
+}
 .info-table th, .compact-table th, .linked-objects-table th,
 .resources-table th, .jobs-table th, .modifiers-table th,
 .pops-table th, .demographics-table th {

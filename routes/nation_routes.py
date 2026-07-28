@@ -751,7 +751,7 @@ def nation_edit_request(item_ref):
         _validate_csrf(request.form.get('csrf_token', ''))
     except _CSRFError:
         flash("Security token expired. Please refresh and try again.")
-        return redirect(f"/nations/edit/{item_ref}")
+        return _render_nation_edit(item_ref, form=form)
 
     form_data = form.data.copy()
     form_data.pop('csrf_token', None)
@@ -794,16 +794,16 @@ def nation_edit_request(item_ref):
     valid, error = validate_form_with_jsonschema(form, schema, data=form_data, partial=True)
     if not valid:
         flash(f"Validation Error: {error}")
-        return redirect(f"/nations/edit/{item_ref}")
+        return _render_nation_edit(item_ref, form=form)
 
     valid, error = _validate_tech_costs(form_data)
     if not valid:
         flash(f"Validation Error: {error}")
-        return redirect(f"/nations/edit/{item_ref}")
+        return _render_nation_edit(item_ref, form=form)
 
     if form_data["name"] != item_ref and db.find_one({"name": form_data["name"]}):
         flash("Name must be unique!")
-        return redirect(f"/nations/edit/{item_ref}")
+        return _render_nation_edit(item_ref, form=form)
 
     change_id = request_change(
         data_type="nations",
@@ -843,7 +843,7 @@ def nation_edit_approve(item_ref):
         _validate_csrf(request.form.get('csrf_token', ''))
     except _CSRFError:
         flash("Security token expired. Please refresh and try again.")
-        return redirect(f"/nations/edit/{item_ref}")
+        return _render_nation_edit(item_ref, form=form)
 
     form_data = form.data.copy()
     form_data.pop('csrf_token', None)
@@ -882,16 +882,16 @@ def nation_edit_approve(item_ref):
     valid, error = validate_form_with_jsonschema(form, schema, data=form_data, partial=is_partial)
     if not valid:
         flash(f"Validation Error: {error}")
-        return redirect(f"/nations/edit/{item_ref}")
+        return _render_nation_edit(item_ref, form=form)
 
     valid, error = _validate_tech_costs(form_data)
     if not valid:
         flash(f"Validation Error: {error}")
-        return redirect(f"/nations/edit/{item_ref}")
+        return _render_nation_edit(item_ref, form=form)
 
     if form_data["name"] != item_ref and db.find_one({"name": form_data["name"]}):
         flash("Name must be unique!")
-        return redirect(f"/nations/edit/{item_ref}")
+        return _render_nation_edit(item_ref, form=form)
 
     change_id = request_change(
         data_type="nations",
@@ -906,7 +906,8 @@ def nation_edit_approve(item_ref):
     if approved:
         flash(f"Change request #{change_id} created and approved.")
         return redirect("/nations/item/" + form_data["name"])
-    return redirect(f"/nations/edit/{item_ref}")
+    flash("Change could not be auto-approved — it may conflict with another pending change. Review it under Pending Changes.")
+    return _render_nation_edit(item_ref, form=form)
 
 @nation_routes.route("/nations/edit_jobs/<item_ref>", methods=["GET"])
 @owner_required("nations")
@@ -931,10 +932,16 @@ def nation_edit_jobs_approve(item_ref):
     schema, db, nation = get_data_on_item("nations", item_ref)
     
     form = form_generator.get_form("jobs", schema, formdata=request.form)
-    
+
     if not form.validate():
         flash(f"Form validation failed: {form.errors}")
-        return redirect("/nations/edit_jobs/" + item_ref)
+        return render_template(
+            "nation_jobs_edit.html",
+            form=form,
+            title="Edit Jobs for " + item_ref,
+            schema=schema,
+            nation=nation
+        )
     
     form_data = form.data.copy()
     form_data.pop('csrf_token', None)

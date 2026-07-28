@@ -282,6 +282,17 @@ def request_change(data_type, item_id, change_type, before_data, after_data, rea
     changes_collection = mongo.db.changes
     now = datetime.now(timezone.utc)
 
+    # Defensive copy — before_data/after_data are frequently the caller's own
+    # live in-memory objects (e.g. a tick's per-nation dict), not throwaway
+    # snapshots. The .pop() calls below (and _reconcile_item_ids/
+    # _ensure_item_ids further down) mutate whatever dict they're given, so
+    # without this, popping "_id" here would silently strip it from the
+    # caller's original object too. See generate_ai_character in
+    # tick_helpers.py, which was bitten by exactly this before it started
+    # deepcopy-ing before_data itself.
+    before_data = deepcopy(before_data)
+    after_data = deepcopy(after_data)
+
     after_data.pop("reason", None)
     before_data.pop("_id", None)
     after_data.pop("_id", None)
@@ -320,6 +331,12 @@ def system_request_change(data_type, item_id, change_type, before_data, after_da
 
     changes_collection = mongo.db.changes
     now = datetime.now(timezone.utc)
+
+    # Defensive copy — see the matching comment in request_change(). Tick
+    # functions in particular routinely pass their own live nation/character
+    # dicts straight through as before_data.
+    before_data = deepcopy(before_data)
+    after_data = deepcopy(after_data)
 
     after_data.pop("reason", None)
     before_data.pop("_id", None)

@@ -78,24 +78,15 @@ def character_list():
         preview_references=preview_overall_lookup_dict
     )
 
-@character_routes.route("/characters/new", methods=["GET"])
-def new_character():
-    """Display new character form"""
-    schema, db = get_data_on_category("characters")
-    
-    dropdown_options = {}
-    for field, attributes in schema["properties"].items():
-        if attributes.get("collections"):
-            related_collections = attributes.get("collections")
-            dropdown_options[field] = []
-            for related_collection in related_collections:
-                dropdown_options[field] += list(
-                    mongo.db[related_collection].find(
-                        {}, {"name": 1, "_id": 1}
-                    ).sort("name", ASCENDING)
-                )
-    
-    form = form_generator.get_form("new_character", schema)
+def _render_new_character_form(form, schema, db):
+    """Render the new-character form given an already-built `form`.
+
+    Shared by the GET route and by the POST request/save routes'
+    validation-failure branches — passing the form built from the submitted
+    request.form re-renders it with the user's entered values intact,
+    instead of redirecting back to a blank form.
+    """
+    dropdown_options = get_dropdown_options(schema)
     form.populate_linked_fields(schema, dropdown_options)
 
     predecessor_characters = list(db.find({}).sort("name", ASCENDING))
@@ -118,6 +109,14 @@ def new_character():
         db_negative_titles=db_negative_titles,
     )
 
+
+@character_routes.route("/characters/new", methods=["GET"])
+def new_character():
+    """Display new character form"""
+    schema, db = get_data_on_category("characters")
+    form = form_generator.get_form("new_character", schema)
+    return _render_new_character_form(form, schema, db)
+
 @character_routes.route("/characters/new/request", methods=["POST"])
 def new_character_request():
     """Handle new character request"""
@@ -128,7 +127,7 @@ def new_character_request():
     
     if not form.validate():
         flash(f"Form validation failed: {form.errors}")
-        return redirect("/characters/new")
+        return _render_new_character_form(form, schema, db)
     
     form_data = form.data.copy()
     form_data.pop('csrf_token', None)
@@ -139,16 +138,16 @@ def new_character_request():
     valid, error = validate_form_with_jsonschema(form, schema)
     if not valid:
         flash(f"Validation Error: {error}")
-        return redirect("/characters/new")
-    
+        return _render_new_character_form(form, schema, db)
+
     if db.find_one({"name": form_data["name"]}):
         flash("Name must be unique!")
-        return redirect("/characters/new")
+        return _render_new_character_form(form, schema, db)
 
     error = validate_character_strengths_weaknesses(form_data)
     if error:
         flash(f"Validation Error: {error}")
-        return redirect("/characters/new")
+        return _render_new_character_form(form, schema, db)
 
     is_child = bool(request.form.get("start_as_child"))
     form_data["age"] = 0 if is_child else 1
@@ -218,7 +217,7 @@ def new_character_approve():
     
     if not form.validate():
         flash(f"Form validation failed: {form.errors}")
-        return redirect("/characters/new")
+        return _render_new_character_form(form, schema, db)
     
     form_data = form.data.copy()
     form_data.pop('csrf_token', None)
@@ -229,16 +228,16 @@ def new_character_approve():
     valid, error = validate_form_with_jsonschema(form, schema)
     if not valid:
         flash(f"Validation Error: {error}")
-        return redirect("/characters/new")
-    
+        return _render_new_character_form(form, schema, db)
+
     if db.find_one({"name": form_data["name"]}):
         flash("Name must be unique!")
-        return redirect("/characters/new")
+        return _render_new_character_form(form, schema, db)
 
     error = validate_character_strengths_weaknesses(form_data)
     if error:
         flash(f"Validation Error: {error}")
-        return redirect("/characters/new")
+        return _render_new_character_form(form, schema, db)
 
     is_child = bool(request.form.get("start_as_child"))
     form_data["age"] = 0 if is_child else 1
