@@ -1837,6 +1837,27 @@ h1, h2 {
     border-radius: 3px;
 }
 
+/* Non-player-admin-only direct override — deliberately styled apart from
+   the normal invest/cost inputs above so it doesn't read as part of the
+   ordinary player-facing tech UI. */
+.tech-admin-toggle-form {
+    margin-top: 0.5rem;
+    border-top: 1px dashed var(--border-strong);
+    padding-top: 0.5rem;
+}
+.tech-admin-toggle-btn {
+    font-size: 0.78rem;
+    padding: 0.3rem 0.6rem;
+    background: rgba(232, 212, 106, .12);
+    color: var(--warn);
+    border: 1px solid var(--warn);
+    border-radius: 4px;
+    cursor: pointer;
+}
+.tech-admin-toggle-btn:hover {
+    background: rgba(232, 212, 106, .2);
+}
+
 @media (max-width: 768px) {
     #cy {
         height: 65vh;
@@ -1984,6 +2005,12 @@ h1, h2 {
     margin-bottom: 1rem;
     flex-wrap: wrap;
     gap: 1rem;
+}
+
+/* Collapsed toolbar — hide everything except the toggle button itself, so
+   the map (flex:1 sibling below) grows to fill the freed vertical space. */
+#shared-controls.toolbar-collapsed > *:not(#toolbar-toggle-btn) {
+    display: none;
 }
 
 .button-group {

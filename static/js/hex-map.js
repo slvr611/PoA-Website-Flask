@@ -186,6 +186,25 @@ class _MinHeap {
 const _HEX_COS = Array.from({ length: 6 }, (_, i) => Math.cos(Math.PI / 3 * i));
 const _HEX_SIN = Array.from({ length: 6 }, (_, i) => Math.sin(Math.PI / 3 * i));
 
+// Custom paint-mode crosshair with an explicitly declared hotspot at its exact
+// center (12,12 in a 24×24 image). The system 'crosshair' keyword delegates
+// rendering to the OS pointer scheme, where the drawn image can drift from the
+// real event hotspot (typically under Windows' enlarged-pointer accessibility
+// setting or a custom cursor scheme — the image scales/changes but the hotspot
+// doesn't move with its visual center, so clicks land above/beside where the
+// icon appears to be). A CSS url() cursor bypasses the OS scheme and the
+// browser honors the hotspot we declare, so the visible center IS the click
+// point. Black outer stroke + white inner stroke keeps it visible on any map
+// color; the open gap around the center leaves the target pixel unobscured.
+const _PAINT_CURSOR_SVG =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24">' +
+    '<path d="M12 0v9M12 15v9M0 12h9M15 12h9" stroke="#000" stroke-width="4"/>' +
+    '<path d="M12 0v9M12 15v9M0 12h9M15 12h9" stroke="#fff" stroke-width="1.5"/>' +
+    '<circle cx="12" cy="12" r="1" fill="#fff" stroke="#000" stroke-width="0.75"/>' +
+    '</svg>';
+const _PAINT_CURSOR =
+    `url("data:image/svg+xml,${encodeURIComponent(_PAINT_CURSOR_SVG)}") 12 12, crosshair`;
+
 
 class HexMapViewer {
     constructor(canvasId, detailPanelId, isAdmin) {
@@ -318,6 +337,12 @@ class HexMapViewer {
         this.dragStart  = { x: 0, y: 0 };
         this.panStart   = { x: 0, y: 0 };
         this.selectedTile = null;
+        // Live paint-mode hover target — {q, r} of the tile the cursor is
+        // currently over while a paint tool is active, or null. Drawn as an
+        // outline in render() so the exact tile a click will affect is always
+        // visible before you click, instead of relying on the OS cursor
+        // icon's own (unverifiable) hotspot alignment.
+        this._hoverTile   = null;
         this._pinchDist   = null;
         this._touchMulti  = false;
         this._lastTouch   = { x: 0, y: 0 };
@@ -1121,6 +1146,16 @@ class HexMapViewer {
             this._drawHex(ctx, x, y, inner, 'rgba(255,255,100,0.25)', '#ffff44', 2.5);
         }
 
+        // ── Paint hover highlight — the exact tile a click will affect right
+        //    now, drawn as a bright outline with no fill so the tile's own
+        //    color stays visible underneath. This is the authoritative
+        //    answer to "what will painting here do", independent of exactly
+        //    where the OS renders the cursor icon itself. ──────────────────
+        if (this._hoverTile && !this._capturingImage) {
+            const { x, y } = this._axialToPixel(this._hoverTile.q, this._hoverTile.r);
+            this._drawHex(ctx, x, y, inner, null, '#ffffff', 3);
+        }
+
         // ── Nodes (rendered at all zoom levels — just get smaller) ──────────
         const _t5 = performance.now();
         const doNodes       = this.layers.nodes;
@@ -1456,6 +1491,7 @@ class HexMapViewer {
             this._midPainting = false;
             this._finalizeUndoBatch();
             this._updateCursor();
+            if (this._hoverTile) { this._hoverTile = null; this.render(); }
         });
         document.addEventListener('keydown', e => {
             if (e.key === 'Escape') {
@@ -1567,6 +1603,7 @@ class HexMapViewer {
         this.paintRouteMode  = null;
         this.paintNodeMode   = null;
         this.forbiddenTiles  = new Set();
+        this._hoverTile      = null;
         this._updateCursor();
         this.render();
     }
@@ -1578,6 +1615,7 @@ class HexMapViewer {
         this.paintRouteMode  = null;
         this.paintNodeMode   = null;
         this.forbiddenTiles  = new Set();
+        this._hoverTile      = null;
         this._updateCursor();
         this.render();
     }
@@ -1595,6 +1633,7 @@ class HexMapViewer {
         this.paintRegionMode = null;
         this.paintNodeMode   = null;
         this.forbiddenTiles  = new Set();
+        this._hoverTile      = null;
         this._updateCursor();
         this.render();
     }
@@ -1606,6 +1645,7 @@ class HexMapViewer {
         this.paintRouteMode  = null;
         this.paintNodeMode   = null;
         this.forbiddenTiles  = new Set();
+        this._hoverTile      = null;
         this._updateCursor();
         if (nationName && nationName !== '__unowned__') {
             try {
@@ -1627,6 +1667,7 @@ class HexMapViewer {
         this.paintRegionMode = null;
         this.paintRouteMode  = null;
         this.forbiddenTiles  = new Set();
+        this._hoverTile      = null;
         this._updateCursor();
         this.render();
     }
@@ -1641,7 +1682,7 @@ class HexMapViewer {
     }
 
     _updateCursor() {
-        this.canvas.style.cursor = (this.paintMode || this.paintNationMode || this.paintRegionMode || this.paintRouteMode || this.paintNodeMode) ? 'crosshair' : 'grab';
+        this.canvas.style.cursor = (this.paintMode || this.paintNationMode || this.paintRegionMode || this.paintRouteMode || this.paintNodeMode) ? _PAINT_CURSOR : 'grab';
     }
 
     _startPan(cx, cy) {
@@ -1658,6 +1699,17 @@ class HexMapViewer {
         if (this.paintMode || this.paintNationMode || this.paintRegionMode || this.paintRouteMode || this.paintNodeMode) {
             this._painting    = true;
             this._lastPainted = null;
+            // Dead zone so a single click near a tile boundary can't paint a
+            // second (neighboring) tile from the tiny, involuntary mouse
+            // movement that happens while physically pressing a button — the
+            // same 3px threshold _onMove/_onUp already use to tell a click
+            // from a drag (see hasMoved below). Painting the SAME tile again
+            // as the pointer wobbles is harmless (dedup'd by _lastPainted);
+            // this only stops it from reaching a DIFFERENT tile before the
+            // move is clearly deliberate.
+            this._paintStartX = cx;
+            this._paintStartY = cy;
+            this._paintMoved   = false;
             const type = this.paintNationMode ? 'nation' : this.paintRegionMode ? 'region' : this.paintRouteMode ? 'route' : this.paintNodeMode ? 'node' : 'terrain';
             this._currentUndoBatch = { type, tiles: new Map() };
             this._paintAt(cx, cy);
@@ -1668,15 +1720,45 @@ class HexMapViewer {
 
     _onMove(cx, cy) {
         if (this._painting && (this.paintMode || this.paintNationMode || this.paintRegionMode || this.paintRouteMode || this.paintNodeMode)) {
+            if (!this._paintMoved) {
+                const dx = cx - this._paintStartX, dy = cy - this._paintStartY;
+                if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+                    this._paintMoved = true;
+                } else {
+                    return;  // still within the click's dead zone — don't retarget yet
+                }
+            }
             this._paintAt(cx, cy);
             return;
         }
-        if (!this.isDragging) return;
+        if (!this.isDragging) {
+            this._updateHoverTile(cx, cy);
+            return;
+        }
         const dx = cx - this.dragStart.x, dy = cy - this.dragStart.y;
         if (Math.abs(dx) > 3 || Math.abs(dy) > 3) this.hasMoved = true;
         this.panX = this.panStart.x + dx;
         this.panY = this.panStart.y + dy;
         this.render();
+    }
+
+    /** Track which tile the cursor is over while a paint tool is active (but
+     * not currently painting), so render() can outline it — the exact tile a
+     * click will affect, visible before you click. Cleared when no paint
+     * tool is selected. */
+    _updateHoverTile(cx, cy) {
+        const inPaintMode = this.paintMode || this.paintNationMode || this.paintRegionMode || this.paintRouteMode || this.paintNodeMode;
+        if (!inPaintMode) {
+            if (this._hoverTile) { this._hoverTile = null; this.render(); }
+            return;
+        }
+        const rect  = this.canvas.getBoundingClientRect();
+        const world = this._screenToWorld(cx - rect.left, cy - rect.top);
+        const axial = this._pixelToAxial(world.x, world.y);
+        if (!this._hoverTile || this._hoverTile.q !== axial.q || this._hoverTile.r !== axial.r) {
+            this._hoverTile = axial;
+            this.render();
+        }
     }
 
     _onUp(cx, cy) {
@@ -1749,6 +1831,14 @@ class HexMapViewer {
         const rect  = this.canvas.getBoundingClientRect();
         const world = this._screenToWorld(screenX - rect.left, screenY - rect.top);
         const { q, r } = this._pixelToAxial(world.x, world.y);
+        // Freeze the exact numbers at the moment of painting for diagnostics —
+        // separate from a live hover readout, which can drift from the actual
+        // click position if the mouse moves at all afterward (e.g. settling
+        // before a screenshot is taken).
+        this.canvas.dispatchEvent(new CustomEvent('hexmap:paintdebug', {
+            bubbles: true,
+            detail: { sx: screenX - rect.left, sy: screenY - rect.top, worldX: world.x, worldY: world.y, q, r },
+        }));
         const col = q; const row = r + Math.floor(q / 2);
         if (col < 0 || col >= this.cols || row < 0 || row >= this.rows) return;
         const key = `${q},${r}`;

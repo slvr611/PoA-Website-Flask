@@ -81,7 +81,10 @@
       "Bash(node --check _rra_extracted.js)",
       "Bash(rm -f _rra_extracted.js)",
       "Bash(awk 'NR<=4020 && /^def /{line=NR; name=$0} END{print line\": \"name}' calculations/field_calculations.py)",
-      "Bash(awk -F: '$1<4020')"
+      "Bash(awk -F: '$1<4020')",
+      "Bash(node -c static/js/hex-map.js)",
+      "Bash(node --check _tech_tree_edit_extracted.js)",
+      "Bash(rm -f _tech_tree_edit_extracted.js)"
     ]
   }
 }

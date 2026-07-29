@@ -1,0 +1,91 @@
+{% extends "layout.html" %}
+
+{% block title %}Assimilation Tool{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1>Assimilation Tool</h1>
+    <p class="text-muted">
+        Merges one nation's districts, cities, and pops into another nation — e.g. after a
+        war of conquest. The source nation is left with none of the transferred items; it is
+        not otherwise modified or removed.
+    </p>
+
+    <form method="get" action="/assimilation_tool">
+        <p>
+            <label for="source-select"><strong>Source nation</strong> <span class="text-muted">(loses these items)</span>:</label>
+            <select id="source-select" name="source" onchange="this.form.submit()">
+                <option value="">— Select a nation —</option>
+                {% for nation in nations %}
+                    <option value="{{ nation._id }}" {% if source_id == nation._id|string %}selected{% endif %}>{{ nation.name }}</option>
+                {% endfor %}
+            </select>
+        </p>
+        <p>
+            <label for="target-select"><strong>Target nation</strong> <span class="text-muted">(gains these items)</span>:</label>
+            <select id="target-select" name="target" onchange="this.form.submit()">
+                <option value="">— Select a nation —</option>
+                {% for nation in nations %}
+                    <option value="{{ nation._id }}" {% if target_id == nation._id|string %}selected{% endif %}>{{ nation.name }}</option>
+                {% endfor %}
+            </select>
+        </p>
+        <noscript><button type="submit">Load</button></noscript>
+    </form>
+
+    {% if source_nation and target_nation and source_id == target_id %}
+        <hr>
+        <p class="text-muted">Source and target must be different nations.</p>
+    {% elif source_nation and target_nation %}
+        <hr>
+        <h2>Assimilate {{ source_nation.name }} into {{ target_nation.name }}</h2>
+
+        <table class="info-table">
+            <thead>
+                <tr><th></th><th>{{ source_nation.name }} (source)</th><th>{{ target_nation.name }} (target, before)</th></tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Districts</td>
+                    <td>{{ source_nation.get("districts", [])|length }}</td>
+                    <td>{{ target_nation.get("districts", [])|length }}{% if target_nation.get("district_slots") is not none %} / {{ target_nation.district_slots }} slots{% endif %}</td>
+                </tr>
+                <tr>
+                    <td>Cities</td>
+                    <td>{{ source_nation.get("cities", [])|length }}</td>
+                    <td>{{ target_nation.get("cities", [])|length }}{% if target_nation.get("city_slots") is not none %} / {{ target_nation.city_slots }} slots{% endif %}</td>
+                </tr>
+                <tr>
+                    <td>Pops</td>
+                    <td>{{ source_pop_count }}</td>
+                    <td>—</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <form method="post" action="/assimilation_tool/execute"
+              onsubmit="return confirm('Assimilate ' + {{ source_nation.name|tojson }} + ' into ' + {{ target_nation.name|tojson }} + '? This transfers the checked items immediately.')">
+            <input type="hidden" name="source_nation" value="{{ source_id }}">
+            <input type="hidden" name="target_nation" value="{{ target_id }}">
+
+            <p>
+                <label><input type="checkbox" name="transfer_districts" checked> Transfer districts ({{ source_nation.get("districts", [])|length }})</label><br>
+                <label><input type="checkbox" name="transfer_cities" checked> Transfer cities ({{ source_nation.get("cities", [])|length }})</label><br>
+                <label><input type="checkbox" name="transfer_pops" checked> Transfer pops ({{ source_pop_count }})</label>
+            </p>
+
+            <div class="button-container">
+                <button type="submit" class="submit-button">Assimilate</button>
+            </div>
+        </form>
+
+        <hr>
+        <h3>After executing</h3>
+        <ol>
+            <li>Open the <a href="/map" target="_blank">map</a>, enter Edit Mode, and repaint {{ source_nation.name }}'s former tiles as belonging to {{ target_nation.name }}.</li>
+            <li>Run <strong>Tools ▾ → Sync Territory</strong> on the map so both nations' territory data is recounted.</li>
+            <li>Check {{ target_nation.name }}'s jobs — pops that worked a district-gated job may have lost that assignment if the district itself didn't transfer with them.</li>
+        </ol>
+    {% endif %}
+</div>
+{% endblock %}

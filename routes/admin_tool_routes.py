@@ -12,6 +12,7 @@ from copy import deepcopy
 import random
 import os
 import datetime
+import uuid
 from bson import ObjectId
 
 admin_tool_routes = Blueprint('admin_tool_routes', __name__)
@@ -343,6 +344,150 @@ def civil_war_execute():
         + ". Now paint the new nation's territory on the map, then run Sync Territory."
     )
     return redirect(f"/nations/item/{new_name}")
+
+
+# ── Assimilation Tool ────────────────────────────────────────────────────────
+# Merges one nation's districts/cities/pops into another (e.g. after a war of
+# conquest). Mirrors Civil War Helper's approach one step below it: both
+# nations already exist, so there's no "Add" change to route through the
+# audit trail for — every write here is a direct db.update_one, exactly like
+# civil war's own post-split recalculation step. District/city tile ownership
+# on the map is deliberately NOT touched (same reason civil war punts it to a
+# human): hex_map_tiles has no reverse index back to which nation "owns" a
+# given district/city _id, so retagging tiles safely requires the admin to
+# repaint them and run Sync Territory anyway.
+
+@admin_tool_routes.route("/assimilation_tool")
+@admin_required
+def assimilation_tool():
+    schema, db = get_data_on_category("nations")
+    nations = list(db.find({}, {"name": 1}).sort("name", ASCENDING))
+
+    source_id = request.args.get("source", "")
+    target_id = request.args.get("target", "")
+
+    source_nation = None
+    target_nation = None
+    source_pop_count = 0
+
+    if source_id:
+        try:
+            source_nation = db.find_one(
+                {"_id": ObjectId(source_id)},
+                {"name": 1, "districts": 1, "cities": 1},
+            )
+        except Exception:
+            source_nation = None
+        if source_nation:
+            source_pop_count = mongo.db.pops.count_documents({"nation": source_id})
+
+    if target_id:
+        try:
+            target_nation = db.find_one(
+                {"_id": ObjectId(target_id)},
+                {"name": 1, "districts": 1, "cities": 1, "district_slots": 1, "city_slots": 1},
+            )
+        except Exception:
+            target_nation = None
+
+    return render_template(
+        "assimilation_tool.html",
+        nations=nations,
+        source_id=source_id,
+        target_id=target_id,
+        source_nation=source_nation,
+        target_nation=target_nation,
+        source_pop_count=source_pop_count,
+    )
+
+
+@admin_tool_routes.route("/assimilation_tool/execute", methods=["POST"])
+@admin_required
+def assimilation_tool_execute():
+    from helpers.change_helpers import _calculate_and_attach_fields
+
+    schema, db = get_data_on_category("nations")
+
+    source_id = request.form.get("source_nation", "")
+    target_id = request.form.get("target_nation", "")
+
+    if not source_id or not target_id:
+        flash("Select both a source and target nation.", "error")
+        return redirect("/assimilation_tool")
+    if source_id == target_id:
+        flash("Source and target nation must be different.", "error")
+        return redirect("/assimilation_tool")
+
+    try:
+        source = db.find_one({"_id": ObjectId(source_id)})
+        target = db.find_one({"_id": ObjectId(target_id)})
+    except Exception:
+        source = target = None
+    if source is None or target is None:
+        flash("Source or target nation not found.", "error")
+        return redirect("/assimilation_tool")
+
+    transfer_districts = request.form.get("transfer_districts") == "on"
+    transfer_cities = request.form.get("transfer_cities") == "on"
+    transfer_pops = request.form.get("transfer_pops") == "on"
+
+    def _merge_items(source_items, target_items):
+        """Append a deep copy of source_items onto target_items, re-issuing
+        any _id that's missing or collides with one already in target_items
+        (or with an earlier item in this same batch) — item _ids are only
+        8 hex chars (see _ensure_item_ids in change_helpers.py), so unlike a
+        full UUID a cross-nation collision is unlikely but not negligible."""
+        existing_ids = {i.get("_id") for i in target_items if isinstance(i, dict) and i.get("_id")}
+        moved = deepcopy(source_items or [])
+        for item in moved:
+            if not isinstance(item, dict):
+                continue
+            item_id = item.get("_id")
+            if not item_id or item_id in existing_ids:
+                item_id = uuid.uuid4().hex[:8]
+                item["_id"] = item_id
+            existing_ids.add(item_id)
+        return moved
+
+    district_count = 0
+    city_count = 0
+    pop_count = 0
+
+    if transfer_districts:
+        moved_districts = _merge_items(source.get("districts", []), target.get("districts", []))
+        district_count = len(moved_districts)
+        target["districts"] = (target.get("districts") or []) + moved_districts
+        source["districts"] = []
+
+    if transfer_cities:
+        moved_cities = _merge_items(source.get("cities", []), target.get("cities", []))
+        city_count = len(moved_cities)
+        target["cities"] = (target.get("cities") or []) + moved_cities
+        source["cities"] = []
+
+    if transfer_pops:
+        pop_count = mongo.db.pops.count_documents({"nation": source_id})
+        if pop_count:
+            mongo.db.pops.update_many({"nation": source_id}, {"$set": {"nation": target_id}})
+
+    # Recalculate both nations so pop counts, district/city totals, and every
+    # other derived field are current — same final step as civil war's own
+    # post-execution recalculation.
+    for nation_doc in (source, target):
+        recalculated = _calculate_and_attach_fields("nations", nation_doc)
+        db.update_one(
+            {"_id": nation_doc["_id"]},
+            {"$set": {k: v for k, v in recalculated.items() if k != "_id"}},
+        )
+
+    flash(
+        f"Assimilated {source['name']} into {target['name']}: "
+        f"{district_count} district(s), {city_count} cit{'y' if city_count == 1 else 'ies'} "
+        f"and {pop_count} pop(s) transferred. Now paint {target['name']}'s territory over "
+        f"{source['name']}'s former tiles on the map, then run Sync Territory.",
+        "success",
+    )
+    return redirect(f"/nations/item/{target['name']}")
 
 
 @admin_tool_routes.route("/database_management", methods=["GET"])

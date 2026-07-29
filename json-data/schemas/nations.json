@@ -45,9 +45,11 @@
     "external_calculation_requirements": {
       "overlord": {
         "fields": [
-          "subject_stance"
+          "subject_stance",
+          "modifiers"
         ],
-        "modifier_prefix": "vassal"
+        "modifier_prefix": "vassal",
+        "required_scope": "nation_vassals"
       },
       "primary_race": [
         "positive_trait",

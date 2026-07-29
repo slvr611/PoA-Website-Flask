@@ -1092,6 +1092,57 @@ def purchase_district_upgrade(nation_name, instance_id, upgrade_key):
     return jsonify({"ok": True, "upgrade_key": upgrade_key})
 
 
+def _is_non_player_admin_or_admin():
+    """True for full admins and for the non-player-admin role specifically —
+    deliberately narrower than g.view_access_level >= 7, which is also true
+    for non-player RP mods (see calculate_user_permissions in
+    routes/base_routes.py); this toggle is meant for non-player admins only."""
+    return bool(g.user) and bool(g.user.get("is_admin") or getattr(g, "is_non_player_admin", False))
+
+
+@nation_routes.route("/nations/item/<path:nation_name>/tech/<tech_key>/toggle_researched", methods=["POST"])
+def toggle_tech_researched(nation_name, tech_key):
+    """Directly flips a tech's researched flag for a nation, bypassing the
+    normal investment mechanic and change-request system entirely — this is
+    a narrow, instant admin override, not a player-facing action, so unlike
+    the rest of nation editing it is never subject to approval."""
+    if not _is_non_player_admin_or_admin():
+        flash("You don't have permission to do that.", "error")
+        return redirect(request.referrer or "/")
+
+    tech_def = json_data.get("tech", {}).get(tech_key)
+    if not tech_def:
+        flash("Unknown tech.", "error")
+        return redirect(request.referrer or "/")
+
+    nation = mongo.db.nations.find_one({"name": nation_name})
+    if not nation:
+        flash("Nation not found.", "error")
+        return redirect(request.referrer or "/")
+
+    from helpers.change_helpers import _calculate_and_attach_fields
+
+    technologies = dict(nation.get("technologies") or {})
+    entry = dict(technologies.get(tech_key) or {})
+    entry["researched"] = not entry.get("researched", False)
+    entry.setdefault("invested", 0)
+    entry.setdefault("investing", 0)
+    entry.setdefault("cost", tech_def.get("cost", 0))
+    technologies[tech_key] = entry
+
+    updated_nation = dict(nation)
+    updated_nation["technologies"] = technologies
+    updated_nation = _calculate_and_attach_fields("nations", updated_nation)
+    mongo.db.nations.update_one(
+        {"_id": nation["_id"]},
+        {"$set": {k: v for k, v in updated_nation.items() if k != "_id"}}
+    )
+
+    status_label = "researched" if entry["researched"] else "not researched"
+    flash(f"{tech_def.get('display_name', tech_key)} marked as {status_label} for {nation['name']}.", "success")
+    return redirect(request.referrer or f"/nations/item/{nation_name}")
+
+
 @nation_routes.route("/nations/upload_banner/<item_ref>", methods=["POST"])
 def nation_upload_banner(item_ref):
     schema, db, nation = get_data_on_item("nations", item_ref)

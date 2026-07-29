@@ -1700,10 +1700,11 @@
 		<h3>Technologies — Tier List</h3>
 		{% set _tier = nation_field_tier("technologies") %}
 			{% if visibility_level >= _tier %}
+			{% set _can_toggle_researched = (g.user and g.user.is_admin) or g.is_non_player_admin %}
 			{% if editable %}
-			{{ render_tech_tree(nation.get("technologies", {"political_philosophy": {"researched": true}}), nation.get("technology_cost_modifier", 0), nation.get("technology_cost_minimum", 2), json_data, editable=True, form=form, form_json=form_json["technologies"], tech_category_cost_modifiers=nation.get("technology_category_cost_modifiers", {})) }}
+			{{ render_tech_tree(nation.get("technologies", {"political_philosophy": {"researched": true}}), nation.get("technology_cost_modifier", 0), nation.get("technology_cost_minimum", 2), json_data, editable=True, form=form, form_json=form_json["technologies"], tech_category_cost_modifiers=nation.get("technology_category_cost_modifiers", {}), nation_name=nation.name, can_toggle_researched=_can_toggle_researched) }}
 			{% else %}
-			{{ render_tech_tree(nation.get("technologies", {"political_philosophy": {"researched": true}}), nation.get("technology_cost_modifier", 0), nation.get("technology_cost_minimum", 2), json_data, tech_category_cost_modifiers=nation.get("technology_category_cost_modifiers", {})) }}
+			{{ render_tech_tree(nation.get("technologies", {"political_philosophy": {"researched": true}}), nation.get("technology_cost_modifier", 0), nation.get("technology_cost_minimum", 2), json_data, tech_category_cost_modifiers=nation.get("technology_category_cost_modifiers", {}), nation_name=nation.name, can_toggle_researched=_can_toggle_researched) }}
 			{% endif %}
 		{% else %}
 			<p class="visibility-locked">Requires Tier {{ _tier }} visibility.</p>

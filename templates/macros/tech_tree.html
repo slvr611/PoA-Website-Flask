@@ -1,4 +1,4 @@
-{% macro render_tech_tree(nation_tech, tech_cost_modifier, tech_cost_minimum, json_data, editable=False, form=None, form_json=None, tech_category_cost_modifiers={}) %}
+{% macro render_tech_tree(nation_tech, tech_cost_modifier, tech_cost_minimum, json_data, editable=False, form=None, form_json=None, tech_category_cost_modifiers={}, nation_name=None, can_toggle_researched=False) %}
 {# Single source of truth for tier layout — used both to lay out the list-view
    cards below and (via tojson) as the Cytoscape graph's manual row layout.
    "" marks an empty slot within a row (kept for visual alignment in the graph). #}
@@ -35,6 +35,19 @@
                             <span class="tech-card-status" data-tech-status-for="{{ tech_id }}"></span>
                         </summary>
                         <div class="tech-card-body" data-tech-body-for="{{ tech_id }}"></div>
+                        {% if can_toggle_researched and nation_name %}
+                        {# Rendered as a plain server-side form, outside .tech-card-body, so
+                           buildTechListView()'s innerHTML rewrite (below) never touches it.
+                           Visible/usable only to non-player admins and full admins — see
+                           _is_non_player_admin_or_admin in routes/nation_routes.py. #}
+                        {% set _researched = nation_tech.get(tech_id, {}).get('researched', False) %}
+                        {% set _confirm_msg = ('Mark ' ~ tech.display_name ~ ' as NOT researched?') if _researched else ('Mark ' ~ tech.display_name ~ ' as researched?') %}
+                        <form method="post" action="/nations/item/{{ nation_name }}/tech/{{ tech_id }}/toggle_researched"
+                              class="tech-admin-toggle-form"
+                              onsubmit="return confirm({{ _confirm_msg|tojson }})">
+                            <button type="submit" class="tech-admin-toggle-btn">{{ 'Admin: Mark Unresearched' if _researched else 'Admin: Mark Researched' }}</button>
+                        </form>
+                        {% endif %}
                     </details>
                     {% endif %}
                 {% endif %}

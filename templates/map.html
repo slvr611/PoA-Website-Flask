@@ -12,6 +12,8 @@
     ====================================================== -->
     <div class="map-controls" id="shared-controls">
 
+        <button type="button" id="toolbar-toggle-btn" class="map-btn" title="Hide the toolbar to give the map more space">&#9650; Hide Toolbar</button>
+
         <div class="session-selector">
             <label for="session-select">Session: </label>
             <select id="session-select">
@@ -120,6 +122,7 @@
                     <button id="hex-download-map-btn" class="map-tools-item" title="Download a high-resolution image of the full map (political, nodes, luxury, buildings — public view, no districts)">Download Map Image</button>
                     <button id="hex-download-terrain-btn" class="map-tools-item" title="Download a high-resolution image of just the terrain layer — no background, no political colors, nodes, or buildings">Download Terrain Image</button>
                     <a href="/admin/grid-calibration" class="map-tools-item" target="_blank">Grid Calibration ↗</a>
+                    <button id="hex-debug-cursor-btn" class="map-tools-item" title="Show live cursor vs. computed-tile-center coordinates, to diagnose any positional offset">Debug Cursor</button>
                 </div>
             </div>
             {% endif %}
@@ -143,6 +146,7 @@
             <div class="hex-map-canvas-wrap">
                 <div id="hex-bg-viewer"></div>
                 <canvas id="hex-map-canvas"></canvas>
+                <div id="hex-cursor-debug" style="display:none;position:absolute;top:6px;left:6px;z-index:20;background:rgba(0,0,0,0.75);color:#0f0;font-family:monospace;font-size:11px;line-height:1.5;padding:6px 8px;border-radius:4px;pointer-events:none;white-space:pre;"></div>
             </div>
             <div class="hex-map-sidebar" id="hex-map-sidebar">
                 <div class="hex-sheet-handle" id="hex-sheet-handle">
@@ -220,6 +224,32 @@ document.addEventListener('DOMContentLoaded', function () {
     const map1Btn        = document.getElementById('map1-btn');
     const map2Btn        = document.getElementById('map2-btn');
     const maxSession     = parseInt(sessionSelect.options[0].value);
+
+    // ---- Toolbar hide/show (gives the map more vertical space) ----
+    const sharedControls   = document.getElementById('shared-controls');
+    const toolbarToggleBtn = document.getElementById('toolbar-toggle-btn');
+    function setToolbarCollapsed(collapsed) {
+        sharedControls.classList.toggle('toolbar-collapsed', collapsed);
+        toolbarToggleBtn.innerHTML = collapsed ? '&#9660; Show Toolbar' : '&#9650; Hide Toolbar';
+        toolbarToggleBtn.title = collapsed
+            ? 'Show the map toolbar again'
+            : 'Hide the toolbar to give the map more space';
+    }
+    let toolbarCollapsed = false;
+    try { toolbarCollapsed = localStorage.getItem('poa-map-toolbar-collapsed') === '1'; } catch (e) {}
+    setToolbarCollapsed(toolbarCollapsed);
+    toolbarToggleBtn.addEventListener('click', () => {
+        toolbarCollapsed = !toolbarCollapsed;
+        setToolbarCollapsed(toolbarCollapsed);
+        try { localStorage.setItem('poa-map-toolbar-collapsed', toolbarCollapsed ? '1' : '0'); } catch (e) {}
+        // The hex canvas measures its available space on construction/resize;
+        // nudge it once the freed-up layout has settled (same pattern used
+        // when the viewer first becomes visible) so it fills the new area
+        // instead of staying sized for the (now hidden) toolbar's height.
+        if (hexViewer) {
+            requestAnimationFrame(() => requestAnimationFrame(() => hexViewer.show()));
+        }
+    });
 
     // ---- Era / age display ----
     const eraData = [
@@ -775,6 +805,95 @@ document.addEventListener('DOMContentLoaded', function () {
             }
             downloadTerrainBtn.disabled = false;
             setTimeout(() => { downloadTerrainBtn.textContent = 'Download Terrain Image'; }, 4000);
+        });
+    }
+
+    // ---- Debug Cursor overlay ----
+    // Shows raw cursor position vs. the computed screen-space center of the
+    // hex tile that position resolves to, so a positional offset can be
+    // measured in exact pixels instead of eyeballed. dx/dy should stay
+    // small and roughly constant in *world* units — if the on-screen pixel
+    // delta grows with zoom, that points to a bug in the pan/zoom math
+    // rather than a fixed rendering/cursor-icon discrepancy.
+    const debugCursorBtn = document.getElementById('hex-debug-cursor-btn');
+    const debugCursorBox = document.getElementById('hex-cursor-debug');
+    let debugCursorOn = false;
+    let lastHoverText = '';
+    let lastPaintInfo = null;  // frozen at the moment of the last actual paint — see hexmap:paintdebug
+    function renderDebugBox() {
+        debugCursorBox.textContent = lastHoverText +
+            (lastPaintInfo ? `\n\n--- LAST PAINT (frozen at click time) ---\n${lastPaintInfo}` : '');
+    }
+    function updateDebugCursor(clientX, clientY) {
+        if (!debugCursorOn || !hexViewer) return;
+        const canvas = document.getElementById('hex-map-canvas');
+        const rect = canvas.getBoundingClientRect();
+        const sx = clientX - rect.left, sy = clientY - rect.top;
+        const world  = hexViewer._screenToWorld(sx, sy);
+        const axial  = hexViewer._pixelToAxial(world.x, world.y);
+        const center = hexViewer._axialToPixel(axial.q, axial.r);
+        const centerScreenX = center.x * hexViewer.zoom + hexViewer.panX;
+        const centerScreenY = center.y * hexViewer.zoom + hexViewer.panY;
+        const dx = sx - centerScreenX, dy = sy - centerScreenY;
+
+        // Does the identified tile (or one of its vertical/diagonal neighbors)
+        // actually own a node in the game data? Tells us whether this is a
+        // rendering-position bug (icon drawn off-center from its own tile) or
+        // a tile-identification bug (the icon visually sits on a DIFFERENT
+        // tile than the one this pixel resolves to).
+        const nodeAt = (q, r) => {
+            const t = hexViewer.tiles.get(`${q},${r}`);
+            return t && t.node ? (t.node.resource_type || t.node.value || t.node.type || 'yes') : null;
+        };
+        const neighborReport = [
+            ['self',        axial.q,     axial.r],
+            ['r-1 (up)',    axial.q,     axial.r - 1],
+            ['r+1 (down)',  axial.q,     axial.r + 1],
+            ['q-1 (left)',  axial.q - 1, axial.r],
+            ['q+1 (right)', axial.q + 1, axial.r],
+        ].map(([label, q, r]) => `${label}: ${nodeAt(q, r) || '—'}`).join('  |  ');
+
+        lastHoverText =
+            `[LIVE HOVER — updates on every mousemove, may not match the exact click instant]\n` +
+            `zoom: ${hexViewer.zoom.toFixed(3)}  hexSize: ${hexViewer.hexSize}\n` +
+            `cursor (screen px): ${sx.toFixed(1)}, ${sy.toFixed(1)}\n` +
+            `world: ${world.x.toFixed(1)}, ${world.y.toFixed(1)}\n` +
+            `axial q,r: ${axial.q}, ${axial.r}\n` +
+            `tile center (screen px): ${centerScreenX.toFixed(1)}, ${centerScreenY.toFixed(1)}\n` +
+            `cursor - tile-center (screen px): ${dx.toFixed(1)}, ${dy.toFixed(1)}\n` +
+            `cursor - tile-center (world units): ${(dx / hexViewer.zoom).toFixed(2)}, ${(dy / hexViewer.zoom).toFixed(2)}\n` +
+            `node ownership: ${neighborReport}`;
+        renderDebugBox();
+    }
+    if (debugCursorBtn) {
+        debugCursorBtn.addEventListener('click', () => {
+            debugCursorOn = !debugCursorOn;
+            debugCursorBox.style.display = debugCursorOn ? 'block' : 'none';
+            debugCursorBtn.textContent = debugCursorOn ? 'Debug Cursor (On)' : 'Debug Cursor';
+        });
+        const hexCanvasEl = document.getElementById('hex-map-canvas');
+        hexCanvasEl.addEventListener('mousemove', (e) => {
+            updateDebugCursor(e.clientX, e.clientY);
+        });
+        // Frozen at the exact instant _paintAt runs — click position + the
+        // axial tile it resolved to and painted. Doesn't move afterward, so
+        // it can't drift from mouse settling/repositioning before a screenshot
+        // the way the live hover readout above can.
+        hexCanvasEl.addEventListener('hexmap:paintdebug', (e) => {
+            if (!debugCursorOn || !hexViewer) return;
+            const { sx, sy, worldX, worldY, q, r } = e.detail;
+            const center = hexViewer._axialToPixel(q, r);
+            const centerScreenX = center.x * hexViewer.zoom + hexViewer.panX;
+            const centerScreenY = center.y * hexViewer.zoom + hexViewer.panY;
+            const dx = sx - centerScreenX, dy = sy - centerScreenY;
+            lastPaintInfo =
+                `click (screen px): ${sx.toFixed(1)}, ${sy.toFixed(1)}\n` +
+                `world: ${worldX.toFixed(1)}, ${worldY.toFixed(1)}\n` +
+                `axial q,r painted: ${q}, ${r}\n` +
+                `tile center (screen px): ${centerScreenX.toFixed(1)}, ${centerScreenY.toFixed(1)}\n` +
+                `click - tile-center (screen px): ${dx.toFixed(1)}, ${dy.toFixed(1)}\n` +
+                `click - tile-center (world units): ${(dx / hexViewer.zoom).toFixed(2)}, ${(dy / hexViewer.zoom).toFixed(2)}`;
+            renderDebugBox();
         });
     }
 

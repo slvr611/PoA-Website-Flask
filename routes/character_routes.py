@@ -52,8 +52,16 @@ def character_list():
                     }
             preview_overall_lookup_dict[preview_item] = preview_individual_lookup_dict
     
-    # Get all characters
-    all_characters = list(db.find().sort("name", ASCENDING))
+    # Get all characters — projected to only what this page actually renders
+    # (row link + schema.preview columns + the player/dead-vs-alive split
+    # below). Fetching full documents here was pulling down every
+    # character's calculated fields (breakdowns, modifiers, etc.) for
+    # nothing, which on the live data made this simple list query take over
+    # 30 seconds — long enough to trip the platform's request timeout.
+    list_projection = {"_id": 1, "name": 1, "health_status": 1, "player": 1}
+    for preview_field in schema.get("preview", []):
+        list_projection[preview_field] = 1
+    all_characters = list(db.find({}, list_projection).sort("name", ASCENDING))
     
     # Separate into player, AI, and dead characters
     player_characters = []

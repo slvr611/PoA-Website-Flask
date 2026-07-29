@@ -136,7 +136,7 @@ json_data = {"general_resources": [
         ],
         "unique_resources": [
             {"key": "iron",   "name": "Iron",   "base_storage": 10,  "base_price": 200, "color": "#828282"},
-            {"key": "gunpowder", "name": "Gunpowder", "base_storage": 0,  "base_price": 400, "color": "#d9ba2a"},
+            {"key": "gunpowder", "name": "Gunpowder", "base_storage": 0,  "base_price": 400, "color": "#dfa811"},
         ],
         "luxury_resources": [
             # Luxury resources render as squares on the map; nodes produce 1/session if they are worked by a building

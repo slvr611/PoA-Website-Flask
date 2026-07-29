@@ -3295,9 +3295,18 @@ def collect_external_requirements(target, schema, target_data_type):
         # Handle new format with modifier_prefix
         modifier_prefix = None
         fields_as_modifiers = []
+        required_scope = None
         if isinstance(required_fields, dict):
             modifier_prefix = required_fields.get("modifier_prefix")
             fields_as_modifiers = required_fields.get("fields_as_modifiers", [])
+            # Restricts a "modifiers" requirement to entries with this exact
+            # scope — needed whenever the linked entity is the SAME type as
+            # the target (e.g. collecting a nation's own scope-based
+            # modifiers from its overlord) and could otherwise have several
+            # scopes all sharing the same target_type (nation_self AND
+            # nation_vassals both target "nation"), which the plain
+            # target_type check below can't tell apart.
+            required_scope = required_fields.get("required_scope")
             required_fields = required_fields.get("fields", [])
 
         if required_fields is None:
@@ -3324,14 +3333,14 @@ def collect_external_requirements(target, schema, target_data_type):
                     
                     for link in links:
                         # Check the link object itself for modifiers
-                        collected_modifiers.extend(collect_external_modifiers_from_object(link, required_fields, category_data.get(link_collection, {}).get("schema", {}), target_data_type, modifier_prefix, fields_as_modifiers, target=target))
+                        collected_modifiers.extend(collect_external_modifiers_from_object(link, required_fields, category_data.get(link_collection, {}).get("schema", {}), target_data_type, modifier_prefix, fields_as_modifiers, target=target, required_scope=required_scope))
 
                         # Get the target object and check it too
                         if query_target in link:
                             target_id = link[query_target]
                             target_object = mongo.db[collection].find_one({"_id": ObjectId(target_id)})
                             if target_object:
-                                collected_modifiers.extend(collect_external_modifiers_from_object(target_object, required_fields, linked_object_schema, target_data_type, modifier_prefix, fields_as_modifiers, target=target))
+                                collected_modifiers.extend(collect_external_modifiers_from_object(target_object, required_fields, linked_object_schema, target_data_type, modifier_prefix, fields_as_modifiers, target=target, required_scope=required_scope))
 
             elif field_schema.get("queryTargetAttribute"):
                 query_target = field_schema["queryTargetAttribute"]
@@ -3342,7 +3351,7 @@ def collect_external_requirements(target, schema, target_data_type):
 
                 for object in linked_objects:
                     if object.get("equipped", True):
-                        collected_modifiers.extend(collect_external_modifiers_from_object(object, required_fields, linked_object_schema, target_data_type, modifier_prefix, fields_as_modifiers, target=target))
+                        collected_modifiers.extend(collect_external_modifiers_from_object(object, required_fields, linked_object_schema, target_data_type, modifier_prefix, fields_as_modifiers, target=target, required_scope=required_scope))
             else:
                 object_id = target.get(field)
                 if not object_id:
@@ -3351,11 +3360,11 @@ def collect_external_requirements(target, schema, target_data_type):
                 object = mongo.db[collection].find_one({"_id": ObjectId(object_id)})
                 if not object:
                     continue
-                collected_modifiers.extend(collect_external_modifiers_from_object(object, required_fields, linked_object_schema, target_data_type, modifier_prefix, fields_as_modifiers, target=target))
+                collected_modifiers.extend(collect_external_modifiers_from_object(object, required_fields, linked_object_schema, target_data_type, modifier_prefix, fields_as_modifiers, target=target, required_scope=required_scope))
 
     return collected_modifiers
 
-def collect_external_modifiers_from_object(object, required_fields, linked_object_schema, target_data_type, modifier_prefix=None, fields_as_modifiers=[], target=None):
+def collect_external_modifiers_from_object(object, required_fields, linked_object_schema, target_data_type, modifier_prefix=None, fields_as_modifiers=[], target=None, required_scope=None):
     collected_modifiers = []
     _outer_schema = linked_object_schema  # preserve original schema for the fields_as_modifiers pass
 
@@ -3382,21 +3391,21 @@ def collect_external_modifiers_from_object(object, required_fields, linked_objec
 
                             for link in links:
                                 # Check the link object itself for modifiers
-                                collected_modifiers.extend(collect_external_modifiers_from_object(link, value, category_data.get(link_collection, {}).get("schema", {}), target_data_type, modifier_prefix, target=target))
+                                collected_modifiers.extend(collect_external_modifiers_from_object(link, value, category_data.get(link_collection, {}).get("schema", {}), target_data_type, modifier_prefix, target=target, required_scope=required_scope))
 
                                 # Get the target object and check it too
                                 if query_target in link:
                                     target_id = link[query_target]
                                     target_object = mongo.db[collection].find_one({"_id": ObjectId(target_id)})
                                     if target_object:
-                                        collected_modifiers.extend(collect_external_modifiers_from_object(target_object, value, nested_schema, target_data_type, modifier_prefix, target=target))
+                                        collected_modifiers.extend(collect_external_modifiers_from_object(target_object, value, nested_schema, target_data_type, modifier_prefix, target=target, required_scope=required_scope))
 
                     elif req_field_schema.get("queryTargetAttribute"):
                         query_target = req_field_schema["queryTargetAttribute"]
                         linked_objects = list(mongo.db[collection].find({query_target: str(object["_id"])}))
                         for nested_obj in linked_objects:
                             if nested_obj.get("equipped", True):
-                                collected_modifiers.extend(collect_external_modifiers_from_object(nested_obj, value, nested_schema, target_data_type, modifier_prefix, target=target))
+                                collected_modifiers.extend(collect_external_modifiers_from_object(nested_obj, value, nested_schema, target_data_type, modifier_prefix, target=target, required_scope=required_scope))
             continue
         else:
             req_field_schema = linked_object_schema["properties"].get(req_field, {})
@@ -3423,7 +3432,18 @@ def collect_external_modifiers_from_object(object, required_fields, linked_objec
                         if _itr(modifier):
                             continue  # terrain rules handled separately
                         scope = modifier.get("scope", "")
-                        if scope:
+                        if required_scope:
+                            # This requirement only wants ONE specific scope (e.g.
+                            # nation_vassals on an overlord) — a plain target_type
+                            # check isn't enough here because the linked object is
+                            # the SAME entity type as the target and can have
+                            # several scopes that all share that target_type (e.g.
+                            # nation_self and nation_vassals both target "nation"),
+                            # which would otherwise leak the overlord's OWN
+                            # self-scoped modifiers into every vassal's calculation.
+                            if scope != required_scope:
+                                continue
+                        elif scope:
                             # Scoped modifier: must match target_data_type
                             if _sd.get(scope, {}).get("target_type", "") != target_data_type:
                                 continue
@@ -3436,15 +3456,37 @@ def collect_external_modifiers_from_object(object, required_fields, linked_objec
                                 applicable_to = _mtype_data.get(mod_type, {}).get("applicable_to", [])
                                 if applicable_to and target_data_type not in applicable_to:
                                     continue
+                        # "All Attributes" (extra field sourced from "attributes",
+                        # value literally "attribute") must expand into all six
+                        # stat fields — mirrors sum_modifier_totals's identical
+                        # expand_all_attrs handling for a nation/character's own
+                        # modifiers array. Without this, _resolve_modifier_type
+                        # substitutes the literal string "attribute" into the
+                        # {attribute}/{attribute}_cap template, producing a bogus
+                        # "attribute"/"attribute_cap" field that nothing reads —
+                        # e.g. an equipped artifact's "+1 to all attributes"
+                        # modifier would silently do nothing.
+                        mod_type = modifier.get("modifier_type", "")
+                        type_def = _mtype_data.get(mod_type, {})
+                        expand_all_attrs = any(
+                            ef.get("source") == "attributes" and str(modifier.get(ef["key"]) or "") == "attribute"
+                            for ef in type_def.get("extra_fields", [])
+                        )
                         field = _rmt(modifier)
                         val = modifier.get("value", 0)
-                        if field and val:
+                        if val and (field or expand_all_attrs):
                             scaling = modifier.get("scaling", "flat")
                             scaling_x = float(modifier.get("scaling_x") or 1)
                             scaling_extra = modifier.get("scaling_extra") or ""
                             if scaling and scaling != "flat" and target is not None:
                                 val = val * get_scaling_multiplier(scaling, target, scaling_x=scaling_x, scaling_extra=scaling_extra)
-                            collected_modifiers.append({field: val})
+                            if expand_all_attrs:
+                                for stat in _ALL_CHAR_STATS:
+                                    expanded = field.replace("attribute", stat)
+                                    if expanded:
+                                        collected_modifiers.append({expanded: val})
+                            elif field:
+                                collected_modifiers.append({field: val})
 
                 elif field_type == "enum" and req_field_schema.get("laws"):
                     law_modifiers = req_field_schema["laws"].get(object[req_field], {})
@@ -4503,7 +4545,7 @@ def _build_computed_contributions(
             projected = storage.get(rkey, 0) + resource_excess.get(rkey, 0)
             if projected < 0:
                 contribs.append(SourceContribution(
-                    label=f"Negative {resource.get('display_name', rkey)} Stockpile",
+                    label=f"Negative {resource.get('display_name', rkey)} Stockpile After Production",
                     source_type="computed",
                     modifiers={"karma": projected},
                 ))

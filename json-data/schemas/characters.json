@@ -28,7 +28,8 @@
         "external_modifiers"
       ],
       "artifacts": [
-        "external_modifiers"
+        "external_modifiers",
+        "modifiers"
       ],
       "region": [
         "external_modifiers"
