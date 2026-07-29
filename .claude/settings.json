@@ -79,7 +79,9 @@
       "Read(//c/Users/orion/AppData/Local/Temp/claude/**)",
       "Bash(node --check _bulk_modifiers_extracted.js)",
       "Bash(node --check _rra_extracted.js)",
-      "Bash(rm -f _rra_extracted.js)"
+      "Bash(rm -f _rra_extracted.js)",
+      "Bash(awk 'NR<=4020 && /^def /{line=NR; name=$0} END{print line\": \"name}' calculations/field_calculations.py)",
+      "Bash(awk -F: '$1<4020')"
     ]
   }
 }

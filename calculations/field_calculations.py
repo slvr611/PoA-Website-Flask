@@ -4096,6 +4096,33 @@ def _build_computed_contributions(
             label="Jobs", source_type="job", modifiers={"money_income": job_money},
         ))
 
+    # ── Unit resource consumption (upkeep) ─────────────────────────────────────
+    # Mirrors sum_unit_totals — previously folded silently into resource_consumption
+    # with no line item, so unit upkeep was invisible in the breakdown tooltip.
+    _unit_slots = (
+        ("land_units", "land_unit_details"),
+        ("naval_units", "naval_unit_details"),
+        ("support_units", "support_unit_details"),
+    )
+    _db_units_cache = None
+    for _assigned_key, _details_key in _unit_slots:
+        units_assigned = target.get(_assigned_key) or {}
+        unit_details = calculated_values.get(_details_key, {})
+        if not isinstance(units_assigned, dict):
+            continue
+        for unit_key, count in units_assigned.items():
+            if not count or unit_key not in unit_details:
+                continue
+            mods = {}
+            for field, v in unit_details[unit_key].get("upkeep", {}).items():
+                if v and field in _resource_keys:
+                    mods[field + "_consumption"] = int(v * count)
+            if mods:
+                if _db_units_cache is None:
+                    _db_units_cache = load_db_units()
+                label = _db_units_cache.get(unit_key, {}).get("display_name", unit_key.replace("_", " ").title())
+                contribs.append(SourceContribution(label=label, source_type="unit", modifiers=mods))
+
     # ── Naval unit resource bonuses ───────────────────────────────────────────
     naval_count = target.get("naval_unit_count", calculated_values.get("naval_unit_count", 0))
     if naval_count:
@@ -4458,36 +4485,41 @@ def _build_computed_contributions(
             ))
 
     # ── Negative stockpile karma ──────────────────────────────────────────────
+    # Mirrors calculate_karma_from_negative_stockpiles exactly: the penalty is
+    # based on PROJECTED storage after this session's net production
+    # (resource_excess), not merely storage that's already negative right now.
+    # The old version here checked current storage only, so it could show a
+    # phantom penalty for a nation already climbing out of a hole (projected
+    # >= 0) or show nothing at all for a nation about to go negative from bad
+    # net production this session (current >= 0, projected < 0) even though
+    # the real karma value already reflects that penalty.
     if target.get("temperament", "None") == "Player":
         storage = target.get("resource_storage") or {}
-        for resource in json_data.get("general_resources", []):
+        resource_excess = calculated_values.get("resource_excess", {}) or {}
+        for resource in json_data.get("general_resources", []) + json_data.get("unique_resources", []):
             rkey = resource["key"]
             if rkey == "research":
                 continue
-            v = storage.get(rkey, 0)
-            if v < 0:
+            projected = storage.get(rkey, 0) + resource_excess.get(rkey, 0)
+            if projected < 0:
                 contribs.append(SourceContribution(
                     label=f"Negative {resource.get('display_name', rkey)} Stockpile",
                     source_type="computed",
-                    modifiers={"karma": v},
-                ))
-        for resource in json_data.get("unique_resources", []):
-            rkey = resource["key"]
-            v = storage.get(rkey, 0)
-            if v < 0:
-                contribs.append(SourceContribution(
-                    label=f"Negative {resource.get('display_name', rkey)} Stockpile",
-                    source_type="computed",
-                    modifiers={"karma": v},
+                    modifiers={"karma": projected},
                 ))
 
     # ── Vassal tribute ────────────────────────────────────────────────────────
+    # Mirrors _apply_vassal_tribute_modifiers's actual math (which already folded
+    # these amounts into resource_consumption/resource_production before this
+    # function runs) so increased/reduced tribute — from vassal_tribute_flat/
+    # multiplier modifiers on either side, plus Provincial/Mercantile transfers —
+    # shows up as its own tooltip line instead of vanishing into the totals.
     nation_id_str = str(target.get("_id", ""))
     if nation_id_str:
         try:
             vassals = list(mongo.db.nations.find(
                 {"overlord": nation_id_str},
-                {"name": 1, "pop_count": 1, "vassal_type": 1},
+                {"name": 1, "pop_count": 1, "vassal_type": 1, "modifiers": 1, "resource_production": 1},
             ))
         except Exception:
             vassals = []
@@ -4495,12 +4527,39 @@ def _build_computed_contributions(
             v_name    = vassal.get("name", "Unknown Vassal")
             v_pop     = vassal.get("pop_count", 0)
             v_type    = vassal.get("vassal_type", "None")
-            v_tribute_by_resource = _calc_tribute(v_pop, v_type, {})
-            if any(v_tribute_by_resource.values()):
+            # Combine this nation's own tribute modifiers (e.g. a "Harsh Overlord"
+            # trait raising tribute from every vassal) with the vassal's own
+            # vassal_tribute_flat/multiplier modifiers — otherwise a vassal-side
+            # effect would never show up in what the overlord's tooltip says it
+            # actually collects from them.
+            v_own_totals = sum_modifier_totals(vassal.get("modifiers", []), vassal)
+            v_combined_modifiers = {
+                "vassal_tribute_flat": (
+                    overall_totals.get("vassal_tribute_flat", 0) + v_own_totals.get("vassal_tribute_flat", 0)
+                ),
+                "vassal_tribute_multiplier": (
+                    overall_totals.get("vassal_tribute_multiplier", 0) + v_own_totals.get("vassal_tribute_multiplier", 0)
+                ),
+            }
+            for resource in _TRIBUTE_RESOURCES:
+                for key in (f"vassal_tribute_flat_{resource}", f"vassal_tribute_multiplier_{resource}"):
+                    v_combined_modifiers[key] = overall_totals.get(key, 0) + v_own_totals.get(key, 0)
+            v_tribute_by_resource = _calc_tribute(v_pop, v_type, v_combined_modifiers)
+            v_mods = {f"{res}_production": amt for res, amt in v_tribute_by_resource.items() if amt}
+            if v_type == "Provincial":
+                v_research = vassal.get("resource_production", {}).get("research", 0)
+                if v_research > 0:
+                    v_mods["research_production"] = v_mods.get("research_production", 0) + _math.ceil(v_research * 0.5)
+            elif v_type == "Mercantile":
+                v_production = vassal.get("resource_production", {})
+                for _lux in json_data.get("luxury_resources", []):
+                    _lux_key = _lux["key"]
+                    v_amount = v_production.get(_lux_key, 0)
+                    if v_amount > 0:
+                        v_mods[f"{_lux_key}_production"] = v_mods.get(f"{_lux_key}_production", 0) + v_amount
+            if v_mods:
                 contribs.append(SourceContribution(
-                    label=f"Vassal: {v_name}",
-                    source_type="computed",
-                    modifiers={res + "_production": amt for res, amt in v_tribute_by_resource.items()},
+                    label=f"Vassal: {v_name}", source_type="computed", modifiers=v_mods,
                 ))
 
     overlord_id = str(target.get("overlord") or "")
@@ -4508,17 +4567,37 @@ def _build_computed_contributions(
         v_pop_count   = target.get("pop_count", 0)
         v_vassal_type = target.get("vassal_type", "None")
         tribute_by_resource = _calc_tribute(v_pop_count, v_vassal_type, overall_totals)
-        if any(tribute_by_resource.values()):
-            try:
-                overlord = mongo.db.nations.find_one({"_id": ObjectId(overlord_id)}, {"name": 1})
-                overlord_name = overlord.get("name", "Overlord") if overlord else "Overlord"
-            except Exception:
-                overlord_name = "Overlord"
+        try:
+            overlord = mongo.db.nations.find_one({"_id": ObjectId(overlord_id)}, {"name": 1})
+            overlord_name = overlord.get("name", "Overlord") if overlord else "Overlord"
+        except Exception:
+            overlord_name = "Overlord"
+        mods = {f"{res}_consumption": amt for res, amt in tribute_by_resource.items() if amt}
+        if mods:
             contribs.append(SourceContribution(
-                label=f"Tribute to {overlord_name}",
-                source_type="computed",
-                modifiers={res + "_consumption": amt for res, amt in tribute_by_resource.items()},
+                label=f"Tribute to {overlord_name}", source_type="computed", modifiers=mods,
             ))
+        if v_vassal_type == "Provincial":
+            own_research = target.get("resource_production", {}).get("research", 0)
+            if own_research > 0:
+                contribs.append(SourceContribution(
+                    label=f"Tribute to {overlord_name} (Provincial Research Share)",
+                    source_type="computed",
+                    modifiers={"research_production": -own_research},
+                ))
+        elif v_vassal_type == "Mercantile":
+            own_production = target.get("resource_production", {})
+            lux_mods = {}
+            for _lux in json_data.get("luxury_resources", []):
+                _lux_key = _lux["key"]
+                own_amount = own_production.get(_lux_key, 0)
+                if own_amount > 0:
+                    lux_mods[f"{_lux_key}_production"] = -own_amount
+            if lux_mods:
+                contribs.append(SourceContribution(
+                    label=f"Tribute to {overlord_name} (Mercantile Luxury Share)",
+                    source_type="computed", modifiers=lux_mods,
+                ))
 
     return contribs
 

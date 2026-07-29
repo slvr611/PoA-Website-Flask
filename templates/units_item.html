@@ -433,7 +433,14 @@
                 {% for u in form.upkeep %}
                 <tr>
                   {% if u.form.item_id is defined %}{{ u.form.item_id() }}{% endif %}
-                  <td>{{ u.form.resource(class="form-control", placeholder="e.g. food, magic") }}</td>
+                  <td>
+                    <select class="form-control" name="{{ u.form.resource.name }}" id="{{ u.form.resource.id }}">
+                      <option value="">-- Select Resource --</option>
+                      {% for r in unit_upkeep_resource_options %}
+                      <option value="{{ r.key }}" {% if u.form.resource.data == r.key %}selected{% endif %}>{{ r.name }}</option>
+                      {% endfor %}
+                    </select>
+                  </td>
                   <td>{{ u.form.cost(class="form-control", type="number") }}</td>
                   <td><button type="button" class="btn-remove" onclick="removeRow(this,'upkeep');calculateCost()">×</button></td>
                 </tr>
@@ -864,6 +871,7 @@ function addSpecialAbility() {
   tbody.appendChild(row);
 }
 
+const UNIT_UPKEEP_RESOURCE_OPTIONS = {{ unit_upkeep_resource_options | tojson }};
 const TECH_OPTIONS = {{ tech_options | tojson }};
 const DISTRICT_OPTIONS = {{ district_options | tojson }};
 const NATIONS_OPTIONS = {{ nations_options | tojson }};
@@ -950,16 +958,22 @@ function onPrereqTypeChange(selectEl) {
   calculateCost();
 }
 
+function makeUpkeepResourceSelect(n) {
+  const opts = '<option value="">-- Select Resource --</option>' +
+    UNIT_UPKEEP_RESOURCE_OPTIONS.map(r => `<option value="${r.key}">${r.name.replace(/</g,'&lt;')}</option>`).join('');
+  return `<select class="form-control" name="upkeep-${n}-resource" id="upkeep-${n}-resource">${opts}</select>`;
+}
+
 function addUpkeep() {
   const tbody = document.getElementById('upkeep-tbody');
   const n = tbody.children.length;
   const row = document.createElement('tr');
   row.innerHTML =
-    `<td><input type="text" class="form-control" name="upkeep-${n}-resource" id="upkeep-${n}-resource" placeholder="e.g. food, magic"></td>` +
+    `<td>${makeUpkeepResourceSelect(n)}</td>` +
     `<td><input type="number" class="form-control" name="upkeep-${n}-cost" id="upkeep-${n}-cost" value="1" min="0"></td>` +
     `<td><button type="button" class="btn-remove" onclick="removeRow(this,'upkeep');calculateCost()">×</button></td>`;
   tbody.appendChild(row);
-  row.querySelector('[name$="-resource"]').addEventListener('input', calculateCost);
+  row.querySelector('[name$="-resource"]').addEventListener('change', calculateCost);
   row.querySelector('[name$="-cost"]').addEventListener('input', calculateCost);
 }
 

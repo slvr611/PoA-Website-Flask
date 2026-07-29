@@ -97,6 +97,23 @@ def inject_modifier_data():
     all_resources.append({"key": "money", "name": "Money"})
     all_resources[1:] = sorted(all_resources[1:], key=lambda x: x["name"])
 
+    # Every upkeep resource key sum_unit_totals actually recognizes: general +
+    # unique resources (as requested), plus "money" and "prestige" — both are
+    # separately special-cased there too, and several real units already use
+    # prestige upkeep, so leaving them out of the dropdown would make those
+    # entries impossible to represent (and clobber them on next save). Used
+    # for the unit upkeep resource dropdown so a typo'd or differently-cased
+    # resource name (e.g. "Food" instead of "food") can't silently fail to be
+    # deducted from a nation's stockpile again.
+    unit_upkeep_resource_options = sorted(
+        [{"key": r["key"], "name": r["name"]} for r in json_data.get("general_resources", [])]
+        + [{"key": r["key"], "name": r["name"]} for r in json_data.get("unique_resources", [])],
+        key=lambda x: x["name"],
+    ) + [
+        {"key": "money", "name": "Money"},
+        {"key": "prestige", "name": "Prestige"},
+    ]
+
     all_trade_resources = []
     for r in json_data.get("general_resources", []):
         if r["key"] != "research":
@@ -202,6 +219,7 @@ def inject_modifier_data():
         "modifier_types": modifier_types,
         "sorted_modifier_types": sorted_modifier_types,
         "all_resources": all_resources,
+        "unit_upkeep_resource_options": unit_upkeep_resource_options,
         "all_trade_resources": all_trade_resources,
         "all_attributes": all_attributes,
         "all_jobs": all_jobs,
