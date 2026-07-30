@@ -736,7 +736,7 @@
 			<h3>Relations <span class="card-count">diplomatic range {{ pf(nation.diplomatic_range, pn.get("diplomatic_range")) }}</span></h3>
 			{% set _tier = nation_field_tier("military_alliance_slots") %}
 			{% if visibility_level >= _tier %}
-				{% set rel_dot = {"Hostile": "var(--crit)", "Unfriendly": "var(--warn)", "Neutral": "var(--text-dim)", "Friendly": "var(--pos)"} %}
+				{% set rel_dot = {"Hostile": "var(--crit)", "Unfriendly": "var(--warn)", "Neutral": "var(--text-dim)", "Friendly": "var(--pos)", "Allied": "var(--info)"} %}
 				<div style="max-height:340px;overflow:auto;">
 					<table class="kh-table">
 						<thead>
@@ -2065,6 +2065,12 @@
 		{% for pop in linked_objects.get("pops", []) %}
 			<form id="pop-clone-{{ pop['_id'] }}" method="POST"></form>
 		{% endfor %}
+		{% set _can_toggle_researched = (g.user and g.user.is_admin) or g.is_non_player_admin %}
+		{% if _can_toggle_researched %}
+			{% for tech_id in json_data["tech"].keys() %}
+				<form id="tech-toggle-{{ tech_id }}" method="post" action="/nations/item/{{ nation.name }}/tech/{{ tech_id }}/toggle_researched"></form>
+			{% endfor %}
+		{% endif %}
 		{% with editable = True %}
 		{% include "trade_routes_forms.html" with context %}
 		{% endwith %}

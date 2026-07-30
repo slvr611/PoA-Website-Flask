@@ -36,17 +36,38 @@
                         </summary>
                         <div class="tech-card-body" data-tech-body-for="{{ tech_id }}"></div>
                         {% if can_toggle_researched and nation_name %}
-                        {# Rendered as a plain server-side form, outside .tech-card-body, so
-                           buildTechListView()'s innerHTML rewrite (below) never touches it.
-                           Visible/usable only to non-player admins and full admins — see
-                           _is_non_player_admin_or_admin in routes/nation_routes.py. #}
+                        {# Rendered outside .tech-card-body, so buildTechListView()'s
+                           innerHTML rewrite (below) never touches it. Visible/usable only
+                           to non-player admins and full admins — see
+                           _is_non_player_admin_or_admin in routes/nation_routes.py.
+
+                           In edit mode (editable=True) this button deliberately does NOT
+                           sit inside its own <form>: the tech tree is itself rendered
+                           inside the page's main edit <form>, and nesting a second <form>
+                           inside an already-open one is a parse error — the browser
+                           silently drops the inner <form> start tag, but its matching
+                           </form> still closes whichever form is currently open, i.e. the
+                           OUTER form. That orphans every field/button rendered after it,
+                           including the page's own Save/Request buttons far below. Instead
+                           the button references a standalone <form id="tech-toggle-{{ tech_id }}">
+                           declared outside the main form in nation_owner.html via the
+                           HTML5 form="" attribute — the same pattern already used there
+                           for per-pop clone forms. Outside edit mode there's no outer form
+                           to collide with, so the plain self-contained form is fine. #}
                         {% set _researched = nation_tech.get(tech_id, {}).get('researched', False) %}
                         {% set _confirm_msg = ('Mark ' ~ tech.display_name ~ ' as NOT researched?') if _researched else ('Mark ' ~ tech.display_name ~ ' as researched?') %}
+                        {% if editable %}
+                        <button type="submit" form="tech-toggle-{{ tech_id }}"
+                                formaction="/nations/item/{{ nation_name }}/tech/{{ tech_id }}/toggle_researched"
+                                class="tech-admin-toggle-btn"
+                                onclick="return confirm({{ _confirm_msg|tojson|forceescape }})">{{ 'Admin: Mark Unresearched' if _researched else 'Admin: Mark Researched' }}</button>
+                        {% else %}
                         <form method="post" action="/nations/item/{{ nation_name }}/tech/{{ tech_id }}/toggle_researched"
                               class="tech-admin-toggle-form"
-                              onsubmit="return confirm({{ _confirm_msg|tojson }})">
+                              onsubmit="return confirm({{ _confirm_msg|tojson|forceescape }})">
                             <button type="submit" class="tech-admin-toggle-btn">{{ 'Admin: Mark Unresearched' if _researched else 'Admin: Mark Researched' }}</button>
                         </form>
+                        {% endif %}
                         {% endif %}
                     </details>
                     {% endif %}

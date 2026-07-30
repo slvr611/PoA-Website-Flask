@@ -44,6 +44,7 @@
   --pos:          #a8d88a;   /* good values */
   --warn:         #e8d46a;   /* caution values (over territory, draining) */
   --crit:         #e08a6a;   /* bad values (over pop cap, hostile) */
+  --info:         #7fa8d9;   /* allied/friendly-pact relation status */
   --done:         #5a7a44;   /* researched-tech pill fill */
   --avail:        #8aa86a;   /* available-tech pill border */
   --avail-text:   #c8dcae;
@@ -75,6 +76,7 @@
   --pos:          #3f7a2a;
   --warn:         #8a6a10;
   --crit:         #a83e22;
+  --info:         #2a5a8a;
   --done:         #3f5a2a;
   --avail:        #5a7a3a;
   --avail-text:   #3a5024;
