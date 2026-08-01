@@ -84,7 +84,8 @@
       "Bash(awk -F: '$1<4020')",
       "Bash(node -c static/js/hex-map.js)",
       "Bash(node --check _tech_tree_edit_extracted.js)",
-      "Bash(rm -f _tech_tree_edit_extracted.js)"
+      "Bash(rm -f _tech_tree_edit_extracted.js)",
+      "Bash(PYTHONIOENCODING=utf-8 python calculate_net_domestic_product.py)"
     ]
   }
 }

@@ -394,111 +394,143 @@ class _Tee:
             stream.flush()
 
 
-def _run():
+def _run(all_file, players_file):
+    """Runs the NDP calculation once for every nation, teeing each nation's
+    trace output (and the final summary table) to `all_file` always, and
+    additionally to `players_file` when that nation's temperament is
+    "Player" — so the two report files end up as an all-nations report and
+    a player-nations-only subset of the same run, without recalculating
+    anything twice."""
     load_dotenv(override=True)
+    console = sys.stdout
 
     nations = list(category_data["nations"]["database"].find({}).sort("name", 1))
 
-    results: List[Tuple[str, float, int, int, int, float, str]] = []
-    for nation in nations:
-        name = nation.get("name", "<Unnamed>")
-        temperament = nation.get("temperament", "Unknown")
+    results: List[Tuple[str, float, int, int, int, float, float, str]] = []
+    try:
+        for nation in nations:
+            name = nation.get("name", "<Unnamed>")
+            temperament = nation.get("temperament", "Unknown")
+            is_player = temperament == "Player"
+            sys.stdout = _Tee(console, all_file, players_file) if is_player else _Tee(console, all_file)
 
-        print(f"Calculating {name}")
-        prices = get_nation_prices(nation)
-        (
-            base_value,
-            pop_count,
-            _administration,
-            job_details,
-            locked_job_count,
-            capacity,
-            _stock,
-            job_stock,
-            base_resource_breakdown,
-            money_income,
-            land_attack,
-            land_defense,
-            land_unit_capacity,
-        ) = compute_base_net_value(nation, prices)
-        marginal_value, _assignments = simulate_optimal_assignments(
-            pop_count,
-            job_details,
-            capacity,
-            job_stock,
-            locked_job_count,
-            prices,
-        )
-
-        ndp = base_value + marginal_value
-        vassal_count = count_vassals(nation)
-        vassal_concessions_cost = sum_vassal_concessions_cost(nation)
-        ndp -= vassal_concessions_cost
-        print(
-            f"Breakdown {name}: base={base_value:.2f}, marginal={marginal_value:.2f}, "
-            f"vassal_concessions={vassal_concessions_cost:.2f}, "
-            f"total={ndp:.2f}"
-        )
-        if base_resource_breakdown:
-            resource_parts = ", ".join(
-                f"{resource}={value:.2f}" for resource, value in sorted(base_resource_breakdown.items())
-            )
-            print(f"Base resources {name}: money={money_income:.2f}, {resource_parts}")
-        else:
-            print(f"Base resources {name}: money={money_income:.2f}")
-        military_score = (10 + land_attack + land_defense) * land_unit_capacity
-        military_score += sum_vassal_military_bonus(nation)
-        wonder_count = count_wonders(nation)
-        infrastructure_score, _details = compute_infrastructure_average(nation)
-        results.append(
+            print(f"Calculating {name}")
+            prices = get_nation_prices(nation)
             (
-                name,
-                ndp,
+                base_value,
                 pop_count,
-                vassal_count,
-                wonder_count,
-                infrastructure_score,
-                military_score,
-                temperament,
+                _administration,
+                job_details,
+                locked_job_count,
+                capacity,
+                _stock,
+                job_stock,
+                base_resource_breakdown,
+                money_income,
+                land_attack,
+                land_defense,
+                land_unit_capacity,
+            ) = compute_base_net_value(nation, prices)
+            marginal_value, _assignments = simulate_optimal_assignments(
+                pop_count,
+                job_details,
+                capacity,
+                job_stock,
+                locked_job_count,
+                prices,
             )
-        )
 
-    results.sort(key=lambda x: x[1], reverse=True)
+            ndp = base_value + marginal_value
+            vassal_count = count_vassals(nation)
+            vassal_concessions_cost = sum_vassal_concessions_cost(nation)
+            ndp -= vassal_concessions_cost
+            print(
+                f"Breakdown {name}: base={base_value:.2f}, marginal={marginal_value:.2f}, "
+                f"vassal_concessions={vassal_concessions_cost:.2f}, "
+                f"total={ndp:.2f}"
+            )
+            if base_resource_breakdown:
+                resource_parts = ", ".join(
+                    f"{resource}={value:.2f}" for resource, value in sorted(base_resource_breakdown.items())
+                )
+                print(f"Base resources {name}: money={money_income:.2f}, {resource_parts}")
+            else:
+                print(f"Base resources {name}: money={money_income:.2f}")
+            military_score = (10 + land_attack + land_defense) * land_unit_capacity
+            military_score += sum_vassal_military_bonus(nation)
+            wonder_count = count_wonders(nation)
+            infrastructure_score, _details = compute_infrastructure_average(nation)
+            results.append(
+                (
+                    name,
+                    ndp,
+                    pop_count,
+                    vassal_count,
+                    wonder_count,
+                    infrastructure_score,
+                    military_score,
+                    temperament,
+                )
+            )
 
-    print("Nation Net Domestic Product (money equivalent):")
-    for (
-        name,
-        ndp,
-        pop_count,
-        vassal_count,
-        wonder_count,
-        infrastructure_score,
-        military_score,
-        temperament,
-    ) in results:
-        print(
-            f"{name}, {ndp:.2f}, {pop_count}, {vassal_count}, {wonder_count}, "
-            f"{infrastructure_score:.2f}, {military_score:.2f}, {temperament}"
-        )
+        results.sort(key=lambda x: x[1], reverse=True)
+
+        sys.stdout = _Tee(console, all_file)
+        print("Nation Net Domestic Product (money equivalent):")
+        for (
+            name,
+            ndp,
+            pop_count,
+            vassal_count,
+            wonder_count,
+            infrastructure_score,
+            military_score,
+            temperament,
+        ) in results:
+            print(
+                f"{name}, {ndp:.2f}, {pop_count}, {vassal_count}, {wonder_count}, "
+                f"{infrastructure_score:.2f}, {military_score:.2f}, {temperament}"
+            )
+
+        sys.stdout = _Tee(console, players_file)
+        print("Nation Net Domestic Product (money equivalent) — Player Nations:")
+        for (
+            name,
+            ndp,
+            pop_count,
+            vassal_count,
+            wonder_count,
+            infrastructure_score,
+            military_score,
+            temperament,
+        ) in results:
+            if temperament != "Player":
+                continue
+            print(
+                f"{name}, {ndp:.2f}, {pop_count}, {vassal_count}, {wonder_count}, "
+                f"{infrastructure_score:.2f}, {military_score:.2f}, {temperament}"
+            )
+    finally:
+        sys.stdout = console
 
 
 def main():
-    """Run the NDP calculation, writing all console output to a timestamped
-    report file (in addition to printing it) under ndp_reports/."""
+    """Run the NDP calculation, writing output to two timestamped report
+    files under ndp_reports/: one covering all nations, and one restricted
+    to nations with temperament == "Player". Both are produced from a
+    single calculation pass — nothing is computed twice."""
     output_dir = os.path.join(os.getcwd(), "ndp_reports")
     os.makedirs(output_dir, exist_ok=True)
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_path = os.path.join(output_dir, f"ndp_report_{timestamp}.txt")
+    all_path = os.path.join(output_dir, f"ndp_report_all_{timestamp}.txt")
+    players_path = os.path.join(output_dir, f"ndp_report_players_{timestamp}.txt")
 
-    original_stdout = sys.stdout
-    with open(output_path, "w", encoding="utf-8") as report_file:
-        sys.stdout = _Tee(original_stdout, report_file)
-        try:
-            _run()
-        finally:
-            sys.stdout = original_stdout
+    with open(all_path, "w", encoding="utf-8") as all_file, \
+         open(players_path, "w", encoding="utf-8") as players_file:
+        _run(all_file, players_file)
 
-    print(f"Report written to {output_path}")
+    print(f"All-nations report written to {all_path}")
+    print(f"Player-nations report written to {players_path}")
 
 
 if __name__ == "__main__":
