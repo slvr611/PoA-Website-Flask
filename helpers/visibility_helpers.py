@@ -55,7 +55,7 @@ NATION_EDIT_FIELD_TIERS = {
     # Tier 1 — demographics
     "primary_race": 1, "primary_culture": 1, "primary_religion": 1,
     # Tier 2 — stability / laws
-    "stability": 2, "infamy": 2, "karma": 2, "rolling_karma": 2, "temporary_karma": 2,
+    "stability": 2, "infamy": 2, "war_support": 2, "karma": 2, "rolling_karma": 2, "temporary_karma": 2,
     "administration": 2,
     "tax_stance": 2, "military_funding": 2, "conscription_type": 2,
     "diplomatic_stance": 2, "expansion_stance": 2, "economy_type": 2,
@@ -152,7 +152,7 @@ NATION_VIEW_FIELD_TIERS = {
     # Tier 2 — stability / internal laws & stances
     "stability": 2, "stability_gain_chance": 2, "stability_loss_chance": 2,
     "stability_loss_chance_on_leader_death": 2,
-    "infamy": 2, "prosperity_role": 2, "karma": 2, "rolling_karma": 2,
+    "infamy": 2, "war_support": 2, "prosperity_role": 2, "karma": 2, "rolling_karma": 2,
     "temporary_karma": 2, "diplomatic_range": 2, "migration_distance": 2,
     "stationary_delay": 2, "pop_loss_chance": 2, "origin": 2, "temperament": 2,
     "government_type": 2, "succession_type": 2, "nomad_camp_type": 2,

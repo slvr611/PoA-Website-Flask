@@ -141,6 +141,25 @@ def inject_modifier_data():
         key=lambda x: x["name"]
     )
 
+    # Non-resource production/upkeep fields a job can carry (see jobs.json) —
+    # used by the "Job Special Production" modifier type so a job's
+    # stability_gain_chance/stability_loss_chance/etc. can be buffed or
+    # debuffed by an ordinary nation/trait/tech modifier the same way
+    # job_resource_production already does for actual resources. The
+    # underlying {job}_{field}_production modifier key is applied generically
+    # in field_calculations.py regardless of which field name is chosen here,
+    # so adding a new special field later only means adding it to this list.
+    all_job_special_fields = [
+        {"key": "stability_gain_chance", "name": "Stability Gain Chance"},
+        {"key": "stability_loss_chance", "name": "Stability Loss Chance"},
+        {"key": "blacklash_chance", "name": "Blacklash Chance"},
+        {"key": "administration", "name": "Administration"},
+        {"key": "progress", "name": "Progress"},
+        {"key": "rerolls", "name": "Rerolls"},
+        {"key": "ruler_artifact_slots", "name": "Ruler Artifact Slots"},
+        {"key": "nation_magic_spell_rolls", "name": "Nation Magic Spell Rolls"},
+    ]
+
     scope_definitions = json_data.get("scope_definitions", {})
     scopes_by_source_type = {}
     for scope_key, scope_data in scope_definitions.items():
@@ -223,6 +242,7 @@ def inject_modifier_data():
         "all_trade_resources": all_trade_resources,
         "all_attributes": all_attributes,
         "all_jobs": all_jobs,
+        "all_job_special_fields": all_job_special_fields,
         "scope_definitions": scope_definitions,
         "scopes_by_source_type": scopes_by_source_type,
         "scaling_types": scaling_types,

@@ -73,7 +73,7 @@
 		},
 		"production": {
 			"food": 4,
-			"stability_gain_chance": 0.1
+			"stability_gain_chance": 0.05
 		}
 	},
 	"firefather_priest": {

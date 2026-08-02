@@ -313,6 +313,11 @@ class ModifierForm(Form):
     """Form for handling nation/character modifiers as a dictionary"""
 
     item_id = HiddenField('_id')
+    # Legacy pre-modifier_type format stored a bare {"field": "cunning", ...}
+    # shape (no modifier_type/scope at all) — this exists purely so the
+    # modifier_table macro's used_keys fallback loop can reference/clear it
+    # without crashing on old-format entries; nothing new is meant to write it.
+    field = HiddenField("Legacy Field")
     modifier_type = StringField("Modifier Type")
     scaling = StringField("Scaling")
     scaling_x = FloatField("Scaling X", validators=[Optional()])
@@ -1280,10 +1285,14 @@ class DynamicSchemaForm(BaseSchemaForm):
                 return FieldList(StringField("Value"), min_entries=0)
 
             elif items_type == "enum":
-                # For arrays of a fixed static enum (e.g. relevant_stats) —
-                # distinct from json_district_enum/json_unit_enum/db_unit_enum,
-                # which pull their choices from json_data/Mongo at request time.
-                subfield = SelectField("Value", choices=[(v, v) for v in items_schema.get("enum", [])])
+                # For arrays of a fixed static enum (e.g. character strengths/
+                # weaknesses) — distinct from json_district_enum/json_unit_enum/
+                # db_unit_enum, which pull their choices from json_data/Mongo at
+                # request time. Values are stored lowercase/raw; labels are
+                # title-cased for display only.
+                subfield = SelectField("Value", choices=[
+                    (v, v.replace('_', ' ').title()) for v in items_schema.get("enum", [])
+                ])
                 return FieldList(subfield, min_entries=0)
 
             elif items_type == "json_district_enum":
@@ -1340,6 +1349,7 @@ class NationForm(BaseSchemaForm):
     prestige = IntegerField("Prestige", validators=[NumberRange(min=0)], default=0)
     stability = SelectField("Stability", choices=[], default="Balanced")
     infamy = IntegerField("Infamy", validators=[NumberRange(min=0)], default=0)
+    war_support = IntegerField("War Support", validators=[NumberRange(min=0, max=100)], default=100)
     temporary_karma = IntegerField("Temporary Karma", default=0)
     money = IntegerField("Money", default=0)
     

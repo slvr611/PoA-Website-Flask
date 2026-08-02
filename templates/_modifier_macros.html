@@ -136,6 +136,13 @@
                         <option value="{{ job.key }}" {% if job.key == ef_val %}selected{% endif %}>{{ job.name }}</option>
                       {% endfor %}
                     </select>
+                  {% elif extra.source == 'job_special_fields' %}
+                    <select class="form-control" name="{{ field_name }}-{{ idx }}-{{ extra.key }}" id="{{ field_name }}-{{ idx }}-{{ extra.key }}">
+                      <option value="">-- Select Field --</option>
+                      {% for jf in all_job_special_fields %}
+                        <option value="{{ jf.key }}" {% if jf.key == ef_val %}selected{% endif %}>{{ jf.name }}</option>
+                      {% endfor %}
+                    </select>
                   {% elif extra.source == 'attributes' %}
                     <select class="form-control" name="{{ field_name }}-{{ idx }}-{{ extra.key }}" id="{{ field_name }}-{{ idx }}-{{ extra.key }}">
                       <option value="">-- Select Attribute --</option>
@@ -196,7 +203,7 @@
                   {% endif %}
                 </div>
               {% endfor %}
-              {% for fkey in ['resource', 'resource_from', 'resource_to', 'job', 'attribute', 'unit_category', 'unit_stat', 'tier', 'tech_category', 'terrain', 'target_type', 'target_value', 'unit_name', 'district_key'] %}
+              {% for fkey in ['resource', 'resource_from', 'resource_to', 'job', 'field', 'attribute', 'unit_category', 'unit_stat', 'tier', 'tech_category', 'terrain', 'target_type', 'target_value', 'unit_name', 'district_key'] %}
                 {% if fkey not in used_keys %}
                   <input type="hidden" name="{{ field_name }}-{{ idx }}-{{ fkey }}" id="{{ field_name }}-{{ idx }}-{{ fkey }}" value="">
                 {% endif %}
@@ -386,6 +393,14 @@
                         <option value="{{ job.key }}" {% if job.key == cur %}selected{% endif %}>{{ job.name }}</option>
                       {% endfor %}
                     </select>
+                  {% elif extra.source == 'job_special_fields' %}
+                    {% set cur = ef.data or '' %}
+                    <select class="form-control" name="{{ ef.name }}" id="{{ ef.id }}">
+                      <option value="">-- Select Field --</option>
+                      {% for jf in all_job_special_fields %}
+                        <option value="{{ jf.key }}" {% if jf.key == cur %}selected{% endif %}>{{ jf.name }}</option>
+                      {% endfor %}
+                    </select>
                   {% elif extra.source == 'attributes' %}
                     {% set cur = ef.data or '' %}
                     <select class="form-control" name="{{ ef.name }}" id="{{ ef.id }}">
@@ -455,7 +470,7 @@
                   {% endif %}
                 </div>
               {% endfor %}
-              {% for fkey in ['resource', 'resource_from', 'resource_to', 'job', 'attribute', 'unit_category', 'unit_stat', 'tier', 'tech_category', 'terrain', 'target_type', 'target_value', 'unit_name', 'district_key'] %}
+              {% for fkey in ['resource', 'resource_from', 'resource_to', 'job', 'field', 'attribute', 'unit_category', 'unit_stat', 'tier', 'tech_category', 'terrain', 'target_type', 'target_value', 'unit_name', 'district_key'] %}
                 {% if fkey not in used_keys %}
                 <input type="hidden" name="{{ modifier_field.form[fkey].name }}" value="">
                 {% endif %}
@@ -718,6 +733,7 @@ if(!window.onScalingChange){window.onScalingChange=function(s){var row=s.closest
         {%- elif ef.source == 'terrains'        -%}{%- for x in all_terrains      -%}{%- if x.key == ef_val -%}{%- set ns2.found = x.name -%}{%- endif -%}{%- endfor -%}
         {%- elif ef.source == 'attributes'      -%}{%- for x in all_attributes    -%}{%- if x.key == ef_val -%}{%- set ns2.found = x.name -%}{%- endif -%}{%- endfor -%}
         {%- elif ef.source == 'jobs'            -%}{%- for x in all_jobs          -%}{%- if x.key == ef_val -%}{%- set ns2.found = x.name -%}{%- endif -%}{%- endfor -%}
+        {%- elif ef.source == 'job_special_fields' -%}{%- for x in all_job_special_fields -%}{%- if x.key == ef_val -%}{%- set ns2.found = x.name -%}{%- endif -%}{%- endfor -%}
         {%- elif ef.source == 'unit_categories' -%}{%- for x in all_unit_categories -%}{%- if x.key == ef_val -%}{%- set ns2.found = x.name -%}{%- endif -%}{%- endfor -%}
         {%- elif ef.source == 'unit_stats'      -%}{%- for x in all_unit_stats    -%}{%- if x.key == ef_val -%}{%- set ns2.found = x.name -%}{%- endif -%}{%- endfor -%}
         {%- elif ef.source == 'progress_tiers'  -%}{%- for x in all_progress_tiers -%}{%- if x.key == ef_val -%}{%- set ns2.found = x.name -%}{%- endif -%}{%- endfor -%}

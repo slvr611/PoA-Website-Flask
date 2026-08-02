@@ -386,6 +386,7 @@ const ALL_DISTRICT_DEFS = {{ all_district_defs | tojson | safe }};
 const ALL_RESOURCES = {{ all_resources | tojson | safe }};
 const ALL_MRP_DEFS = {{ all_mrp_defs | tojson | safe }};
 const ALL_JOBS = {{ all_jobs | tojson | safe }};
+const ALL_JOB_SPECIAL_FIELDS = {{ all_job_special_fields | tojson | safe }};
 const ALL_ATTRIBUTES = {{ all_attributes | tojson | safe }};
 const ALL_UNIT_CATEGORIES = {{ all_unit_categories | tojson | safe }};
 const ALL_UNIT_STATS = {{ all_unit_stats | tojson | safe }};
@@ -436,7 +437,7 @@ function buildExtraFieldsHTML(fieldName, index, modifierType, currentData) {
   // missing here (e.g. target_value) is left with no hidden fallback input,
   // so a stale value from a previously-selected modifier type can leak
   // into whatever gets submitted for the newly-selected one.
-  const ALL_EXTRA_KEYS = ['resource', 'resource_from', 'resource_to', 'job', 'attribute', 'unit_category', 'unit_stat', 'tier', 'tech_category', 'terrain', 'node_resource', 'terrain_as', 'target_type', 'target_value', 'unit_name', 'district_key'];
+  const ALL_EXTRA_KEYS = ['resource', 'resource_from', 'resource_to', 'job', 'field', 'attribute', 'unit_category', 'unit_stat', 'tier', 'tech_category', 'terrain', 'node_resource', 'terrain_as', 'target_type', 'target_value', 'unit_name', 'district_key'];
   const renderedKeys = new Set();
   let html = '';
   for (const extra of extraFields) {
@@ -467,6 +468,13 @@ function buildExtraFieldsHTML(fieldName, index, modifierType, currentData) {
       let opts = '<option value="">-- Select Job --</option>';
       for (const job of ALL_JOBS) {
         opts += `<option value="${job.key}" ${job.key === cur ? 'selected' : ''}>${job.name}</option>`;
+      }
+      html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
+        <select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+    } else if (extra.source === 'job_special_fields') {
+      let opts = '<option value="">-- Select Field --</option>';
+      for (const jf of ALL_JOB_SPECIAL_FIELDS) {
+        opts += `<option value="${jf.key}" ${jf.key === cur ? 'selected' : ''}>${jf.name}</option>`;
       }
       html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
         <select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;

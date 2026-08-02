@@ -252,6 +252,17 @@
         ],
         "applicable_to": ["nation"]
     },
+    "job_special_production": {
+        "name": "Job Special Production (Stability, etc.)",
+        "description": "Adds to a job's production of a non-resource field per assigned pop — e.g. give a job a Stability Gain/Loss Chance or Blacklash Chance. Stability Gain Chance, Stability Loss Chance, and Blacklash Chance use decimal notation (0.05 = 5%); the rest are plain numbers.",
+        "value_format": "number",
+        "field_template": "{job}_{field}_production",
+        "extra_fields": [
+            {"key": "job", "label": "Job", "source": "jobs"},
+            {"key": "field", "label": "Field", "source": "job_special_fields"}
+        ],
+        "applicable_to": ["nation"]
+    },
     "karma": {
         "name": "Karma",
         "value_format": "number",

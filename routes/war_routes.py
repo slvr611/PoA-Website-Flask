@@ -180,6 +180,27 @@ def _resolve_war_participants(
 
     return participants
 
+# Terrain fill colors for the war API's hexMap.tiles[].terrainColor — must be
+# kept in sync with static/js/hex-map.js's TERRAIN_COLORS constant, which is
+# the map editor's own source of truth for these values.
+_TERRAIN_COLORS = {
+    "plains":          "#87ff87",
+    "forest":          "#38b839",
+    "dense_forest":    "#286022",
+    "hill":            "#f38561",
+    "mountain":        "#4c4a47",
+    "river":           "#ff85d8",
+    "desert":          "#fbea4e",
+    "tundra":          "#ffffff",
+    "marsh":           "#817b26",
+    "urban":           "#808080",
+    "hazardous_land":  "#8f203b",
+    "shallow_water":   "#42e3df",
+    "deep_water":      "#2b85d5",
+    "hazardous_water": "#581224",
+    "disconnected":    "#252525",
+}
+
 _S3_MAPS_BASE = "https://poa-website-static-assets.s3.us-east-1.amazonaws.com/maps/"
 
 
@@ -353,6 +374,40 @@ def _coerce_unit_range(value):
         return value
 
 
+def _ruler_unit_docs_by_character_type():
+    """Ruler Unit-class documents in `units`, keyed by character_type.
+
+    A ruler's personal combat unit is not a per-nation assignment — it's a
+    single global unit per character_type, matched by name (e.g. the
+    "Conqueror" Ruler Unit doc is every Conqueror-type ruler's personal
+    unit). Not every character_type has one (only some grant a personal
+    combat unit); those without a matching doc simply get no unitType.
+    """
+    docs = mongo.db.units.find({"unit_class": "Ruler Unit"})
+    return {doc.get("name", ""): doc for doc in docs}
+
+
+def _ruler_unit_type_dto(unit_doc):
+    """Build a RulerUnitTypeDto from a Ruler Unit document's base stats.
+
+    Only base stats are included (no modifiers list) — nation-specific
+    bonuses for ruler units are already carried on the nation's own
+    combatModifiers.rulerUnit group, and get applied there instead."""
+    return {
+        "sourceId":            str(unit_doc["_id"]),
+        "name":                unit_doc.get("name", ""),
+        "iconUrl":             _make_absolute_url(unit_doc.get("image") or ""),
+        "baseAttack":          int(unit_doc.get("attack") or 0),
+        "baseDefense":         int(unit_doc.get("defense") or 0),
+        "baseHp":              int(unit_doc.get("hp") or 0),
+        "baseDamage":          int(unit_doc.get("damage") or 0),
+        "baseArmor":           int(unit_doc.get("armor") or 0),
+        "baseRange":           _coerce_unit_range(unit_doc.get("maximum_range")),
+        "moveSpeed":           int(unit_doc.get("speed") or 0),
+        "baseRetaliationDamage": int(unit_doc.get("retaliation_damage") or 0),
+    }
+
+
 def _unit_types_for_nation(nation, nation_id_str):
     """Build UnitTypeDto list for a nation (own units + patron mercenaries)."""
     unit_types = []
@@ -498,6 +553,15 @@ def _build_hex_map_data():
     cfg = mongo.db.global_modifiers.find_one({"name": "hex_map_config"}) or {}
     tiles_raw = get_all_tiles()
 
+    city_icons = (mongo.db.global_modifiers.find_one({"name": "city_type_images"}) or {}).get("images", {}) or {}
+    district_icons = {
+        d["key"]: d["image"]
+        for d in mongo.db.district_defs.find({"image": {"$exists": True, "$ne": ""}}, {"key": 1, "image": 1, "_id": 0})
+    }
+    # Wonders have no per-item image field — every wonder tile shares the one
+    # global default icon (the same fallback map.html's own viewer uses).
+    wonder_icon = (mongo.db.global_modifiers.find_one({"name": "wonder_default_image"}) or {}).get("url", "")
+
     tiles = []
     for t in tiles_raw:
         entry = {"q": t.get("q"), "r": t.get("r")}
@@ -505,10 +569,35 @@ def _build_hex_map_data():
             val = t.get(field)
             if val is not None and val != "" and val is not False:
                 entry[field] = val
-        for obj_field in ("city", "district", "wonder"):
-            obj = t.get(obj_field)
-            if obj and isinstance(obj, dict) and obj.get("id"):
-                entry[obj_field] = {"id": obj["id"], "name": obj.get("name", ""), "type": obj.get("type", "")}
+        terrain = t.get("terrain")
+        if terrain:
+            entry["terrainColor"] = _TERRAIN_COLORS.get(terrain, "#555555")
+
+        city = t.get("city")
+        if city and isinstance(city, dict) and city.get("id"):
+            icon = city_icons.get(city.get("type", ""), "")
+            entry["city"] = {
+                "id": city["id"], "name": city.get("name", ""), "type": city.get("type", ""),
+                **({"iconUrl": _make_absolute_url(icon)} if icon else {}),
+            }
+
+        district = t.get("district")
+        if district and isinstance(district, dict) and district.get("id"):
+            icon = district_icons.get(district.get("def_key", ""), "")
+            entry["district"] = {
+                "id": district["id"],
+                "name": district.get("display_name") or district.get("name", ""),
+                "type": district.get("type", ""),
+                **({"iconUrl": _make_absolute_url(icon)} if icon else {}),
+            }
+
+        wonder = t.get("wonder")
+        if wonder and isinstance(wonder, dict) and wonder.get("id"):
+            entry["wonder"] = {
+                "id": wonder["id"], "name": wonder.get("name", ""), "type": wonder.get("type", ""),
+                **({"iconUrl": _make_absolute_url(wonder_icon)} if wonder_icon else {}),
+            }
+
         tiles.append(entry)
 
     return {
@@ -528,6 +617,7 @@ def _build_war_payload(war_id_strings):
     nations_dto = []
     rulers_dto = []
     unit_types_dto = []
+    ruler_unit_docs = _ruler_unit_docs_by_character_type()
 
     for war_idx, war_id_str in enumerate(war_id_strings):
         try:
@@ -584,16 +674,20 @@ def _build_war_payload(war_id_strings):
             rulers = list(
                 mongo.db.characters.find(
                     {"ruling_nation_org": nation_id_str},
-                    {"name": 1, "strategy": 1},
+                    {"name": 1, "strategy": 1, "character_type": 1},
                 )
             )
             for ruler in rulers:
-                rulers_dto.append({
+                ruler_dto = {
                     "nationId": nation_id_str,
                     "name": ruler.get("name", ""),
                     "initiative": int(ruler.get("strategy") or 0),
                     "sourceId": str(ruler["_id"]),
-                })
+                }
+                ruler_unit_doc = ruler_unit_docs.get(ruler.get("character_type", ""))
+                if ruler_unit_doc:
+                    ruler_dto["unitType"] = _ruler_unit_type_dto(ruler_unit_doc)
+                rulers_dto.append(ruler_dto)
 
             unit_types_dto.extend(_unit_types_for_nation(nation, nation_id_str))
 

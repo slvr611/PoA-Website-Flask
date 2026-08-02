@@ -359,6 +359,12 @@
         "description": "The nation's current level of infamy",
         "default": 0
       },
+      "war_support": {
+        "bsonType": "number",
+        "label": "War Support",
+        "description": "The nation's public support for war, from 0 to 100. Drops each session the nation is at war (more for fighting offensively than defensively) and recovers at peace.",
+        "default": 100
+      },
       "diplomatic_check_modifier": {
         "bsonType": "number",
         "label": "Diplomatic Check Modifier",

@@ -572,8 +572,13 @@ RULER_SUBTYPES = {
 _RULER_TYPES = list(RULER_TYPE_STATS.keys())
 
 
-def _pick_succession_title(succession_type, previous_leader):
-    """Return a title key based on succession type, or None if nothing is available."""
+def _pick_succession_titles(succession_type, previous_leader):
+    """Return a list of title keys based on succession type (possibly empty).
+
+    - Elected: one random tier-2 title and one random tier-1 title.
+    - Strength: two random (distinct) tier-3 titles.
+    - Inherited: the tier-1 version of every title the previous leader had.
+    """
     positive_titles = json_data.get("positive_titles", {})
     positive_only = {k: v for k, v in positive_titles.items() if v.get("type") == "positive"}
     keys_ordered = list(positive_only.keys())
@@ -583,24 +588,38 @@ def _pick_succession_title(succession_type, previous_leader):
     title_to_line = {k: line for line in title_lines for k in line}
 
     tier1 = [k for k, v in positive_only.items() if v.get("tier") == 1]
+    tier2 = [k for k, v in positive_only.items() if v.get("tier") == 2]
     tier3 = [k for k, v in positive_only.items() if v.get("tier") == 3]
 
     if succession_type == "Elected":
-        return random.choice(tier1) if tier1 else None
+        titles = []
+        if tier2:
+            titles.append(random.choice(tier2))
+        if tier1:
+            titles.append(random.choice(tier1))
+        return titles
 
     if succession_type == "Strength":
-        return random.choice(tier3) if tier3 else None
+        return random.sample(tier3, min(2, len(tier3))) if tier3 else []
 
-    # Inherited: use previous leader's title line if available
+    # Inherited: tier-1 version of every title the previous leader had,
+    # deduplicated by line (a leader can't hold two titles from the same line).
     if previous_leader:
-        prev_titles = previous_leader.get("positive_titles", [])
-        inherited_line_title = next(
-            (t for t in prev_titles if t in title_to_line), None
-        )
-        if inherited_line_title:
-            return title_to_line[inherited_line_title][0]  # tier-1 of that line
+        titles = []
+        seen_lines = set()
+        for t in previous_leader.get("positive_titles", []):
+            line = title_to_line.get(t)
+            if not line:
+                continue
+            line_key = line[0]
+            if line_key in seen_lines:
+                continue
+            seen_lines.add(line_key)
+            titles.append(line[0])  # tier-1 of that line
+        if titles:
+            return titles
 
-    return random.choice(tier1) if tier1 else None
+    return [random.choice(tier1)] if tier1 else []
 
 
 def generate_ai_character(org, org_schema, character_schema, previous_leader=None):
@@ -649,7 +668,7 @@ def generate_ai_character(org, org_schema, character_schema, previous_leader=Non
             ruler_culture = str(pop_selected["culture"]) if pop_selected.get("culture") else ruler_culture
             ruler_religion = str(pop_selected["religion"]) if pop_selected.get("religion") else ruler_religion
 
-    title = _pick_succession_title(succession_type, previous_leader)
+    titles = _pick_succession_titles(succession_type, previous_leader)
 
     char_props = character_schema.get("properties", {})
     positive_quirk_options = [q for q in char_props.get("positive_quirk", {}).get("enum", []) if q != "None"]
@@ -684,7 +703,7 @@ def generate_ai_character(org, org_schema, character_schema, previous_leader=Non
         "culture": ruler_culture,
         "religion": ruler_religion,
         "random_stats": 0,
-        "positive_titles": [title] if title else [],
+        "positive_titles": titles,
         "negative_titles": [],
         "positive_quirk": positive_quirk,
         "negative_quirk": negative_quirk,
@@ -1342,6 +1361,45 @@ def nation_infamy_decay_tick(old_nation, new_nation, schema):
 
     decay = max(min(math.floor((infamy / 2) / 5) * 5, 20), 5)
     new_nation["infamy"] = max(0, infamy - decay)
+    return ""
+
+def nation_war_support_tick(old_nation, new_nation, schema):
+    """War support drops each session the nation is actively at war — more
+    for fighting offensively (-20) than defensively (-10); both apply and
+    stack if the nation is doing both at once in different wars — and
+    recovers at peace (+10, capped at 100). Same live-war liveness check as
+    nation_infamy_decay_tick (session_declared/session_ended against the
+    current session), just checked for both stances instead of only
+    Attacker."""
+    war_support = int(old_nation.get("war_support", 100))
+
+    global_modifiers = mongo.db["global_modifiers"].find_one({"name": "global_modifiers"})
+    current_session = global_modifiers.get("session_counter", 0) if global_modifiers else 0
+
+    nation_id_str = str(old_nation.get("_id", ""))
+    is_offensive = False
+    is_defensive = False
+    links = mongo.db.war_links.find({"participant": nation_id_str, "stance": {"$in": ["Attacker", "Defender"]}})
+    for link in links:
+        war = mongo.db.wars.find_one({"_id": ObjectId(link["war"])}) if link.get("war") else None
+        if not war:
+            continue
+        session_declared = war.get("session_declared", 0)
+        session_ended = war.get("session_ended", None)
+        if session_declared <= current_session and (session_ended is None or session_ended >= current_session):
+            if link.get("stance") == "Attacker":
+                is_offensive = True
+            elif link.get("stance") == "Defender":
+                is_defensive = True
+
+    if is_offensive:
+        war_support -= 20
+    if is_defensive:
+        war_support -= 10
+    if not is_offensive and not is_defensive:
+        war_support += 10
+
+    new_nation["war_support"] = max(0, min(100, war_support))
     return ""
 
 def nation_infamy_consequences_tick(old_nation, new_nation, schema):
@@ -2932,6 +2990,7 @@ NATION_TICK_FUNCTIONS = {
     "Nation Tech Tick": nation_tech_tick,
     "Nation Update Rolling Karma Tick": update_rolling_karma,
     "Nation Infamy Decay Tick": nation_infamy_decay_tick,
+    "Nation War Support Tick": nation_war_support_tick,
     "Nation Infamy Consequences Tick": nation_infamy_consequences_tick,
     "Nation Prestige Gain Tick": nation_prestige_gain_tick,
     "Nation Civil War Tick": nation_civil_war_tick,

@@ -11,7 +11,7 @@ district_def_routes = Blueprint("district_def_routes", __name__)
 
 _RESOURCE_KEYS = ["money", "food", "wood", "stone", "mounts", "magic", "bronze", "iron"]
 _UPKEEP_KEYS = _RESOURCE_KEYS + ["research"]
-_ALL_EXTRA_KEYS = ["resource", "resource_from", "resource_to", "job", "attribute", "unit_category", "unit_stat", "tier", "tech_category", "terrain"]
+_ALL_EXTRA_KEYS = ["resource", "resource_from", "resource_to", "job", "field", "attribute", "unit_category", "unit_stat", "tier", "tech_category", "terrain"]
 
 
 def _all_categories():

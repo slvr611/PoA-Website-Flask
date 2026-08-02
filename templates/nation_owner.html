@@ -281,6 +281,7 @@
 						<dt>{{ schema.properties.stability_gain_chance.label }}</dt><dd>{{ (nation.stability_gain_chance * 100)|int }}%</dd>
 						<dt>{{ schema.properties.stability_loss_chance.label }}</dt><dd>{{ (nation.stability_loss_chance * 100)|int }}%</dd>
 						<dt>{{ form.infamy.label.text }}</dt><dd>{{ form.infamy(class="form-control") }}</dd>
+						<dt>{{ form.war_support.label.text }}</dt><dd>{{ form.war_support(class="form-control") }}</dd>
 						<dt>{{ form.prosperity_role.label.text }}</dt><dd>{{ form.prosperity_role(class="form-control") }}</dd>
 						<dt>{{ form.temporary_karma.label.text }}</dt><dd>{{ form.temporary_karma(class="form-control") }}</dd>
 						{% if nation.nomadic > 0 %}
@@ -303,6 +304,7 @@
 					{{ kv(schema.properties.stability_loss_chance.label, pfbd_stab_pct(nation.stability_loss_chance, nation.get("stability_loss_chance_cap", 3), pn.get("stability_loss_chance"), pn.get("stability_loss_chance_cap", 3), breakdowns["stability_loss_chance"], pbd.get("stability_loss_chance", []), "Stability Loss Chance", breakdowns.get("stability_loss_chance_cap", []), pbd.get("stability_loss_chance_cap", []))) }}
 					{{ kv(schema.properties.stability_loss_chance_on_leader_death.label, pf_pct(nation.stability_loss_chance_on_leader_death, pn.get("stability_loss_chance_on_leader_death"))) }}
 					{{ kv(schema.properties.infamy.label, pf(nation.infamy, pn.get("infamy"))) }}
+					{{ kv(schema.properties.war_support.label, pf(nation.get("war_support", 100), pn.get("war_support"))) }}
 					{{ kv(schema.properties.diplomatic_check_modifier.label, pf(nation.diplomatic_check_modifier, pn.get("diplomatic_check_modifier"))) }}
 					{{ kv(schema.properties.prosperity_role.label, pf(nation.get("prosperity_role", "None"), pn.get("prosperity_role"))) }}
 					<dt>{{ schema.properties.karma.label }}</dt>
@@ -2146,6 +2148,7 @@
 			const ALL_RESOURCES = {{ all_resources | tojson | safe }};
 			const ALL_MRP_DEFS = {{ all_mrp_defs | tojson | safe }};
 			const ALL_JOBS = {{ all_jobs | tojson | safe }};
+			const ALL_JOB_SPECIAL_FIELDS = {{ all_job_special_fields | tojson | safe }};
 			const ALL_ATTRIBUTES = {{ all_attributes | tojson | safe }};
 			const ALL_UNIT_CATEGORIES = {{ all_unit_categories | tojson | safe }};
 			const ALL_UNIT_STATS = {{ all_unit_stats | tojson | safe }};
@@ -2451,6 +2454,10 @@
 					} else if (extra.source === 'jobs') {
 						let opts = '<option value="">-- Select Job --</option>';
 						for (const job of ALL_JOBS) opts += `<option value="${job.key}" ${job.key === cur ? 'selected' : ''}>${job.name}</option>`;
+						html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label><select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+					} else if (extra.source === 'job_special_fields') {
+						let opts = '<option value="">-- Select Field --</option>';
+						for (const jf of ALL_JOB_SPECIAL_FIELDS) opts += `<option value="${jf.key}" ${jf.key === cur ? 'selected' : ''}>${jf.name}</option>`;
 						html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label><select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
 					} else if (extra.source === 'attributes') {
 						let opts = '<option value="">-- Select Attribute --</option>';
