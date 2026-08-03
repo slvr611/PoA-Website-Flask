@@ -215,6 +215,11 @@ def get_nation_connected_tiles(nation_name):
 def route_cost_reduction(tile):
     """Movement-cost reduction granted by a route on this tile.
     Tier 3 routes reduce entry cost by 2; tier 2 routes by 1 (minimum cost 1).
+
+    Mirrored (not shared — see compute_admin_range_out_of_range's docstring)
+    in static/js/hex-map.js's _computeAllAdminRanges, which inlines the same
+    tier-3/-2 reduction for its own client-side admin-range Dijkstra. Keep
+    both in sync; tests/test_admin_range_parity.py asserts they match.
     """
     tier = ((tile or {}).get("route") or {}).get("tier")
     if tier == 3:
@@ -235,6 +240,18 @@ def compute_admin_range_out_of_range(nation_name, admin, nomadic=False, all_tile
     "Entering a tile is sufficient" rule: a tile T is in-range when the cost to
     reach T's entrance — dist[T] minus T's own movement cost — is ≤ limit.
     Building tiles themselves are always in range.
+
+    This is the real calculation engine's source of truth — field_calculations.py
+    calls this (via effective_territory_types) to determine which tiles actually
+    produce resources. static/js/hex-map.js's _computeAllAdminRanges is a second,
+    independent implementation of this exact algorithm (building/capital source
+    selection, portal jumps, route-tier reduction, the same in-range boundary
+    condition) used for the map's live out-of-range preview while painting — it
+    can't literally share this function since it runs client-side for
+    responsiveness, but it must stay behaviorally identical. Both already read
+    terrain movement costs from terrains.json (this function directly; the JS
+    side via /api/hex-map/config, which serves the same file).
+    tests/test_admin_range_parity.py guards against the two drifting apart.
     """
     IMPASSABLE = 9999
     limit = admin * (8 if nomadic else 4)

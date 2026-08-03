@@ -913,12 +913,25 @@ def collect_modifiers(target, target_data_type=None):
     if not target_data_type:
         return modifiers
     scope_defs = json_data.get("scope_definitions", {})
-    entity_type = "nation" if target_data_type == "nation_jobs" else target_data_type
     def _keep(m):
         scope = m.get("scope", "")
         if not scope:
             return True
-        return scope_defs.get(scope, {}).get("target_type", entity_type) == entity_type
+        scope_def = scope_defs.get(scope)
+        if scope_def is None:
+            return True  # unknown scope key (e.g. renamed/removed) — fail open
+        # A scope only applies to the entity's OWN calculation if it actually
+        # resolves to itself (resolution type "direct", e.g. nation_self) —
+        # NOT merely because it shares the same target_type. nation_vassals
+        # and nation_overlord both have target_type "nation" too, but they
+        # resolve to a DIFFERENT linked nation (a vassal or an overlord), so
+        # matching on target_type alone let a nation's own nation_vassals
+        # modifier apply to itself in addition to correctly flowing to its
+        # actual vassals via collect_external_requirements — e.g. Tsetsl's
+        # own +50% compliance_loss_chance (scope nation_vassals, meant for
+        # ITS vassals) was also hitting Tsetsl itself, on top of the
+        # identical modifier correctly inherited from its overlord.
+        return scope_def.get("resolution", {}).get("type") == "direct"
     return [m for m in modifiers if _keep(m)]
 
 def collect_laws(target, schema):

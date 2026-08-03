@@ -92,6 +92,16 @@ const TERRAIN_FILL_ALPHA = 0.40;
 // Land movement costs per terrain — seeded with fallback values, overwritten by
 // loadConfig() from the server's terrains.json data (speed_cost, falling back to
 // naval_speed_cost). Terrain with no entry → impassable to the admin-range Dijkstra.
+//
+// This table (and the route-tier reduction / admin*4|8 limit formula used in
+// _computeAllAdminRanges below) mirrors helpers/hex_map_helpers.py's
+// route_cost_reduction()/compute_admin_range_out_of_range() — the real
+// calculation engine's admin-range logic. It's a separate implementation (this
+// one runs client-side for instant feedback while painting, rather than a
+// server round-trip), not literally shared code, so it must be kept
+// behaviorally identical by hand. The seed values below must match
+// terrains.json even before loadConfig()'s fetch resolves.
+// tests/test_admin_range_parity.py (Python) asserts all of this stays in sync.
 const TERRAIN_MOVE_COST = {
     plains:          2,
     urban:           1,
