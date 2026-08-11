@@ -23,7 +23,7 @@ import random
 import os
 import datetime
 
-def _queue_change(pending, data_type, item_id, change_type, before_data, after_data, reason):
+def _queue_change(pending, data_type, item_id, change_type, before_data, after_data, reason, already_calculated=False):
     """Defer a change instead of committing it immediately.
 
     Every tick function that used to call system_request_change +
@@ -31,10 +31,20 @@ def _queue_change(pending, data_type, item_id, change_type, before_data, after_d
     iterating (e.g. a character's death touching their nation, an artifact
     loss) now calls this instead, so the write only actually happens once the
     whole tick's compute phase has finished without error, as part of the
-    single all-or-nothing commit transaction at the end of tick()/era_tick().
+    commit phase at the end of tick()/era_tick() (see _commit_pending_changes).
 
-    `pending` is that transaction's accumulator list, threaded through only
-    to the specific tick functions that need it (see _PENDING_AWARE_TICK_FUNCTIONS
+    `already_calculated`: pass True when `after_data` already went through
+    calculate_all_fields during this same tick's compute phase (true for
+    every tick's main per-category loop, and for a few cross-cutting cases
+    that recalculate their source object before mutating it — see call
+    sites). Lets the commit phase skip system_approve_change's own
+    recalculation, which is by far the dominant cost there (a nation: ~8s;
+    a character: ~0.4s — measured directly against production data).
+    Defaults to False (always recalculate at commit time — the original,
+    always-safe behavior) for anything not verified to already be fresh.
+
+    `pending` is the commit-phase accumulator list, threaded through only to
+    the specific tick functions that need it (see _PENDING_AWARE_TICK_FUNCTIONS
     near the bottom of this file) — every other tick function's signature is
     untouched. If `pending` is None (e.g. a test or other caller invoking a
     tick function directly, outside of tick()/era_tick()), falls back to the
@@ -45,7 +55,7 @@ def _queue_change(pending, data_type, item_id, change_type, before_data, after_d
             before_data=before_data, after_data=after_data, reason=reason,
         )
         if change_id is not None:
-            system_approve_change(change_id)
+            system_approve_change(change_id, skip_recalculation=already_calculated)
         return change_id
     pending.append({
         "data_type": data_type,
@@ -54,68 +64,120 @@ def _queue_change(pending, data_type, item_id, change_type, before_data, after_d
         "before_data": before_data,
         "after_data": after_data,
         "reason": reason,
+        "already_calculated": already_calculated,
     })
     return None
 
 
+def _commit_one_batch(session, items, skip_propagate_ids=None):
+    """Commit a list of already-queued items inside an already-open
+    transaction on `session`. Shared by every group _commit_pending_changes
+    commits — see its docstring for the overall strategy.
+
+    `skip_propagate_ids`: forwarded to system_approve_change/propagate_updates
+    — the full set of (data_type, item_id) pairs queued anywhere in this
+    tick's `pending`, not just this batch, so a dependency cascade never
+    redundantly recalculates something that's getting its own fresh commit
+    later in the same tick regardless of which batch it's in."""
+    for i, item in enumerate(items):
+        change_id = system_request_change(
+            item["data_type"], item["item_id"], item["change_type"],
+            item["before_data"], item["after_data"], item["reason"],
+            session=session,
+        )
+        if change_id is None or not system_approve_change(
+            change_id, session=session, skip_recalculation=item.get("already_calculated", False),
+            skip_propagate_ids=skip_propagate_ids,
+        ):
+            raise RuntimeError(
+                f"Tick commit aborted: a queued {item['change_type']} on "
+                f"{item['data_type']} ({item['reason']}) could not be applied "
+                f"— rolling back this batch so nothing in it is left partially applied."
+            )
+        # propagate_updates' recursive recalculation cascade can accumulate a
+        # lot of temporary objects across a long batch — periodic GC here
+        # mirrors what the old per-category commit loops already did.
+        if i % 20 == 19:
+            gc.collect()
+
+
+# Even with already_calculated=True skipping recalculation, each item still
+# costs several sequential network round trips to Atlas (change insert,
+# change approve, target update, dependency-lookup queries) — measured at
+# roughly 0.5-0.7s/item against production. A single category can have 200+
+# items (nations) or 400+ (characters), which alone exceeds MongoDB's 60s
+# transaction limit regardless of recalculation cost. Chunking bounds the
+# worst case; see _commit_pending_changes's docstring for the trade-off.
+_COMMIT_CHUNK_SIZE = 30
+
+
+def _chunked(items, size):
+    for i in range(0, len(items), size):
+        yield items[i:i + size]
+
+
 def _commit_pending_changes(pending):
-    """Apply every change queued via _queue_change as a single all-or-nothing
-    MongoDB transaction (requires a replica-set deployment — confirmed
-    supported on this project's Atlas cluster).
+    """Apply every change queued via _queue_change, grouped into one
+    transaction per CHUNK of up to _COMMIT_CHUNK_SIZE items of the same
+    data type (nations, characters, artifacts, ...) rather than a single
+    transaction for the whole tick, or even for a whole data type.
 
-    Each item is still committed individually — its own
-    system_request_change + system_approve_change call — so every entity
-    still gets its own normal "Tick Update for X" change-history record
-    exactly as before; only the *timing and atomicity* changed; the DB
-    shape of what gets written did not. If system_approve_change fails or
-    is blocked for ANY item (a conflicting concurrent edit, a name
-    collision, a DB error), this raises to abort the whole transaction —
-    deliberately stricter than the old per-item-immediate-commit behavior,
-    which silently skipped a blocked item and kept going. That silent
-    partial-skip is exactly the kind of inconsistency this whole change
-    exists to eliminate.
+    A single all-or-nothing transaction for an entire full tick was tried
+    first and doesn't hold up at real data volume: system_approve_change's
+    recalculation step alone measured ~8s per nation, and a full tick can
+    queue 200+ nations plus 400+ characters — many times over MongoDB's
+    default 60-second transaction limit, which aborted the transaction
+    outright (NoSuchTransaction/TransientTransactionError) partway through
+    real runs. `already_calculated` (see _queue_change) removes most of that
+    per-item cost for the categories that matter most — but even with it,
+    each item still costs several sequential DB round trips (~0.5-0.7s/item
+    measured live), so one transaction per whole category (e.g. all 200+
+    nations at once) *still* blew the 60s limit in practice. Chunking each
+    category into fixed-size groups, each its own transaction, is what
+    actually keeps every transaction comfortably under the limit regardless
+    of how large a category grows.
 
-    Returns the current session_counter (read fresh, after the transaction
+    Trade-off this accepts: atomicity is now per chunk, not per data type or
+    per tick. If one nations chunk commits successfully and a later nations
+    chunk (or a different data type) then fails, the earlier chunk's changes
+    stay committed — they are NOT rolled back. Each chunk is still fully
+    all-or-nothing internally, and a failure still stops every later chunk
+    from starting, so nothing is silently skipped — but a tick that fails
+    partway through no longer guarantees a clean pre-tick state, only that
+    no chunk was left half-applied. Each queued item is still committed
+    individually — its own system_request_change + system_approve_change
+    call — so every entity still gets its own normal "Tick Update for X"
+    change-history record.
+
+    Each chunk uses session.with_transaction(), pymongo's own recommended
+    pattern for transactions — it automatically retries the whole chunk on
+    a TransientTransactionError (e.g. a brief replica-set election), which
+    a plain start_transaction()/commit_transaction() pair does not.
+
+    Returns the current session_counter (read fresh, after every chunk
     commits) for callers that need it afterward, e.g. archive_old_changes
     and snapshot_current_map — both must see the POST-commit value, since a
-    queued "Tick Session Number" change may have just incremented it.
+    queued "Tick Session Number" change may have just incremented it."""
+    if pending:
+        by_type = {}
+        order = []
+        for item in pending:
+            dt = item["data_type"]
+            if dt not in by_type:
+                by_type[dt] = []
+                order.append(dt)
+            by_type[dt].append(item)
 
-    Known limitation: _calculate_and_attach_fields (called inside
-    system_approve_change for every item) does its own non-session-aware
-    reads of other live documents (e.g. vassal tribute reads a vassal's
-    live pop_count/modifiers/resource_production). Within this transaction,
-    those reads see the pre-transaction snapshot of other same-batch
-    entities, not each other's queued-but-not-yet-committed values — a
-    calculated field that cross-references another entity updated in the
-    same tick may be one tick stale rather than perfectly fresh within the
-    same batch. This doesn't weaken the all-or-nothing guarantee itself,
-    and self-corrects on the next tick; deliberately accepted rather than
-    threading `session` through the entire calculation engine."""
-    if not pending:
-        global_modifiers = mongo.db["global_modifiers"].find_one({"name": "global_modifiers"})
-        return global_modifiers.get("session_counter", 0) if global_modifiers else 0
+        # Every item queued anywhere in this tick, not just the chunk
+        # currently committing — see _commit_one_batch's docstring for why.
+        skip_propagate_ids = {(item["data_type"], str(item["item_id"])) for item in pending}
 
-    with mongo.cx.start_session() as session:
-        with session.start_transaction():
-            for i, item in enumerate(pending):
-                change_id = system_request_change(
-                    item["data_type"], item["item_id"], item["change_type"],
-                    item["before_data"], item["after_data"], item["reason"],
-                    session=session,
-                )
-                if change_id is None or not system_approve_change(change_id, session=session):
-                    raise RuntimeError(
-                        f"Tick commit aborted: a queued {item['change_type']} on "
-                        f"{item['data_type']} ({item['reason']}) could not be applied "
-                        f"— rolling back everything else queued in this tick so "
-                        f"nothing is left partially applied."
+        for dt in order:
+            for chunk in _chunked(by_type[dt], _COMMIT_CHUNK_SIZE):
+                with mongo.cx.start_session() as session:
+                    session.with_transaction(
+                        lambda s, _items=chunk: _commit_one_batch(s, _items, skip_propagate_ids=skip_propagate_ids)
                     )
-                # propagate_updates' recursive recalculation cascade can
-                # accumulate a lot of temporary objects across a long tick —
-                # periodic GC here mirrors what the old per-category commit
-                # loops already did.
-                if i % 20 == 19:
-                    gc.collect()
 
     global_modifiers = mongo.db["global_modifiers"].find_one({"name": "global_modifiers"})
     return global_modifiers.get("session_counter", 0) if global_modifiers else 0
@@ -422,7 +484,8 @@ def tick(form_data):
             change_type="Update",
             before_data=old_target,
             after_data=new_target,
-            reason="Tick Update for Tick Session Number"
+            reason="Tick Update for Tick Session Number",
+            already_calculated=True,
         )
 
     if collect_character_data:
@@ -434,7 +497,8 @@ def tick(form_data):
                 change_type="Update",
                 before_data=old_characters[i],
                 after_data=new_characters[i],
-                reason="Tick Update for " + old_characters[i]["name"]
+                reason="Tick Update for " + old_characters[i]["name"],
+                already_calculated=True,
             )
 
     if collect_artifact_data:
@@ -446,7 +510,8 @@ def tick(form_data):
                 change_type="Update",
                 before_data=old_artifacts[i],
                 after_data=new_artifacts[i],
-                reason="Tick Update for " + old_artifacts[i]["name"]
+                reason="Tick Update for " + old_artifacts[i]["name"],
+                already_calculated=True,
             )
 
     if collect_merchant_data:
@@ -458,7 +523,8 @@ def tick(form_data):
                 change_type="Update",
                 before_data=old_merchants[i],
                 after_data=new_merchants[i],
-                reason="Tick Update for " + old_merchants[i]["name"]
+                reason="Tick Update for " + old_merchants[i]["name"],
+                already_calculated=True,
             )
 
     if collect_mercenary_data:
@@ -470,7 +536,8 @@ def tick(form_data):
                 change_type="Update",
                 before_data=old_mercenaries[i],
                 after_data=new_mercenaries[i],
-                reason="Tick Update for " + old_mercenaries[i]["name"]
+                reason="Tick Update for " + old_mercenaries[i]["name"],
+                already_calculated=True,
             )
 
     if collect_faction_data:
@@ -482,7 +549,8 @@ def tick(form_data):
                 change_type="Update",
                 before_data=old_factions[i],
                 after_data=new_factions[i],
-                reason="Tick Update for " + old_factions[i]["name"]
+                reason="Tick Update for " + old_factions[i]["name"],
+                already_calculated=True,
             )
 
     if collect_market_data:
@@ -494,7 +562,8 @@ def tick(form_data):
                 change_type="Update",
                 before_data=old_markets[i],
                 after_data=new_markets[i],
-                reason="Tick Update for " + old_markets[i]["name"]
+                reason="Tick Update for " + old_markets[i]["name"],
+                already_calculated=True,
             )
 
     if collect_nation_data:
@@ -506,7 +575,8 @@ def tick(form_data):
                 change_type="Update",
                 before_data=old_nations[i],
                 after_data=new_nations[i],
-                reason="Tick Update for " + old_nations[i]["name"]
+                reason="Tick Update for " + old_nations[i]["name"],
+                already_calculated=True,
             )
 
     # ── Commit phase ─────────────────────────────────────────────────────
@@ -1112,7 +1182,8 @@ def character_heal_then_death_tick(old_character, new_character, schema, pending
                     change_type="Update",
                     before_data=old_nation,
                     after_data=new_nation,
-                    reason="Death of " + old_character.get('name', 'Unknown') + " has caused an update for " + old_nation.get('name', 'Unknown')
+                    reason="Death of " + old_character.get('name', 'Unknown') + " has caused an update for " + old_nation.get('name', 'Unknown'),
+                    already_calculated=True,
                 )
 
     return result
@@ -3047,6 +3118,7 @@ def era_character_aging_tick(pending=None):
             before_data=character,
             after_data=new_character,
             reason=f"Era Tick: aged {age_increase} session(s)",
+            already_calculated=True,
         )
 
     return result
@@ -3320,6 +3392,7 @@ def era_tick(form_data):
                 before_data=old_nations[i],
                 after_data=new_nations[i],
                 reason="Era Tick Update for " + old_nations[i]["name"],
+                already_calculated=True,
             )
 
     collect_character_data = any(
@@ -3353,6 +3426,7 @@ def era_tick(form_data):
                 before_data=old_characters[i],
                 after_data=new_characters[i],
                 reason="Era Tick Update for " + old_characters[i].get("name", str(old_characters[i]["_id"])),
+                already_calculated=True,
             )
 
     for label, fn in ERA_GENERAL_TICK_FUNCTIONS.items():

@@ -43,7 +43,17 @@ class TestQueueChange:
         assert pending == [{
             "data_type": "nations", "item_id": "abc", "change_type": "Update",
             "before_data": {"a": 1}, "after_data": {"a": 2}, "reason": "test",
+            "already_calculated": False,
         }]
+
+    def test_appends_already_calculated_flag_when_set(self):
+        pending = []
+        th._queue_change(
+            pending, data_type="nations", item_id="abc", change_type="Update",
+            before_data={"a": 1}, after_data={"a": 2}, reason="test",
+            already_calculated=True,
+        )
+        assert pending[0]["already_calculated"] is True
 
     def test_pending_none_falls_back_to_immediate_commit(self):
         with patch("helpers.tick_helpers.system_request_change", return_value="change123") as req, \
@@ -56,8 +66,18 @@ class TestQueueChange:
             data_type="nations", item_id="abc", change_type="Update",
             before_data={"a": 1}, after_data={"a": 2}, reason="test",
         )
-        approve.assert_called_once_with("change123")
+        approve.assert_called_once_with("change123", skip_recalculation=False)
         assert result == "change123"
+
+    def test_pending_none_forwards_already_calculated_as_skip_recalculation(self):
+        with patch("helpers.tick_helpers.system_request_change", return_value="change123"), \
+             patch("helpers.tick_helpers.system_approve_change") as approve:
+            th._queue_change(
+                None, data_type="nations", item_id="abc", change_type="Update",
+                before_data={"a": 1}, after_data={"a": 2}, reason="test",
+                already_calculated=True,
+            )
+        approve.assert_called_once_with("change123", skip_recalculation=True)
 
     def test_pending_none_and_no_requester_skips_approve(self):
         """system_request_change returns None when the "System" player is

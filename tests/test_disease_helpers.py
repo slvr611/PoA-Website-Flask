@@ -745,7 +745,7 @@ class TestDiseaseCureTick:
 
         with patch("helpers.tick_helpers.mongo", patch_disease_mongo), \
              patch("helpers.tick_helpers.system_request_change", fake_request), \
-             patch("helpers.tick_helpers.system_approve_change", lambda cid: True):
+             patch("helpers.tick_helpers.system_approve_change", lambda cid, **kwargs: True):
             result = th.disease_cure_cross_tick(nations, [dict(n) for n in nations], {})
 
         assert "+5" in result
@@ -774,7 +774,7 @@ class TestDiseaseCureTick:
 
         with patch("helpers.tick_helpers.mongo", patch_disease_mongo), \
              patch("helpers.tick_helpers.system_request_change", fake_request), \
-             patch("helpers.tick_helpers.system_approve_change", lambda cid: True):
+             patch("helpers.tick_helpers.system_approve_change", lambda cid, **kwargs: True):
             result = th.disease_cure_cross_tick(nations, new_nations, {})
 
         assert "CURE HAS BEEN DISCOVERED" in result

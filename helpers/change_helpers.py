@@ -601,12 +601,25 @@ def approve_change(change_id):
             flash("Change approval failed because the target has changed since the request was made.", "error")
     return False
 
-def system_approve_change(change_id, session=None):
+def system_approve_change(change_id, session=None, skip_recalculation=False, skip_propagate_ids=None):
     """`session`: optional pymongo ClientSession — pass through when
     committing inside a transaction (e.g. a tick's deferred commit phase).
     When set, every read/write this function (and everything it calls —
     propagate_updates, _handle_nation_rename, etc.) performs participates in
     the caller's transaction, so a failure anywhere rolls all of it back.
+
+    `skip_propagate_ids`: forwarded to propagate_updates — see its docstring.
+
+    `skip_recalculation`: skip the _calculate_and_attach_fields call (see
+    below) entirely. Only safe when the caller already knows after_data (for
+    Add) / the merged result (for Update) is fully calculated — e.g. a tick's
+    queued change, where the data already went through calculate_all_fields
+    once during the tick's compute phase, and skipping a second recompute
+    here is a large, measured performance win (recalculating a nation from
+    scratch was independently measured at ~8s; a character ~0.4s — the
+    dominant cost in the commit phase by two orders of magnitude). Defaults
+    to False (today's original behavior: always recalculate) for every
+    caller that isn't explicitly opting in.
 
     Known gap: _calculate_and_attach_fields → calculate_all_fields does its
     own non-session-aware reads of other live documents (e.g. vassal tribute
@@ -639,7 +652,8 @@ def system_approve_change(change_id, session=None):
                   f"already exists in {change['target_collection']}.")
             return False
 
-        after_data = _calculate_and_attach_fields(change["target_collection"], after_data)
+        if not skip_recalculation:
+            after_data = _calculate_and_attach_fields(change["target_collection"], after_data)
 
         # If after_data already carries an _id (system_request_change stamped
         # one on from a caller-supplied item_id), insert_one respects it
@@ -663,6 +677,7 @@ def system_approve_change(change_id, session=None):
             changed_object=after_data,
             reason=f"Dependency update from change #{change_id}",
             session=session,
+            skip_ids=skip_propagate_ids,
         )
         return True
     else:
@@ -687,7 +702,8 @@ def system_approve_change(change_id, session=None):
                               f"already exists in {change['target_collection']}.")
                         return False
 
-                merged = _calculate_and_attach_fields(change["target_collection"], merged)
+                if not skip_recalculation:
+                    merged = _calculate_and_attach_fields(change["target_collection"], merged)
                 target_collection.update_one({"_id": change["target"]}, {"$set": merged}, session=session)
                 if change["target_collection"] == "nations":
                     _handle_nation_rename(change["target"], existing.get("name", ""), merged.get("name", ""), session=session)
@@ -712,6 +728,7 @@ def system_approve_change(change_id, session=None):
                     changed_object=merged,
                     reason=f"Dependency update from change #{change_id}",
                     session=session,
+                    skip_ids=skip_propagate_ids,
                 )
             else:
                 propagate_updates(
@@ -720,6 +737,7 @@ def system_approve_change(change_id, session=None):
                     changed_object={},
                     reason=f"Dependency update from change #{change_id}",
                     session=session,
+                    skip_ids=skip_propagate_ids,
                 )
             return True
         print(f"system_approve_change blocked: change #{change_id} on "
@@ -1377,26 +1395,39 @@ def recalculate_object(data_type, object_ref, session=None):
 
 _MAX_PROPAGATION_DEPTH = 3
 
-def propagate_updates(changed_data_type, changed_object_id, changed_object, reason="Dependency update", _depth=0, session=None):
+def propagate_updates(changed_data_type, changed_object_id, changed_object, reason="Dependency update", _depth=0, session=None, skip_ids=None):
     """Propagate updates to all dependent objects.
 
     Depth-limited to _MAX_PROPAGATION_DEPTH to prevent runaway recursion
     on long vassal chains or cyclic dependency graphs from consuming all memory.
 
     `session`: optional pymongo ClientSession, threaded through every read/
-    write here and in the recursive calls — see system_approve_change."""
+    write here and in the recursive calls — see system_approve_change.
+
+    `skip_ids`: optional set of (data_type, str(object_id)) tuples to skip
+    recalculating entirely. recalculate_object's own cost is dominated by a
+    full calculate_all_fields recompute (measured at ~8s for a nation), so
+    this cascade is expensive for any changed object with dependents — and
+    largely redundant when the dependent is *also* about to be committed in
+    the same batch (a tick's per-category commit phase, see
+    _commit_one_batch in tick_helpers.py), since it'll get its own fresh
+    recalculation from that commit regardless of what this cascade would
+    have done to it."""
     if _depth >= _MAX_PROPAGATION_DEPTH:
         return
     dependent_objects = get_dependent_objects(changed_data_type, changed_object_id, changed_object, session=session)
 
     for dep in dependent_objects:
         try:
+            dep_id = dep["object_id"]["_id"]
+            if skip_ids and (dep["data_type"], str(dep_id)) in skip_ids:
+                continue
             db = mongo.db[dep["data_type"]]
-            old_object = db.find_one({"_id": dep["object_id"]["_id"]}, session=session)
+            old_object = db.find_one({"_id": dep_id}, session=session)
             if not old_object:
                 continue
 
-            propagate_updates(dep["data_type"], dep["object_id"]["_id"], old_object, reason, _depth=_depth + 1, session=session)
-            recalculate_object(dep["data_type"], dep["object_id"]["_id"], session=session)
+            propagate_updates(dep["data_type"], dep_id, old_object, reason, _depth=_depth + 1, session=session, skip_ids=skip_ids)
+            recalculate_object(dep["data_type"], dep_id, session=session)
         except Exception as e:
             print(f"Error updating {dep['data_type']} {dep['object_id']}: {e}")
