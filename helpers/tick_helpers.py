@@ -149,6 +149,16 @@ def _commit_pending_changes(pending):
     call — so every entity still gets its own normal "Tick Update for X"
     change-history record.
 
+    Note: two of a tick's own queued changes can legitimately target the
+    same entity (e.g. a character death queues a cross-cutting nation
+    update, and the tick's main per-entity loop separately queues its own
+    "Tick Update for X" for that same nation) — these commit as separate,
+    sequential changes rather than being merged into one. See
+    system_approve_change's skip_recalculation bypass of
+    check_no_other_changes in change_helpers.py for why that's safe for
+    the common case, and its docstring for the known narrower trade-off
+    when both changes touch the same ID-keyed list field.
+
     Each chunk uses session.with_transaction(), pymongo's own recommended
     pattern for transactions — it automatically retries the whole chunk on
     a TransientTransactionError (e.g. a brief replica-set election), which

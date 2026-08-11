@@ -177,6 +177,147 @@ class TestCallerSuppliedAddId:
 
 
 # ---------------------------------------------------------------------------
+# system_approve_change: two tick-queued changes to the same entity
+# ---------------------------------------------------------------------------
+
+class TestSameEntityDoubleQueuedInOneTick:
+    """Production regression: a character death queues a cross-cutting
+    nation update (e.g. adds a stability-loss modifier entry) AND the same
+    tick's main per-nation loop separately queues "Tick Update for X" for
+    that same nation, from an independent, earlier-taken snapshot. Once the
+    first commits, the second's before_data no longer matches the live
+    document (it doesn't know about the modifier the first one added) —
+    check_no_other_changes correctly flags that as a divergence, but it's
+    expected same-tick sequencing, not an outside edit, and previously
+    aborted the whole batch with "could not be applied"."""
+
+    def test_second_update_is_not_blocked_by_the_first_ones_side_effect(self, mock_mongo, fake_category_data):
+        mock_mongo.db.players.insert_one({"name": "System"})
+        nation_id = ObjectId()
+        mock_mongo.db.nations.insert_one({"_id": nation_id, "name": "Test Nation", "money": 100, "modifiers": []})
+        original = mock_mongo.db.nations.find_one({"_id": nation_id})
+
+        before1 = dict(original)
+        after1 = dict(original)
+        after1["modifiers"] = [{"_id": "death-modifier", "name": "Stability loss", "value": -1}]
+
+        before2 = dict(original)  # stale — taken before item 1 committed
+        after2 = dict(original)
+        after2["money"] = 105
+
+        with patch("helpers.change_helpers.mongo", mock_mongo), \
+             patch("helpers.change_helpers.category_data", fake_category_data), \
+             patch("helpers.change_helpers._calculate_and_attach_fields", side_effect=lambda dt, d: d), \
+             patch("helpers.change_helpers.propagate_updates"):
+            cid1 = ch.system_request_change(
+                data_type="nations", item_id=nation_id, change_type="Update",
+                before_data=before1, after_data=after1, reason="Death of X caused nation update",
+            )
+            ok1 = ch.system_approve_change(cid1, skip_recalculation=True)
+
+            cid2 = ch.system_request_change(
+                data_type="nations", item_id=nation_id, change_type="Update",
+                before_data=before2, after_data=after2, reason="Tick Update for X",
+            )
+            ok2 = ch.system_approve_change(cid2, skip_recalculation=True)
+
+        assert ok1 is True
+        assert ok2 is True, "second tick-queued update to the same entity must not be blocked by the first's side effect"
+        final = mock_mongo.db.nations.find_one({"_id": nation_id})
+        assert final["modifiers"] == [{"_id": "death-modifier", "name": "Stability loss", "value": -1}]
+        assert final["money"] == 105
+
+    def test_interactive_path_without_skip_recalculation_still_blocks_on_divergence(self, mock_mongo, fake_category_data):
+        """The bypass only applies to tick-driven (skip_recalculation=True)
+        commits — the admin/interactive approval flow must keep the
+        conflict-detection safety net. Uses a plain string field (not a list)
+        so the scenario is unambiguous: the target diverges from both what
+        was requested (a rename) and what the caller last saw, with nothing
+        list-merge-shaped to complicate it."""
+        mock_mongo.db.players.insert_one({"name": "System"})
+        nation_id = ObjectId()
+        mock_mongo.db.nations.insert_one({"_id": nation_id, "name": "Original Name", "money": 100})
+        original = mock_mongo.db.nations.find_one({"_id": nation_id})
+
+        before1 = dict(original)
+        after1 = dict(original)
+        after1["name"] = "Renamed By Someone Else"
+        before2 = dict(original)  # stale — still expects "Original Name"
+        after2 = dict(original)
+        after2["name"] = "Intended New Name"
+
+        with patch("helpers.change_helpers.mongo", mock_mongo), \
+             patch("helpers.change_helpers.category_data", fake_category_data), \
+             patch("helpers.change_helpers._calculate_and_attach_fields", side_effect=lambda dt, d: d), \
+             patch("helpers.change_helpers.propagate_updates"):
+            cid1 = ch.system_request_change(
+                data_type="nations", item_id=nation_id, change_type="Update",
+                before_data=before1, after_data=after1, reason="first",
+            )
+            ch.system_approve_change(cid1, skip_recalculation=True)
+
+            cid2 = ch.system_request_change(
+                data_type="nations", item_id=nation_id, change_type="Update",
+                before_data=before2, after_data=after2, reason="second",
+            )
+            ok2 = ch.system_approve_change(cid2)  # skip_recalculation defaults to False
+
+        assert ok2 is False
+
+    def test_known_tradeoff_same_list_field_touched_by_both_is_last_write_wins(self, mock_mongo, fake_category_data):
+        """Documents a deliberate, accepted trade-off (not a desired
+        behavior to protect): if two of a tick's own queued changes to the
+        same entity BOTH genuinely modify the same ID-keyed list field with
+        different content (e.g. two different cross-cutting functions each
+        add their own modifier to the same nation in the same tick),
+        deep_merge's list-replace-when-both-sides-have-ids behavior means
+        the second one's version silently wins — the first one's addition
+        is lost, no error is raised. This is narrower than the bug this
+        fix addresses (which triggered on *any* two same-tick updates to
+        the same entity, not just ones touching the identical field), and
+        trades a loud whole-batch failure for a quiet one. Pinned here so a
+        future change to deep_merge's list semantics doesn't silently
+        change this trade-off without it being noticed."""
+        mock_mongo.db.players.insert_one({"name": "System"})
+        nation_id = ObjectId()
+        mock_mongo.db.nations.insert_one({
+            "_id": nation_id, "name": "Test Nation",
+            "modifiers": [{"_id": "old-mod", "name": "Old", "value": 1}],
+        })
+        original = mock_mongo.db.nations.find_one({"_id": nation_id})
+
+        before1 = dict(original)
+        after1 = dict(original)
+        after1["modifiers"] = [
+            {"_id": "old-mod", "name": "Old", "value": 1},
+            {"_id": "death-mod", "name": "Death", "value": -1},
+        ]
+        before2 = dict(original)
+        after2 = dict(original)
+        after2["modifiers"] = []  # item2's own, independent intent: old-mod expired
+
+        with patch("helpers.change_helpers.mongo", mock_mongo), \
+             patch("helpers.change_helpers.category_data", fake_category_data), \
+             patch("helpers.change_helpers._calculate_and_attach_fields", side_effect=lambda dt, d: d), \
+             patch("helpers.change_helpers.propagate_updates"):
+            cid1 = ch.system_request_change(
+                data_type="nations", item_id=nation_id, change_type="Update",
+                before_data=before1, after_data=after1, reason="death event",
+            )
+            ch.system_approve_change(cid1, skip_recalculation=True)
+
+            cid2 = ch.system_request_change(
+                data_type="nations", item_id=nation_id, change_type="Update",
+                before_data=before2, after_data=after2, reason="regular tick, expires old-mod",
+            )
+            ok2 = ch.system_approve_change(cid2, skip_recalculation=True)
+
+        assert ok2 is True
+        final = mock_mongo.db.nations.find_one({"_id": nation_id})
+        assert final["modifiers"] == []  # death-mod silently lost — known trade-off, not a goal
+
+
+# ---------------------------------------------------------------------------
 # generate_ai_character: no read-back needed for the new character's id
 # ---------------------------------------------------------------------------
 

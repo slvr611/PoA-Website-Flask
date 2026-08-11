@@ -685,7 +685,19 @@ def system_approve_change(change_id, session=None, skip_recalculation=False, ski
         before_data = change["before_requested_data"]
         after_data = change["after_requested_data"]
 
-        if check_no_other_changes(before_data, after_data, target):
+        # skip_recalculation only ever comes from a tick's own deferred
+        # commit phase (see its docstring above). Two of a tick's own queued
+        # changes can legitimately target the same entity — e.g. a character
+        # death queues a cross-cutting nation update (adds a stability-loss
+        # modifier entry) AND the main per-nation loop separately queues
+        # "Tick Update for X" for that same nation, each snapshotted
+        # independently. Once the first commits, the second's before_data
+        # (captured before either committed) no longer matches the live
+        # document — check_no_other_changes correctly flags that divergence,
+        # but here it's expected same-tick sequencing, not an outside edit.
+        # The merge below already re-reads `existing` fresh and deep_merges
+        # onto it, so it's safe to skip the gate rather than abort the batch.
+        if skip_recalculation or check_no_other_changes(before_data, after_data, target):
             if change["change_type"] == "Update":
                 existing = target_collection.find_one({"_id": change["target"]}, session=session)
                 merged = deep_merge(existing, after_data)
