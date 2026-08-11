@@ -10,42 +10,53 @@ from bson import ObjectId
 _NATURAL_KEY_FIELDS = ['name', 'quest_name', 'source', 'modifier_type', 'scope', 'attribute', 'resource_from', 'resource_to', 'field', 'key', 'unit_category', 'unit_stat', 'tier', 'tech_category', 'def_key', 'disease', 'stage_name']
 
 
-def _handle_nation_rename(nation_id, old_name, new_name):
+def _handle_nation_rename(nation_id, old_name, new_name, session=None):
     """When a nation is renamed: update all hex_map_tiles owner and route.owner
     references, all trade_routes nation_a/nation_b references, and record the
-    old name in previous_names so old links can redirect."""
+    old name in previous_names so old links can redirect.
+
+    `session` (optional): a pymongo ClientSession — when the caller is
+    committing inside a transaction (e.g. a tick's deferred commit phase),
+    pass it through so these writes participate in the same transaction and
+    roll back together with everything else on failure."""
     if not old_name or not new_name or old_name == new_name:
         return
     mongo.db.hex_map_tiles.update_many(
         {"owner": old_name},
-        {"$set": {"owner": new_name}}
+        {"$set": {"owner": new_name}},
+        session=session,
     )
     mongo.db.hex_map_tiles.update_many(
         {"route.owner": old_name},
-        {"$set": {"route.owner": new_name}}
+        {"$set": {"route.owner": new_name}},
+        session=session,
     )
     mongo.db.trade_routes.update_many(
         {"nation_a": old_name},
-        {"$set": {"nation_a": new_name}}
+        {"$set": {"nation_a": new_name}},
+        session=session,
     )
     mongo.db.trade_routes.update_many(
         {"nation_b": old_name},
-        {"$set": {"nation_b": new_name}}
+        {"$set": {"nation_b": new_name}},
+        session=session,
     )
     # proposer records who requested the route; keep it consistent too.
     mongo.db.trade_routes.update_many(
         {"proposer": old_name},
-        {"$set": {"proposer": new_name}}
+        {"$set": {"proposer": new_name}},
+        session=session,
     )
     mongo.db.nations.update_one(
         {"_id": nation_id},
-        {"$addToSet": {"previous_names": old_name}}
+        {"$addToSet": {"previous_names": old_name}},
+        session=session,
     )
     from helpers.hex_map_helpers import bump_tile_version
     bump_tile_version()
 
 
-def _handle_city_changes(old_cities, new_cities):
+def _handle_city_changes(old_cities, new_cities, session=None):
     """When a nation's cities are edited: sync any live hex_map_tiles.city
     snapshot (matched by city _id) with the new name/type, and clear tiles
     whose city was deleted from the nation.
@@ -53,7 +64,9 @@ def _handle_city_changes(old_cities, new_cities):
     Only touches the live hex_map_tiles collection — hex_map_history snapshots
     from past sessions are separate, already-copied documents and are left
     untouched, so they keep whatever city data existed on that session
-    (same guarantee _handle_nation_rename relies on for tile owners)."""
+    (same guarantee _handle_nation_rename relies on for tile owners).
+
+    `session`: see _handle_nation_rename."""
     old_by_id = {c.get("_id"): c for c in (old_cities or []) if isinstance(c, dict) and c.get("_id")}
     new_by_id = {c.get("_id"): c for c in (new_cities or []) if isinstance(c, dict) and c.get("_id")}
     if not old_by_id and not new_by_id:
@@ -70,7 +83,8 @@ def _handle_city_changes(old_cities, new_cities):
             continue
         result = mongo.db.hex_map_tiles.update_many(
             {"city.id": city_id},
-            {"$set": {"city": {"id": city_id, "name": new_name, "type": new_type}}}
+            {"$set": {"city": {"id": city_id, "name": new_name, "type": new_type}}},
+            session=session,
         )
         if result.modified_count:
             changed = True
@@ -80,7 +94,8 @@ def _handle_city_changes(old_cities, new_cities):
             continue
         result = mongo.db.hex_map_tiles.update_many(
             {"city.id": city_id},
-            {"$set": {"city": None}}
+            {"$set": {"city": None}},
+            session=session,
         )
         if result.modified_count:
             changed = True
@@ -324,8 +339,18 @@ def request_change(data_type, item_id, change_type, before_data, after_data, rea
     result = changes_collection.insert_one(change_doc)
     return result.inserted_id
 
-def system_request_change(data_type, item_id, change_type, before_data, after_data, reason):
-    requester = mongo.db.players.find_one({"name": "System"})
+def system_request_change(data_type, item_id, change_type, before_data, after_data, reason, session=None):
+    """`session`: optional pymongo ClientSession — pass through when committing
+    inside a transaction (see system_approve_change).
+
+    `item_id` for an "Add" change: normally None (Mongo auto-generates the new
+    document's _id at insert time). A caller can instead pass a pre-generated
+    ObjectId here to know the new document's _id *before* it's actually
+    inserted — needed when a deferred-commit batch queues a later action
+    (e.g. reassigning an artifact) that references the new document's id
+    before the insert itself has run. See generate_ai_character in
+    tick_helpers.py for the motivating case."""
+    requester = mongo.db.players.find_one({"name": "System"}, session=session)
     if requester is None:
         return None
 
@@ -340,7 +365,10 @@ def system_request_change(data_type, item_id, change_type, before_data, after_da
 
     after_data.pop("reason", None)
     before_data.pop("_id", None)
-    after_data.pop("_id", None)
+    if change_type == "Add" and item_id is not None:
+        after_data["_id"] = item_id
+    else:
+        after_data.pop("_id", None)
 
     _reconcile_item_ids(before_data, after_data)
     _ensure_item_ids(after_data)
@@ -361,7 +389,7 @@ def system_request_change(data_type, item_id, change_type, before_data, after_da
         "request_reason": reason,
         "status": "Pending"
     }
-    result = changes_collection.insert_one(change_doc)
+    result = changes_collection.insert_one(change_doc, session=session)
     return result.inserted_id
 
 
@@ -426,7 +454,7 @@ def _approve_hex_map_change(change, change_id, changes_collection, approver, now
     return True
 
 
-def _find_name_collision(target_collection, data_type, name, era=None, exclude_id=None):
+def _find_name_collision(target_collection, data_type, name, era=None, exclude_id=None, session=None):
     """Return the colliding document for a prospective `name` in this
     collection, or None if the name is free.
 
@@ -443,7 +471,7 @@ def _find_name_collision(target_collection, data_type, name, era=None, exclude_i
         query["era"] = era
     if exclude_id is not None:
         query["_id"] = {"$ne": exclude_id}
-    return target_collection.find_one(query)
+    return target_collection.find_one(query, session=session)
 
 
 def approve_change(change_id):
@@ -573,14 +601,29 @@ def approve_change(change_id):
             flash("Change approval failed because the target has changed since the request was made.", "error")
     return False
 
-def system_approve_change(change_id):
-    approver = mongo.db.players.find_one({"name": "System"})
+def system_approve_change(change_id, session=None):
+    """`session`: optional pymongo ClientSession — pass through when
+    committing inside a transaction (e.g. a tick's deferred commit phase).
+    When set, every read/write this function (and everything it calls —
+    propagate_updates, _handle_nation_rename, etc.) performs participates in
+    the caller's transaction, so a failure anywhere rolls all of it back.
+
+    Known gap: _calculate_and_attach_fields → calculate_all_fields does its
+    own non-session-aware reads of other live documents (e.g. vassal tribute
+    reads a vassal's pop_count/modifiers/resource_production). Inside a
+    multi-entity transaction, those reads see the pre-transaction snapshot of
+    other same-batch entities, not their already-queued-but-not-yet-committed
+    values — a cross-referencing calculated field may be one tick stale
+    rather than perfectly fresh within the same batch. This doesn't affect
+    the all-or-nothing guarantee itself; deliberately accepted rather than
+    threading `session` through the entire calculation engine."""
+    approver = mongo.db.players.find_one({"name": "System"}, session=session)
 
     changes_collection = mongo.db.changes
     now = datetime.now(timezone.utc)
-    global_modifiers = mongo.db["global_modifiers"].find_one({"name": "global_modifiers"})
+    global_modifiers = mongo.db["global_modifiers"].find_one({"name": "global_modifiers"}, session=session)
     session_number = global_modifiers.get("session_counter", 0) if global_modifiers else 0
-    change = changes_collection.find_one({"_id": change_id})
+    change = changes_collection.find_one({"_id": change_id}, session=session)
     target_collection = category_data[change["target_collection"]]["database"]
 
     if change["change_type"] == "Add":
@@ -589,6 +632,7 @@ def system_approve_change(change_id):
         collision = _find_name_collision(
             target_collection, change["target_collection"],
             after_data.get("name"), era=after_data.get("era"),
+            session=session,
         )
         if collision:
             print(f"system_approve_change blocked: name '{after_data.get('name')}' "
@@ -597,7 +641,11 @@ def system_approve_change(change_id):
 
         after_data = _calculate_and_attach_fields(change["target_collection"], after_data)
 
-        inserted_item_id = target_collection.insert_one(after_data).inserted_id
+        # If after_data already carries an _id (system_request_change stamped
+        # one on from a caller-supplied item_id), insert_one respects it
+        # instead of generating a new one — see system_request_change's
+        # docstring for why a caller would want that.
+        inserted_item_id = target_collection.insert_one(after_data, session=session).inserted_id
         changes_collection.update_one({"_id": change_id}, {"$set": {
             "target": inserted_item_id,
             "status": "Approved",
@@ -607,23 +655,24 @@ def system_approve_change(change_id):
             "session_number": session_number,
             "before_implemented_data": {},
             "after_implemented_data": after_data
-        }})
+        }}, session=session)
 
         propagate_updates(
             changed_data_type=change["target_collection"],
             changed_object_id=inserted_item_id,
             changed_object=after_data,
-            reason=f"Dependency update from change #{change_id}"
+            reason=f"Dependency update from change #{change_id}",
+            session=session,
         )
         return True
     else:
-        target = target_collection.find_one({"_id": change["target"]})
+        target = target_collection.find_one({"_id": change["target"]}, session=session)
         before_data = change["before_requested_data"]
         after_data = change["after_requested_data"]
 
         if check_no_other_changes(before_data, after_data, target):
             if change["change_type"] == "Update":
-                existing = target_collection.find_one({"_id": change["target"]})
+                existing = target_collection.find_one({"_id": change["target"]}, session=session)
                 merged = deep_merge(existing, after_data)
 
                 new_name = merged.get("name")
@@ -631,6 +680,7 @@ def system_approve_change(change_id):
                     collision = _find_name_collision(
                         target_collection, change["target_collection"], new_name,
                         era=merged.get("era"), exclude_id=change["target"],
+                        session=session,
                     )
                     if collision:
                         print(f"system_approve_change blocked: name '{new_name}' "
@@ -638,12 +688,12 @@ def system_approve_change(change_id):
                         return False
 
                 merged = _calculate_and_attach_fields(change["target_collection"], merged)
-                target_collection.update_one({"_id": change["target"]}, {"$set": merged})
+                target_collection.update_one({"_id": change["target"]}, {"$set": merged}, session=session)
                 if change["target_collection"] == "nations":
-                    _handle_nation_rename(change["target"], existing.get("name", ""), merged.get("name", ""))
-                    _handle_city_changes(existing.get("cities", []), merged.get("cities", []))
+                    _handle_nation_rename(change["target"], existing.get("name", ""), merged.get("name", ""), session=session)
+                    _handle_city_changes(existing.get("cities", []), merged.get("cities", []), session=session)
             else:
-                target_collection.delete_one({"_id": change["target"]})
+                target_collection.delete_one({"_id": change["target"]}, session=session)
 
             changes_collection.update_one({"_id": change_id}, {"$set": {
                 "status": "Approved",
@@ -653,21 +703,23 @@ def system_approve_change(change_id):
                 "session_number": session_number,
                 "before_implemented_data": target,
                 "after_implemented_data": after_data
-            }})
+            }}, session=session)
 
             if change["change_type"] == "Update":
                 propagate_updates(
                     changed_data_type=change["target_collection"],
                     changed_object_id=change["target"],
                     changed_object=merged,
-                    reason=f"Dependency update from change #{change_id}"
+                    reason=f"Dependency update from change #{change_id}",
+                    session=session,
                 )
             else:
                 propagate_updates(
                     changed_data_type=change["target_collection"],
                     changed_object_id=change["target"],
                     changed_object={},
-                    reason=f"Dependency update from change #{change_id}"
+                    reason=f"Dependency update from change #{change_id}",
+                    session=session,
                 )
             return True
         print(f"system_approve_change blocked: change #{change_id} on "
@@ -1214,18 +1266,18 @@ def check_no_other_changes(before_data, after_data, current_data):
     
     return True
 
-def get_dependent_objects(changed_data_type, changed_object_id, changed_object):
+def get_dependent_objects(changed_data_type, changed_object_id, changed_object, session=None):
     """Find all objects that depend on the changed object"""
     dependent_objects = []
-    
+
     # Check all schemas for external_calculation_requirements
     for category, category_info in category_data.items():
         schema = category_info.get("schema", {})
         external_reqs = schema.get("external_calculation_requirements", {})
-        
+
         if not external_reqs:
             continue
-            
+
         # Check if this category depends on the changed data type
         for local_field, foreign_fields in external_reqs.items():
             field_schema = schema["properties"].get(local_field, {})
@@ -1258,7 +1310,7 @@ def get_dependent_objects(changed_data_type, changed_object_id, changed_object):
                 if schema.get("properties")[local_field].get("queryTargetAttribute"):
                     db = mongo.db[category]
                     try:
-                        new_id = _find_referencing_objects_single(db, ObjectId(changed_object.get(schema.get("properties")[local_field].get("queryTargetAttribute", ""), "")))
+                        new_id = _find_referencing_objects_single(db, ObjectId(changed_object.get(schema.get("properties")[local_field].get("queryTargetAttribute", ""), "")), session=session)
                         if new_id:
                             dependent_ids.append(new_id)
                     except:
@@ -1266,14 +1318,14 @@ def get_dependent_objects(changed_data_type, changed_object_id, changed_object):
                 else:
                     for collection in schema.get("properties")[local_field].get("collections"):
                         db = mongo.db[collection]
-                        dependent_ids += _find_referencing_objects_array(db, local_field, changed_object_id)
+                        dependent_ids += _find_referencing_objects_array(db, local_field, changed_object_id, session=session)
 
                 for dep_id in dependent_ids:
                     dependent_objects.append({
                         "data_type": category,
                         "object_id": dep_id
                     })
-    
+
     return dependent_objects
 
 def _depends_on_data_type(data_type, field_schema):
@@ -1283,13 +1335,13 @@ def _depends_on_data_type(data_type, field_schema):
             return True
     return False
 
-def _find_referencing_objects_single(db, id):
+def _find_referencing_objects_single(db, id, session=None):
     """Find objects in category that reference the given ID in the specified field"""
-    return db.find_one({"_id": id})
+    return db.find_one({"_id": id}, session=session)
 
-def _find_referencing_objects_array(db, target_field, id):
+def _find_referencing_objects_array(db, target_field, id, session=None):
     """Find objects in category that reference the given ID in the specified field"""
-    return list(db.find({target_field: id}))
+    return list(db.find({target_field: id}, session=session))
 
 def recalculate_all_objects(data_type):
     """Recalculate all fields for all objects of a given type"""
@@ -1301,17 +1353,17 @@ def recalculate_all_objects(data_type):
         db.update_one({"_id": obj_id}, {"$set": obj})
         obj["_id"] = obj_id
 
-def recalculate_object(data_type, object_ref):
+def recalculate_object(data_type, object_ref, session=None):
     """Recalculate all fields for an object"""
     db = mongo.db[data_type]
     object_id = None
     object = None
     try:
         object_id = ObjectId(object_ref)
-        object = db.find_one({"_id": object_id})
+        object = db.find_one({"_id": object_id}, session=session)
     except:
         object_id = object_ref
-        object = db.find_one({"name": object_id})
+        object = db.find_one({"name": object_id}, session=session)
     if not object:
         return
     object = _calculate_and_attach_fields(data_type, object)
@@ -1321,28 +1373,30 @@ def recalculate_object(data_type, object_ref):
     else:
         search_dict = {"_id": object_id}
     save_obj = {k: v for k, v in object.items() if k != "_id"}
-    db.update_one(search_dict, {"$set": save_obj})
+    db.update_one(search_dict, {"$set": save_obj}, session=session)
 
 _MAX_PROPAGATION_DEPTH = 3
 
-def propagate_updates(changed_data_type, changed_object_id, changed_object, reason="Dependency update", _depth=0):
+def propagate_updates(changed_data_type, changed_object_id, changed_object, reason="Dependency update", _depth=0, session=None):
     """Propagate updates to all dependent objects.
 
     Depth-limited to _MAX_PROPAGATION_DEPTH to prevent runaway recursion
     on long vassal chains or cyclic dependency graphs from consuming all memory.
-    """
+
+    `session`: optional pymongo ClientSession, threaded through every read/
+    write here and in the recursive calls — see system_approve_change."""
     if _depth >= _MAX_PROPAGATION_DEPTH:
         return
-    dependent_objects = get_dependent_objects(changed_data_type, changed_object_id, changed_object)
+    dependent_objects = get_dependent_objects(changed_data_type, changed_object_id, changed_object, session=session)
 
     for dep in dependent_objects:
         try:
             db = mongo.db[dep["data_type"]]
-            old_object = db.find_one({"_id": dep["object_id"]["_id"]})
+            old_object = db.find_one({"_id": dep["object_id"]["_id"]}, session=session)
             if not old_object:
                 continue
 
-            propagate_updates(dep["data_type"], dep["object_id"]["_id"], old_object, reason, _depth=_depth + 1)
-            recalculate_object(dep["data_type"], dep["object_id"]["_id"])
+            propagate_updates(dep["data_type"], dep["object_id"]["_id"], old_object, reason, _depth=_depth + 1, session=session)
+            recalculate_object(dep["data_type"], dep["object_id"]["_id"], session=session)
         except Exception as e:
             print(f"Error updating {dep['data_type']} {dep['object_id']}: {e}")

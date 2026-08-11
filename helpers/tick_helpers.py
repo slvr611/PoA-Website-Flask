@@ -1,5 +1,6 @@
 import uuid
 import math
+import functools
 from bson import ObjectId
 from helpers.data_helpers import get_data_on_category
 import gc
@@ -16,11 +17,109 @@ from helpers.change_helpers import system_request_change, system_approve_change
 from helpers.archive_helpers import archive_old_changes
 from app_core import mongo, json_data, upload_to_s3, character_stats
 from flask import flash
-from app_core import backup_mongodb_async, category_data, temperament_enum, base_temperament_odds, cultural_trait_temperament_modifiers
+from app_core import backup_mongodb, category_data, temperament_enum, base_temperament_odds, cultural_trait_temperament_modifiers
 from copy import deepcopy
 import random
 import os
 import datetime
+
+def _queue_change(pending, data_type, item_id, change_type, before_data, after_data, reason):
+    """Defer a change instead of committing it immediately.
+
+    Every tick function that used to call system_request_change +
+    system_approve_change directly on a document OTHER than the one it's
+    iterating (e.g. a character's death touching their nation, an artifact
+    loss) now calls this instead, so the write only actually happens once the
+    whole tick's compute phase has finished without error, as part of the
+    single all-or-nothing commit transaction at the end of tick()/era_tick().
+
+    `pending` is that transaction's accumulator list, threaded through only
+    to the specific tick functions that need it (see _PENDING_AWARE_TICK_FUNCTIONS
+    near the bottom of this file) — every other tick function's signature is
+    untouched. If `pending` is None (e.g. a test or other caller invoking a
+    tick function directly, outside of tick()/era_tick()), falls back to the
+    original immediate commit so those callers keep working unchanged."""
+    if pending is None:
+        change_id = system_request_change(
+            data_type=data_type, item_id=item_id, change_type=change_type,
+            before_data=before_data, after_data=after_data, reason=reason,
+        )
+        if change_id is not None:
+            system_approve_change(change_id)
+        return change_id
+    pending.append({
+        "data_type": data_type,
+        "item_id": item_id,
+        "change_type": change_type,
+        "before_data": before_data,
+        "after_data": after_data,
+        "reason": reason,
+    })
+    return None
+
+
+def _commit_pending_changes(pending):
+    """Apply every change queued via _queue_change as a single all-or-nothing
+    MongoDB transaction (requires a replica-set deployment — confirmed
+    supported on this project's Atlas cluster).
+
+    Each item is still committed individually — its own
+    system_request_change + system_approve_change call — so every entity
+    still gets its own normal "Tick Update for X" change-history record
+    exactly as before; only the *timing and atomicity* changed; the DB
+    shape of what gets written did not. If system_approve_change fails or
+    is blocked for ANY item (a conflicting concurrent edit, a name
+    collision, a DB error), this raises to abort the whole transaction —
+    deliberately stricter than the old per-item-immediate-commit behavior,
+    which silently skipped a blocked item and kept going. That silent
+    partial-skip is exactly the kind of inconsistency this whole change
+    exists to eliminate.
+
+    Returns the current session_counter (read fresh, after the transaction
+    commits) for callers that need it afterward, e.g. archive_old_changes
+    and snapshot_current_map — both must see the POST-commit value, since a
+    queued "Tick Session Number" change may have just incremented it.
+
+    Known limitation: _calculate_and_attach_fields (called inside
+    system_approve_change for every item) does its own non-session-aware
+    reads of other live documents (e.g. vassal tribute reads a vassal's
+    live pop_count/modifiers/resource_production). Within this transaction,
+    those reads see the pre-transaction snapshot of other same-batch
+    entities, not each other's queued-but-not-yet-committed values — a
+    calculated field that cross-references another entity updated in the
+    same tick may be one tick stale rather than perfectly fresh within the
+    same batch. This doesn't weaken the all-or-nothing guarantee itself,
+    and self-corrects on the next tick; deliberately accepted rather than
+    threading `session` through the entire calculation engine."""
+    if not pending:
+        global_modifiers = mongo.db["global_modifiers"].find_one({"name": "global_modifiers"})
+        return global_modifiers.get("session_counter", 0) if global_modifiers else 0
+
+    with mongo.cx.start_session() as session:
+        with session.start_transaction():
+            for i, item in enumerate(pending):
+                change_id = system_request_change(
+                    item["data_type"], item["item_id"], item["change_type"],
+                    item["before_data"], item["after_data"], item["reason"],
+                    session=session,
+                )
+                if change_id is None or not system_approve_change(change_id, session=session):
+                    raise RuntimeError(
+                        f"Tick commit aborted: a queued {item['change_type']} on "
+                        f"{item['data_type']} ({item['reason']}) could not be applied "
+                        f"— rolling back everything else queued in this tick so "
+                        f"nothing is left partially applied."
+                    )
+                # propagate_updates' recursive recalculation cascade can
+                # accumulate a lot of temporary objects across a long tick —
+                # periodic GC here mirrors what the old per-category commit
+                # loops already did.
+                if i % 20 == 19:
+                    gc.collect()
+
+    global_modifiers = mongo.db["global_modifiers"].find_one({"name": "global_modifiers"})
+    return global_modifiers.get("session_counter", 0) if global_modifiers else 0
+
 
 def tick(form_data):
     if "run_Backup Database" in form_data:
@@ -29,6 +128,13 @@ def tick(form_data):
             return message
     player_tick_summary = ""
     full_tick_summary = ""
+
+    # Every write this tick makes is queued here instead of being committed
+    # immediately, and only actually applied — all at once, inside a single
+    # MongoDB transaction — once the entire compute phase below has finished
+    # with no exception. See _queue_change/_dispatch and the commit phase at
+    # the bottom of this function.
+    pending = []
 
     global_modifiers = mongo.db["global_modifiers"].find_one({"name": "global_modifiers"})
     old_target = global_modifiers
@@ -67,7 +173,7 @@ def tick(form_data):
                     # stasis modifier's own duration still counts down and can expire.
                     if tick_function is not modifier_decay_tick and _in_stasis(old_characters[i]):
                         continue
-                    result = tick_function(old_characters[i], new_characters[i], character_schema)
+                    result = _dispatch(tick_function, pending, old_characters[i], new_characters[i], character_schema)
                     if old_characters[i].get("player", None) is not None:
                         player_tick_summary += result
                     full_tick_summary += result
@@ -95,7 +201,7 @@ def tick(form_data):
             if run_key in form_data:
                 print(tick_function_label)
                 for i in range(len(old_artifacts)):
-                    result = tick_function(old_artifacts[i], new_artifacts[i], artifact_schema)
+                    result = _dispatch(tick_function, pending, old_artifacts[i], new_artifacts[i], artifact_schema)
                     character = old_artifacts[i].get("owner", "None")
                     if character != "None":
                         try:
@@ -128,7 +234,7 @@ def tick(form_data):
             if run_key in form_data:
                 print(tick_function_label)
                 for i in range(len(old_merchants)):
-                    result = tick_function(old_merchants[i], new_merchants[i], merchant_schema)
+                    result = _dispatch(tick_function, pending, old_merchants[i], new_merchants[i], merchant_schema)
                     leaders = old_merchants[i].get("leaders", [])
                     for leader in leaders:
                         try:
@@ -163,7 +269,7 @@ def tick(form_data):
             if run_key in form_data:
                 print(tick_function_label)
                 for i in range(len(old_mercenaries)):
-                    result = tick_function(old_mercenaries[i], new_mercenaries[i], mercenary_schema)
+                    result = _dispatch(tick_function, pending, old_mercenaries[i], new_mercenaries[i], mercenary_schema)
                     leaders = old_mercenaries[i].get("leaders", [])
                     for leader in leaders:
                         try:
@@ -198,7 +304,7 @@ def tick(form_data):
             if run_key in form_data:
                 print(tick_function_label)
                 for i in range(len(old_factions)):
-                    result = tick_function(old_factions[i], new_factions[i], faction_schema)
+                    result = _dispatch(tick_function, pending, old_factions[i], new_factions[i], faction_schema)
                     leaders = old_factions[i].get("leaders", [])
                     for leader in leaders:
                         try:
@@ -233,7 +339,7 @@ def tick(form_data):
             if run_key in form_data:
                 print(tick_function_label)
                 for i in range(len(old_markets)):
-                    full_tick_summary += tick_function(old_markets[i], new_markets[i], market_schema)
+                    full_tick_summary += _dispatch(tick_function, pending, old_markets[i], new_markets[i], market_schema)
 
 
 
@@ -281,7 +387,7 @@ def tick(form_data):
                         # compliance loss) instead of stasis's universal one.
                         if tick_function is not modifier_decay_tick and _undead_horde_tick_blocked(old_nations[i], tick_function_label):
                             continue
-                        result = tick_function(old_nations[i], new_nations[i], nation_schema)
+                        result = _dispatch(tick_function, pending, old_nations[i], new_nations[i], nation_schema)
                         if old_nations[i].get("temperament", "None") == "Player":
                             player_tick_summary += result
                         elif tick_function_label in VASSAL_SPECIFIC_NATION_TICK_FUNCTIONS and old_nations[i].get("overlord", "None") != "None":
@@ -303,13 +409,14 @@ def tick(form_data):
         for tick_function_label, tick_function in NATION_CROSS_TICK_FUNCTIONS.items():
             if f"run_{tick_function_label}" in form_data:
                 print(tick_function_label)
-                result = tick_function(old_nations, new_nations, nation_schema)
+                result = _dispatch(tick_function, pending, old_nations, new_nations, nation_schema)
                 full_tick_summary += result
 
 
 
     if "run_Tick Session Number" in form_data:
-        change_id = system_request_change(
+        _queue_change(
+            pending,
             data_type="global_modifiers",
             item_id=old_target["_id"],
             change_type="Update",
@@ -317,11 +424,11 @@ def tick(form_data):
             after_data=new_target,
             reason="Tick Update for Tick Session Number"
         )
-        system_approve_change(change_id)
-    
+
     if collect_character_data:
         for i in range(len(old_characters)):
-            change_id = system_request_change(
+            _queue_change(
+                pending,
                 data_type="characters",
                 item_id=old_characters[i]["_id"],
                 change_type="Update",
@@ -329,11 +436,11 @@ def tick(form_data):
                 after_data=new_characters[i],
                 reason="Tick Update for " + old_characters[i]["name"]
             )
-            system_approve_change(change_id)
-    
-    if collect_artifact_data:    
+
+    if collect_artifact_data:
         for i in range(len(old_artifacts)):
-            change_id = system_request_change(
+            _queue_change(
+                pending,
                 data_type="artifacts",
                 item_id=old_artifacts[i]["_id"],
                 change_type="Update",
@@ -341,11 +448,11 @@ def tick(form_data):
                 after_data=new_artifacts[i],
                 reason="Tick Update for " + old_artifacts[i]["name"]
             )
-            system_approve_change(change_id)
 
     if collect_merchant_data:
         for i in range(len(old_merchants)):
-            change_id = system_request_change(
+            _queue_change(
+                pending,
                 data_type="merchants",
                 item_id=old_merchants[i]["_id"],
                 change_type="Update",
@@ -353,11 +460,11 @@ def tick(form_data):
                 after_data=new_merchants[i],
                 reason="Tick Update for " + old_merchants[i]["name"]
             )
-            system_approve_change(change_id)
 
     if collect_mercenary_data:
         for i in range(len(old_mercenaries)):
-            change_id = system_request_change(
+            _queue_change(
+                pending,
                 data_type="mercenaries",
                 item_id=old_mercenaries[i]["_id"],
                 change_type="Update",
@@ -365,11 +472,11 @@ def tick(form_data):
                 after_data=new_mercenaries[i],
                 reason="Tick Update for " + old_mercenaries[i]["name"]
             )
-            system_approve_change(change_id)
-    
+
     if collect_faction_data:
         for i in range(len(old_factions)):
-            change_id = system_request_change(
+            _queue_change(
+                pending,
                 data_type="factions",
                 item_id=old_factions[i]["_id"],
                 change_type="Update",
@@ -377,11 +484,11 @@ def tick(form_data):
                 after_data=new_factions[i],
                 reason="Tick Update for " + old_factions[i]["name"]
             )
-            system_approve_change(change_id)
 
     if collect_market_data:
         for i in range(len(old_markets)):
-            change_id = system_request_change(
+            _queue_change(
+                pending,
                 data_type="markets",
                 item_id=old_markets[i]["_id"],
                 change_type="Update",
@@ -389,11 +496,11 @@ def tick(form_data):
                 after_data=new_markets[i],
                 reason="Tick Update for " + old_markets[i]["name"]
             )
-            system_approve_change(change_id)
 
     if collect_nation_data:
         for i in range(len(old_nations)):
-            change_id = system_request_change(
+            _queue_change(
+                pending,
                 data_type="nations",
                 item_id=old_nations[i]["_id"],
                 change_type="Update",
@@ -401,19 +508,21 @@ def tick(form_data):
                 after_data=new_nations[i],
                 reason="Tick Update for " + old_nations[i]["name"]
             )
-            system_approve_change(change_id)
-            # Release this nation's data immediately after saving so the GC can
-            # reclaim it rather than holding all 201 processed nation dicts until
-            # the entire save loop finishes.
-            old_nations[i] = None
-            new_nations[i] = None
-            # Force GC every 20 nations to reclaim memory from propagate_updates
-            # cascades (character/market recalculations triggered per nation save).
-            if i % 20 == 19:
-                gc.collect()
 
-    global_modifiers_refreshed = mongo.db["global_modifiers"].find_one({"name": "global_modifiers"})
-    current_session = global_modifiers_refreshed.get("session_counter", 0) if global_modifiers_refreshed else 0
+    # ── Commit phase ─────────────────────────────────────────────────────
+    # Everything above was pure computation — nothing has touched the
+    # database yet except plain reads. Now that the whole tick has finished
+    # without raising, apply every queued change as one all-or-nothing
+    # transaction: if anything fails partway through (a conflicting edit, a
+    # DB error, hitting Mongo's transaction time limit), pymongo aborts the
+    # transaction automatically and NONE of this tick's changes are applied
+    # — matching what used to happen only within a single system_approve_change
+    # call, now extended to the entire tick. Each queued item is still
+    # committed individually (its own system_request_change/system_approve_change
+    # call), so every entity's change-history page shows the same one
+    # "Tick Update for X" record it always has.
+    current_session = _commit_pending_changes(pending)
+
     archive_message = archive_old_changes(current_session)
     full_tick_summary += f"\n\nArchival: {archive_message}"
 
@@ -430,10 +539,32 @@ def tick(form_data):
 
     return full_tick_summary
 
+def _run_tick_guarded(target, form_data, label):
+    """Run tick()/era_tick() and make sure a failure is actually visible
+    somewhere an admin will see it, instead of a bare thread crash whose
+    only trace is whatever reached the process logs before it died (see the
+    KeyError: 'overlord' incident that prompted this). Failure here always
+    means the deferred-commit transaction was never opened or was aborted —
+    per _commit_pending_changes, nothing from this run was applied."""
+    try:
+        target(form_data)
+    except Exception as e:
+        import traceback
+        error_text = (
+            f"{label} FAILED and was fully rolled back — no changes from this "
+            f"run were applied.\n\nError: {e}\n\n{traceback.format_exc()}"
+        )
+        print(error_text)
+        try:
+            give_tick_summary(error_text, error_text)
+        except Exception:
+            pass
+
+
 def run_tick_async(form_data):
     """Queue the tick process to run in the background"""
     from threading import Thread
-    thread = Thread(target=tick, args=(form_data,))
+    thread = Thread(target=_run_tick_guarded, args=(tick, form_data, "Tick"))
     thread.daemon = True
     thread.start()
     return "Tick process started in background. Check logs for results."
@@ -461,7 +592,19 @@ def run_ai_market_matching_async():
 ###########################################################
 
 def backup_database():
-    success, message = backup_mongodb_async()
+    """Runs the backup synchronously and waits for it to fully finish before
+    returning. tick()/era_tick() both call this before touching any data, and
+    both already run in their own background thread (run_tick_async/
+    run_era_tick_async) rather than inline in an HTTP request — so blocking
+    here doesn't risk a request timeout, and is exactly what's needed: the
+    backup must capture a complete, consistent pre-tick snapshot rather than
+    racing the tick's own writes to the same database (the previous
+    fire-and-forget backup_mongodb_async spawned the backup in a SEPARATE
+    thread and returned immediately, letting the tick start mutating data
+    the backup might not have read yet)."""
+    success, message = backup_mongodb()
+    status = "success" if success else "failure"
+    print(f"Backup completed with {status}: {message}")
     return success, message
 
 def give_tick_summary(player_tick_summary, full_tick_summary):
@@ -622,7 +765,7 @@ def _pick_succession_titles(succession_type, previous_leader):
     return [random.choice(tier1)] if tier1 else []
 
 
-def generate_ai_character(org, org_schema, character_schema, previous_leader=None):
+def generate_ai_character(org, org_schema, character_schema, previous_leader=None, pending=None):
     """Create and insert an AI ruler for the given nation/org. Returns a log string."""
     character_type = random.choice(_RULER_TYPES)
     character_subtype = random.choice(RULER_SUBTYPES[character_type])
@@ -710,17 +853,23 @@ def generate_ai_character(org, org_schema, character_schema, previous_leader=Non
         "magic_points": magic_points,
     }
 
-    change_id = system_request_change(
+    # Generated up front (instead of letting Mongo auto-assign one at insert
+    # time and reading it back afterward) so the artifact-reassignment step
+    # below can reference the new character's id immediately — required now
+    # that the Add itself may be deferred (see _queue_change) rather than
+    # committed right here, so there's nothing to read back yet.
+    new_char_id = ObjectId()
+    char_doc["_id"] = new_char_id
+
+    _queue_change(
+        pending,
         data_type="characters",
-        item_id=None,
+        item_id=new_char_id,
         change_type="Add",
         before_data={},
         after_data=char_doc,
         reason=f"Auto-generated AI ruler for {org_name}",
     )
-    system_approve_change(change_id)
-    new_char_change = mongo.db.changes.find_one({"_id": change_id})
-    new_char_id = new_char_change.get("target") if new_char_change else None
     result = f"Generated AI ruler '{name}' ({character_type} / {character_subtype}) for {org_name}.\n"
 
     if pop_selected or heir_training_bonuses:
@@ -734,7 +883,8 @@ def generate_ai_character(org, org_schema, character_schema, previous_leader=Non
         if heir_training_bonuses:
             new_org["heir_training_bonuses"] = {}
             reasons.append("Heir Training bonuses applied, clearing the bank")
-        change_id = system_request_change(
+        _queue_change(
+            pending,
             data_type="nations",
             item_id=org["_id"],
             change_type="Update",
@@ -742,18 +892,18 @@ def generate_ai_character(org, org_schema, character_schema, previous_leader=Non
             after_data=new_org,
             reason=f"{'; '.join(reasons)} for {org_name}",
         )
-        system_approve_change(change_id)
         if pop_selected:
             result += f"  -> Updated {org_name} primary demographics via {succession_type} succession.\n"
         if heir_training_bonuses:
             trained_summary = ", ".join(f"+{v} {k}" for k, v in heir_training_bonuses.items())
             result += f"  -> Applied banked Heir Training ({trained_summary}) to {name}.\n"
 
-    if new_char_id and previous_leader:
+    if previous_leader:
         prev_id_str = str(previous_leader["_id"])
         predecessor_artifacts = list(mongo.db.artifacts.find({"owner": prev_id_str, "archived": {"$ne": True}}))
         for artifact in predecessor_artifacts:
-            art_change_id = system_request_change(
+            _queue_change(
+                pending,
                 data_type="artifacts",
                 item_id=artifact["_id"],
                 change_type="Update",
@@ -761,14 +911,13 @@ def generate_ai_character(org, org_schema, character_schema, previous_leader=Non
                 after_data={"owner": str(new_char_id)},
                 reason=f"Artifact inherited by {name} from predecessor",
             )
-            system_approve_change(art_change_id)
         if predecessor_artifacts:
             result += f"  -> Transferred {len(predecessor_artifacts)} artifact(s) from predecessor.\n"
 
     return result
 
 
-def ai_ensure_leader_tick(old_nation, new_nation, schema):
+def ai_ensure_leader_tick(old_nation, new_nation, schema, pending=None):
     """Nation tick: generate a fresh AI ruler immediately if the nation has no
     living leader when the tick starts.
 
@@ -787,7 +936,7 @@ def ai_ensure_leader_tick(old_nation, new_nation, schema):
     if has_living_leader:
         return ""
     character_schema, _ = get_data_on_category("characters")
-    return generate_ai_character(old_nation, schema, character_schema)
+    return generate_ai_character(old_nation, schema, character_schema, pending=pending)
 
 
 def character_death_tick(old_character, new_character, schema):
@@ -878,7 +1027,7 @@ def character_heal_tick(old_character, new_character, schema):
         result = f"{old_character.get('name', 'Unknown')} has healed from {old_character.get('health_status', 'Unknown')} to {new_character.get('health_status', 'Unknown')}.\n"
     return result
 
-def character_heal_then_death_tick(old_character, new_character, schema):
+def character_heal_then_death_tick(old_character, new_character, schema, pending=None):
     result = ""
     if old_character.get("health_status", "Healthy") == "Dead":
         return ""
@@ -956,7 +1105,8 @@ def character_heal_then_death_tick(old_character, new_character, schema):
 
                 result += adjust_stability(old_nation, new_nation, nation_schema, amounts, reasons)
 
-                change_id = system_request_change(
+                _queue_change(
+                    pending,
                     data_type="nations",
                     item_id=old_nation["_id"],
                     change_type="Update",
@@ -964,7 +1114,6 @@ def character_heal_then_death_tick(old_character, new_character, schema):
                     after_data=new_nation,
                     reason="Death of " + old_character.get('name', 'Unknown') + " has caused an update for " + old_nation.get('name', 'Unknown')
                 )
-                system_approve_change(change_id)
 
     return result
 
@@ -1021,9 +1170,9 @@ def character_stat_gain_tick(old_character, new_character, schema):
 
     return result
 
-def artifact_loss_tick(old_character, new_character, schema):
+def artifact_loss_tick(old_character, new_character, schema, pending=None):
     result = ""
-    
+
     artifact_loss_chance = old_character.get("artifact_loss_chance", 0)
     if artifact_loss_chance <= 0:
         return ""
@@ -1038,7 +1187,8 @@ def artifact_loss_tick(old_character, new_character, schema):
             new_artifact = deepcopy(old_artifact)
             new_artifact["owner"] = "Lost"
             result = f"{old_character.get('name', 'Unknown')} has lost {old_artifact.get('name', 'Unknown')}.\n"
-            change_id = system_request_change(
+            _queue_change(
+                pending,
                 data_type="artifacts",
                 item_id=old_artifact["_id"],
                 change_type="Update",
@@ -1046,7 +1196,6 @@ def artifact_loss_tick(old_character, new_character, schema):
                 after_data=new_artifact,
                 reason=old_artifact.get('name', 'Unknown') + " has been lost due to passive loss chance"
             )
-            system_approve_change(change_id)
         else:
             equipped_artifacts = list(artifact_db.find({"owner": str(old_character.get("_id", "")), "equipped": True}))
             if equipped_artifacts:
@@ -1054,7 +1203,8 @@ def artifact_loss_tick(old_character, new_character, schema):
                 new_artifact = deepcopy(old_artifact)
                 new_artifact["owner"] = "Lost"
                 result = f"{old_character.get('name', 'Unknown')} has lost {old_artifact.get('name', 'Unknown')}.\n"
-                change_id = system_request_change(
+                _queue_change(
+                    pending,
                     data_type="artifacts",
                     item_id=old_artifact["_id"],
                     change_type="Update",
@@ -1062,7 +1212,6 @@ def artifact_loss_tick(old_character, new_character, schema):
                     after_data=new_artifact,
                     reason="Loss of " + old_character.get('name', 'Unknown') + " has caused " + old_artifact.get('name', 'Unknown') + " to be lost"
                 )
-                system_approve_change(change_id)
     return result
 
 ###########################################################
@@ -1507,7 +1656,7 @@ def _resource_storage_capacity(nation_doc):
 
 
 def nation_concessions_tick(old_nation, new_nation, schema):
-    if old_nation["overlord"] == "":
+    if old_nation.get("overlord", "") == "":
         return ""
 
     result = ""
@@ -1593,7 +1742,7 @@ def nation_concessions_tick(old_nation, new_nation, schema):
     return result
 
 def nation_rebellion_tick(old_nation, new_nation, schema):
-    if old_nation["overlord"] == "":
+    if old_nation.get("overlord", "") == "":
         return ""
     result = ""
     rebellion_roll = random.random()
@@ -2134,7 +2283,7 @@ def nation_accepted_spread_tick(old_nation, new_nation, schema):
 
     return result
 
-def disease_cure_cross_tick(old_nations, new_nations, schema):
+def disease_cure_cross_tick(old_nations, new_nations, schema, pending=None):
     """Cross-nation tick: sum shared-quest contributions into each disease's
     cure progress. Reaching the difficulty's required progress sets a
     permanent "cure discovered" flag (cured=True) — it does NOT heal anyone
@@ -2191,7 +2340,8 @@ def disease_cure_cross_tick(old_nations, new_nations, schema):
         if completed:
             after_data["cured"] = True
 
-        change_id = system_request_change(
+        _queue_change(
+            pending,
             data_type="diseases",
             item_id=disease["_id"],
             change_type="Update",
@@ -2199,8 +2349,6 @@ def disease_cure_cross_tick(old_nations, new_nations, schema):
             after_data=after_data,
             reason=f"Disease cure tick: +{contribution} progress from {contributors} nation(s)",
         )
-        if change_id is not None:
-            system_approve_change(change_id)
 
         result += f"{disease_name} cure progress: +{contribution} ({new_progress}/{required}).\n"
 
@@ -2213,7 +2361,7 @@ def disease_cure_cross_tick(old_nations, new_nations, schema):
 
     return result
 
-def disease_job_death_tick(_old_nations, _new_nations, _schema):
+def disease_job_death_tick(_old_nations, _new_nations, _schema, pending=None):
     """Cross-nation tick: roll job_death_chance for every pop currently
     infected with a disease that has one set (> 0). A pop that dies has a
     Remove change auto-requested and approved against it — mirroring the
@@ -2235,7 +2383,8 @@ def disease_job_death_tick(_old_nations, _new_nations, _schema):
         for pop in infected_pops:
             if random.random() <= death_chance:
                 before = {k: v for k, v in pop.items() if k != "_id"}
-                change_id = system_request_change(
+                _queue_change(
+                    pending,
                     data_type="pops",
                     item_id=pop["_id"],
                     change_type="Remove",
@@ -2243,9 +2392,7 @@ def disease_job_death_tick(_old_nations, _new_nations, _schema):
                     after_data={},
                     reason=f"Died from {disease_name} (job death chance)",
                 )
-                if change_id is not None:
-                    system_approve_change(change_id)
-                    died += 1
+                died += 1
 
         if died:
             result += f"{disease_name}: {died} pop(s) died from job death chance.\n"
@@ -2273,7 +2420,7 @@ def _forced_flee_destination_for_region(region_id):
                 return mongo.db.nations.find_one({"name": target_name}, {"_id": 1, "name": 1})
     return None
 
-def pop_flee_tick(old_nation, new_nation, schema):
+def pop_flee_tick(old_nation, new_nation, schema, pending=None):
     """Roll nation's pop_flee_chance once; on success one excess pop flees to
     a random non-Closed nation in the same region — unless the region has a
     Forced Flee Destination modifier, in which case it always goes there.
@@ -2337,7 +2484,8 @@ def pop_flee_tick(old_nation, new_nation, schema):
     new_pop_data = dict(old_pop_data)
     new_pop_data["nation"] = str(destination["_id"])
 
-    change_id = system_request_change(
+    _queue_change(
+        pending,
         data_type="pops",
         item_id=fleeing_pop["_id"],
         change_type="Update",
@@ -2348,13 +2496,10 @@ def pop_flee_tick(old_nation, new_nation, schema):
             f"to {destination.get('name', 'Unknown')} due to overcrowding"
         ),
     )
-    if change_id:
-        system_approve_change(change_id)
-        return (
-            f"A pop fled from {old_nation.get('name', 'Unknown')} "
-            f"to {destination.get('name', 'Unknown')} due to overcrowding.\n"
-        )
-    return ""
+    return (
+        f"A pop fled from {old_nation.get('name', 'Unknown')} "
+        f"to {destination.get('name', 'Unknown')} due to overcrowding.\n"
+    )
 
 def temperament_tick(old_nation, new_nation, schema):
     if old_nation.get("temperament", "None") == "Player":
@@ -2737,7 +2882,7 @@ def era_ai_resource_grant_tick(old_nation, new_nation, schema):
     return f"{old_nation.get('name', '?')}: era resource grant [{summary}]\n"
 
 
-def era_relations_decay_tick():
+def era_relations_decay_tick(pending=None):
     neutral_idx = _RELATION_STEPS.index("Neutral")
     relations = list(mongo.db.diplo_relations.find())
     count = 0
@@ -2747,7 +2892,8 @@ def era_relations_decay_tick():
             continue
         idx = _RELATION_STEPS.index(current)
         new_val = _RELATION_STEPS[idx + 1 if idx < neutral_idx else idx - 1]
-        change_id = system_request_change(
+        _queue_change(
+            pending,
             data_type="diplo_relations",
             item_id=relation["_id"],
             change_type="Update",
@@ -2755,9 +2901,7 @@ def era_relations_decay_tick():
             after_data={"relation": new_val},
             reason="Era Tick: Relations Decay to Neutral",
         )
-        if change_id:
-            system_approve_change(change_id)
-            count += 1
+        count += 1
     return f"Decayed {count} relation(s) toward Neutral.\n"
 
 
@@ -2806,7 +2950,7 @@ def age_pop_growth_tick():
     return f"Age Pop Growth: grew {count} nation(s) (infertile races skipped).\n"
 
 
-def era_artifact_loss_tick():
+def era_artifact_loss_tick(pending=None):
     """Roll artifact loss chance 3 times per character; lose 1 artifact per successful roll."""
     character_schema, character_db = get_data_on_category("characters")
     _, artifact_db = get_data_on_category("artifacts")
@@ -2843,7 +2987,8 @@ def era_artifact_loss_tick():
             new_artifact["owner"] = "Lost"
             available.remove(old_artifact)
 
-            change_id = system_request_change(
+            _queue_change(
+                pending,
                 data_type="artifacts",
                 item_id=old_artifact["_id"],
                 change_type="Update",
@@ -2851,7 +2996,6 @@ def era_artifact_loss_tick():
                 after_data=new_artifact,
                 reason=f"{old_artifact.get('name', 'Unknown')} lost by {character.get('name', 'Unknown')} during era artifact loss",
             )
-            system_approve_change(change_id)
             losses_log += f"  {character.get('name', 'Unknown')} lost {old_artifact.get('name', 'Unknown')}.\n"
 
     if losses_log:
@@ -2859,7 +3003,7 @@ def era_artifact_loss_tick():
     return "Era Artifact Loss: no artifacts lost.\n"
 
 
-def era_character_aging_tick():
+def era_character_aging_tick(pending=None):
     """Roll 5d4 once; age every living character by that many sessions.
     Any character whose age exceeds their elderly_age threshold by more than 2 dies."""
     character_schema, character_db = get_data_on_category("characters")
@@ -2892,7 +3036,8 @@ def era_character_aging_tick():
                 f" (age {new_age}, elderly threshold {elderly_age}).\n"
             )
 
-        change_id = system_request_change(
+        _queue_change(
+            pending,
             data_type="characters",
             item_id=character["_id"],
             change_type="Update",
@@ -2900,7 +3045,6 @@ def era_character_aging_tick():
             after_data=new_character,
             reason=f"Era Tick: aged {age_increase} session(s)",
         )
-        system_approve_change(change_id)
 
     return result
 
@@ -3031,7 +3175,7 @@ NATION_CROSS_TICK_FUNCTIONS = {
     "AI Vassal Concessions Payment Tick": ai_vassal_concessions_payment_tick,
 }
 
-def generate_all_ai_rulers_tick():
+def generate_all_ai_rulers_tick(pending=None):
     """Generate AI rulers for all nations and mercenary companies without a living ruler or direct players."""
     result = ""
     character_schema, _ = get_data_on_category("characters")
@@ -3054,7 +3198,7 @@ def generate_all_ai_rulers_tick():
             if _in_stasis(org):
                 continue
             if str(org["_id"]) not in living_ruler_org_ids and not org.get("players"):
-                result += generate_ai_character(org, org_schema, character_schema)
+                result += generate_ai_character(org, org_schema, character_schema, pending=pending)
 
     return result
 
@@ -3100,6 +3244,36 @@ ERA_CHARACTER_TICK_FUNCTIONS = {
 }
 
 
+# Tick functions that queue a deferred change against a document OTHER than
+# the one they're iterating (see _queue_change) — everything else is called
+# by tick()/era_tick()'s dispatch loops exactly as before. Wrapped with
+# functools.partial(fn, pending=pending) at dispatch time rather than adding
+# `pending` to every tick function's signature, so this list is the only
+# place that needs to be kept up to date when a new cross-cutting write is
+# added.
+_PENDING_AWARE_TICK_FUNCTIONS = {
+    character_heal_then_death_tick,
+    artifact_loss_tick,
+    ai_ensure_leader_tick,
+    pop_flee_tick,
+    disease_cure_cross_tick,
+    disease_job_death_tick,
+    era_relations_decay_tick,
+    era_artifact_loss_tick,
+    era_character_aging_tick,
+    generate_all_ai_rulers_tick,
+}
+
+
+def _dispatch(tick_function, pending, *args):
+    """Call a registered tick function, binding `pending` in only if that
+    function is one of _PENDING_AWARE_TICK_FUNCTIONS — every other tick
+    function's call signature is completely unaffected."""
+    if tick_function in _PENDING_AWARE_TICK_FUNCTIONS:
+        return functools.partial(tick_function, pending=pending)(*args)
+    return tick_function(*args)
+
+
 def era_tick(form_data):
     full_tick_summary = ""
 
@@ -3107,6 +3281,10 @@ def era_tick(form_data):
         success, message = backup_database()
         if not success:
             return message
+
+    # See tick()'s matching comment: nothing below touches the database
+    # except plain reads until the single commit phase at the end.
+    pending = []
 
     collect_nation_data = any(
         f"run_{label}" in form_data for label in ERA_NATION_TICK_FUNCTIONS
@@ -3127,11 +3305,12 @@ def era_tick(form_data):
                 for i in range(len(old_nations)):
                     if _in_stasis(old_nations[i]):
                         continue
-                    result = fn(old_nations[i], new_nations[i], nation_schema)
+                    result = _dispatch(fn, pending, old_nations[i], new_nations[i], nation_schema)
                     full_tick_summary += result
 
         for i in range(len(old_nations)):
-            change_id = system_request_change(
+            _queue_change(
+                pending,
                 data_type="nations",
                 item_id=old_nations[i]["_id"],
                 change_type="Update",
@@ -3139,7 +3318,6 @@ def era_tick(form_data):
                 after_data=new_nations[i],
                 reason="Era Tick Update for " + old_nations[i]["name"],
             )
-            system_approve_change(change_id)
 
     collect_character_data = any(
         f"run_{label}" in form_data for label in ERA_CHARACTER_TICK_FUNCTIONS
@@ -3160,11 +3338,12 @@ def era_tick(form_data):
                 for i in range(len(old_characters)):
                     if _in_stasis(old_characters[i]):
                         continue
-                    result = fn(old_characters[i], new_characters[i], character_schema)
+                    result = _dispatch(fn, pending, old_characters[i], new_characters[i], character_schema)
                     full_tick_summary += result
 
         for i in range(len(old_characters)):
-            change_id = system_request_change(
+            _queue_change(
+                pending,
                 data_type="characters",
                 item_id=old_characters[i]["_id"],
                 change_type="Update",
@@ -3172,19 +3351,19 @@ def era_tick(form_data):
                 after_data=new_characters[i],
                 reason="Era Tick Update for " + old_characters[i].get("name", str(old_characters[i]["_id"])),
             )
-            system_approve_change(change_id)
 
     for label, fn in ERA_GENERAL_TICK_FUNCTIONS.items():
         if fn is None:
             continue  # handled as a special case above (e.g. Backup Database)
         if f"run_{label}" in form_data:
             print(label)
-            full_tick_summary += fn()
+            full_tick_summary += _dispatch(fn, pending)
+
+    # ── Commit phase — see tick()'s matching comment. ──────────────────────
+    current_session = _commit_pending_changes(pending)
 
     if "run_Snapshot Hex Map" in form_data:
         from helpers.hex_map_helpers import snapshot_current_map
-        global_modifiers = mongo.db["global_modifiers"].find_one({"name": "global_modifiers"})
-        current_session = global_modifiers.get("session_counter", 0) if global_modifiers else 0
         snap_message = snapshot_current_map(current_session)
         full_tick_summary += f"\n\n{snap_message}"
 
@@ -3196,7 +3375,7 @@ def era_tick(form_data):
 
 def run_era_tick_async(form_data):
     from threading import Thread
-    thread = Thread(target=era_tick, args=(form_data,))
+    thread = Thread(target=_run_tick_guarded, args=(era_tick, form_data, "Era tick"))
     thread.daemon = True
     thread.start()
     return "Era tick started in background."

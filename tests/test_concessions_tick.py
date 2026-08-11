@@ -147,6 +147,42 @@ class TestConcessionsResourceFiltering:
         assert isinstance(result, str)
 
 
+class TestMissingOverlordKey:
+    """Regression test for a production crash: a nation whose document has no
+    "overlord" key at all (as opposed to overlord == "") crashed both
+    nation_concessions_tick and nation_rebellion_tick with
+
+        KeyError: 'overlord'
+
+    because they indexed old_nation["overlord"] directly instead of using
+    .get("overlord", ""). "overlord" is a linked_object field with no schema
+    default, so a nation that has never been touched by the
+    vassal/overlord flow can legitimately lack the key entirely — this is
+    not malformed data, and both functions must treat it exactly like an
+    independent nation (overlord == "") rather than raising.
+    """
+
+    def test_concessions_tick_treats_missing_overlord_key_as_independent(self):
+        old_nation = {"_id": ObjectId(), "name": "Independent Nation"}
+        assert "overlord" not in old_nation
+        new_nation = dict(old_nation)
+
+        result = th.nation_concessions_tick(old_nation, new_nation, {})
+
+        assert result == ""
+        assert new_nation == old_nation  # untouched — no concessions logic ran
+
+    def test_rebellion_tick_treats_missing_overlord_key_as_independent(self):
+        old_nation = {"_id": ObjectId(), "name": "Independent Nation"}
+        assert "overlord" not in old_nation
+        new_nation = dict(old_nation)
+
+        result = th.nation_rebellion_tick(old_nation, new_nation, {})
+
+        assert result == ""
+        assert new_nation == old_nation  # untouched — no rebellion logic ran
+
+
 _COMPLIANCE_SCHEMA = {
     "properties": {
         "compliance": {
