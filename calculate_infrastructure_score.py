@@ -116,7 +116,10 @@ def score_modifiers(nation: Dict[str, Any]) -> int:
 
     score = 0
     for modifier in nation.get("modifiers", []):
-        if "nodes" in modifier.get("field", ""):
+        # "field" is legitimately absent (or explicitly None) on structured
+        # modifiers that target via modifier_type instead of a plain field
+        # name — .get(..., "") only covers "missing", not "present but None".
+        if "nodes" in (modifier.get("field") or ""):
             score += modifier.get("value", 0)
     return score
 

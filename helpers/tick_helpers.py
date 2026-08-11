@@ -2691,7 +2691,10 @@ def district_duration_tick(old_nation, new_nation, schema):
 
     stale = []
     for i, m in enumerate(modifiers):
-        f = m.get("field", "")
+        # "field" is legitimately absent (or explicitly None) on structured
+        # modifiers that target via modifier_type instead — .get(..., "")
+        # only covers "missing", not "present but None".
+        f = m.get("field") or ""
         if f.startswith("district_sessions_") and f[len("district_sessions_"):] not in active_def_keys:
             stale.append(i)
     for i in reversed(stale):
