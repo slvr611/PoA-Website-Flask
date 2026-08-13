@@ -69,6 +69,64 @@ def _queue_change(pending, data_type, item_id, change_type, before_data, after_d
     return None
 
 
+def _queue_tile_write(pending_tiles, tile_id, set_fields):
+    """Defer a hex_map_tiles $set instead of writing immediately — the tile
+    equivalent of _queue_change, for district/city claims made mid-tick.
+
+    hex_map_tiles doesn't go through system_request_change/_queue_change at
+    all: it carries no calculated fields and is deliberately kept outside the
+    schema/change-tracking/approval system for performance (see
+    routes/hex_map_routes.py's update_hex_map_tile, which writes directly).
+    So this is a separate, much lighter queue — committed at the same point
+    _commit_pending_changes runs, via _commit_pending_tile_writes — rather
+    than folded into _queue_change's data-type grouping.
+
+    Before this existed, _claim_district_tile/_claim_city_tile wrote to
+    hex_map_tiles immediately, during the tick's compute phase — the one
+    write in the whole tick that didn't respect "nothing touches the
+    database until the single commit phase at the end" (see tick()'s
+    matching comment). A tick that failed after claiming some tiles but
+    before reaching the commit phase left those claims permanently on the
+    map with no corresponding nation.districts/cities entry — see
+    migrations/fix_orphaned_district_tile_claims.py, written to clean up
+    exactly that shape of damage from before dry_run existed on the preview
+    path; this closes the same class of gap for the live tick path too.
+
+    If pending_tiles is None (a caller invoking a tile-claiming function
+    directly, outside tick()), falls back to an immediate write so those
+    callers keep working unchanged."""
+    if pending_tiles is None:
+        mongo.db.hex_map_tiles.update_one({"_id": tile_id}, {"$set": set_fields})
+        return
+    pending_tiles.append({"_id": tile_id, "set": dict(set_fields)})
+
+
+def _commit_pending_tile_writes(pending_tiles):
+    """Apply every hex_map_tiles write queued via _queue_tile_write, merged
+    per tile (later-queued fields win on conflict, same precedent as
+    _merge_after_data) — the tile-claim half of the tick's single
+    end-of-compute-phase commit (_commit_pending_changes is the
+    nations/characters/etc. half). No transaction/session needed: hex tiles
+    carry no calculated fields or change-approval workflow, each tile is
+    written independently, and this only ever runs after the whole compute
+    phase has already finished without error. Plain per-tile update_one
+    calls rather than bulk_write — nothing else in this codebase uses
+    bulk_write, and tile counts per tick (a handful of district/city claims)
+    don't need it."""
+    if not pending_tiles:
+        return
+    merged = {}
+    order = []
+    for item in pending_tiles:
+        tid = item["_id"]
+        if tid not in merged:
+            merged[tid] = {}
+            order.append(tid)
+        merged[tid].update(item["set"])
+    for tid in order:
+        mongo.db.hex_map_tiles.update_one({"_id": tid}, {"$set": merged[tid]})
+
+
 def _commit_one_batch(session, items, skip_propagate_ids=None):
     """Commit a list of already-queued items inside an already-open
     transaction on `session`. Shared by every group _commit_pending_changes
@@ -99,6 +157,145 @@ def _commit_one_batch(session, items, skip_propagate_ids=None):
         # mirrors what the old per-category commit loops already did.
         if i % 20 == 19:
             gc.collect()
+
+
+def _looks_id_keyed(lst):
+    """True if every item in `lst` is a dict with a stable `_id` — or `lst`
+    is empty. Deliberately more permissive than change_helpers._all_have_ids
+    (which treats an empty list as disqualifying) — here an empty list just
+    means "this side removed everything," which must still be eligible for
+    the ID-based 3-way merge below, not fall through to whole-list replace."""
+    return all(isinstance(item, dict) and item.get("_id") is not None for item in lst)
+
+
+def _merge_id_keyed_lists(base_list, a_list, b_list):
+    """3-way merge of an ID-keyed list (modifiers, cities, ...) that two
+    independent same-tick changes to the same entity both touched.
+
+    `base_list` is the shared pre-tick ancestor both sides started from.
+    An item missing from a side relative to base means that side removed
+    it; an item present in a side but not in base means that side added
+    it. Both sides' additions/removals/edits are combined rather than one
+    side's whole list replacing the other's (which is what plain
+    deep_merge does when both sides carry stable IDs — appropriate when
+    merging a requested change onto the live document, but wrong here,
+    where `a` and `b` are two independent deltas off the same base rather
+    than one being authoritative)."""
+    base_map = {i["_id"]: i for i in base_list if isinstance(i, dict) and "_id" in i}
+    a_map = {i["_id"]: i for i in a_list if isinstance(i, dict) and "_id" in i}
+    b_map = {i["_id"]: i for i in b_list if isinstance(i, dict) and "_id" in i}
+
+    result_map = {}
+    for item_id in set(base_map) | set(a_map) | set(b_map):
+        in_base, in_a, in_b = item_id in base_map, item_id in a_map, item_id in b_map
+        if not in_base:
+            # Newly added by one or both sides — keep whichever added it;
+            # if both added the same id (unlikely), the later side (b) wins.
+            if in_b:
+                result_map[item_id] = b_map[item_id]
+            elif in_a:
+                result_map[item_id] = a_map[item_id]
+            continue
+        a_edited = in_a and a_map[item_id] != base_map[item_id]
+        b_edited = in_b and b_map[item_id] != base_map[item_id]
+        if not in_a and not in_b:
+            continue  # both removed it
+        if not in_a and in_b:
+            # a removed it; respect that unless b actually edited it (conflict — b wins)
+            if b_edited:
+                result_map[item_id] = b_map[item_id]
+            continue
+        if not in_b and in_a:
+            if a_edited:
+                result_map[item_id] = a_map[item_id]
+            continue
+        # present on both sides — later side's edit wins if it changed anything
+        result_map[item_id] = b_map[item_id] if b_edited else a_map[item_id]
+
+    # Preserve a stable order: base order first, then new items from a, then from b.
+    ordered = []
+    seen = set()
+    for src in (base_list, a_list, b_list):
+        for item in src:
+            item_id = item.get("_id") if isinstance(item, dict) else None
+            if item_id in result_map and item_id not in seen:
+                ordered.append(result_map[item_id])
+                seen.add(item_id)
+    return ordered
+
+
+def _merge_after_data(base, a, b):
+    """3-way merge of two independent full-document mutations (`a`, `b`) of
+    the same pre-tick `base` document, produced by two of a tick's own
+    queued changes to the same entity (see _merge_pending_by_entity).
+
+    For each key: if only one side changed it from base, use that side's
+    value untouched. If both sides changed it to the same value, keep it.
+    If both changed it to *different* values: ID-keyed lists (including
+    ones where one side emptied it out entirely — see _looks_id_keyed) are
+    merged item-by-item via _merge_id_keyed_lists; anything else (scalars,
+    plain dicts) falls back to the later-queued side winning, same as
+    deep_merge's existing behavior for non-list fields."""
+    result = dict(a)
+    for key, b_val in b.items():
+        a_val = a.get(key)
+        if b_val == a_val:
+            continue
+        base_val = base.get(key)
+        b_changed = b_val != base_val
+        a_changed = a_val != base_val
+        if not b_changed:
+            continue
+        if not a_changed:
+            result[key] = b_val
+            continue
+        if (isinstance(base_val, list) and isinstance(a_val, list) and isinstance(b_val, list)
+                and _looks_id_keyed(base_val) and _looks_id_keyed(a_val) and _looks_id_keyed(b_val)
+                and (base_val or a_val or b_val)):  # all-empty is not "ID-keyed", just empty
+            result[key] = _merge_id_keyed_lists(base_val, a_val, b_val)
+        else:
+            result[key] = b_val
+    return result
+
+
+def _merge_pending_by_entity(items):
+    """Collapse multiple queued changes to the same entity (same item_id)
+    within one data-type group into a single change, in queue order, so at
+    most one change — and one change-history record — is committed per
+    entity per tick.
+
+    Two of a tick's own queued changes can legitimately target the same
+    entity — this isn't rare: it happens whenever a cross-cutting function
+    (e.g. a character death queuing a nation-side stability/modifier
+    update, or era_tick's ERA_GENERAL_TICK_FUNCTIONS running character
+    aging *after* the main character loop already queued that same
+    character) reaches into a data type that also gets its own per-entity
+    "Tick Update for X" elsewhere in the same tick. Committing both as
+    separate sequential changes either gets the second one blocked by
+    check_no_other_changes (a real production failure — see
+    change_helpers.py's skip_recalculation bypass, kept as a
+    defense-in-depth fallback for anything that slips past this) or
+    silently drops one side's list-field addition when both independently
+    touched the same ID-keyed list (deep_merge replaces such lists
+    wholesale rather than merging them). Merging here at queue-commit time
+    avoids both: there's only ever one change to commit, so there's
+    nothing for it to diverge from, and list fields are combined via
+    _merge_after_data instead of one side clobbering the other."""
+    merged_by_id = {}
+    order = []
+    for item in items:
+        key = str(item["item_id"])
+        if key not in merged_by_id:
+            merged_by_id[key] = dict(item)
+            order.append(key)
+        else:
+            existing = merged_by_id[key]
+            existing["after_data"] = _merge_after_data(
+                existing["before_data"], existing["after_data"], item["after_data"]
+            )
+            existing["reason"] = existing["reason"] + "; " + item["reason"]
+            existing["already_calculated"] = existing["already_calculated"] and item["already_calculated"]
+    return [merged_by_id[k] for k in order]
 
 
 # Even with already_calculated=True skipping recalculation, each item still
@@ -149,15 +346,19 @@ def _commit_pending_changes(pending):
     call — so every entity still gets its own normal "Tick Update for X"
     change-history record.
 
-    Note: two of a tick's own queued changes can legitimately target the
-    same entity (e.g. a character death queues a cross-cutting nation
-    update, and the tick's main per-entity loop separately queues its own
-    "Tick Update for X" for that same nation) — these commit as separate,
-    sequential changes rather than being merged into one. See
-    system_approve_change's skip_recalculation bypass of
-    check_no_other_changes in change_helpers.py for why that's safe for
-    the common case, and its docstring for the known narrower trade-off
-    when both changes touch the same ID-keyed list field.
+    Multiple changes queued for the same entity within one tick — a real,
+    not-rare occurrence (a character death queuing a cross-cutting nation
+    update alongside the nations loop's own "Tick Update for X"; era_tick's
+    ERA_GENERAL_TICK_FUNCTIONS queuing character-aging updates *after* the
+    main character loop already queued that same character; etc — see
+    _merge_pending_by_entity's docstring) — are merged into a single change
+    per data-type group before chunking, via _merge_pending_by_entity. This
+    is the single channel every tick-driven write goes through: at most one
+    change, and one change-history record, per entity per tick, regardless
+    of how many functions contributed to it. system_approve_change's
+    skip_recalculation bypass of check_no_other_changes (change_helpers.py)
+    is kept as a defense-in-depth fallback for anything that isn't a
+    same-data-type-group duplicate and so slips past this merge.
 
     Each chunk uses session.with_transaction(), pymongo's own recommended
     pattern for transactions — it automatically retries the whole chunk on
@@ -183,7 +384,8 @@ def _commit_pending_changes(pending):
         skip_propagate_ids = {(item["data_type"], str(item["item_id"])) for item in pending}
 
         for dt in order:
-            for chunk in _chunked(by_type[dt], _COMMIT_CHUNK_SIZE):
+            merged_items = _merge_pending_by_entity(by_type[dt])
+            for chunk in _chunked(merged_items, _COMMIT_CHUNK_SIZE):
                 with mongo.cx.start_session() as session:
                     session.with_transaction(
                         lambda s, _items=chunk: _commit_one_batch(s, _items, skip_propagate_ids=skip_propagate_ids)
@@ -207,6 +409,10 @@ def tick(form_data):
     # with no exception. See _queue_change/_dispatch and the commit phase at
     # the bottom of this function.
     pending = []
+    # Same idea for hex_map_tiles writes (district/city claims) — a separate
+    # queue since tiles don't go through the schema/change-tracking system
+    # _queue_change uses. See _queue_tile_write/_commit_pending_tile_writes.
+    pending_tiles = []
 
     global_modifiers = mongo.db["global_modifiers"].find_one({"name": "global_modifiers"})
     old_target = global_modifiers
@@ -459,7 +665,7 @@ def tick(form_data):
                         # compliance loss) instead of stasis's universal one.
                         if tick_function is not modifier_decay_tick and _undead_horde_tick_blocked(old_nations[i], tick_function_label):
                             continue
-                        result = _dispatch(tick_function, pending, old_nations[i], new_nations[i], nation_schema)
+                        result = _dispatch(tick_function, pending, old_nations[i], new_nations[i], nation_schema, pending_tiles=pending_tiles)
                         if old_nations[i].get("temperament", "None") == "Player":
                             player_tick_summary += result
                         elif tick_function_label in VASSAL_SPECIFIC_NATION_TICK_FUNCTIONS and old_nations[i].get("overlord", "None") != "None":
@@ -481,7 +687,7 @@ def tick(form_data):
         for tick_function_label, tick_function in NATION_CROSS_TICK_FUNCTIONS.items():
             if f"run_{tick_function_label}" in form_data:
                 print(tick_function_label)
-                result = _dispatch(tick_function, pending, old_nations, new_nations, nation_schema)
+                result = _dispatch(tick_function, pending, old_nations, new_nations, nation_schema, pending_tiles=pending_tiles)
                 full_tick_summary += result
 
 
@@ -602,6 +808,7 @@ def tick(form_data):
     # call), so every entity's change-history page shows the same one
     # "Tick Update for X" record it always has.
     current_session = _commit_pending_changes(pending)
+    _commit_pending_tile_writes(pending_tiles)
 
     archive_message = archive_old_changes(current_session)
     full_tick_summary += f"\n\nArchival: {archive_message}"
@@ -3349,13 +3556,26 @@ _PENDING_AWARE_TICK_FUNCTIONS = {
     generate_all_ai_rulers_tick,
 }
 
+# Separate registry, same reasoning, for functions that queue hex_map_tiles
+# writes via _queue_tile_write (district/city claims) rather than
+# system_request_change-tracked ones — see _queue_tile_write's docstring.
+_TILE_PENDING_AWARE_TICK_FUNCTIONS = {
+    ai_decision_tick,
+    ai_market_matching_tick,
+}
 
-def _dispatch(tick_function, pending, *args):
-    """Call a registered tick function, binding `pending` in only if that
-    function is one of _PENDING_AWARE_TICK_FUNCTIONS — every other tick
-    function's call signature is completely unaffected."""
+
+def _dispatch(tick_function, pending, *args, pending_tiles=None):
+    """Call a registered tick function, binding `pending` and/or
+    `pending_tiles` in only if that function is registered for them — every
+    other tick function's call signature is completely unaffected."""
+    kwargs = {}
     if tick_function in _PENDING_AWARE_TICK_FUNCTIONS:
-        return functools.partial(tick_function, pending=pending)(*args)
+        kwargs["pending"] = pending
+    if tick_function in _TILE_PENDING_AWARE_TICK_FUNCTIONS:
+        kwargs["pending_tiles"] = pending_tiles
+    if kwargs:
+        return functools.partial(tick_function, **kwargs)(*args)
     return tick_function(*args)
 
 

@@ -488,6 +488,24 @@ def update_hex_map_tile(q, r):
     if not update:
         return jsonify({"ok": True})
 
+    # Enforce: the capital hex may only ever hold a city, never a district —
+    # matches the AI-side exclusion in calculations.field_calculations
+    # _compute_legal_placement. Checked against the EFFECTIVE state (this
+    # update layered over whatever isn't being changed) since either field
+    # can be edited independently of the other.
+    def _effective_tile_field(field):
+        if field in update:
+            return update[field]
+        existing = mongo.db.hex_map_tiles.find_one(
+            {"q": {"$in": [q, float(q)]}, "r": {"$in": [r, float(r)]}}, {field: 1, "_id": 0}
+        ) or {}
+        return existing.get(field)
+
+    if update.get("district") and _effective_tile_field("capital"):
+        return jsonify({"error": "The capital hex cannot have a district — only a city may be built there."}), 422
+    if update.get("capital") and _effective_tile_field("district"):
+        return jsonify({"error": "This tile has a district and cannot be marked as the capital — clear the district first."}), 422
+
     # Enforce route terrain restrictions
     _ROUTE_BLOCKED = {
         1: {"hazardous_land", "hazardous_water", "mountain", "deep_water"},

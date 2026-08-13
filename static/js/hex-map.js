@@ -246,7 +246,7 @@ class HexMapViewer {
             nodes:            true,
             luxury_nodes:     true,
             buildings:        true,
-            roads:            false,
+            roads:            true,
             out_of_range:     true,
             trade_distance:   false,
             diplomatic_range: false,
@@ -946,6 +946,7 @@ class HexMapViewer {
         const hasTerrain   = this.layers.terrain;
         const hasPolitical = this.layers.political;
         const hasRegions   = this.layers.regions;
+        const hasRoads     = this.layers.roads;
 
         // Flat x/y arrays per fill style — push(x, y) pairs to avoid per-hex object allocation.
         const terrainBuckets = {};  // fillStyle → Float64Array-like flat [x,y,x,y,…]
@@ -1088,7 +1089,7 @@ class HexMapViewer {
 
         // ── Routes (dashed lines connecting route tiles and adjacent cities) ────
         // Line width scales with zoom: 3.5 screen-px at zoom ≥ 0.875, thinner when zoomed out.
-        if (hasPolitical) {
+        if (hasRoads) {
             const routeLW    = Math.max(0.8, Math.min(4, 3.5 / this.zoom));
             const drawnEdges = new Set();
             ctx.save();
@@ -1682,13 +1683,13 @@ class HexMapViewer {
         this.render();
     }
 
-    _showPaintError(msg) {
+    _showPaintError(msg, durationMs = 4000) {
         const el = document.getElementById('hex-paint-error');
         if (!el) return;
         el.textContent = msg;
         el.style.display = 'block';
         clearTimeout(this._paintErrorTimer);
-        this._paintErrorTimer = setTimeout(() => { el.style.display = 'none'; }, 4000);
+        this._paintErrorTimer = setTimeout(() => { el.style.display = 'none'; }, durationMs);
     }
 
     _updateCursor() {
@@ -1720,6 +1721,7 @@ class HexMapViewer {
             this._paintStartX = cx;
             this._paintStartY = cy;
             this._paintMoved   = false;
+            this._paintBlockedCount = 0;
             const type = this.paintNationMode ? 'nation' : this.paintRegionMode ? 'region' : this.paintRouteMode ? 'route' : this.paintNodeMode ? 'node' : 'terrain';
             this._currentUndoBatch = { type, tiles: new Map() };
             this._paintAt(cx, cy);
@@ -1788,6 +1790,14 @@ class HexMapViewer {
             this._undoStack.push(this._currentUndoBatch);
             if (this._undoStack.length > 50) this._undoStack.shift();
         }
+        // A drag across mixed terrain can silently skip several route tiles
+        // in a row (see _paintAt's blocked-terrain check) — one tile's worth
+        // of fading error text is easy to miss mid-drag, so summarize the
+        // whole gesture here once it ends.
+        if (this._paintBlockedCount > 1) {
+            this._showPaintError(`${this._paintBlockedCount} tile(s) skipped — blocked terrain.`, 7000);
+        }
+        this._paintBlockedCount = 0;
         this._currentUndoBatch = null;
     }
 
@@ -1947,6 +1957,11 @@ class HexMapViewer {
                 const blocked3  = new Set(['deep_water']);
                 const blocked   = route.tier === 3 ? blocked3 : blocked12;
                 if (blocked.has(terrain)) {
+                    // Counted (not just flashed) because a drag-paint across mixed
+                    // terrain can silently skip several tiles in a row — the single
+                    // fading error line is easy to miss mid-drag. _finalizeUndoBatch
+                    // turns this into one aggregated summary once the drag ends.
+                    this._paintBlockedCount = (this._paintBlockedCount || 0) + 1;
                     this._showPaintError(`Tier ${route.tier} routes cannot be built on ${TERRAIN_NAMES[terrain] || terrain} terrain.`);
                     return;
                 }
@@ -3260,6 +3275,7 @@ class HexMapViewer {
         // Fixed layer set for the export
         for (const k of Object.keys(this.layers)) this.layers[k] = false;
         this.layers.political    = true;
+        this.layers.roads        = true;
         this.layers.nodes        = true;
         this.layers.luxury_nodes = true;
         this.layers.buildings    = true;

@@ -2859,6 +2859,15 @@ def _compute_legal_placement(nation, owned_tiles=None):
                     "adj_water_or_building": adj_water_or_building,
                 })
 
+            # The capital hex may only ever be built on with a city (above) —
+            # never a district. The building_coords bootstrap seeding earlier
+            # only protects it while it's the nation's ONLY building; once any
+            # other building exists elsewhere, an unbuilt capital is otherwise
+            # indistinguishable from a plain empty owned tile in this loop, so
+            # the exclusion has to be explicit here too.
+            if coord == capital_coord:
+                continue
+
             adjacent_to_building = any(
                 n in building_coords for n in _hex_neighbors(*coord)
             )
@@ -2921,24 +2930,64 @@ def _compute_legal_placement(nation, owned_tiles=None):
         oor_set = result["oor_tiles"]
         for tile_info in result["legal_land_tiles"]:
             tile_info["oor"] = tile_info["coord"] in oor_set
-            # Count OOR owned tiles nearby that a building here would bring into range
-            nearby_oor = 0
-            nearby_oor_nodes = []
-            for nq, nr in _hex_neighbors(*tile_info["coord"]):
-                if (nq, nr) in oor_set:
-                    nearby_oor += 1
-                    n = node_map.get((nq, nr))
-                    if n:
-                        nearby_oor_nodes.append(n)
-                # Check 2nd ring too (rough estimate of range extension)
-                for nq2, nr2 in _hex_neighbors(nq, nr):
-                    if (nq2, nr2) in oor_set and (nq2, nr2) != tile_info["coord"]:
-                        nearby_oor += 1
-                        n = node_map.get((nq2, nr2))
-                        if n:
-                            nearby_oor_nodes.append(n)
-            tile_info["nearby_oor"] = nearby_oor
-            tile_info["nearby_oor_nodes"] = nearby_oor_nodes
+
+        # For every legal tile (land/water/city), compute how many of the
+        # nation's currently out-of-range owned tiles would actually become
+        # reachable if a building were placed here — a real single-source
+        # admin-range Dijkstra from the candidate alone, using the exact same
+        # "entering the tile is sufficient" boundary rule as
+        # compute_admin_range_out_of_range (limit = admin_range, in-range
+        # when dist-to-entrance < limit). This replaces a previous raw
+        # hex-neighbor proximity count, which ignored terrain movement cost
+        # entirely and double-counted tiles reachable via more than one
+        # neighbor. Restricted to owned_tiles only, matching the OOR set
+        # computation above (paths don't cross foreign/unowned territory).
+        all_candidate_tiles = (
+            result["legal_land_tiles"] + result["legal_water_tiles"] + result["legal_city_tiles"]
+        )
+        if oor_set and all_candidate_tiles:
+            try:
+                from helpers.hex_map_helpers import _dijkstra_from_sources
+                IMPASSABLE = 9999
+                INF = float("inf")
+                terrain_data = json_data.get("terrains", {})
+                terrain_move_costs = {
+                    k: v.get("speed_cost") or v.get("naval_speed_cost") or IMPASSABLE
+                    for k, v in terrain_data.items()
+                }
+                portal_map = {}
+                for t in owned_tiles:
+                    p = t.get("portal")
+                    if p and p.get("color"):
+                        portal_map.setdefault(p["color"], []).append((t["q"], t["r"]))
+
+                reach_cache = {}
+                for tile_info in all_candidate_tiles:
+                    coord = tile_info["coord"]
+                    if coord not in reach_cache:
+                        dist = _dijkstra_from_sources({coord}, tile_map, portal_map, terrain_move_costs)
+                        count = 0
+                        nodes = []
+                        for oor_coord in oor_set:
+                            d = dist.get(oor_coord, INF)
+                            if d == INF:
+                                continue
+                            entry_cost = terrain_move_costs.get(tile_map.get(oor_coord, ""), IMPASSABLE)
+                            if (d - entry_cost) < admin_range:
+                                count += 1
+                                n = node_map.get(oor_coord)
+                                if n:
+                                    nodes.append(n)
+                        reach_cache[coord] = (count, nodes)
+                    tile_info["nearby_oor"], tile_info["nearby_oor_nodes"] = reach_cache[coord]
+            except Exception:
+                for tile_info in all_candidate_tiles:
+                    tile_info["nearby_oor"] = 0
+                    tile_info["nearby_oor_nodes"] = []
+        else:
+            for tile_info in all_candidate_tiles:
+                tile_info["nearby_oor"] = 0
+                tile_info["nearby_oor_nodes"] = []
 
     except Exception:
         result = dict(_empty_result)

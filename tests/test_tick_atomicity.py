@@ -181,15 +181,27 @@ class TestCallerSuppliedAddId:
 # ---------------------------------------------------------------------------
 
 class TestSameEntityDoubleQueuedInOneTick:
-    """Production regression: a character death queues a cross-cutting
-    nation update (e.g. adds a stability-loss modifier entry) AND the same
-    tick's main per-nation loop separately queues "Tick Update for X" for
-    that same nation, from an independent, earlier-taken snapshot. Once the
-    first commits, the second's before_data no longer matches the live
-    document (it doesn't know about the modifier the first one added) —
-    check_no_other_changes correctly flags that as a divergence, but it's
-    expected same-tick sequencing, not an outside edit, and previously
-    aborted the whole batch with "could not be applied"."""
+    """Production regression, and the defense-in-depth fallback under it.
+
+    In normal tick flow, _commit_pending_changes now runs every data-type
+    group through _merge_pending_by_entity first (see TestMergePendingByEntity
+    below), so two queued changes to the same entity are combined into one
+    before system_approve_change ever sees them — this class's scenarios
+    don't actually arise from a real tick() /era_tick() run anymore.
+
+    These tests call system_request_change/system_approve_change directly,
+    bypassing that merge, to pin the *lower-level* fallback behavior on its
+    own: a character death queues a cross-cutting nation update (e.g. adds a
+    stability-loss modifier entry) AND the same tick's main per-nation loop
+    separately queues "Tick Update for X" for that same nation, from an
+    independent, earlier-taken snapshot. Once the first commits, the
+    second's before_data no longer matches the live document (it doesn't
+    know about the modifier the first one added) — check_no_other_changes
+    correctly flags that as a divergence, but it's expected same-tick
+    sequencing, not an outside edit, and previously aborted the whole batch
+    with "could not be applied". This bypass stays in place as a safety net
+    for anything that reaches system_approve_change without having gone
+    through the merge (e.g. a future direct caller)."""
 
     def test_second_update_is_not_blocked_by_the_first_ones_side_effect(self, mock_mongo, fake_category_data):
         mock_mongo.db.players.insert_one({"name": "System"})
@@ -264,20 +276,19 @@ class TestSameEntityDoubleQueuedInOneTick:
 
         assert ok2 is False
 
-    def test_known_tradeoff_same_list_field_touched_by_both_is_last_write_wins(self, mock_mongo, fake_category_data):
-        """Documents a deliberate, accepted trade-off (not a desired
-        behavior to protect): if two of a tick's own queued changes to the
-        same entity BOTH genuinely modify the same ID-keyed list field with
-        different content (e.g. two different cross-cutting functions each
-        add their own modifier to the same nation in the same tick),
-        deep_merge's list-replace-when-both-sides-have-ids behavior means
-        the second one's version silently wins — the first one's addition
-        is lost, no error is raised. This is narrower than the bug this
-        fix addresses (which triggered on *any* two same-tick updates to
-        the same entity, not just ones touching the identical field), and
-        trades a loud whole-batch failure for a quiet one. Pinned here so a
-        future change to deep_merge's list semantics doesn't silently
-        change this trade-off without it being noticed."""
+    def test_fallback_path_same_list_field_touched_by_both_is_last_write_wins(self, mock_mongo, fake_category_data):
+        """Pins the fallback path's OWN narrower limitation, now superseded
+        in normal tick flow by _merge_pending_by_entity (see
+        TestMergePendingByEntity, which asserts the *opposite* outcome —
+        both sides' list edits correctly combined — for the equivalent
+        scenario run through the real merge). Calling system_approve_change
+        directly, bypassing the merge: if two changes to the same entity
+        BOTH genuinely modify the same ID-keyed list field with different
+        content, deep_merge's list-replace-when-both-sides-have-ids
+        behavior means the second one's version silently wins — the first
+        one's addition is lost, no error raised. Pinned so a future change
+        to deep_merge's list semantics doesn't silently change this
+        fallback-path behavior without it being noticed."""
         mock_mongo.db.players.insert_one({"name": "System"})
         nation_id = ObjectId()
         mock_mongo.db.nations.insert_one({
@@ -315,6 +326,224 @@ class TestSameEntityDoubleQueuedInOneTick:
         assert ok2 is True
         final = mock_mongo.db.nations.find_one({"_id": nation_id})
         assert final["modifiers"] == []  # death-mod silently lost — known trade-off, not a goal
+
+
+# ---------------------------------------------------------------------------
+# _merge_pending_by_entity / _merge_after_data / _merge_id_keyed_lists:
+# the single channel every tick-driven write goes through
+# ---------------------------------------------------------------------------
+
+class TestMergeIdKeyedLists:
+    def test_addition_from_one_side_is_kept(self):
+        base = [{"_id": "a", "v": 1}]
+        a = [{"_id": "a", "v": 1}, {"_id": "b", "v": 2}]  # a added "b"
+        b = [{"_id": "a", "v": 1}]  # b didn't touch it
+        assert th._merge_id_keyed_lists(base, a, b) == [{"_id": "a", "v": 1}, {"_id": "b", "v": 2}]
+
+    def test_additions_from_both_sides_are_both_kept(self):
+        base = []
+        a = [{"_id": "a", "v": 1}]
+        b = [{"_id": "b", "v": 2}]
+        result = th._merge_id_keyed_lists(base, a, b)
+        assert {i["_id"] for i in result} == {"a", "b"}
+
+    def test_removal_by_one_side_is_respected_when_other_side_unchanged(self):
+        base = [{"_id": "a", "v": 1}]
+        a = []  # a removed it
+        b = [{"_id": "a", "v": 1}]  # b left it untouched
+        assert th._merge_id_keyed_lists(base, a, b) == []
+
+    def test_edit_by_one_side_wins_over_unrelated_removal_by_the_other(self):
+        base = [{"_id": "a", "v": 1}]
+        a = [{"_id": "a", "v": 99}]  # a edited it
+        b = []  # b removed it — but a's edit is a real conflict, a's edit wins
+        assert th._merge_id_keyed_lists(base, a, b) == [{"_id": "a", "v": 99}]
+
+    def test_both_sides_remove_the_same_item(self):
+        base = [{"_id": "a", "v": 1}]
+        assert th._merge_id_keyed_lists(base, [], []) == []
+
+    def test_empty_result_list_from_a_removal_does_not_break_downstream_merges(self):
+        """Regression: an earlier version of this merge used a helper that
+        treated an empty list as "not ID-keyed," which made a full removal
+        by one side fall through to whole-list replacement and silently
+        wipe out the OTHER side's addition. See _looks_id_keyed."""
+        base = [{"_id": "old", "v": 1}]
+        a = [{"_id": "old", "v": 1}, {"_id": "new", "v": 2}]  # a adds "new"
+        b = []  # b removes "old" entirely — b's list is empty
+        assert th._merge_id_keyed_lists(base, a, b) == [{"_id": "new", "v": 2}]
+
+
+class TestLooksIdKeyed:
+    def test_empty_list_is_id_keyed(self):
+        assert th._looks_id_keyed([]) is True
+
+    def test_list_of_dicts_with_ids_is_id_keyed(self):
+        assert th._looks_id_keyed([{"_id": "a"}, {"_id": "b"}]) is True
+
+    def test_list_with_a_dict_missing_id_is_not_id_keyed(self):
+        assert th._looks_id_keyed([{"_id": "a"}, {"name": "no id"}]) is False
+
+    def test_list_of_non_dicts_is_not_id_keyed(self):
+        assert th._looks_id_keyed([1, 2, 3]) is False
+
+
+class TestMergeAfterData:
+    def test_only_one_side_changed_key_uses_that_sides_value(self):
+        base = {"money": 100, "name": "N"}
+        a = {"money": 105, "name": "N"}
+        b = {"money": 100, "name": "N"}
+        assert th._merge_after_data(base, a, b) == {"money": 105, "name": "N"}
+
+    def test_both_sides_agree_keeps_the_value(self):
+        base = {"money": 100}
+        a = {"money": 105}
+        b = {"money": 105}
+        assert th._merge_after_data(base, a, b) == {"money": 105}
+
+    def test_scalar_conflict_later_side_wins(self):
+        base = {"name": "Original"}
+        a = {"name": "Renamed by A"}
+        b = {"name": "Renamed by B"}
+        assert th._merge_after_data(base, a, b)["name"] == "Renamed by B"
+
+    def test_id_keyed_list_conflict_is_combined_not_replaced(self):
+        base = {"modifiers": [{"_id": "old", "v": 1}]}
+        a = {"modifiers": [{"_id": "old", "v": 1}, {"_id": "death", "v": -1}]}
+        b = {"modifiers": []}
+        result = th._merge_after_data(base, a, b)
+        assert result["modifiers"] == [{"_id": "death", "v": -1}]
+
+    def test_keys_untouched_by_either_side_are_left_alone(self):
+        base = {"money": 100, "stability": 5}
+        a = {"money": 105, "stability": 5}
+        b = {"money": 100, "stability": 5}
+        assert th._merge_after_data(base, a, b) == {"money": 105, "stability": 5}
+
+
+class TestMergePendingByEntity:
+    def test_single_item_passes_through_unchanged(self):
+        item = {"item_id": ObjectId(), "data_type": "nations", "change_type": "Update",
+                "before_data": {}, "after_data": {"money": 5}, "reason": "r", "already_calculated": True}
+        assert th._merge_pending_by_entity([item]) == [item]
+
+    def test_different_entities_stay_separate(self):
+        id1, id2 = ObjectId(), ObjectId()
+        items = [
+            {"item_id": id1, "data_type": "nations", "change_type": "Update",
+             "before_data": {}, "after_data": {"money": 5}, "reason": "r1", "already_calculated": True},
+            {"item_id": id2, "data_type": "nations", "change_type": "Update",
+             "before_data": {}, "after_data": {"money": 5}, "reason": "r2", "already_calculated": True},
+        ]
+        result = th._merge_pending_by_entity(items)
+        assert len(result) == 2
+        assert {str(r["item_id"]) for r in result} == {str(id1), str(id2)}
+
+    def test_two_items_for_the_same_entity_produce_one_merged_change(self):
+        """The core production scenario: a character death queues a
+        cross-cutting nation update (adds a modifier) and the main
+        per-nation loop separately queues its own "Tick Update for X" for
+        that same nation — both should collapse into exactly one change,
+        with both sides' intent preserved."""
+        nid = ObjectId()
+        base = {"_id": nid, "name": "Test Nation", "money": 100, "modifiers": [{"_id": "old", "v": 1}]}
+        item1 = {
+            "item_id": nid, "data_type": "nations", "change_type": "Update",
+            "before_data": dict(base),
+            "after_data": {**base, "modifiers": [{"_id": "old", "v": 1}, {"_id": "death", "v": -1}]},
+            "reason": "Death of X caused nation update", "already_calculated": True,
+        }
+        item2 = {
+            "item_id": nid, "data_type": "nations", "change_type": "Update",
+            "before_data": dict(base),
+            "after_data": {**base, "money": 105, "modifiers": []},
+            "reason": "Tick Update for X", "already_calculated": True,
+        }
+
+        result = th._merge_pending_by_entity([item1, item2])
+
+        assert len(result) == 1
+        merged = result[0]
+        assert merged["reason"] == "Death of X caused nation update; Tick Update for X"
+        assert merged["after_data"]["money"] == 105
+        assert merged["after_data"]["modifiers"] == [{"_id": "death", "v": -1}]
+
+    def test_already_calculated_is_false_if_any_contributor_is_false(self):
+        nid = ObjectId()
+        item1 = {"item_id": nid, "data_type": "nations", "change_type": "Update",
+                 "before_data": {}, "after_data": {"a": 1}, "reason": "r1", "already_calculated": True}
+        item2 = {"item_id": nid, "data_type": "nations", "change_type": "Update",
+                 "before_data": {}, "after_data": {"a": 1}, "reason": "r2", "already_calculated": False}
+        result = th._merge_pending_by_entity([item1, item2])
+        assert result[0]["already_calculated"] is False
+
+    def test_preserves_queue_order_for_first_appearance(self):
+        id1, id2 = ObjectId(), ObjectId()
+        items = [
+            {"item_id": id2, "data_type": "nations", "change_type": "Update",
+             "before_data": {}, "after_data": {}, "reason": "second-entity-first", "already_calculated": True},
+            {"item_id": id1, "data_type": "nations", "change_type": "Update",
+             "before_data": {}, "after_data": {}, "reason": "first-entity-second", "already_calculated": True},
+        ]
+        result = th._merge_pending_by_entity(items)
+        assert [str(r["item_id"]) for r in result] == [str(id2), str(id1)]
+
+
+class TestCommitPendingChangesMergesDuplicates:
+    """Integration test: _commit_pending_changes (the real entry point tick()
+    and era_tick() call) produces exactly one change document for an entity
+    queued twice in the same tick, via the merge above — not two, and not a
+    crash. mongomock doesn't support real transactions, so this exercises
+    the grouping/merging/dispatch logic; the transactional commit itself was
+    verified separately against the real Atlas connection."""
+
+    def test_entity_queued_twice_commits_as_one_change_document(self, mock_mongo, fake_category_data):
+        mock_mongo.db.players.insert_one({"name": "System"})
+        nid = ObjectId()
+        mock_mongo.db.nations.insert_one({
+            "_id": nid, "name": "Test Nation", "money": 100,
+            "modifiers": [{"_id": "old", "v": 1}],
+        })
+        mock_mongo.db.global_modifiers.insert_one({"name": "global_modifiers", "session_counter": 1})
+        original = mock_mongo.db.nations.find_one({"_id": nid})
+
+        pending = [
+            {
+                "data_type": "nations", "item_id": nid, "change_type": "Update",
+                "before_data": dict(original),
+                "after_data": {**original, "modifiers": [{"_id": "old", "v": 1}, {"_id": "death", "v": -1}]},
+                "reason": "Death of X caused nation update", "already_calculated": True,
+            },
+            {
+                "data_type": "nations", "item_id": nid, "change_type": "Update",
+                "before_data": dict(original),
+                "after_data": {**original, "money": 105, "modifiers": []},
+                "reason": "Tick Update for X", "already_calculated": True,
+            },
+        ]
+
+        class _FakeSession:
+            # mongomock doesn't support real sessions — pass None through so
+            # the underlying find/insert/update calls (session=None) work
+            # against mongomock exactly like any non-transactional call.
+            def with_transaction(self, callback):
+                return callback(None)
+
+        with patch("helpers.tick_helpers.mongo", mock_mongo), \
+             patch("helpers.change_helpers.mongo", mock_mongo), \
+             patch("helpers.change_helpers.category_data", fake_category_data), \
+             patch("helpers.change_helpers._calculate_and_attach_fields", side_effect=lambda dt, d: d), \
+             patch("helpers.change_helpers.propagate_updates"), \
+             patch.object(mock_mongo, "cx", MagicMock(start_session=MagicMock(
+                 return_value=MagicMock(__enter__=lambda s: _FakeSession(), __exit__=lambda *a: False)
+             ))):
+            th._commit_pending_changes(pending)
+
+        changes = list(mock_mongo.db.changes.find({"target": nid}))
+        assert len(changes) == 1, "two queued changes to the same entity must commit as one change document"
+        final = mock_mongo.db.nations.find_one({"_id": nid})
+        assert final["money"] == 105
+        assert final["modifiers"] == [{"_id": "death", "v": -1}]
 
 
 # ---------------------------------------------------------------------------

@@ -2433,14 +2433,19 @@ def _pick_district_tile(legal_placement, dd, key, need_weights, prices):
     return best_coord, best_rationale
 
 
-def _claim_district_tile(nation_name, district_id, def_key, display_name, coord, dry_run=False):
-    """Write the district claim onto the chosen hex tile in the DB so the
-    placement is real (visible on the map, eligible for node/terrain
-    modifiers). Returns the tile's node resource key, or "" if none/no tile.
+def _claim_district_tile(nation_name, district_id, def_key, display_name, coord, dry_run=False, pending_tiles=None):
+    """Write the district claim onto the chosen hex tile so the placement is
+    real (visible on the map, eligible for node/terrain modifiers). Returns
+    the tile's node resource key, or "" if none/no tile.
 
     dry_run=True reads the tile's node without writing the claim — used by
     the read-only AI Goals Preview tool so simply viewing a preview never
     mutates the live hex map.
+
+    pending_tiles, when given (the live tick path), defers the actual write
+    via _queue_tile_write instead of writing immediately — see that
+    function's docstring for why. Local import to avoid a circular import
+    (tick_helpers imports this module at module load time).
     """
     if not coord or not nation_name:
         return ""
@@ -2451,13 +2456,11 @@ def _claim_district_tile(nation_name, district_id, def_key, display_name, coord,
     if not tile:
         return ""
     if not dry_run:
-        mongo.db.hex_map_tiles.update_one(
-            {"_id": tile["_id"]},
-            {"$set": {"district": {
-                "id": district_id, "def_key": def_key,
-                "display_name": display_name, "type": "",
-            }}},
-        )
+        from helpers.tick_helpers import _queue_tile_write
+        _queue_tile_write(pending_tiles, tile["_id"], {"district": {
+            "id": district_id, "def_key": def_key,
+            "display_name": display_name, "type": "",
+        }})
     node = tile.get("node") or {}
     if isinstance(node, dict):
         node_key = node.get("resource_type") or node.get("value") or node.get("resource") or ""
@@ -2466,11 +2469,11 @@ def _claim_district_tile(nation_name, district_id, def_key, display_name, coord,
     return node_key if node_key != "none" else ""
 
 
-def _claim_city_tile(nation_name, city_id, city_type, coord, set_capital=False, dry_run=False):
+def _claim_city_tile(nation_name, city_id, city_type, coord, set_capital=False, dry_run=False, pending_tiles=None):
     """Write the city onto the chosen hex tile so it appears on the map.
 
-    Mirrors _claim_district_tile. dry_run=True reads without writing —
-    used by the read-only AI Goals Preview tool.
+    Mirrors _claim_district_tile, including pending_tiles deferral. dry_run
+    =True reads without writing — used by the read-only AI Goals Preview tool.
     Returns the tile's node resource key, or "" if none.
     """
     if not coord or not nation_name:
@@ -2482,10 +2485,11 @@ def _claim_city_tile(nation_name, city_id, city_type, coord, set_capital=False, 
     if not tile:
         return ""
     if not dry_run:
+        from helpers.tick_helpers import _queue_tile_write
         update = {"city": {"id": city_id, "name": "", "type": city_type}}
         if set_capital:
             update["capital"] = True
-        mongo.db.hex_map_tiles.update_one({"_id": tile["_id"]}, {"$set": update})
+        _queue_tile_write(pending_tiles, tile["_id"], update)
     node = tile.get("node") or {}
     if isinstance(node, dict):
         node_key = node.get("resource_type") or node.get("value") or node.get("resource") or ""
@@ -2494,13 +2498,18 @@ def _claim_city_tile(nation_name, city_id, city_type, coord, set_capital=False, 
     return node_key if node_key != "none" else ""
 
 
-def _select_best_city(old_nation, state, exclude_types=None):
+def _select_best_city(old_nation, state, exclude_types=None, owned_tiles=None):
     """
     For grow_population: pick the best city to build (or replace).
     Evaluates conditional modifiers against the nation's current state to find
     the city type that would give the most effective_pop_capacity.
     Also scores the best tile placement for node and metropolis bonuses.
     exclude_types: set of city types built this session (to prevent duplicates).
+    owned_tiles: optional pre-fetched, evaluate_goal_district-maintained tile
+    snapshot (see its docstring) passed straight through to
+    _compute_legal_placement so a district/city claimed earlier in the same
+    call is correctly seen here — map writes are deferred to the tick's
+    commit phase now, so a fresh DB query wouldn't see them yet.
     Returns a plan dict with source='city', or None if no city avenue exists.
     """
     cities_data = json_data.get("cities", {})
@@ -2541,7 +2550,7 @@ def _select_best_city(old_nation, state, exclude_types=None):
 
     if open_city_slots > 0 and city_scores:
         from calculations.field_calculations import _compute_legal_placement
-        legal = _compute_legal_placement(old_nation)
+        legal = _compute_legal_placement(old_nation, owned_tiles=owned_tiles)
         prices = _base_prices()
         baseline_w = _weights_from_net(
             state["net_production"], state["stockpiles"], prices, state["money_income"],
@@ -2998,7 +3007,7 @@ def _goal_adjusted_need_weights(need_weights, goal_type, state=None):
     return w
 
 
-def evaluate_goal_district(old_nation, new_nation, state, goal, need_weights, prices, upkeep_assignments, log, dry_run=False):
+def evaluate_goal_district(old_nation, new_nation, state, goal, need_weights, prices, upkeep_assignments, log, dry_run=False, pending_tiles=None):
     """
     Build affordable districts and cities in a loop. After each build:
     - Re-evaluate upkeep assignments (new districts may unlock better jobs)
@@ -3008,17 +3017,57 @@ def evaluate_goal_district(old_nation, new_nation, state, goal, need_weights, pr
     dry_run=True simulates tile placement (for the decision log) without
     writing the claim to hex_map_tiles — used by the read-only AI Goals
     Preview tool so a preview render never mutates the live hex map.
+
+    pending_tiles, when given (the live tick path), makes any real claim a
+    deferred write via _claim_district_tile/_claim_city_tile's own
+    pending_tiles support — see _queue_tile_write. Since the claim is no
+    longer immediately visible in the database, this function keeps its own
+    in-memory `owned_tiles` snapshot (see below) so a second/third build
+    later in the SAME call still sees earlier ones from this call.
+
     Returns (district_plan, district_scores, district_log, upkeep_assignments, goal).
     """
-    from calculations.field_calculations import check_job_requirements
+    from calculations.field_calculations import check_job_requirements, _compute_legal_placement
 
     district_log = []
     district_plan = None
     max_builds = 5
     built_count = 0
+    nation_name = old_nation.get("name", "")
 
     # Nomads build districts/cities on the nation doc but never claim map tiles.
     is_nomadic = _nation_is_nomadic(old_nation)
+
+    # In-memory snapshot of this nation's own tiles, threaded into every
+    # _compute_legal_placement call below (city and district alike) instead
+    # of letting it query the database fresh each time, and mutated after
+    # every successful claim this call. Map writes are deferred to the
+    # tick's single end-of-compute-phase commit (pending_tiles), so a fresh
+    # DB query between builds #1 and #2 in the loop below would NOT see
+    # build #1's claim yet — this snapshot is what lets build #2 correctly
+    # treat build #1's tile as taken (excluded as a district candidate,
+    # counted as an adjacency source for the next one) without a DB round
+    # trip. Also benefits dry_run (a preview building several districts in
+    # one pass previously could re-suggest the same tile for more than one
+    # of them).
+    owned_tiles_snapshot = None
+    if not is_nomadic:
+        owned_tiles_snapshot = list(mongo.db.hex_map_tiles.find(
+            {"owner": nation_name},
+            {"q": 1, "r": 1, "terrain": 1, "district": 1, "city": 1, "wonder": 1, "capital": 1, "node": 1, "_id": 0},
+        ))
+
+    def _mark_tile_claimed(coord, **fields):
+        """Reflect a just-queued claim in owned_tiles_snapshot and force the
+        next _compute_legal_placement call to recompute from it instead of
+        serving a stale nation["_legal_placement_cache"]."""
+        old_nation.pop("_legal_placement_cache", None)
+        if owned_tiles_snapshot is None or not coord:
+            return
+        for t in owned_tiles_snapshot:
+            if (t.get("q"), t.get("r")) == coord:
+                t.update(fields)
+                break
 
     # Apply goal-specific weight adjustments so district scoring
     # properly values goal-relevant modifiers (e.g. stability for stabilize_nation)
@@ -3041,7 +3090,6 @@ def evaluate_goal_district(old_nation, new_nation, state, goal, need_weights, pr
     # nation docs that miss a previous tile claim — prevents exceeding map_count).
     map_claimed_counts = {}  # {def_key: count_on_map}
     if not dry_run:
-        nation_name = old_nation.get("name", "")
         for t in mongo.db.hex_map_tiles.find(
             {"owner": nation_name, "district": {"$exists": True, "$ne": None}},
             {"district.def_key": 1, "_id": 0}
@@ -3058,7 +3106,7 @@ def evaluate_goal_district(old_nation, new_nation, state, goal, need_weights, pr
 
         # --- Try city if goal is grow_population ---
         if goal.get("type") == "grow_population":
-            city_plan = _select_best_city(old_nation, state, exclude_types=built_city_types)
+            city_plan = _select_best_city(old_nation, state, exclude_types=built_city_types, owned_tiles=owned_tiles_snapshot)
             if city_plan:
                 cost = city_plan.get("cost", {})
                 money_ok = state["money"] >= cost.get("money", 0)
@@ -3092,7 +3140,7 @@ def evaluate_goal_district(old_nation, new_nation, state, goal, need_weights, pr
                         node_key = _claim_city_tile(
                             old_nation.get("name", ""), city_id, city_type,
                             coord, set_capital=city_plan.get("set_capital", False),
-                            dry_run=dry_run,
+                            dry_run=dry_run, pending_tiles=pending_tiles,
                         )
                     city_entry = {
                         "_id": city_id,
@@ -3110,6 +3158,10 @@ def evaluate_goal_district(old_nation, new_nation, state, goal, need_weights, pr
                     if coord:
                         placed_desc = "Previewed placement" if dry_run else "Placed"
                         district_log.append(f"  {placed_desc} at ({coord[0]},{coord[1]})" + (f" — node: {node_key}" if node_key else ""))
+                        city_fields = {"city": {"id": city_id, "name": "", "type": city_type}}
+                        if city_plan.get("set_capital", False):
+                            city_fields["capital"] = True
+                        _mark_tile_claimed(coord, **city_fields)
 
                     built_city_types.add(city_plan.get("key", ""))
                     district_log.append(f"Built city: {city_plan['display_name']}")
@@ -3183,15 +3235,15 @@ def evaluate_goal_district(old_nation, new_nation, state, goal, need_weights, pr
                 if c_source == "db" and not is_nomadic:
                     dd = mongo.db.district_defs.find_one({"key": c_key})
                     if dd:
-                        from calculations.field_calculations import _compute_legal_placement
-                        legal_for_pick = _compute_legal_placement(old_nation)
+                        legal_for_pick = _compute_legal_placement(old_nation, owned_tiles=owned_tiles_snapshot)
                         coord, tile_rationale = _pick_district_tile(
                             legal_for_pick, dd, c_key, scoring_weights, prices
                         )
                         if coord:
                             node_key = _claim_district_tile(
                                 old_nation.get("name", ""), district_id, c_key,
-                                dd.get("display_name", c_key), coord, dry_run=dry_run
+                                dd.get("display_name", c_key), coord, dry_run=dry_run,
+                                pending_tiles=pending_tiles,
                             )
                 new_entry = (
                     {"_id": district_id, "def_key": c_key, "node": node_key, "upgrades": []}
@@ -3201,10 +3253,11 @@ def evaluate_goal_district(old_nation, new_nation, state, goal, need_weights, pr
                 if coord:
                     placed_desc = "Previewed placement" if dry_run else "Placed"
                     district_log.append(f"  {placed_desc} at ({coord[0]},{coord[1]})" + (f" — node: {node_key}" if node_key else ""))
+                    _mark_tile_claimed(coord, district={
+                        "id": district_id, "def_key": c_key,
+                        "display_name": dd.get("display_name", c_key) if dd else c_key, "type": "",
+                    })
                     if not dry_run:
-                        # Invalidate the cached legal-placement scan so the next
-                        # build this session sees this tile as claimed.
-                        old_nation.pop("_legal_placement_cache", None)
                         map_claimed_counts[c_key] = map_claimed_counts.get(c_key, 0) + 1
                 districts = list(new_nation.get("districts", deepcopy(old_nation.get("districts", []))))
                 _insert_filling_empty_slot(
@@ -3859,10 +3912,14 @@ def generate_goal_trade_desires(state, goal, personality, district_plan, project
 # Main AI tick
 # ---------------------------------------------------------------------------
 
-def ai_decision_tick(old_nation, new_nation, schema):
+def ai_decision_tick(old_nation, new_nation, schema, pending_tiles=None):
     """
     Main per-nation AI tick — goal-first architecture.
     Must run AFTER nation_job_cleanup_tick in NATION_TICK_FUNCTIONS.
+
+    pending_tiles: forwarded to evaluate_goal_district so any district/city
+    tile claim this nation makes is deferred to the tick's commit phase
+    instead of written immediately — see _queue_tile_write.
 
     Flow:
       1. Evaluate state, personality, prices
@@ -3945,7 +4002,8 @@ def ai_decision_tick(old_nation, new_nation, schema):
         # --- Step 3: Goal-aware district/city building (may build multiple, re-evaluates goal after each) ---
         district_plan, district_scores, district_log, upkeep_assignments, goal = evaluate_goal_district(
             old_nation, new_nation, state, goal, need_weights,
-            market_prices, upkeep_assignments, log, dry_run=False
+            market_prices, upkeep_assignments, log, dry_run=False,
+            pending_tiles=pending_tiles,
         )
 
         # Re-compute upkeep floor with final state (districts may have changed available jobs)
@@ -4100,9 +4158,16 @@ def ai_decision_tick(old_nation, new_nation, schema):
 # ---------------------------------------------------------------------------
 
 
-def _post_trade_build_and_rejob(old_nation, new_nation, log_lines):
+def _post_trade_build_and_rejob(old_nation, new_nation, log_lines, pending_tiles=None):
     """After trade matching: if the nation's planned district is now affordable
     with newly received resources, build it and assign newly idle pops.
+
+    pending_tiles: forwarded to _claim_district_tile so the claim is
+    deferred to the tick's commit phase — see _queue_tile_write. None (the
+    default) makes it write immediately instead, which is correct for
+    run_ai_market_matching_standalone's own already-immediate-commit design
+    (see its call site below) — only the tick-driven ai_market_matching_tick
+    call passes a real list.
 
     Returns True if a district was built this call.
     """
@@ -4138,7 +4203,8 @@ def _post_trade_build_and_rejob(old_nation, new_nation, log_lines):
             if coord:
                 node_key = _claim_district_tile(
                     nation_name, district_id, def_key,
-                    dd.get("display_name", def_key), coord
+                    dd.get("display_name", def_key), coord,
+                    pending_tiles=pending_tiles,
                 )
 
     new_entry = {"_id": district_id, "def_key": def_key, "node": node_key, "upgrades": []}
@@ -4475,11 +4541,15 @@ def run_ai_market_matching_standalone(app_ctx=None):
             ctx.pop()
 
 
-def ai_market_matching_tick(old_nations, new_nations, schema):
+def ai_market_matching_tick(old_nations, new_nations, schema, pending_tiles=None):
     """
     Tick-system entry point for AI market matching.  Operates on the
     already-loaded old_nations / new_nations lists provided by the tick
     infrastructure (changes are persisted by the tick's batch save loop).
+
+    pending_tiles: forwarded to _post_trade_build_and_rejob so any post-trade
+    district claim is deferred to the tick's commit phase — see
+    _queue_tile_write.
 
     For standalone / async use outside the tick system call
     run_ai_market_matching_standalone() instead — it loads its own data and
@@ -4500,7 +4570,7 @@ def ai_market_matching_tick(old_nations, new_nations, schema):
             new_n = new_nations[bidx] if bidx < len(new_nations) else None
             if old_n is None or new_n is None:
                 continue
-            _post_trade_build_and_rejob(old_n, new_n, log_lines)
+            _post_trade_build_and_rejob(old_n, new_n, log_lines, pending_tiles=pending_tiles)
         except Exception as e:
             name = (new_nations[bidx].get("name", "?")
                     if bidx < len(new_nations) else "?")

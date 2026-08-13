@@ -141,7 +141,7 @@
     <div id="hex-section" style="display:none"
          data-is-admin="{{ (g.edit_access_level >= 10) | tojson }}"
          data-is-logged-in="{{ (g.user is not none) | tojson }}">
-        <div id="hex-paint-error" style="display:none; color:var(--crit); font-size:0.85em; padding:3px 4px; min-height:1.3em;"></div>
+        <div id="hex-paint-error" style="display:none; color:var(--crit); font-size:0.95em; font-weight:600; padding:4px 8px; min-height:1.3em; background:color-mix(in srgb, var(--crit) 12%, transparent); border:1px solid var(--crit); border-radius:4px;"></div>
         <div class="hex-map-layout">
             <div class="hex-map-canvas-wrap">
                 <div id="hex-bg-viewer"></div>
