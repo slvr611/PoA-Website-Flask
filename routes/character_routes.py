@@ -97,7 +97,14 @@ def _render_new_character_form(form, schema, db):
     dropdown_options = get_dropdown_options(schema)
     form.populate_linked_fields(schema, dropdown_options)
 
-    predecessor_characters = list(db.find({}).sort("name", ASCENDING))
+    # Projected — the predecessor dropdown only ever reads _id/name/health_status
+    # (see new_character.html). Fetching full documents here pulled down every
+    # character's calculated fields for nothing, same anti-pattern already
+    # fixed for character_list() above once it was found to trip Heroku's
+    # request timeout on live data.
+    predecessor_characters = list(db.find(
+        {}, {"_id": 1, "name": 1, "health_status": 1}
+    ).sort("name", ASCENDING))
 
     db_negative_titles = list(mongo.db.titles.find(
         {"type": "negative"}, {"_id": 0, "name": 1, "display_name": 1, "tier": 1, "type": 1, "modifiers": 1}
