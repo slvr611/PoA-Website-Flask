@@ -792,8 +792,14 @@ def edit_global_modifiers():
 @admin_required
 def temperament_overview():
     schema, db = get_data_on_category("nations")
-    nations = list(db.find().sort("name", ASCENDING))
-    
+    # Projected — this page only ever reads name/temperament/sessions_since_temperament_change
+    # (see temperament_overview.html). Fetching full nation documents pulled down
+    # every nation's calculated fields for nothing, same anti-pattern already
+    # found and fixed on the characters list/new-character pages.
+    nations = list(db.find(
+        {}, {"name": 1, "temperament": 1, "sessions_since_temperament_change": 1}
+    ).sort("name", ASCENDING))
+
     # Group nations by temperament
     temperament_groups = {}
     for temperament in temperament_enum:
