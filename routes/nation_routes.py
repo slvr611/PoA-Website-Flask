@@ -2,8 +2,9 @@ from flask import Blueprint, render_template, request, redirect, flash, g, curre
 import os
 import re
 from copy import deepcopy
+from concurrent.futures import ThreadPoolExecutor
 from helpers.data_helpers import get_data_on_category, get_data_on_item, get_dropdown_options
-from helpers.render_helpers import get_linked_objects
+from helpers.render_helpers import get_linked_objects, get_linked_objects_parallel
 from helpers.change_helpers import request_change, approve_change, system_approve_change, deep_merge
 from helpers.form_helpers import validate_form_with_jsonschema
 from helpers.auth_helpers import owner_required
@@ -244,7 +245,21 @@ def nation_item(item_ref):
     timings["get_data_on_item_ms"] = round((perf_counter() - phase_start) * 1000, 2)
 
     phase_start = perf_counter()
-    linked_objects = get_linked_objects(schema, nation, exclude_fields={"pops"})
+    # wars/markets/owned_markets/factions/hired_mercenaries are never read
+    # from linked_objects anywhere in nation_owner.html's view-mode render —
+    # confirmed by grepping the template. wars/markets were also the two
+    # most expensive fields to compute (linkCollection join-table fields do
+    # 1 query for every link PLUS a separate find_one per link's target,
+    # unbatched), so excluding all 5 removes data the page never displays.
+    # The remaining ~10 fields (region, primary_race/culture/religion,
+    # overlord, rulers, vassals, both diplomatic_relations, wonders) are all
+    # genuinely used, but each is an independent round trip to a different
+    # collection — on a real connection those sum linearly (measured
+    # ~500-700ms sequential), so they're fetched concurrently instead.
+    linked_objects = get_linked_objects_parallel(
+        schema, nation,
+        exclude_fields={"pops", "wars", "markets", "owned_markets", "factions", "hired_mercenaries"},
+    )
     timings["get_linked_objects_ms"] = round((perf_counter() - phase_start) * 1000, 2)
 
     phase_start = perf_counter()
@@ -364,23 +379,56 @@ def nation_item(item_ref):
     except Exception as e:
         current_app.logger.warning("Failed to compute pending nation state: %s", e)
 
-    # Build def lookup for DB-driven districts
+    # Build def lookup for DB-driven districts — batched into a single $in
+    # query instead of one find_one per unique def_key (was N separate
+    # round trips, one per DISTINCT district type the nation has — e.g. 7
+    # round trips, ~350-500ms at real network latency, for a nation with 7
+    # distinct district types). Only def_key-bearing districts are ever
+    # looked up here, matching the original loop exactly — legacy
+    # (type-only) districts were never resolved by this call site either.
     district_defs_map = {}
-    for _d in nation.get("districts", []):
-        if isinstance(_d, dict):
-            _dk = _d.get("def_key")
-            if _dk and _dk not in district_defs_map:
-                _dd = _resolve_def(_d)
-                if _dd:
-                    district_defs_map[_dk] = _dd
+    _unique_def_keys = list({
+        _d.get("def_key") for _d in nation.get("districts", [])
+        if isinstance(_d, dict) and _d.get("def_key")
+    })
+    if _unique_def_keys:
+        for _dd in mongo.db.district_defs.find({"key": {"$in": _unique_def_keys}}):
+            district_defs_map[_dd["key"]] = _dd
+
+    # Tile-based node lookup, trade routes, and the session counter are 3
+    # independent queries to 3 different collections with no data
+    # dependency on each other — fetched concurrently instead of
+    # sequentially for the same reason as get_linked_objects_parallel above
+    # (each pays full round-trip latency; run at once, wall time is
+    # ~the slowest one instead of their sum).
+    nation_name = nation.get("name", item_ref)
+
+    def _fetch_hex_tiles():
+        return list(mongo.db.hex_map_tiles.find(
+            {"owner": nation_name, "node.resource_type": {"$exists": True}},
+            {"node.resource_type": 1, "city": 1, "district": 1, "wonder": 1, "_id": 0},
+        ))
+
+    def _fetch_trade_routes():
+        return list(mongo.db.trade_routes.find({
+            "$or": [{"nation_a": nation_name}, {"nation_b": nation_name}],
+            "status": {"$in": ["pending", "active", "ending"]}
+        }))
+
+    def _fetch_global_modifiers():
+        return mongo.db.global_modifiers.find_one({"name": "global_modifiers"}, {"session_counter": 1})
+
+    with ThreadPoolExecutor(max_workers=3) as _executor:
+        _hex_tiles_future = _executor.submit(_fetch_hex_tiles)
+        _trade_routes_future = _executor.submit(_fetch_trade_routes)
+        _global_modifiers_future = _executor.submit(_fetch_global_modifiers)
+        _hex_tiles = _hex_tiles_future.result()
+        trade_routes = _trade_routes_future.result()
+        _gm = _global_modifiers_future.result()
 
     # Build tile-based node lookup from hex map for display
-    nation_name = nation.get("name", item_ref)
     tile_node_map = {}
-    for _tile in mongo.db.hex_map_tiles.find(
-        {"owner": nation_name, "node.resource_type": {"$exists": True}},
-        {"node.resource_type": 1, "city": 1, "district": 1, "wonder": 1, "_id": 0},
-    ):
+    for _tile in _hex_tiles:
         _rt = _tile.get("node", {}).get("resource_type", "")
         if not _rt:
             continue
@@ -391,12 +439,6 @@ def nation_item(item_ref):
                 if _bid:
                     tile_node_map.setdefault(_btype, {})[_bid] = _rt
 
-    # Trade routes
-    trade_routes = list(mongo.db.trade_routes.find({
-        "$or": [{"nation_a": nation_name}, {"nation_b": nation_name}],
-        "status": {"$in": ["pending", "active", "ending"]}
-    }))
-    _gm = mongo.db.global_modifiers.find_one({"name": "global_modifiers"}, {"session_counter": 1})
     current_session = _gm.get("session_counter", 0) if _gm else 0
 
     all_players = []
@@ -520,12 +562,12 @@ def nation_item(item_ref):
     timings["render_template_ms"] = round((perf_counter() - phase_start) * 1000, 2)
     timings["total_request_ms"] = round((perf_counter() - request_start) * 1000, 2)
 
-    # current_app.logger.info(
-    #     "Nation page timing: nation=%s timings=%s calc_timings=%s",
-    #     item_ref,
-    #     timings,
-    #     calc_timings
-    # )
+    current_app.logger.info(
+        "Nation page timing: nation=%s timings=%s calc_timings=%s",
+        item_ref,
+        timings,
+        calc_timings
+    )
 
     return rendered
 

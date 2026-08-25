@@ -1,3 +1,5 @@
+from concurrent.futures import ThreadPoolExecutor
+
 from app_core import category_data, mongo
 from bson import ObjectId
 from pymongo import ASCENDING
@@ -126,3 +128,41 @@ def get_linked_objects(schema, item, preview_items=None, exclude_fields=None):
                                 break
     
     return linked_objects
+
+
+def get_linked_objects_parallel(schema, item, exclude_fields=None):
+    """Same result as get_linked_objects(schema, item, exclude_fields=exclude_fields),
+    but fetches each linked field concurrently instead of one after another.
+
+    get_linked_objects does one DB round trip per linked_object field (more
+    for join-table/queryTargetAttribute fields), each to a different,
+    independent collection — on a real connection with network latency
+    (not local mongomock), those round trips dominate wall-clock time by
+    simply summing (measured: ~10 fields × ~50-70ms each ≈ 500-700ms for a
+    single nation page). Since they don't depend on each other, firing them
+    at once cuts that down to roughly the slowest single one instead of
+    their sum. Each thread calls the real, unmodified get_linked_objects
+    with preview_items restricted to one field, so behavior (including its
+    per-field try/except tolerance) is identical to the sequential version —
+    only the scheduling changes.
+
+    Does not parallelize get_linked_objects's own recursive preview_items
+    sub-calls (e.g. a vassal's own linked_objects) — those run inside
+    whichever thread already fetched the parent field.
+    """
+    excluded = set(exclude_fields or [])
+    fields = [
+        field for field, attrs in schema.get("properties", {}).items()
+        if field not in excluded and attrs.get("collections")
+    ]
+    if not fields:
+        return {}
+
+    def _one(field):
+        return get_linked_objects(schema, item, preview_items={field}, exclude_fields=excluded)
+
+    result = {}
+    with ThreadPoolExecutor(max_workers=len(fields)) as executor:
+        for partial in executor.map(_one, fields):
+            result.update(partial)
+    return result

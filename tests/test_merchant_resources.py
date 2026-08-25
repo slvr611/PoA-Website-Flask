@@ -14,6 +14,7 @@ Regression tests for the merchant resource-production/capacity bug fixes:
 - Merchants now have a resource_capacity field (compute_merchant_resource_storage_capacity)
   mirroring the nation/market capacity pattern.
 """
+from app_core import json_data
 from calculations.compute_functions import (
     compute_resource_production,
     compute_merchant_resource_storage_capacity,
@@ -22,15 +23,25 @@ from calculations.field_calculations import calculate_title_modifiers
 
 
 class TestTitleModifierKeyFix:
+    """Expected values are read from json-data/positive_titles.json itself
+    rather than hardcoded, so rebalancing "the_countryman"'s numbers doesn't
+    break this test — what's actually being checked is that
+    calculate_title_modifiers strips the nation_/merchant_ prefix onto the
+    correctly-scoped "food_production" key (not a generic
+    "resource_production" key boosting every resource), regardless of what
+    the current tuned values are.
+    """
+
     def test_merchant_title_only_boosts_food(self):
-        # the_countryman: nation_food_production=2, merchant_food_production=2
+        expected = json_data["positive_titles"]["the_countryman"]["modifiers"]["merchant_food_production"]
         mods = calculate_title_modifiers(["the_countryman"], "merchant", {})
-        assert mods == {"food_production": 2}
+        assert mods == {"food_production": expected}
         assert "resource_production" not in mods
 
     def test_nation_title_only_boosts_food(self):
+        expected = json_data["positive_titles"]["the_countryman"]["modifiers"]["nation_food_production"]
         mods = calculate_title_modifiers(["the_countryman"], "nation", {})
-        assert mods == {"food_production": 2}
+        assert mods == {"food_production": expected}
 
 
 class TestComputeResourceProductionWithFoodOnlyModifier:
