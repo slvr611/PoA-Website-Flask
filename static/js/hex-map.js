@@ -1811,9 +1811,15 @@ class HexMapViewer {
             if (batch.type === 'terrain') {
                 field      = { terrain: originalValue };
                 apiPayload = { terrain: originalValue };
-            } else if (batch.type === 'nation' || batch.type === 'unown') {
+            } else if (batch.type === 'nation') {
                 field      = { owner: originalValue };
                 apiPayload = { owner: originalValue };
+            } else if (batch.type === 'unown') {
+                // originalValue is the full { owner, district, city, wonder,
+                // capital } snapshot — unclaiming clears all of them, so undo
+                // must restore all of them too (see _paintUnownedAt).
+                field      = originalValue;
+                apiPayload = originalValue;
             } else if (batch.type === 'region') {
                 field      = { region: originalValue };
                 apiPayload = { region: originalValue };
@@ -2033,9 +2039,24 @@ class HexMapViewer {
         this._lastPainted = key;
         const rawExisting = this.tiles.get(key);
         const existing    = rawExisting || { q, r };
-        if (this._currentUndoBatch && !this._currentUndoBatch.tiles.has(key))
-            this._currentUndoBatch.tiles.set(key, existing.owner || null);
-        const newTile = { ...existing, owner: null };
+        if (this._currentUndoBatch && !this._currentUndoBatch.tiles.has(key)) {
+            // Store everything unclaiming is about to clear (not just owner) so
+            // undo can restore it — see the clear below for why these go together.
+            this._currentUndoBatch.tiles.set(key, {
+                owner:    existing.owner    || null,
+                district: existing.district || null,
+                city:     existing.city     || null,
+                wonder:   existing.wonder   || null,
+                capital:  existing.capital  || false,
+            });
+        }
+        // Unclaiming abandons anything built on the tile — a district/city/
+        // wonder/capital can't legitimately belong to no one. Without this,
+        // the tile ends up ownerless but still carrying another nation's
+        // district, which the map's visibility check treats as "nothing
+        // private to hide" and shows to every viewer regardless of their
+        // actual visibility into that nation (see _canSeePrivate).
+        const newTile = { ...existing, owner: null, district: null, city: null, wonder: null, capital: false };
         this.tiles.set(key, newTile);
         this._computeNationLabels(); this._computeRegionLabels();
         this.render();
@@ -2045,7 +2066,7 @@ class HexMapViewer {
             await fetch(`/api/hex-map/tile/${q}/${r}`, {
                 method:  'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body:    JSON.stringify({ owner: null }),
+                body:    JSON.stringify({ owner: null, district: null, city: null, wonder: null, capital: false }),
             }).catch(() => {});
         }
     }

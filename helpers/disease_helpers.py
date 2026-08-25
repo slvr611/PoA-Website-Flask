@@ -29,7 +29,21 @@ def _enum_settings(field_name, value, default):
     return dict(result) if isinstance(result, dict) else dict(default)
 
 
-def get_infectivity_settings(disease):
+def get_infectivity_settings(disease, nation=None):
+    """Infectivity settings for `disease`, region-aware when `nation` is given.
+
+    If the disease has a `restricted_region` set and `nation`'s region isn't
+    that one, the disease only spreads at `outside_region_infectivity`'s
+    (weaker, by convention) settings out there instead of its base
+    `infectivity`. Diseases with no `restricted_region` (the default —
+    every existing disease) are unaffected regardless of `nation`."""
+    restricted_region = disease.get("restricted_region")
+    if restricted_region and nation is not None:
+        nation_region = str(nation.get("region", "") or "")
+        if nation_region != str(restricted_region):
+            return _enum_settings(
+                "infectivity", disease.get("outside_region_infectivity", "Low"), _DEFAULT_INFECTIVITY
+            )
     return _enum_settings("infectivity", disease.get("infectivity", ""), _DEFAULT_INFECTIVITY)
 
 
@@ -42,12 +56,18 @@ def get_difficulty_settings(disease):
 # ---------------------------------------------------------------------------
 
 def get_nation_infection_counts(nation_id):
-    """Return {disease_id_str: infected_pop_count} for one nation."""
+    """Return {disease_id_str: infected_pop_count} for one nation.
+
+    A pop carrying 2 diseases is counted once toward EACH — $unwind turns
+    one pop document into one row per disease it carries before grouping,
+    so multi-disease pops correctly contribute to every disease's count."""
     counts = {}
     try:
         cursor = mongo.db.pops.aggregate([
-            {"$match": {"nation": str(nation_id), "disease": {"$nin": [None, ""]}}},
-            {"$group": {"_id": "$disease", "count": {"$sum": 1}}},
+            {"$match": {"nation": str(nation_id), "diseases": {"$exists": True, "$ne": []}}},
+            {"$unwind": "$diseases"},
+            {"$match": {"diseases": {"$nin": [None, ""]}}},
+            {"$group": {"_id": "$diseases", "count": {"$sum": 1}}},
         ])
         for doc in cursor:
             counts[str(doc["_id"])] = doc["count"]
@@ -57,12 +77,17 @@ def get_nation_infection_counts(nation_id):
 
 
 def get_global_infection_counts():
-    """Return {disease_id_str: total_infected_pops} across all nations."""
+    """Return {disease_id_str: total_infected_pops} across all nations.
+
+    See get_nation_infection_counts — a multi-disease pop counts once
+    toward each disease it carries."""
     counts = {}
     try:
         cursor = mongo.db.pops.aggregate([
-            {"$match": {"disease": {"$nin": [None, ""]}}},
-            {"$group": {"_id": "$disease", "count": {"$sum": 1}}},
+            {"$match": {"diseases": {"$exists": True, "$ne": []}}},
+            {"$unwind": "$diseases"},
+            {"$match": {"diseases": {"$nin": [None, ""]}}},
+            {"$group": {"_id": "$diseases", "count": {"$sum": 1}}},
         ])
         for doc in cursor:
             counts[str(doc["_id"])] = doc["count"]
@@ -77,17 +102,20 @@ def get_global_accepted_count(disease):
     their disease marker, so get_global_infection_counts alone misses them,
     even though they're still hosts of the disease's identity).
 
-    Excludes pops that still carry the disease marker (mid-infection, not yet
-    accepted — infect_pop flips race to the derived race immediately on
-    infection, before the disease field is ever cleared) so this never
-    overlaps with get_global_infection_counts's count of the same pop."""
+    Excludes pops that still carry THIS disease's marker (mid-infection, not
+    yet accepted — infect_pop flips race to the derived race immediately on
+    infection, before the disease is ever removed from `diseases`) so this
+    never overlaps with get_global_infection_counts's count of the same pop.
+    A pop can still be separately infected with an unrelated disease and
+    correctly count here regardless — only THIS disease's id disqualifies it."""
     derived_ids = _derived_race_ids(disease)
     if not derived_ids:
         return 0
+    disease_id_str = str(disease.get("_id", ""))
     try:
         return mongo.db.pops.count_documents({
             "race": {"$in": list(derived_ids)},
-            "$or": [{"disease": {"$exists": False}}, {"disease": {"$in": [None, ""]}}],
+            "diseases": {"$nin": [disease_id_str]},
         })
     except Exception:
         return 0
@@ -101,12 +129,13 @@ def get_accepted_counts_by_nation(disease):
     derived_ids = _derived_race_ids(disease)
     if not derived_ids:
         return {}
+    disease_id_str = str(disease.get("_id", ""))
     counts = {}
     try:
         cursor = mongo.db.pops.aggregate([
             {"$match": {
                 "race": {"$in": list(derived_ids)},
-                "$or": [{"disease": {"$exists": False}}, {"disease": {"$in": [None, ""]}}],
+                "diseases": {"$nin": [disease_id_str]},
             }},
             {"$group": {"_id": "$nation", "count": {"$sum": 1}}},
         ])
@@ -118,12 +147,14 @@ def get_accepted_counts_by_nation(disease):
 
 
 def infection_counts_from_pops(pops):
-    """Derive {disease_id_str: count} from an in-memory pops list."""
+    """Derive {disease_id_str: count} from an in-memory pops list.
+
+    A pop carrying multiple diseases contributes to each one's count."""
     counts = {}
     for pop in pops:
-        disease_id = pop.get("disease") or ""
-        if disease_id:
-            counts[str(disease_id)] = counts.get(str(disease_id), 0) + 1
+        for disease_id in (pop.get("diseases") or []):
+            if disease_id:
+                counts[str(disease_id)] = counts.get(str(disease_id), 0) + 1
     return counts
 
 
@@ -227,6 +258,17 @@ def collect_disease_effects(target):
         job_name = disease.get("job_type", "") or disease.get("name", "Diseased")
         production = kv_list_to_dict(disease.get("job_production"))
         upkeep = kv_list_to_dict(disease.get("job_upkeep"))
+
+        # Nation-trait-conditional override (e.g. Ravager nations get a
+        # different per-pop effect from the same disease) — applied before
+        # any stage override, so a stage (a more specific, escalated
+        # situation) still wins if a disease ever uses both features together.
+        role_condition = disease.get("prosperity_role_condition") or "None"
+        if role_condition != "None" and target.get("prosperity_role") == role_condition:
+            override_production = kv_list_to_dict(disease.get("override_job_production"))
+            if override_production:
+                production = override_production
+
         stage_name = ""
         if stage:
             if stage.get("job_type_override"):
@@ -326,14 +368,23 @@ def get_or_create_derived_race(base_race_doc, prefix, positive_trait="", negativ
 
 
 def infect_pop(pop_doc, disease):
-    """Infect a single pop with a disease. Returns the $set update applied.
+    """Infect a single pop with a disease. Returns the update applied.
 
-    For race-changing diseases the pop's race is swapped to the derived race
-    and the original is stored in pre_disease_race for restoration on cure.
+    A pop can carry multiple diseases at once, each applying its own job
+    effects/cure/death rolls independently — this adds `disease` to the
+    pop's `diseases` array via $addToSet (re-infecting with a disease the
+    pop already has is a no-op) rather than replacing a single field.
+
+    For race-changing diseases the pop's race is swapped to the derived
+    race. pre_disease_race is only set if the pop doesn't already have one
+    stored — a pop already mid-race-change from an earlier co-infecting
+    disease keeps its original pre-disease race on record instead of
+    losing it to a second race-changing infection.
     """
-    updates = {"disease": str(disease.get("_id", ""))}
+    disease_id_str = str(disease.get("_id", ""))
+    set_updates = {}
 
-    if disease.get("changes_race") and disease.get("race_prefix"):
+    if disease.get("changes_race") and disease.get("race_prefix") and not pop_doc.get("pre_disease_race"):
         race_id = pop_doc.get("race", "")
         base_race = None
         if race_id:
@@ -348,30 +399,41 @@ def infect_pop(pop_doc, disease):
             disease.get("race_negative_trait", ""),
         )
         if derived_id:
-            updates["pre_disease_race"] = str(race_id)
-            updates["race"] = derived_id
+            set_updates["pre_disease_race"] = str(race_id)
+            set_updates["race"] = derived_id
 
-    mongo.db.pops.update_one({"_id": pop_doc["_id"]}, {"$set": updates})
-    return updates
-
-
-def cure_pop(pop_doc):
-    """Clear a pop's disease, restoring its pre-disease race when stored."""
-    set_updates = {}
-    unset_updates = {"disease": "", "pre_disease_race": ""}
-    if pop_doc.get("pre_disease_race"):
-        set_updates["race"] = pop_doc["pre_disease_race"]
-    update = {"$unset": unset_updates}
+    update = {"$addToSet": {"diseases": disease_id_str}}
     if set_updates:
         update["$set"] = set_updates
+    mongo.db.pops.update_one({"_id": pop_doc["_id"]}, update)
+    return {"diseases_added": disease_id_str, **set_updates}
+
+
+def cure_pop(pop_doc, disease_id):
+    """Remove one disease from a pop's `diseases` array.
+
+    `disease_id` must be given — curing is now per-disease, not per-pop,
+    since a pop can carry more than one at once. pre_disease_race is only
+    restored once the pop's `diseases` array is fully empty (i.e. this was
+    its last remaining disease) — a pop cured of one of two co-infections
+    keeps its current (possibly changed) race until it's completely healthy.
+    """
+    disease_id_str = str(disease_id)
+    remaining = [d for d in (pop_doc.get("diseases") or []) if str(d) != disease_id_str]
+
+    update = {"$pull": {"diseases": disease_id_str}}
+    if not remaining and pop_doc.get("pre_disease_race"):
+        update["$set"] = {"race": pop_doc["pre_disease_race"]}
+        update["$unset"] = {"pre_disease_race": ""}
     mongo.db.pops.update_one({"_id": pop_doc["_id"]}, update)
 
 
 def cure_disease_pops(disease_id):
     """Cure every pop infected with a disease. Returns {nation_id: cured_count}."""
+    disease_id_str = str(disease_id)
     cured_by_nation = {}
-    for pop in mongo.db.pops.find({"disease": str(disease_id)}):
-        cure_pop(pop)
+    for pop in mongo.db.pops.find({"diseases": disease_id_str}):
+        cure_pop(pop, disease_id_str)
         nation_id = str(pop.get("nation", ""))
         cured_by_nation[nation_id] = cured_by_nation.get(nation_id, 0) + 1
     return cured_by_nation
@@ -390,17 +452,28 @@ def _derived_race_ids(disease):
 
 
 def infect_random_pops(nation_id, disease, count):
-    """Infect up to `count` random uninfected, non-slave pops of a nation.
+    """Infect up to `count` random eligible, non-slave pops of a nation.
+
+    A pop already carrying THIS disease is never a valid target (can't
+    double-infect with the same disease). A pop carrying a DIFFERENT
+    disease is only eligible when `disease.get("infects_diseased_pops")` is
+    true — the default (false, matching every disease before this existed)
+    still only targets fully healthy pops.
 
     Pops already carrying the disease's derived race (e.g. an existing vampire
     pop for Vampirism) are not valid infection targets.
     Returns the number of pops actually infected.
     """
-    candidates = list(mongo.db.pops.find({
+    disease_id_str = str(disease.get("_id", ""))
+    query = {
         "nation": str(nation_id),
         "slave": {"$ne": True},
-        "$or": [{"disease": {"$exists": False}}, {"disease": {"$in": [None, ""]}}],
-    }))
+    }
+    if disease.get("infects_diseased_pops"):
+        query["diseases"] = {"$nin": [disease_id_str]}
+    else:
+        query["$or"] = [{"diseases": {"$exists": False}}, {"diseases": []}]
+    candidates = list(mongo.db.pops.find(query))
     derived_ids = _derived_race_ids(disease)
     if derived_ids:
         candidates = [p for p in candidates if str(p.get("race", "")) not in derived_ids]
@@ -439,10 +512,13 @@ def convert_pop_to_accepted(pop_doc, disease):
     )
     if not derived_id:
         return False
+    # Only THIS disease becomes permanent/accepted — any other disease the
+    # pop separately carries is unaffected.
     mongo.db.pops.update_one(
         {"_id": pop_doc["_id"]},
         {"$set": {"race": derived_id},
-         "$unset": {"disease": "", "pre_disease_race": ""}},
+         "$pull": {"diseases": str(disease.get("_id", ""))},
+         "$unset": {"pre_disease_race": ""}},
     )
     return True
 
@@ -652,20 +728,24 @@ def execute_disease_civil_war(source_nation, disease, infected_count):
             updates[f"resource_storage.{res}"] = (source_nation.get("resource_storage", {}).get(res, 0) or 0) - moved
         mongo.db.nations.update_one({"_id": source_nation["_id"]}, {"$set": updates})
 
-    # Move the infected pops to the breakaway nation.
+    # Move the pops infected with THIS disease to the breakaway nation — any
+    # other disease(s) a moved pop also carries move with it unaffected.
+    disease_id_str = str(disease.get("_id", ""))
     result = mongo.db.pops.update_many(
-        {"nation": source_id, "disease": str(disease.get("_id", ""))},
+        {"nation": source_id, "diseases": disease_id_str},
         {"$set": {"nation": new_id}},
     )
 
     # For race-changing diseases the breakaway is an ACCEPTED nation (its
-    # primary race is the derived race): its pops are not sick, they simply
-    # ARE the derived race now. Clear the disease markers — they keep their
-    # derived races permanently and gain the disease's custom job instead.
+    # primary race is the derived race): its pops are not sick FROM THIS
+    # DISEASE, they simply ARE the derived race now, permanently — remove
+    # just this disease from their array (any other co-infection stays) and
+    # clear pre_disease_race (this race change is no longer reversible by a
+    # future cure).
     if disease.get("changes_race") and disease.get("race_prefix"):
         mongo.db.pops.update_many(
-            {"nation": new_id, "disease": str(disease.get("_id", ""))},
-            {"$unset": {"disease": "", "pre_disease_race": ""}},
+            {"nation": new_id, "diseases": disease_id_str},
+            {"$pull": {"diseases": disease_id_str}, "$unset": {"pre_disease_race": ""}},
         )
 
     return new_name, result.modified_count

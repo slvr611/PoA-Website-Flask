@@ -1578,7 +1578,7 @@
             "unit_hp": 1,
             "unit_retaliation_damage": 1,
             "_modifiers": [
-              { "modifier_type": "resource_consumption", "scaling_extra": "food", "value": 1, "scope": "nation_self", "scaling": "per_x_pops", "scaling_x": 2}
+              { "modifier_type": "resource_consumption", "resource": "food", "value": 1, "scope": "nation_self", "scaling": "per_x_pops", "scaling_x": 2}
             ]
           },
           "Comfort": {
@@ -1586,7 +1586,7 @@
             "unit_morale": 1,
             "unit_hp": 1,
             "_modifiers": [
-              { "modifier_type": "resource_consumption", "scaling_extra": "food", "value": 1, "scope": "nation_self", "scaling": "per_x_pops", "scaling_x": 3}
+              { "modifier_type": "resource_consumption", "resource": "food", "value": 1, "scope": "nation_self", "scaling": "per_x_pops", "scaling_x": 3}
             ]
           },
           "Standard": {
@@ -1595,7 +1595,7 @@
           "Rationing": {
             "unit_morale": -2,
             "_modifiers": [
-              { "modifier_type": "resource_consumption", "scaling_extra": "food", "value": -1, "scope": "nation_self", "scaling": "per_x_pops", "scaling_x": 4}
+              { "modifier_type": "resource_consumption", "resource": "food", "value": -1, "scope": "nation_self", "scaling": "per_x_pops", "scaling_x": 4}
             ]
           }
         }
@@ -1640,9 +1640,9 @@
             "slave_death_chance": 0.05,
             "_modifiers": [
               { "modifier_type": "stability_loss_chance", "value": 0.15, "scope": "nation_self", "scaling": "per_x_slaves", "scaling_x": 1},
-              { "modifier_type": "resource_production", "scaling_extra": "food", "value": 1, "scope": "nation_self", "scaling": "per_x_slaves", "scaling_x": 1},
-              { "modifier_type": "resource_production", "scaling_extra": "wood", "value": 1, "scope": "nation_self", "scaling": "per_x_slaves", "scaling_x": 1},
-              { "modifier_type": "resource_production", "scaling_extra": "stone", "value": 1, "scope": "nation_self", "scaling": "per_x_slaves", "scaling_x": 1}
+              { "modifier_type": "resource_production", "resource": "food", "value": 1, "scope": "nation_self", "scaling": "per_x_slaves", "scaling_x": 1},
+              { "modifier_type": "resource_production", "resource": "wood", "value": 1, "scope": "nation_self", "scaling": "per_x_slaves", "scaling_x": 1},
+              { "modifier_type": "resource_production", "resource": "stone", "value": 1, "scope": "nation_self", "scaling": "per_x_slaves", "scaling_x": 1}
             ]
           }
         }
@@ -1664,13 +1664,13 @@
           "Subsidized": {
             "_modifiers": [
               { "modifier_type": "money_income", "value": -24, "scope": "nation_self", "scaling": "per_x_pops", "scaling_x": 1},
-              { "modifier_type": "stability_gain_chance", "value": 0.01, "scope": "nation_self", "scaling": "per_x_pops", "scaling_x": 1}
+              { "modifier_type": "stability_loss_chance", "value": -0.02, "scope": "nation_self", "scaling": "per_x_pops", "scaling_x": 1}
             ]
           },
           "No Taxes": {
             "_modifiers": [
               { "modifier_type": "money_income", "value": -12, "scope": "nation_self", "scaling": "per_x_pops", "scaling_x": 1},
-              { "modifier_type": "stability_gain_chance", "value": 0.01, "scope": "nation_self", "scaling": "per_x_pops", "scaling_x": 1}
+              { "modifier_type": "stability_loss_chance", "value": -0.01, "scope": "nation_self", "scaling": "per_x_pops", "scaling_x": 1}
             ]
           },
           "Low": {
@@ -1681,19 +1681,19 @@
           "Moderate": {
             "_modifiers": [
               { "modifier_type": "money_income", "value": 16, "scope": "nation_self", "scaling": "per_x_pops", "scaling_x": 1},
-              { "modifier_type": "stability_loss_chance", "value": 0.01, "scope": "nation_self", "scaling": "per_x_pops", "scaling_x": 1}
+              { "modifier_type": "stability_gain_chance", "value": -0.02, "scope": "nation_self", "scaling": "per_x_pops", "scaling_x": 1}
             ]
           },
           "High": {
             "_modifiers": [
               { "modifier_type": "money_income", "value": 32, "scope": "nation_self", "scaling": "per_x_pops", "scaling_x": 1},
-              { "modifier_type": "stability_loss_chance", "value": 0.02, "scope": "nation_self", "scaling": "per_x_pops", "scaling_x": 1}
+              { "modifier_type": "stability_gain_chance", "value": -0.04, "scope": "nation_self", "scaling": "per_x_pops", "scaling_x": 1}
             ]
           },
           "Oppressive": {
             "_modifiers": [
               { "modifier_type": "money_income", "value": 60, "scope": "nation_self", "scaling": "per_x_pops", "scaling_x": 1},
-              { "modifier_type": "stability_loss_chance", "value": 0.04, "scope": "nation_self", "scaling": "per_x_pops", "scaling_x": 1}
+              { "modifier_type": "stability_gain_chance", "value": -0.06, "scope": "nation_self", "scaling": "per_x_pops", "scaling_x": 1}
             ]
           }
         }

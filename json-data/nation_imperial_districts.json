@@ -31,8 +31,8 @@
 		},
 		"modifiers": {
 			"prestige_gain": -1,
-			"merchant_trade_slots_production": 2,
-			"trade_risk_over_land": -0.1
+			"banker_money_production": 100,
+			"trade_slots": 4
 		},
 		"count": 1,
 		"synergies": [
@@ -41,7 +41,7 @@
 					"any"
 				],
 				"modifiers": {
-					"merchant_mounts_upkeep": -1
+					"trade_slots": 3
 				},
 				"node_active": false
 			}
@@ -89,8 +89,7 @@
 					"any"
 				],
 				"modifiers": {
-					"nation_spell_cost": -2,
-					"nation_spell_cost_minimum": 2
+					"nation_spell_cost": -2
 				},
 				"node_active": false
 			}
@@ -105,7 +104,9 @@
 		"modifiers": {
 			"prestige_gain": -1,
 			"fisherman_food_production": 1,
-			"trade_risk_over_water": -0.1
+			"naval_unit_hp": 2,
+			"naval_uni_morale": 2,
+			"naval_unit_spawn": 1
 		},
 		"count": 1,
 		"synergies": [
@@ -120,9 +121,9 @@
 			}
 		]
 	},
-	"palace": {
-		"display_name": "Palace",
-		"type": "palace",
+	"alcazar": {
+		"display_name": "Alcazar",
+		"type": "alcazar",
 		"cost": {
 			"prestige": 5
 		},
@@ -150,7 +151,8 @@
 			"prestige": 5
 		},
 		"modifiers": {
-			"prestige_gain": -1
+			"prestige_gain": -1,
+			"enemy_unit_speed_in_friendly_territory": -1
 		},
 		"count": 1,
 		"synergies": [
@@ -173,7 +175,7 @@
 		},
 		"modifiers": {
 			"prestige_gain": -1,
-			"food_consumption": -3,
+			"food_consumption": -4,
 			"effective_pop_capacity": 2
 		},
 		"count": 1,
@@ -238,8 +240,8 @@
 		},
 		"modifiers": {
 			"prestige_gain": -1,
-			"food_production": 6,
-			"stability_loss_chance": -0.1
+			"food_production": 8,
+			"stability_loss_chance": -0.25
 		},
 		"count": 1,
 		"synergies": [
@@ -248,7 +250,7 @@
 					"any"
 				],
 				"modifiers": {
-					"stability_loss_chance": -0.1
+					"stability_loss_chance": -0.25
 				},
 				"node_active": false
 			}

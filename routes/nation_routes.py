@@ -185,7 +185,7 @@ def _fetch_nation_pops_page(nation_id, page, page_size, pops_schema):
     sort_tuples = [(field, ASCENDING) for field in sort_by] if isinstance(sort_by, list) else [(sort_by, ASCENDING)]
 
     pops = list(
-        mongo.db.pops.find(pop_query, {"_id": 1, "race": 1, "culture": 1, "religion": 1, "slave": 1, "disease": 1})
+        mongo.db.pops.find(pop_query, {"_id": 1, "race": 1, "culture": 1, "religion": 1, "slave": 1, "diseases": 1})
         .sort(sort_tuples)
         .skip(skip)
         .limit(page_size)
@@ -440,7 +440,7 @@ def nation_item(item_ref):
         _accepted = nation_accepts_disease(nation, _d)
         _domestic_chance = _foreign_chance = None
         if not _accepted:
-            _settings = get_infectivity_settings(_d)
+            _settings = get_infectivity_settings(_d, nation)
             _pop_count = nation.get("pop_count", 0)
             _cap = math.floor(_settings.get("max_infected_pct", 0) * _pop_count)
             _halted = bool(_stage and _stage.get("halts_spread"))

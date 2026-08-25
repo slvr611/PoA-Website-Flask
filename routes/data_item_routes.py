@@ -528,7 +528,7 @@ def data_item(data_type, item_ref):
         nation_ids = []
         counts_by_nation = {}
         for doc in mongo.db.pops.aggregate([
-            {"$match": {"disease": str(item["_id"])}},
+            {"$match": {"diseases": str(item["_id"])}},
             {"$group": {"_id": "$nation", "count": {"$sum": 1}}},
         ]):
             counts_by_nation[str(doc["_id"])] = doc["count"]

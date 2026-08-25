@@ -148,7 +148,7 @@
 		"tier": 1,
 		"type": "positive",
 		"modifiers": {
-			"nation_stability_gain_chance": 0.10
+			"nation_stability_gain_chance": 0.15
 		}
 	},
 	"the_just": {
@@ -156,7 +156,7 @@
 		"tier": 2,
 		"type": "positive",
 		"modifiers": {
-			"nation_stability_gain_chance": 0.15
+			"nation_stability_gain_chance": 0.25
 		}
 	},
 	"the_virtuous": {
@@ -164,7 +164,7 @@
 		"tier": 3,
 		"type": "positive",
 		"modifiers": {
-			"nation_stability_gain_chance": 0.25
+			"nation_stability_gain_chance": 0.35
 		}
 	},
 	"the_humble": {
@@ -250,7 +250,7 @@
 		"tier": 1,
 		"type": "positive",
 		"modifiers": {
-			"nation_food_production": 1,
+			"nation_food_production": 2,
 			"merchant_food_production": 1
 		}
 	},
@@ -259,7 +259,7 @@
 		"tier": 2,
 		"type": "positive",
 		"modifiers": {
-			"nation_food_production": 2,
+			"nation_food_production": 4,
 			"merchant_food_production": 2
 		}
 	},
@@ -268,7 +268,7 @@
 		"tier": 3,
 		"type": "positive",
 		"modifiers": {
-			"nation_food_production": 4,
+			"nation_food_production": 6,
 			"merchant_food_production": 4
 		}
 	},

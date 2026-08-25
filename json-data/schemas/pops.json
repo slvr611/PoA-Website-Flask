@@ -33,17 +33,20 @@
         "label": "Slave",
         "description": "Whether this pop is enslaved"
       },
-      "disease": {
-        "bsonType": "linked_object",
-        "label": "Disease",
-        "description": "The disease this pop is infected with (empty = healthy)",
-        "noneResult": "Healthy",
-        "collections": ["diseases"]
+      "diseases": {
+        "bsonType": "array",
+        "label": "Diseases",
+        "description": "The disease(s) this pop is currently infected with (empty = healthy). A pop can carry more than one disease at once — each applies its own job effects, cure rolls, and death rolls independently, as if the pop were working every disease's forced job simultaneously.",
+        "items": {
+          "bsonType": "linked_object",
+          "collections": ["diseases"]
+        },
+        "hidden": true
       },
       "pre_disease_race": {
         "bsonType": "string",
         "label": "Pre-Disease Race",
-        "description": "Race id restored when this pop is cured of a race-changing disease",
+        "description": "Race id restored once every one of this pop's diseases has been cured, for whichever disease was the one that changed its race",
         "hidden": true
       }
     }

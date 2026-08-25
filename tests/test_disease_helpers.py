@@ -61,7 +61,7 @@ def _seed_pops(db, nation_id, count, disease_id="", race="", slave=False):
     for _ in range(count):
         doc = {"nation": str(nation_id), "race": race, "culture": "c", "religion": "r"}
         if disease_id:
-            doc["disease"] = str(disease_id)
+            doc["diseases"] = [str(disease_id)]
         if slave:
             doc["slave"] = True
         docs.append(doc)
@@ -175,8 +175,8 @@ class TestInfectionCounts:
         assert dh.get_global_infection_counts() == {str(d1): 8}
 
     def test_counts_from_pops(self):
-        pops = [{"disease": "x"}, {"disease": "x"}, {"disease": ""}, {}]
-        assert dh.infection_counts_from_pops(pops) == {"x": 2}
+        pops = [{"diseases": ["x"]}, {"diseases": ["x", "y"]}, {"diseases": []}, {}]
+        assert dh.infection_counts_from_pops(pops) == {"x": 2, "y": 1}
 
 
 class TestDerivedRaces:
@@ -214,14 +214,14 @@ class TestInfectCure:
         dh.infect_pop(pop, disease)
 
         infected = test_db["pops"].find_one({"_id": pop_id})
-        assert infected["disease"] == str(disease["_id"])
+        assert infected["diseases"] == [str(disease["_id"])]
         assert infected["pre_disease_race"] == str(race_id)
         derived = test_db["races"].find_one({"name": "Rotting Human"})
         assert infected["race"] == str(derived["_id"])
 
-        dh.cure_pop(infected)
+        dh.cure_pop(infected, disease["_id"])
         cured = test_db["pops"].find_one({"_id": pop_id})
-        assert cured.get("disease") is None
+        assert not cured.get("diseases")
         assert cured.get("pre_disease_race") is None
         assert cured["race"] == str(race_id)
 
@@ -233,7 +233,7 @@ class TestInfectCure:
         pop = test_db["pops"].find_one({"_id": pop_id})
         dh.infect_pop(pop, disease)
         infected = test_db["pops"].find_one({"_id": pop_id})
-        assert infected["disease"] == str(disease["_id"])
+        assert infected["diseases"] == [str(disease["_id"])]
         assert infected["race"] == "r1"
         assert "pre_disease_race" not in infected
 
@@ -243,7 +243,7 @@ class TestInfectCure:
         _seed_pops(test_db, "n1", 2, disease_id=disease["_id"])   # already infected
         _seed_pops(test_db, "n1", 2, slave=True)                  # slaves skipped
         assert dh.infect_random_pops("n1", disease, 10) == 3
-        assert test_db["pops"].count_documents({"nation": "n1", "disease": str(disease["_id"])}) == 5
+        assert test_db["pops"].count_documents({"nation": "n1", "diseases": str(disease["_id"])}) == 5
 
     def test_cure_disease_pops_by_nation(self, patch_disease_mongo, test_db):
         disease = _make_disease()
@@ -251,7 +251,7 @@ class TestInfectCure:
         _seed_pops(test_db, "n2", 2, disease_id=disease["_id"])
         cured = dh.cure_disease_pops(str(disease["_id"]))
         assert cured == {"n1": 3, "n2": 2}
-        assert test_db["pops"].count_documents({"disease": str(disease["_id"])}) == 0
+        assert test_db["pops"].count_documents({"diseases": str(disease["_id"])}) == 0
 
 
 class TestCollectDiseaseEffects:
@@ -356,9 +356,9 @@ class TestDiseaseCivilWar:
         # ACCEPTED nation — its pops keep derived races but are no longer sick.
         assert test_db["pops"].count_documents({"nation": str(breakaway["_id"])}) == 4
         assert test_db["pops"].count_documents(
-            {"nation": str(breakaway["_id"]), "disease": str(disease["_id"])}) == 0
+            {"nation": str(breakaway["_id"]), "diseases": str(disease["_id"])}) == 0
         assert test_db["pops"].count_documents(
-            {"nation": str(nation_id), "disease": str(disease["_id"])}) == 0
+            {"nation": str(nation_id), "diseases": str(disease["_id"])}) == 0
 
     def test_split_keeps_infection_for_non_race_changing_disease(self, patch_disease_mongo, test_db, flask_app):
         disease = _make_disease(job_type="Plague Bearer")   # changes_race False
@@ -375,7 +375,7 @@ class TestDiseaseCivilWar:
         breakaway = test_db["nations"].find_one({"name": new_name})
         # Non-race-changing: the breakaway stays a diseased nation
         assert test_db["pops"].count_documents(
-            {"nation": str(breakaway["_id"]), "disease": str(disease["_id"])}) == 4
+            {"nation": str(breakaway["_id"]), "diseases": str(disease["_id"])}) == 4
 
     def test_name_collision_gets_suffix(self, patch_disease_mongo, test_db, flask_app):
         disease = _make_disease(job_type="Rot Carrier")
@@ -409,7 +409,7 @@ class TestDiseaseSpreadTick:
             result = th.nation_disease_spread_tick(old_nation, new_nation, {})
 
         assert "has spread" in result
-        assert test_db["pops"].count_documents({"disease": str(disease["_id"])}) == 3
+        assert test_db["pops"].count_documents({"diseases": str(disease["_id"])}) == 3
         roll_info = new_nation["disease_spread_rolls"]["Crimson Rot"]
         assert abs(roll_info["chance_at_tick"] - 0.14) < 1e-9
 
@@ -427,7 +427,7 @@ class TestDiseaseSpreadTick:
             result = th.nation_disease_spread_tick(old_nation, new_nation, {})
 
         assert "has spread" not in result
-        assert test_db["pops"].count_documents({"disease": str(disease["_id"])}) == 5
+        assert test_db["pops"].count_documents({"diseases": str(disease["_id"])}) == 5
 
     def test_no_spread_roll_when_stage_halts(self, patch_disease_mongo, test_db, flask_app):
         import helpers.tick_helpers as th
@@ -444,7 +444,7 @@ class TestDiseaseSpreadTick:
         with patch("helpers.tick_helpers.random.random", return_value=0.0):
             th.nation_disease_spread_tick(old_nation, new_nation, {})
 
-        assert test_db["pops"].count_documents({"disease": str(disease["_id"])}) == 4
+        assert test_db["pops"].count_documents({"diseases": str(disease["_id"])}) == 4
         assert new_nation["disease_spread_rolls"] == {}
 
     def test_stage_civil_war_fires_once(self, patch_disease_mongo, test_db, flask_app):
@@ -582,7 +582,7 @@ class TestAcceptance:
         converted = test_db["pops"].find_one({"_id": pop_id})
         derived = test_db["races"].find_one({"name": "Vampiric Human"})
         assert converted["race"] == str(derived["_id"])
-        assert converted.get("disease") is None
+        assert not converted.get("diseases")
         assert converted.get("pre_disease_race") is None
 
     def test_infect_random_pops_skips_derived_race_pops(self, patch_disease_mongo, test_db):
@@ -603,7 +603,7 @@ class TestAcceptance:
         with patch("helpers.tick_helpers.random.random", return_value=0.0):
             result = th.nation_disease_spread_tick(nation, new_nation, {})
         assert "has spread" not in result
-        assert test_db["pops"].count_documents({"disease": str(disease["_id"])}) == 2
+        assert test_db["pops"].count_documents({"diseases": str(disease["_id"])}) == 2
 
 
 class TestAcceptedSpreadTick:
@@ -634,7 +634,7 @@ class TestAcceptedSpreadTick:
         assert "embraced" in result
         converted = test_db["pops"].count_documents({"race": str(derived_id)})
         assert converted == 1
-        assert test_db["pops"].count_documents({"disease": str(disease["_id"])}) == 0
+        assert test_db["pops"].count_documents({"diseases": str(disease["_id"])}) == 0
         roll = new_nation["disease_spread_rolls"]["Vampirism (accepted)"]
         assert abs(roll["chance_at_tick"] - 0.5) < 1e-9
 
@@ -656,7 +656,7 @@ class TestAcceptedSpreadTick:
 
         assert "has spread from Nocturne to Neighborland" in result
         assert test_db["pops"].count_documents(
-            {"nation": str(target_id), "disease": str(disease["_id"])}) == 1
+            {"nation": str(target_id), "diseases": str(disease["_id"])}) == 1
 
     def test_no_roll_without_spreader_jobs(self, patch_disease_mongo, test_db, flask_app):
         import helpers.tick_helpers as th
@@ -782,7 +782,7 @@ class TestDiseaseCureTick:
         assert doc["cured"] is True
         assert doc["cure_progress"] == 100                       # clamped
         # Nobody is healed and nothing else changes as a side effect of discovery.
-        assert test_db["pops"].count_documents({"disease": str(disease["_id"])}) == 6
+        assert test_db["pops"].count_documents({"diseases": str(disease["_id"])}) == 6
         assert new_nations[0]["disease_stages"][str(disease["_id"])] == 1
 
     def test_already_cured_disease_is_skipped(self, patch_disease_mongo, test_db, flask_app):
@@ -799,7 +799,7 @@ class TestDiseaseCureTick:
             result = th.disease_cure_cross_tick(nations, [dict(n) for n in nations], {})
 
         assert result == ""
-        assert test_db["pops"].count_documents({"disease": str(disease["_id"])}) == 6
+        assert test_db["pops"].count_documents({"diseases": str(disease["_id"])}) == 6
 
 
 class TestNaturalCureTick:
@@ -819,7 +819,7 @@ class TestNaturalCureTick:
 
         assert "naturally recovered" in result
         assert test_db["pops"].count_documents(
-            {"nation": str(old_nation["_id"]), "disease": str(disease["_id"])}) == 0
+            {"nation": str(old_nation["_id"]), "diseases": str(disease["_id"])}) == 0
 
     def test_no_recovery_when_roll_fails(self, patch_disease_mongo, test_db, flask_app):
         import helpers.tick_helpers as th
@@ -834,7 +834,7 @@ class TestNaturalCureTick:
             result = th.nation_disease_natural_cure_tick(old_nation, dict(old_nation), {})
 
         assert result == ""
-        assert test_db["pops"].count_documents({"disease": str(disease["_id"])}) == 2
+        assert test_db["pops"].count_documents({"diseases": str(disease["_id"])}) == 2
 
     def test_chance_doubles_once_cured(self, patch_disease_mongo, test_db, flask_app):
         import helpers.tick_helpers as th
@@ -851,7 +851,7 @@ class TestNaturalCureTick:
             result = th.nation_disease_natural_cure_tick(old_nation, dict(old_nation), {})
 
         assert "naturally recovered" in result
-        assert test_db["pops"].count_documents({"disease": str(disease["_id"])}) == 0
+        assert test_db["pops"].count_documents({"diseases": str(disease["_id"])}) == 0
 
     def test_no_chance_configured_means_no_recovery(self, patch_disease_mongo, test_db, flask_app):
         import helpers.tick_helpers as th
@@ -866,7 +866,7 @@ class TestNaturalCureTick:
             result = th.nation_disease_natural_cure_tick(old_nation, dict(old_nation), {})
 
         assert result == ""
-        assert test_db["pops"].count_documents({"disease": str(disease["_id"])}) == 2
+        assert test_db["pops"].count_documents({"diseases": str(disease["_id"])}) == 2
 
     def test_no_infected_pops_is_a_noop(self, patch_disease_mongo, test_db, flask_app):
         import helpers.tick_helpers as th
@@ -896,7 +896,7 @@ class TestCuredDoesNotHaltMechanics:
             result = th.nation_disease_spread_tick(old_nation, new_nation, {})
 
         assert "has spread" in result
-        assert test_db["pops"].count_documents({"disease": str(disease["_id"])}) == 3
+        assert test_db["pops"].count_documents({"diseases": str(disease["_id"])}) == 3
 
     def test_forced_job_continues_after_cure_discovered(self, patch_disease_mongo, test_db, flask_app):
         disease = _make_disease(cured=True)

@@ -142,6 +142,60 @@
           }
         }
       },
+      "restricted_region": {
+        "bsonType": "linked_object",
+        "label": "Restricted Region (Full Infectivity)",
+        "description": "If set, this disease only spreads at its full infectivity within this region — nations outside it use outside_region_infectivity instead. Leave empty for a disease that spreads the same everywhere.",
+        "collections": ["regions"]
+      },
+      "outside_region_infectivity": {
+        "bsonType": "enum",
+        "label": "Infectivity Outside Restricted Region",
+        "description": "Only used when restricted_region is set — the infectivity tier applied to nations outside that region",
+        "enum": ["Low", "Moderate", "Highly", "Extremely"],
+        "default": "Low"
+      },
+      "infects_diseased_pops": {
+        "bsonType": "boolean",
+        "label": "Can Infect Already-Diseased Pops",
+        "description": "When true, this disease can infect pops that already carry a different disease — the pop ends up with both diseases at once, each applying its own job effects/cure/death rolls independently. Default false matches every other disease: pops with an existing disease are skipped as infection candidates."
+      },
+      "compliance_loss_at_max_infection": {
+        "bsonType": "boolean",
+        "label": "Vassal Compliance Loss at Max Infection",
+        "description": "When true, any vassal nation (has an overlord) currently at or above this disease's max_infected_pct cap loses one level of vassal compliance each session"
+      },
+      "random_resource_windfall_per_infected_pop": {
+        "bsonType": "number",
+        "label": "Random Resource Windfall Rolls Per Infected Pop",
+        "description": "Each session, every pop currently infected with this disease grants this many rolls of a random non-research general resource, added directly to storage (same mechanic as the tech-research/expansion/stability-loss windfalls). 0 (default) means no windfall.",
+        "default": 0
+      },
+      "prosperity_role_condition": {
+        "bsonType": "enum",
+        "label": "Prosperity Role Override Condition",
+        "description": "If set to Savior or Ravager, nations currently holding that Dark Ages stance (prosperity_role) use override_job_production/override_job_death_chance below instead of the base job_production/job_death_chance",
+        "enum": ["None", "Savior", "Ravager"],
+        "default": "None"
+      },
+      "override_job_production": {
+        "bsonType": "array",
+        "label": "Override Job Production",
+        "description": "Replaces job_production for nations matching prosperity_role_condition. Same shape as job_production.",
+        "items": {
+          "bsonType": "object",
+          "properties": {
+            "_id": {"bsonType": "string", "label": "Item ID"},
+            "key": {"bsonType": "string", "label": "Resource / Modifier Key"},
+            "value": {"bsonType": "number", "label": "Per-Pop Amount"}
+          }
+        }
+      },
+      "override_job_death_chance": {
+        "bsonType": "number",
+        "label": "Override Job Death Chance",
+        "description": "Replaces job_death_chance for nations matching prosperity_role_condition"
+      },
       "cure_progress": {
         "bsonType": "number",
         "label": "Cure Progress",

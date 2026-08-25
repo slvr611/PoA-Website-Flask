@@ -479,40 +479,91 @@ def compute_money_income(field, target, base_value, field_schema, overall_total_
             net = get_trade_route_resource_net(nation_name, routes)
             value += net.get("money", 0)
 
-    money_per_bandit_camp = overall_total_modifiers.get("money_income_per_bandit_camp", 0)
-    if money_per_bandit_camp:
-        nation_id_str = str(target.get("_id", ""))
-        if nation_id_str:
-            from app_core import mongo as _mongo
-            market_ids = [
-                lnk["market"] for lnk in
-                _mongo.db.market_links.find({"member": nation_id_str}, {"market": 1})
-                if lnk.get("market")
-            ]
-            if market_ids:
-                market_object_ids = []
-                for mid in market_ids:
-                    try:
-                        market_object_ids.append(ObjectId(mid))
-                    except Exception:
-                        pass
-                # Bandit camps store their market by NAME (the paint-tool's
-                # market dropdown uses market.name as its option value, not
-                # the market's _id — see hex-map.js's bandit_market select),
-                # so market_links' _id strings must be resolved to names
-                # before matching against hex_map_tiles.bandit_camp.market.
-                market_names = [
-                    m["name"] for m in _mongo.db.markets.find(
-                        {"_id": {"$in": market_object_ids}}, {"name": 1}
-                    ) if m.get("name")
-                ]
-                if market_names:
-                    bandit_count = _mongo.db.hex_map_tiles.count_documents(
-                        {"bandit_camp.market": {"$in": market_names}}
-                    )
-                    value += int(money_per_bandit_camp * bandit_count)
+    # Gate only — overall_total_modifiers' value is summed across EVERY
+    # market the nation belongs to (modifier_prefix "member" in
+    # nations.json), so if the nation is in two Illicit markets this is
+    # already 400, not 200. get_bandit_camp_income_contributions computes
+    # the real, correctly-scoped amount itself rather than using this as a
+    # rate — this is just a cheap check to skip the DB queries entirely for
+    # nations in no Illicit market at all.
+    if overall_total_modifiers.get("money_income_per_bandit_camp", 0):
+        bandit_bonus, _ = get_bandit_camp_income_contributions(str(target.get("_id", "")))
+        value += bandit_bonus
 
     return int(value)
+
+
+def get_bandit_camp_income_contributions(nation_id_str):
+    """Return (total_bonus, [{"label", "value"}, ...]) for the Illicit-market
+    bandit-camp income bonus (markets.json: Illicit grants
+    member_nation_money_income_per_bandit_camp per camp in that market).
+
+    Shared by compute_money_income (the actual money_income value) and
+    compute_nation_breakdowns (the displayed income ledger) so they can't
+    drift apart the way they did before this existed — the value silently
+    included this bonus while the ledger never showed a line for it,
+    making a correctly-functioning bonus look broken/missing to players.
+
+    One entry per Illicit market the nation belongs to that has bandit
+    camps assigned to it (bandit camps store their market by NAME — the
+    paint tool's dropdown uses market.name as its option value, not the
+    market's _id — see hex-map.js's bandit_market select), each market's
+    own camp count multiplied by the flat per-camp rate. Summing per-market
+    contributions (rather than one combined rate times a combined count)
+    is what keeps a nation in 2+ Illicit markets from having the rate
+    double-applied against every market's camps at once."""
+    if not nation_id_str:
+        return 0, []
+    from app_core import mongo as _mongo
+    market_ids = [
+        lnk["market"] for lnk in
+        _mongo.db.market_links.find({"member": nation_id_str}, {"market": 1})
+        if lnk.get("market")
+    ]
+    if not market_ids:
+        return 0, []
+    market_object_ids = []
+    for mid in market_ids:
+        try:
+            market_object_ids.append(ObjectId(mid))
+        except Exception:
+            pass
+    # Only markets actually typed "Illicit" grant this bonus — a nation can
+    # belong to several markets at once (2-3 trade_slots), and non-Illicit
+    # memberships must not contribute their bandit camps here.
+    illicit_market_names = [
+        m["name"] for m in _mongo.db.markets.find(
+            {"_id": {"$in": market_object_ids}, "market_type": "Illicit"}, {"name": 1}
+        ) if m.get("name")
+    ]
+    if not illicit_market_names:
+        return 0, []
+    illicit_rate = (
+        category_data["markets"]["schema"]["properties"]["market_type"]["laws"]
+        .get("Illicit", {})
+        .get("member_nation_money_income_per_bandit_camp", 0)
+    )
+    if not illicit_rate:
+        return 0, []
+    counts_by_market = {
+        doc["_id"]: doc["count"] for doc in _mongo.db.hex_map_tiles.aggregate([
+            {"$match": {"bandit_camp.market": {"$in": illicit_market_names}}},
+            {"$group": {"_id": "$bandit_camp.market", "count": {"$sum": 1}}},
+        ])
+    }
+    total = 0
+    contributions = []
+    for market_name in illicit_market_names:
+        count = counts_by_market.get(market_name, 0)
+        if count:
+            bonus = int(illicit_rate * count)
+            total += bonus
+            camp_word = "camp" if count == 1 else "camps"
+            contributions.append({
+                "label": f"Bandit Camp: {market_name} ({count} {camp_word})",
+                "value": bonus,
+            })
+    return total, contributions
     
 def compute_resource_production(field, target, base_value, field_schema, overall_total_modifiers):
     from helpers.undead_horde_helpers import nation_is_undead_horde

@@ -53,9 +53,10 @@ def disease_cure_nation(item_ref):
         flash("Nation not found.", "error")
         return redirect(f"/diseases/item/{item_ref}")
 
+    disease_id_str = str(disease["_id"])
     cured = 0
-    for pop in mongo.db.pops.find({"nation": str(nation["_id"]), "disease": str(disease["_id"])}):
-        cure_pop(pop)
+    for pop in mongo.db.pops.find({"nation": str(nation["_id"]), "diseases": disease_id_str}):
+        cure_pop(pop, disease_id_str)
         cured += 1
 
     flash(f"Cured {cured} pop(s) of {disease.get('name', item_ref)} in {nation.get('name', nation_name)}.", "success")

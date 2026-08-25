@@ -476,7 +476,7 @@
 									<td class="pop-race-cell">{% if pop["linked_objects"]["race"] %}<a href="{{ pop['linked_objects']['race']['link'] }}">{{ pop['linked_objects']['race']['name'] }}</a>{% else %}None{% endif %}</td>
 									<td class="pop-culture-cell">{% if pop["linked_objects"]["culture"] %}<a href="{{ pop['linked_objects']['culture']['link'] }}">{{ pop['linked_objects']['culture']['name'] }}</a>{% else %}None{% endif %}</td>
 									<td class="pop-religion-cell">{% if pop["linked_objects"]["religion"] %}<a href="{{ pop['linked_objects']['religion']['link'] }}">{{ pop['linked_objects']['religion']['name'] }}</a>{% else %}None{% endif %}</td>
-									<td>{% if pop.get("disease") %}<span style="color:var(--crit);">{{ disease_name_map.get(pop.get("disease")|string, "Diseased") }}</span>{% endif %}</td>
+									<td>{% if pop.get("diseases") %}<span style="color:var(--crit);">{% for did in pop.get("diseases") %}{{ disease_name_map.get(did|string, "Diseased") }}{% if not loop.last %}, {% endif %}{% endfor %}</span>{% endif %}</td>
 									<td><input type="text" name="pop_reason" value="" form="pop-clone-{{ pop['_id'] }}"></td>
 									{% if g.user.is_admin %}
 										<td><button type="submit" form="pop-clone-{{ pop['_id'] }}" formaction="{{ pop['link'].replace('item', 'clone') }}/save" class="btn btn-primary">Clone Now</button></td>
@@ -536,7 +536,7 @@
 									<td>{% if pop["linked_objects"]["religion"] %}<a href="{{ pop['linked_objects']['religion']['link'] }}">{{ pop["linked_objects"]["religion"]["name"] }}</a>{% else %}None{% endif %}</td>
 									<td>
 										{% if pop.get("slave") %}<span class="slave-badge">Slave</span>{% endif %}
-										{% if pop.get("disease") %}<span style="color:var(--crit);">{{ disease_name_map.get(pop.get("disease")|string, "Diseased") }}</span>{% endif %}
+										{% if pop.get("diseases") %}<span style="color:var(--crit);">{% for did in pop.get("diseases") %}{{ disease_name_map.get(did|string, "Diseased") }}{% if not loop.last %}, {% endif %}{% endfor %}</span>{% endif %}
 									</td>
 								</tr>
 							{% endfor %}

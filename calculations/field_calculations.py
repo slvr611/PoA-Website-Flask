@@ -4,7 +4,7 @@ import threading
 from copy import deepcopy
 from time import perf_counter
 from app_core import mongo, json_data, category_data
-from calculations.compute_functions import compute_pop_count, compute_field
+from calculations.compute_functions import compute_pop_count, compute_field, get_bandit_camp_income_contributions
 from calculations.scaling_methods import get_scaling_multiplier
 from bson.objectid import ObjectId
 
@@ -5070,6 +5070,10 @@ def compute_nation_breakdowns(
             money_bd.append({"label": tc.label, "value": money_in})
         if money_out:
             money_bd.append({"label": tc.label, "value": -money_out})
+    # Shared with compute_money_income so the ledger can't silently omit a
+    # bonus that's actually baked into the total (see the helper's docstring).
+    _, bandit_contribs = get_bandit_camp_income_contributions(str(target.get("_id", "")))
+    money_bd.extend(bandit_contribs)
     money_bd.append({"label": "Total",
                      "value": calculated_values.get("money_income", target.get("money_income", 0))})
     breakdowns["money_income"] = money_bd

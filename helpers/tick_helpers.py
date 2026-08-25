@@ -2220,7 +2220,7 @@ def nation_enclave_compliance_tick(old_nation, new_nation, schema):
 
 
 
-def nation_passive_expansion_tick(old_nation, new_nation, schema):
+def nation_passive_expansion_tick(old_nation, new_nation, schema, pending_tiles=None):
     from helpers.hex_map_helpers import select_passive_expansion_tiles
 
     result = ""
@@ -2239,12 +2239,14 @@ def nation_passive_expansion_tick(old_nation, new_nation, schema):
     nation_name = old_nation.get("name", "Unknown")
 
     # Fetch tiles once; reuse across multiple successful rolls so that tiles
-    # claimed in earlier rounds are visible to later rounds.
+    # claimed in earlier rounds are visible to later rounds. Need _id (unlike
+    # before) since claims now go through _queue_tile_write, which addresses
+    # tiles by _id rather than the q/r filter a direct update_one used.
     all_tiles = list(mongo.db.hex_map_tiles.find(
         {},
         {"q": 1, "r": 1, "terrain": 1, "owner": 1,
          "city": 1, "district": 1, "wonder": 1, "capital": 1,
-         "portal": 1, "route": 1, "_id": 0},
+         "portal": 1, "route": 1, "_id": 1},
     ))
     tile_map = {(t["q"], t["r"]): t for t in all_tiles}
 
@@ -2257,27 +2259,30 @@ def nation_passive_expansion_tick(old_nation, new_nation, schema):
             break
         expansion_events += 1
         for (q, r) in to_claim:
-            mongo.db.hex_map_tiles.update_one(
-                {"q": q, "r": r},
-                {"$set": {"owner": nation_name}}
-            )
+            tile = tile_map.get((q, r))
+            if tile is None:
+                continue
+            # Deferred (not an immediate write) so a tick that fails later —
+            # e.g. at the final commit transaction — doesn't leave these
+            # claims permanently on the map despite the tick reporting a
+            # full rollback. See _queue_tile_write's docstring: this closes
+            # the same class of gap already fixed there for district/city
+            # claims.
+            _queue_tile_write(pending_tiles, tile["_id"], {"owner": nation_name})
             claimed.append((q, r))
             # Update the in-memory tile so subsequent rounds see the new ownership
-            if (q, r) in tile_map:
-                tile_map[(q, r)]["owner"] = nation_name
+            tile["owner"] = nation_name
 
     if claimed:
-        # Resync territory_types on the nation document
-        pipeline = [
-            {"$match": {"owner": nation_name, "terrain": {"$exists": True, "$ne": None}}},
-            {"$group": {"_id": "$terrain", "count": {"$sum": 1}}},
-        ]
-        counts = {doc["_id"]: doc["count"]
-                  for doc in mongo.db.hex_map_tiles.aggregate(pipeline)}
-        mongo.db.nations.update_one(
-            {"name": nation_name},
-            {"$set": {"territory_types": counts}}
-        )
+        # Resync territory_types from the in-memory tile ownership above —
+        # the actual DB write is only queued, not yet applied, so an
+        # aggregate query against hex_map_tiles here would still see the
+        # pre-claim owners.
+        counts = {}
+        for tile in tile_map.values():
+            if tile.get("owner") == nation_name and tile.get("terrain"):
+                counts[tile["terrain"]] = counts.get(tile["terrain"], 0) + 1
+        new_nation["territory_types"] = counts
         result += f"{nation_name} expanded into {len(claimed)} tile(s).\n"
         windfall_rolls = old_nation.get("resource_windfall_on_expansion", 0) * expansion_events
         result += _grant_resource_windfall(old_nation, new_nation, windfall_rolls, "expanded territory")
@@ -2358,7 +2363,7 @@ def nation_disease_spread_tick(old_nation, new_nation, schema):
         cur_stage = get_stage(disease, cur_stage_idx)
 
         # ── Spread roll ────────────────────────────────────────────────────
-        settings = get_infectivity_settings(disease)
+        settings = get_infectivity_settings(disease, old_nation)
         cap = math.floor(settings.get("max_infected_pct", 0) * pop_count)
         halted = bool(cur_stage and cur_stage.get("halts_spread"))
         if not halted and infected < cap and infected < pop_count:
@@ -2456,8 +2461,9 @@ def nation_disease_natural_cure_tick(old_nation, new_nation, schema):
     """Give every infected pop of this nation an individual per-tick chance of
     natural recovery, independent of shared-quest cure research.
 
-    Each pop rolls separately against its disease's natural_cure_chance. Once
-    a disease's cure has been discovered (cured=True — set by
+    A pop carrying multiple diseases rolls separately against EACH one's own
+    natural_cure_chance — it can recover from more than one in the same tick.
+    Once a disease's cure has been discovered (cured=True — set by
     disease_cure_cross_tick when cure_progress reaches the difficulty's
     required amount), that chance permanently doubles for every infected pop,
     everywhere. Discovering the cure does not itself heal anyone or stop
@@ -2469,32 +2475,94 @@ def nation_disease_natural_cure_tick(old_nation, new_nation, schema):
     nation_name = old_nation.get("name", "Unknown")
     try:
         infected_pops = list(mongo.db.pops.find(
-            {"nation": nation_id, "disease": {"$nin": [None, ""]}}))
+            {"nation": nation_id, "diseases": {"$exists": True, "$ne": []}}))
     except Exception:
         return ""
     if not infected_pops:
         return ""
 
-    disease_ids = {p.get("disease") for p in infected_pops if p.get("disease")}
-    diseases = resolve_diseases(disease_ids)
+    all_disease_ids = set()
+    for p in infected_pops:
+        all_disease_ids.update(str(d) for d in (p.get("diseases") or []) if d)
+    diseases = resolve_diseases(all_disease_ids)
 
     recovered_counts = {}
     for pop in infected_pops:
-        disease = diseases.get(str(pop.get("disease", "")))
-        if not disease:
-            continue
-        base_chance = disease.get("natural_cure_chance", 0) or 0
-        if base_chance <= 0:
-            continue
-        chance = min(base_chance * (2 if disease.get("cured") else 1), 1.0)
-        if random.random() <= chance:
-            cure_pop(pop)
-            name = disease.get("name", "")
-            recovered_counts[name] = recovered_counts.get(name, 0) + 1
+        # Mutable per-pop snapshot, updated as cures land this tick so a
+        # pop's later rolls (and cure_pop's own "is this the last disease"
+        # check) see accurate, not-yet-stale state.
+        current_diseases = list(pop.get("diseases") or [])
+        for disease_id in list(current_diseases):
+            disease = diseases.get(str(disease_id))
+            if not disease:
+                continue
+            base_chance = disease.get("natural_cure_chance", 0) or 0
+            if base_chance <= 0:
+                continue
+            chance = min(base_chance * (2 if disease.get("cured") else 1), 1.0)
+            if random.random() <= chance:
+                cure_pop({**pop, "diseases": current_diseases}, disease_id)
+                current_diseases.remove(disease_id)
+                name = disease.get("name", "")
+                recovered_counts[name] = recovered_counts.get(name, 0) + 1
 
     result = ""
     for name, count in recovered_counts.items():
         result += f"{count} pop(s) in {nation_name} naturally recovered from {name}.\n"
+    return result
+
+def nation_disease_effects_tick(old_nation, new_nation, schema):
+    """Per-nation, per-session disease effects that aren't part of the
+    virtual job overlay (collect_disease_effects) because they either need
+    to re-roll every session (the resource windfall — job_production is a
+    fixed value recomputed continuously, not something that changes
+    session to session) or reach into a different data type (vassal
+    compliance, on the nation itself, but gated by a game-mechanic
+    threshold rather than a plain per-pop modifier).
+
+    For each disease currently infecting this nation:
+      - `random_resource_windfall_per_infected_pop`: grants that many rolls
+        of a random non-research resource PER currently-infected pop, via
+        the same mechanic as the tech-research/expansion/stability-loss
+        windfalls (_grant_resource_windfall).
+      - `compliance_loss_at_max_infection`: if this nation is a vassal
+        (has an overlord) and is currently at or above this disease's
+        effective (region-aware) max_infected_pct cap, it loses one level
+        of vassal compliance — reuses adjust_compliance, the same helper
+        Nation Vassal Compliance Tick uses, so it floor-clamps at
+        "Rebellious" the same way.
+    """
+    from helpers.disease_helpers import get_nation_infection_counts, resolve_diseases, get_infectivity_settings
+
+    nation_id = str(old_nation.get("_id", ""))
+    counts = get_nation_infection_counts(nation_id)
+    if not counts:
+        return ""
+
+    diseases = resolve_diseases(counts.keys())
+    pop_count = old_nation.get("pop_count", 0)
+    result = ""
+
+    for disease_id, infected in counts.items():
+        disease = diseases.get(disease_id)
+        if not disease or infected <= 0:
+            continue
+        disease_name = disease.get("name", disease_id)
+
+        windfall_rate = disease.get("random_resource_windfall_per_infected_pop", 0) or 0
+        if windfall_rate:
+            result += _grant_resource_windfall(
+                old_nation, new_nation, windfall_rate * infected, disease_name
+            )
+
+        if disease.get("compliance_loss_at_max_infection") and old_nation.get("overlord"):
+            settings = get_infectivity_settings(disease, old_nation)
+            cap = math.floor(settings.get("max_infected_pct", 0) * pop_count)
+            if infected >= cap and cap > 0:
+                result += adjust_compliance(
+                    old_nation, new_nation, schema, [-1], [f"{disease_name} (max infection)"]
+                )
+
     return result
 
 def nation_accepted_spread_tick(old_nation, new_nation, schema):
@@ -2655,20 +2723,51 @@ def disease_job_death_tick(_old_nations, _new_nations, _schema, pending=None):
     Remove change auto-requested and approved against it — mirroring the
     manual pop-deletion flow (routes/pops_routes.py's bulk delete) — rather
     than being deleted directly, so it shows up in change history like any
-    other pop removal."""
+    other pop removal.
+
+    A pop carrying 2+ death-chance diseases only gets queued for removal
+    once per tick (already_queued), even though it's found again in a later
+    disease's loop iteration — otherwise the same pop could be queued twice
+    in one pass."""
     result = ""
     diseases = list(mongo.db.diseases.find({"job_death_chance": {"$gt": 0}}))
     if not diseases:
         return ""
 
+    already_queued = set()
+
     for disease in diseases:
-        death_chance = disease.get("job_death_chance", 0)
+        base_death_chance = disease.get("job_death_chance", 0)
         disease_id = str(disease["_id"])
         disease_name = disease.get("name", disease_id)
-        infected_pops = list(mongo.db.pops.find({"disease": disease_id}))
+        role_condition = disease.get("prosperity_role_condition") or "None"
+        override_death_chance = disease.get("override_job_death_chance")
+        infected_pops = list(mongo.db.pops.find({"diseases": disease_id}))
+
+        # Batch-resolve infected pops' nations' prosperity_role once (not
+        # per-pop) for the role-conditional override.
+        nation_roles = {}
+        if role_condition != "None" and override_death_chance is not None:
+            nation_object_ids = []
+            for p in infected_pops:
+                try:
+                    nation_object_ids.append(ObjectId(p.get("nation", "")))
+                except Exception:
+                    continue
+            for n in mongo.db.nations.find(
+                {"_id": {"$in": nation_object_ids}}, {"prosperity_role": 1}
+            ):
+                nation_roles[str(n["_id"])] = n.get("prosperity_role")
 
         died = 0
         for pop in infected_pops:
+            pop_id_str = str(pop["_id"])
+            if pop_id_str in already_queued:
+                continue
+            death_chance = base_death_chance
+            if role_condition != "None" and override_death_chance is not None:
+                if nation_roles.get(str(pop.get("nation", ""))) == role_condition:
+                    death_chance = override_death_chance
             if random.random() <= death_chance:
                 before = {k: v for k, v in pop.items() if k != "_id"}
                 _queue_change(
@@ -2680,6 +2779,7 @@ def disease_job_death_tick(_old_nations, _new_nations, _schema, pending=None):
                     after_data={},
                     reason=f"Died from {disease_name} (job death chance)",
                 )
+                already_queued.add(pop_id_str)
                 died += 1
 
         if died:
@@ -3444,6 +3544,7 @@ NATION_TICK_FUNCTIONS = {
     "Nation Disease Spread Tick": nation_disease_spread_tick,
     "Nation Accepted Disease Spread Tick": nation_accepted_spread_tick,
     "Nation Disease Natural Cure Tick": nation_disease_natural_cure_tick,
+    "Nation Disease Effects Tick": nation_disease_effects_tick,
     "Nation Pop Loss Tick": pop_loss_tick,
     "Nation Pop Flee Tick": pop_flee_tick,
     "Nation Temperament Tick": temperament_tick,
@@ -3562,6 +3663,7 @@ _PENDING_AWARE_TICK_FUNCTIONS = {
 _TILE_PENDING_AWARE_TICK_FUNCTIONS = {
     ai_decision_tick,
     ai_market_matching_tick,
+    nation_passive_expansion_tick,
 }
 
 
