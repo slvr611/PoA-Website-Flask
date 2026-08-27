@@ -165,6 +165,37 @@
         "description": "The luxury district of the merchant company",
         "json_data": "merchant_luxury_districts"
       },
+      "0_progress_slots": {
+        "bsonType": "number",
+        "label": "0 Progress Slots",
+        "description": "The number of 0 progress slots the merchant company has available",
+        "calculated": true
+      },
+      "1_progress_slots": {
+        "bsonType": "number",
+        "label": "1 Progress Slots",
+        "description": "The number of 1 progress slots the merchant company has available",
+        "calculated": true,
+        "base_value": 3
+      },
+      "2_progress_slots": {
+        "bsonType": "number",
+        "label": "2 Progress Slots",
+        "description": "The number of 2 progress slots the merchant company has available",
+        "calculated": true
+      },
+      "3_progress_slots": {
+        "bsonType": "number",
+        "label": "3 Progress Slots",
+        "description": "The number of 3 progress slots the merchant company has available",
+        "calculated": true
+      },
+      "4_progress_slots": {
+        "bsonType": "number",
+        "label": "4 Progress Slots",
+        "description": "The number of 4 progress slots the merchant company has available",
+        "calculated": true
+      },
       "progress_quests": {
         "bsonType": "array",
         "label": "Progress Quests",

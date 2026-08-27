@@ -777,11 +777,33 @@ def compute_market_resource_storage_capacity(field, target, base_value, field_sc
     return storage_dict
 
 def compute_trade_risk(field, target, base_value, field_schema, overall_total_modifiers):
-    value = base_value + overall_total_modifiers.get("trade_risk", 0)
+    """Purely informational risk indicator shown to players: 0% normally,
+    50% the moment this market has a bandit camp anywhere in it. No longer
+    additive from protection stance / market type / owner units — those all
+    now affect bandit_camp_spawn_chance instead (the actual lever that
+    prevents/attracts a camp in the first place; see
+    compute_bandit_camp_spawn_chance). This deliberately ignores
+    overall_total_modifiers entirely so it stays a clean binary signal."""
+    market_name = target.get("name", "")
+    if not market_name:
+        return 0.0
+    from app_core import mongo as _mongo
+    has_camp = _mongo.db.hex_map_tiles.find_one({"bandit_camp.market": market_name}, {"_id": 1}) is not None
+    return 0.5 if has_camp else 0.0
 
-    per_naval  = overall_total_modifiers.get("trade_risk_per_owner_naval_unit", 0)
-    per_land   = overall_total_modifiers.get("trade_risk_per_owner_land_unit",  0)
-    per_luxury = overall_total_modifiers.get("trade_risk_per_owner_luxury",     0)
+
+def compute_bandit_camp_spawn_chance(field, target, base_value, field_schema, overall_total_modifiers):
+    """Chance a new bandit camp spawns in this market's trade network each
+    session (rolled by tick_helpers.bandit_camp_spawn_tick). Base 5%, moved
+    by market type (Illicit raises it; Luxury/Maritime/Militant lower it
+    per owner luxury/naval/land unit — the same per-unit market-head lookup
+    compute_trade_risk used to do) and by member protection stances
+    (market_links.json's market_safety_stance laws)."""
+    value = base_value + overall_total_modifiers.get(field, 0)
+
+    per_naval  = overall_total_modifiers.get("bandit_camp_spawn_chance_per_owner_naval_unit", 0)
+    per_land   = overall_total_modifiers.get("bandit_camp_spawn_chance_per_owner_land_unit",  0)
+    per_luxury = overall_total_modifiers.get("bandit_camp_spawn_chance_per_owner_luxury",     0)
 
     if per_naval or per_land or per_luxury:
         tier_mult = max(1, int(overall_total_modifiers.get("market_tier_multiplier", 1)))
@@ -809,7 +831,7 @@ def compute_trade_risk(field, target, base_value, field_schema, overall_total_mo
             except Exception:
                 pass
 
-    return value
+    return max(0.0, min(1.0, value))
 
 
 def compute_import_slots(field, target, base_value, field_schema, overall_total_modifiers):
@@ -1323,4 +1345,5 @@ CUSTOM_COMPUTE_FUNCTIONS = {
     "diplomatic_range": lambda field, target, base_value, field_schema, otm:
         int(5 * target.get("administration", 0) + 2 * target.get("trade_speed", 0) + otm.get(field, 0)),
     "trade_risk": compute_trade_risk,
+    "bandit_camp_spawn_chance": compute_bandit_camp_spawn_chance,
 }

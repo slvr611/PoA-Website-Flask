@@ -274,14 +274,38 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
     phase_start = perf_counter()
     laws = collect_laws(target, schema)
     law_totals = sum_law_totals(laws)
-    # Process _modifiers (scaling modifier lists) from law values — skipped by sum_law_totals
+    # Process _modifiers (scaling modifier lists) from law values — skipped by sum_law_totals.
+    # A scoped entry only self-applies here (folds into THIS target's own
+    # law_totals) when its scope actually resolves DIRECTLY to the entity
+    # currently being calculated (target_data_type) — e.g. nation_self on a
+    # nation's own law, or character_self on a character's own law. A scope
+    # that forwards to a DIFFERENT linked entity (forward_link/reverse_link/
+    # chain — e.g. character_ruling_nation, nation_ruling_characters) must
+    # NOT self-apply here regardless of what its target_type happens to be;
+    # that redirection is handled by the target entity's own
+    # external_calculation_requirements lookup instead. The old check only
+    # ever compared target_type against the literal string "nation" (a
+    # relic from when only nations used this mechanism), so a character's
+    # own law entry scoped character_ruling_nation (target_type "nation")
+    # incorrectly passed and applied to the CHARACTER itself instead of the
+    # nation it rules — e.g. the built-in Quartermaster subtype's
+    # progress_slots bonus. An unrecognized/typo'd scope key still fails
+    # open (kept) exactly as before, so it can't silently disable an
+    # existing self-effect that happened to rely on that fallback.
     _law_scope_defs = json_data.get("scope_definitions", {})
     _law_scaled = []
     for _law in laws:
         for _m in _law.get("_modifiers", []):
             _scope = _m.get("scope", "")
-            if _scope and _law_scope_defs.get(_scope, {}).get("target_type", "nation") != "nation":
-                continue
+            if _scope:
+                _scope_def = _law_scope_defs.get(_scope)
+                if _scope_def is not None:
+                    _resolves_direct_to_self = (
+                        _scope_def.get("resolution", {}).get("type") == "direct"
+                        and _scope_def.get("target_type", "") == target_data_type
+                    )
+                    if not _resolves_direct_to_self:
+                        continue
             _law_scaled.append(_m)
     if _law_scaled:
         for _k, _v in sum_modifier_totals(_law_scaled, target).items():
@@ -334,6 +358,7 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
     prestige_modifiers = {}
     title_modifiers = {}
     nation_tagged_sources = None
+    character_tagged_sources = None
 
     phase_start = perf_counter()
     if target_data_type == "nation":
@@ -467,14 +492,35 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
         title_modifiers = positive_title_modifiers.copy()
         for key, value in negative_title_modifiers.items():
             title_modifiers[key] = title_modifiers.get(key, 0) + value
-        # District and law modifiers scoped to ruling characters
-        from calculations.source_adapters import DistrictAdapter as _DistrictAdapter, LawAdapter as _LawAdapter
+
+        # Build one labeled tagged source per contributor (custom modifiers,
+        # each title, each equipped artifact, race traits, ruled-nation
+        # districts/laws, ...) instead of the single merged dict every other
+        # non-nation target type falls back to in compute_nation_breakdowns —
+        # this is what lets e.g. two artifacts that each grant +1 cunning show
+        # as two separate tooltip lines instead of one merged "+2" line.
+        from calculations.source_adapters import ModifierAdapter as _ModifierAdapter, TitleAdapter as _TitleAdapter, DistrictAdapter as _DistrictAdapter, LawAdapter as _LawAdapter
+        character_tagged_sources = []
+        for _mc in _ModifierAdapter.collect(target, target_data_type="character"):
+            character_tagged_sources.append({"label": f"Modifier: {_mc.label}", "modifiers": dict(_mc.modifiers)})
+        for _tc in _TitleAdapter.collect(target, "character", schema_properties):
+            character_tagged_sources.append({"label": f"Title: {_tc.label}", "modifiers": dict(_tc.modifiers)})
+
+        # District and law modifiers scoped to ruling characters — feed both
+        # the flat totals used for the actual calculation, and individually
+        # labeled tagged entries used for the breakdown tooltip.
         for _contrib in _DistrictAdapter.collect_for_character(target):
             for _k, _v in _contrib.modifiers.items():
                 district_totals[_k] = district_totals.get(_k, 0) + _v
+            character_tagged_sources.append({"label": f"Ruled Nation District: {_contrib.label}", "modifiers": dict(_contrib.modifiers)})
         for _contrib in _LawAdapter.collect_for_character(target):
             for _k, _v in _contrib.modifiers.items():
                 district_totals[_k] = district_totals.get(_k, 0) + _v
+            character_tagged_sources.append({"label": f"Ruled Nation Law: {_contrib.label}", "modifiers": dict(_contrib.modifiers)})
+
+        # Race traits, religion, equipped artifacts (each listed individually),
+        # region, and ruler bonuses from the ruled nation.
+        character_tagged_sources.extend(_collect_external_labeled(target, schema, "character"))
     elif target_data_type == "market":
         primary_resource = target.get("primary_resource", "")
         secondary_resource_one = target.get("secondary_resource_one", "")
@@ -809,7 +855,9 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
             component_sources,
             overall_total_modifiers,
             calculated_values,
-            nation_tagged_sources if target_data_type == "nation" else None,
+            nation_tagged_sources if target_data_type == "nation"
+            else character_tagged_sources if target_data_type == "character"
+            else None,
             target_data_type=target_data_type,
         )
         record_timing("compute_breakdowns_ms", phase_start)
@@ -1774,6 +1822,8 @@ _EXTERNAL_FIELD_LABEL_MAP = {
     "markets": "Market",
     "owned_markets": "Owned Market",
     "pops": "Pop",
+    "artifacts": "Artifact",
+    "ruling_nation_org": "Ruled Nation",
 }
 
 

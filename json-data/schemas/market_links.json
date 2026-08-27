@@ -26,22 +26,22 @@
           "None": {},
           "Exploit": {
             "nation_money_income_per_market_tier": 40,
-            "market_trade_risk": 0.1
+            "market_bandit_camp_spawn_chance": 0.1
           },
           "Abuse": {
             "nation_money_income_per_market_tier": 20,
-            "market_trade_risk": 0.05
+            "market_bandit_camp_spawn_chance": 0.05
           },
           "Ignore": {
-            "market_trade_risk": 0.01
+            "market_bandit_camp_spawn_chance": 0.01
           },
           "Protect": {
             "nation_money_income_per_market_tier": -100,
-            "market_trade_risk": -0.05
+            "market_bandit_camp_spawn_chance": -0.05
           },
           "Preserve": {
             "nation_money_income_per_market_tier": -200,
-            "market_trade_risk": -0.08
+            "market_bandit_camp_spawn_chance": -0.08
           }
         }
       }

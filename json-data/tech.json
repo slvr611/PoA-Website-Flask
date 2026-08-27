@@ -190,7 +190,9 @@
 		"display_name": "Niter Grinding",
 		"type": "Military",
 		"cost": 9,
-		"modifiers": {},
+		"modifiers": {
+			"gunpowder_storage_capacity": 5
+		},
 		"prerequisites_all": [],
 		"prerequisites_one": ["standard_measurements", "mage_college"]
 	},

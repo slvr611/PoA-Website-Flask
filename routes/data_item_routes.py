@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, flash, jsonify, g
+from flask import Blueprint, render_template, request, redirect, flash, jsonify, g, url_for
 from forms import form_generator
 from helpers.data_helpers import get_data_on_category, get_data_on_item
 from helpers.change_helpers import request_change, approve_change, recalculate_object
@@ -17,7 +17,14 @@ import os
 
 
 _DEMOGRAPHIC_TYPES = frozenset(("races", "cultures", "religions"))
-_VISIBILITY_GATED_TYPES = frozenset({"characters", "artifacts"})
+_VISIBILITY_GATED_TYPES = frozenset({"characters", "artifacts", "merchants"})
+
+# Data types where even the "request a change, pending admin approval" flow
+# is admin-only — unlike nations/artifacts/etc., where any player can
+# request an edit for review, units are static game-balance content, not
+# player-driven data, so no non-admin should reach the edit form or be able
+# to submit a change request at all.
+_ADMIN_ONLY_EDIT_TYPES = frozenset({"units"})
 
 
 def _get_visible_pop_nations():
@@ -837,6 +844,10 @@ def data_item_new_approve(data_type):
 
 @data_item_routes.route("/<data_type>/edit/<item_ref>", methods=["GET"])
 def data_item_edit(data_type, item_ref):
+    if data_type in _ADMIN_ONLY_EDIT_TYPES and not (g.user and g.user.get("is_admin", False)):
+        flash("You must be an admin to access this page.")
+        return redirect(url_for("base_routes.home"))
+
     schema, db, item = get_data_on_item(data_type, item_ref)
 
     if data_type in _VISIBILITY_GATED_TYPES:
@@ -854,8 +865,12 @@ def data_item_edit(data_type, item_ref):
 
 @data_item_routes.route("/<data_type>/edit/<item_ref>/request", methods=["POST"])
 def data_item_edit_request(data_type, item_ref):
+    if data_type in _ADMIN_ONLY_EDIT_TYPES and not (g.user and g.user.get("is_admin", False)):
+        flash("You must be an admin to access this page.")
+        return redirect(url_for("base_routes.home"))
+
     schema, db, item = get_data_on_item(data_type, item_ref)
-    
+
     if data_type == "nations": #This should never happen, but just a good fallback
         print("Had to redirect from data_item_routes to nation_routes")
         return nation_edit_request(item_ref)

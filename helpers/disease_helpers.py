@@ -451,6 +451,30 @@ def _derived_race_ids(disease):
         return set()
 
 
+def nation_is_immune_to_disease(nation_id_str, disease):
+    """True if the nation is listed as immune to this disease (by name) in
+    its own disease_immunities field.
+
+    Only gates NEW infection attempts — infect_random_pops is the single
+    choke point every spread pathway funnels through (a nation's own
+    outbreak spreading to more of its pops, cross-nation spread landing on
+    this nation from elsewhere, and any admin/seed script), so checking it
+    here rather than in each individual tick function covers all of them at
+    once and can't be bypassed by a new pathway forgetting to check.
+    A nation that already carries the disease before immunity is added
+    keeps its existing infected pops — this does not cure anyone."""
+    disease_name = disease.get("name", "")
+    if not disease_name or not nation_id_str:
+        return False
+    try:
+        nation = mongo.db.nations.find_one(
+            {"_id": ObjectId(str(nation_id_str))}, {"disease_immunities": 1}
+        )
+    except Exception:
+        return False
+    return bool(nation and disease_name in (nation.get("disease_immunities") or []))
+
+
 def infect_random_pops(nation_id, disease, count):
     """Infect up to `count` random eligible, non-slave pops of a nation.
 
@@ -462,8 +486,16 @@ def infect_random_pops(nation_id, disease, count):
 
     Pops already carrying the disease's derived race (e.g. an existing vampire
     pop for Vampirism) are not valid infection targets.
+
+    A nation listed as immune to this disease in its own disease_immunities
+    (see nation_is_immune_to_disease) never gets any new infections at all,
+    regardless of how many eligible pops it has.
+
     Returns the number of pops actually infected.
     """
+    if nation_is_immune_to_disease(nation_id, disease):
+        return 0
+
     disease_id_str = str(disease.get("_id", ""))
     query = {
         "nation": str(nation_id),

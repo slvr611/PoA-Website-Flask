@@ -498,7 +498,7 @@
         "extra_fields": [
             {"key": "tier", "label": "Tier", "source": "progress_tiers"}
         ],
-        "applicable_to": ["nation"]
+        "applicable_to": ["nation", "character", "merchant", "mercenary"]
     },
     "tech_cost_modifier": {
         "name": "Technology Cost Modifier",
@@ -726,14 +726,14 @@
             {"key": "target_type", "label": "Target Type", "source": "visibility_target_types"},
             {"key": "target_value", "label": "Target (region or nation name)", "optional": true}
         ],
-        "applicable_to": ["nation"]
+        "applicable_to": ["nation", "merchant"]
     },
     "defensive_visibility": {
         "name": "Defensive Visibility",
         "value_format": "number",
         "field_template": "defensive_visibility",
         "is_visibility_modifier": true,
-        "applicable_to": ["nation"]
+        "applicable_to": ["nation", "merchant"]
     },
     "forced_flee_destination": {
         "name": "Forced Flee Destination",

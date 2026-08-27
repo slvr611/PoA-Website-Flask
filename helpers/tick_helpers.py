@@ -617,7 +617,7 @@ def tick(form_data):
             if run_key in form_data:
                 print(tick_function_label)
                 for i in range(len(old_markets)):
-                    full_tick_summary += _dispatch(tick_function, pending, old_markets[i], new_markets[i], market_schema)
+                    full_tick_summary += _dispatch(tick_function, pending, old_markets[i], new_markets[i], market_schema, pending_tiles=pending_tiles)
 
 
 
@@ -1579,6 +1579,166 @@ def market_income_tick(old_market, new_market, schema):
     produced = [f"+{amt} {r}" for r, amt in old_market.get("resource_production", {}).items() if amt]
     produced_str = ", ".join(produced) if produced else "no production"
     return f"{name}: {produced_str}{luxury_log}\n"
+
+
+def _market_member_nation_names(market_id_str):
+    """Return the list of nation names that are members of a market (via
+    market_links), resolved from the member ids stored there."""
+    member_ids = [
+        lnk["member"] for lnk in mongo.db.market_links.find({"market": market_id_str}, {"member": 1})
+        if lnk.get("member")
+    ]
+    if not member_ids:
+        return []
+    object_ids = []
+    for mid in member_ids:
+        try:
+            object_ids.append(ObjectId(mid))
+        except Exception:
+            pass
+    if not object_ids:
+        return []
+    return [
+        n["name"] for n in mongo.db.nations.find({"_id": {"$in": object_ids}}, {"name": 1})
+        if n.get("name")
+    ]
+
+
+def bandit_camp_spawn_tick(old_market, new_market, schema, pending_tiles=None):
+    """Each session, a market has a chance (bandit_camp_spawn_chance — base
+    5%, moved by market type and member protection stances, see
+    markets.json/market_links.json) to spawn a new bandit camp preying on
+    its own trade network.
+
+    Eligible tiles are road ("route") tiles owned by one of the market's
+    member nations — bandits camp out on the roads nations actually use to
+    trade, not just anywhere on the map. Prefers a tile with no city/
+    district/wonder/bandit_camp already on it, but falls back to an
+    occupied route tile rather than never spawning if every member's roads
+    are already fully built up.
+
+    Runs before nations are recalculated this same tick (MARKET_TICK_FUNCTIONS
+    runs first in tick()), but the write itself is deferred via
+    pending_tiles/_queue_tile_write like every other tile claim this tick —
+    so a freshly spawned camp only starts affecting trade_risk/raids from
+    next session onward, once the deferred write actually commits.
+    """
+    market_name = old_market.get("name", "Unknown")
+    spawn_chance = old_market.get("bandit_camp_spawn_chance", 0.05)
+    if random.random() >= spawn_chance:
+        return ""
+
+    member_names = _market_member_nation_names(str(old_market.get("_id", "")))
+    if not member_names:
+        return f"{market_name}: bandit camp spawn roll succeeded, but the market has no members to prey on.\n"
+
+    route_tiles = list(mongo.db.hex_map_tiles.find(
+        {"owner": {"$in": member_names}, "route": {"$exists": True, "$ne": None}},
+        {"_id": 1, "city": 1, "district": 1, "wonder": 1, "bandit_camp": 1},
+    ))
+    if not route_tiles:
+        return f"{market_name}: bandit camp spawn roll succeeded, but no member has any road tiles to place one on.\n"
+
+    empty_tiles = [
+        t for t in route_tiles
+        if not (t.get("city") or t.get("district") or t.get("wonder") or t.get("bandit_camp"))
+    ]
+    tile = random.choice(empty_tiles or route_tiles)
+
+    camp_name = f"{market_name} Bandit Camp"
+    _queue_tile_write(pending_tiles, tile["_id"], {
+        "bandit_camp": {"name": camp_name, "tier": 1, "market": market_name},
+    })
+    return f"{market_name}: a new bandit camp (\"{camp_name}\") has spawned, preying on the market's trade routes.\n"
+
+
+def complex_trade_bandit_loss_tick(old_market, new_market, schema, pending_tiles=None):
+    """Complex (ongoing) trade routes have a flat 25% chance, each session,
+    of having that session's delivery lost to a bandit camp if this market
+    has one anywhere in it.
+
+    Runs as a market tick — before nations are recalculated this same
+    session — so a raided route's resources_a_to_b/resources_b_to_a net to
+    zero for BOTH sides starting with THIS session's money/resource income,
+    not one session late. The stolen cargo is logged on the raiding bandit
+    camp tile itself (bandit_camp.stolen_goods) so it's visible on the map.
+
+    A route between two nations who share more than one market with a camp
+    would otherwise get rolled once per shared market on the same session —
+    raid_checked_sessions guards against that, regardless of which market's
+    tick reaches the route first.
+    """
+    market_name = old_market.get("name", "Unknown")
+    camp_tiles = list(mongo.db.hex_map_tiles.find(
+        {"bandit_camp.market": market_name}, {"_id": 1, "bandit_camp": 1},
+    ))
+    if not camp_tiles:
+        return ""
+
+    member_names = _market_member_nation_names(str(old_market.get("_id", "")))
+    if len(member_names) < 2:
+        return ""
+
+    from helpers.trade_route_helpers import is_delivering, _current_session as _tr_current_session, _nations_in_stasis
+    current_session = _tr_current_session()
+    stasis_names = _nations_in_stasis(member_names)
+
+    routes = list(mongo.db.trade_routes.find({
+        "status": {"$in": ["active", "ending"]},
+        "nation_a": {"$in": member_names},
+        "nation_b": {"$in": member_names},
+    }))
+    if not routes:
+        return ""
+
+    # Cumulative local snapshot of each camp tile's bandit_camp dict — every
+    # raid re-queues the FULL dict (rather than one re-read from camp_tiles)
+    # so two routes raiding the same tile in this same call don't clobber
+    # each other's stolen_goods entry (_commit_pending_tile_writes merges
+    # queued writes per top-level key, last write wins — not a deep merge).
+    camp_state = {t["_id"]: dict(t.get("bandit_camp") or {}) for t in camp_tiles}
+    camp_tile_ids = list(camp_state.keys())
+
+    log_lines = []
+    for route in routes:
+        if not is_delivering(route, current_session):
+            continue
+        if route.get("nation_a") in stasis_names or route.get("nation_b") in stasis_names:
+            continue  # paused, nothing moving to lose
+        if current_session in route.get("raid_checked_sessions", []):
+            continue  # already resolved this session via another shared market
+
+        mongo.db.trade_routes.update_one(
+            {"_id": route["_id"]},
+            {"$addToSet": {"raid_checked_sessions": current_session}},
+        )
+
+        if random.random() >= 0.25:
+            continue
+
+        mongo.db.trade_routes.update_one(
+            {"_id": route["_id"]},
+            {"$addToSet": {"raided_sessions": current_session}},
+        )
+
+        tile_id = random.choice(camp_tile_ids)
+        stolen_goods = list(camp_state[tile_id].get("stolen_goods", []))
+        stolen_goods.append({
+            "session": current_session,
+            "nation_a": route.get("nation_a", ""),
+            "nation_b": route.get("nation_b", ""),
+            "resources_a_to_b": route.get("resources_a_to_b", []),
+            "resources_b_to_a": route.get("resources_b_to_a", []),
+        })
+        camp_state[tile_id]["stolen_goods"] = stolen_goods
+        _queue_tile_write(pending_tiles, tile_id, {"bandit_camp": camp_state[tile_id]})
+
+        log_lines.append(
+            f"{market_name}: trade route {route.get('nation_a')} <-> {route.get('nation_b')} raided by a bandit camp this session.\n"
+        )
+
+    return "".join(log_lines)
+
 
 ###########################################################
 # Nation Tick Functions
@@ -3510,6 +3670,8 @@ FACTION_TICK_FUNCTIONS = {
 
 MARKET_TICK_FUNCTIONS = {
     "Market Income Tick": market_income_tick,
+    "Bandit Camp Spawn Tick": bandit_camp_spawn_tick,
+    "Complex Trade Bandit Loss Tick": complex_trade_bandit_loss_tick,
 }
 
 VASSAL_SPECIFIC_NATION_TICK_FUNCTIONS = [
@@ -3664,6 +3826,8 @@ _TILE_PENDING_AWARE_TICK_FUNCTIONS = {
     ai_decision_tick,
     ai_market_matching_tick,
     nation_passive_expansion_tick,
+    bandit_camp_spawn_tick,
+    complex_trade_bandit_loss_tick,
 }
 
 

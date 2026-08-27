@@ -1479,7 +1479,12 @@
 						{% if cur_def_key %}
 							{# ── DB-driven district card ── #}
 							{% set dd = district_defs_map.get(cur_def_key, {}) %}
-							{% set pend_node = pd.get("node", "") if pd is not none else cur_node %}
+							{# District node assignment lives on the live hex map, not on the district's own
+							   (often stale/empty) "node" field — a pending nation-document change never touches
+							   tile data, so pend_node must be resolved the same way as cur_node (via
+							   tile_node_map keyed by _id) or every district with a real live node falsely shows
+							   as "node → unset" even when the pending change doesn't mention districts at all. #}
+							{% set pend_node = tile_node_map.get("district", {}).get(pd.get("_id", ""), pd.get("node", "")) if pd is not none else cur_node %}
 							{% set node_changed = pd is not none and pend_node != cur_node %}
 							{{ district_card(dd, cur_node, cur_upgrades, pend_node=pend_node if node_changed else none, nation=nation) }}
 

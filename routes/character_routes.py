@@ -12,13 +12,21 @@ from forms import form_generator
 import random
 
 def validate_character_strengths_weaknesses(form_data):
-    """Returns an error string or None if valid."""
+    """Returns an error string or None if valid.
+
+    No longer enforces an exact count of 2 strengths/2 weaknesses — a
+    character can have any number of each (including zero). Duplicate
+    entries within the same list are still rejected (only representable now
+    that strengths/weaknesses are an addable/removable list rather than a
+    fixed pair of checkboxes), and a stat still can't be both a strength
+    and a weakness at once.
+    """
     strengths = form_data.get("strengths", [])
     weaknesses = form_data.get("weaknesses", [])
-    if len(strengths) != 2:
-        return "Character must have exactly 2 strengths."
-    if len(weaknesses) != 2:
-        return "Character must have exactly 2 weaknesses."
+    if len(strengths) != len(set(strengths)):
+        return "The same strength cannot be listed more than once."
+    if len(weaknesses) != len(set(weaknesses)):
+        return "The same weakness cannot be listed more than once."
     if set(strengths) & set(weaknesses):
         return "A stat cannot be both a strength and a weakness."
     character_type = form_data.get("character_type", "")

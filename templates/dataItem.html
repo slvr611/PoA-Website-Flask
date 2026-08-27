@@ -104,6 +104,26 @@
 									</tbody>
 								</table>
 								<button type="button" class="btn btn-primary" onclick="addToArray('{{ field.name }}')">Add Quest</button>
+							{% elif field.type == 'FieldList' and field.name in ('strengths', 'weaknesses') %}
+								<table class="modifiers-table">
+									<thead>
+										<tr>
+											<th>{{ 'Strength' if field.name == 'strengths' else 'Weakness' }}</th>
+											<th>Actions</th>
+										</tr>
+									</thead>
+									<tbody id="{{ field.name }}-tbody">
+										{% for stat_field in field %}
+											<tr>
+												<td>{{ stat_field(class="form-control") }}</td>
+												<td>
+													<button type="button" class="btn btn-danger" onclick="removeFromArray(this, '{{ field.name }}')">Remove</button>
+												</td>
+											</tr>
+										{% endfor %}
+									</tbody>
+								</table>
+								<button type="button" class="btn btn-primary" onclick="addToArray('{{ field.name }}')">Add {{ 'Strength' if field.name == 'strengths' else 'Weakness' }}</button>
 							{% elif field.type == 'FieldList' and field.name == 'negative_titles' %}
 								<table class="modifiers-table">
 									<thead>
@@ -450,12 +470,20 @@
 	}
 
 	function reindexNegativeTitles() {
-		const tbody = document.getElementById('negative_titles-tbody');
+		reindexFlatFieldList('negative_titles');
+	}
+
+	// Shared by any plain FieldList(SelectField) with no sub-attribute name
+	// (negative_titles, strengths, weaknesses) — each entry's name/id is just
+	// "{field}-{index}", unlike FormField-wrapped lists (modifiers,
+	// progress_quests) whose entries have a third "-{subfield}" segment.
+	function reindexFlatFieldList(fieldName) {
+		const tbody = document.getElementById(`${fieldName}-tbody`);
 		if (!tbody) return;
 		Array.from(tbody.children).forEach((row, index) => {
 			row.querySelectorAll('select').forEach(input => {
-				input.name = `negative_titles-${index}`;
-				input.id   = `negative_titles-${index}`;
+				input.name = `${fieldName}-${index}`;
+				input.id   = `${fieldName}-${index}`;
 			});
 		});
 	}
@@ -541,6 +569,13 @@
 			newRow.innerHTML = `
 				<td><select class="form-control" name="${fieldName}-${currentCount}" id="${fieldName}-${currentCount}">${options}</select></td>
 				<td><button type="button" class="btn btn-danger" onclick="removeFromArray(this,'${fieldName}')">Remove</button></td>`;
+
+		} else if (fieldName === 'strengths' || fieldName === 'weaknesses') {
+			const options = ALL_ATTRIBUTES.filter(a => a.key !== 'attribute')
+				.map(a => `<option value="${a.key}">${a.name}</option>`).join('');
+			newRow.innerHTML = `
+				<td><select class="form-control" name="${fieldName}-${currentCount}" id="${fieldName}-${currentCount}">${options}</select></td>
+				<td><button type="button" class="btn btn-danger" onclick="removeFromArray(this,'${fieldName}')">Remove</button></td>`;
 		}
 
 		tbody.appendChild(newRow);
@@ -601,7 +636,9 @@
 	function removeFromArray(button, categoryName) {
 		button.closest('tr').remove();
 		if      (categoryName === 'progress_quests') reindexProgressQuests();
-		else if (categoryName === 'negative_titles') reindexNegativeTitles();
+		else if (categoryName === 'negative_titles') reindexFlatFieldList('negative_titles');
+		else if (categoryName === 'strengths')       reindexFlatFieldList('strengths');
+		else if (categoryName === 'weaknesses')      reindexFlatFieldList('weaknesses');
 		else if (categoryName === 'modifiers')       reindexModifiers();
 		else {
 			const tbody = document.getElementById(`${categoryName}-tbody`);

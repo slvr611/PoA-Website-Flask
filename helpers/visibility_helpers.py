@@ -44,6 +44,10 @@ VISIBILITY_CONFIG = {
         "hop_collection": "characters",
         "nation_field": "ruling_nation_org",
     },
+    "merchants": {
+        "resolution": "one_hop",
+        "nation_field": "location",
+    },
 }
 
 # Maps nation form field names → minimum visibility tier required to see/edit them.
@@ -114,6 +118,23 @@ ITEM_VIEW_FIELD_TIERS = {
         # Tier 3
         "effect_description": 3, "modifiers": 3,
         "equipped": 3, "artifact_slot_usage": 3,
+    },
+    # Mirrors NATION_VIEW_FIELD_TIERS's tiering philosophy at merchant scale:
+    # identity/location public, operational logistics low-tier, districts/
+    # quests/modifiers mid-tier, treasury and resource details most
+    # sensitive (nations' money/resource_storage equivalent).
+    "merchants": {
+        # Tier 1 — operational logistics
+        "hostile_encounter_chance": 1, "trade_speed": 1,
+        "import_slots": 1, "export_slots": 1,
+        # Tier 2
+        "resource_production": 2, "resource_capacity": 2,
+        # Tier 3 — districts / quests / modifiers
+        "production_district_1": 3, "production_district_2": 3,
+        "production_district_3": 3, "specialty_district": 3,
+        "luxury_district": 3, "progress_quests": 3, "modifiers": 3,
+        # Tier 4 — treasury and resource reserves (most sensitive)
+        "income": 4, "treasury": 4, "resource_storage": 4,
     },
 }
 
@@ -300,6 +321,22 @@ def is_item_owner(data_type: str, item: dict, user) -> bool:
         )
         return char is not None
 
+    if data_type == "merchants":
+        leader_oids = []
+        for leader_id in item.get("leaders", []):
+            if not leader_id:
+                continue
+            try:
+                leader_oids.append(ObjectId(str(leader_id)))
+            except Exception:
+                continue
+        if not leader_oids:
+            return False
+        char = mongo.db.characters.find_one(
+            {"player": player_id, "_id": {"$in": leader_oids}}, {"_id": 1}
+        )
+        return char is not None
+
     return False
 
 
@@ -327,7 +364,7 @@ def get_item_visibility(
 
     Never writes to the DB — callers decide whether to log.
     """
-    from calculations.visibility import get_viewer_nations, compute_visibility
+    from calculations.visibility import get_viewer_nations, compute_visibility, compute_merchant_visibility
 
     # 1. Non-player admin or non-player RP mod → always full access, no log
     if is_non_player_admin or getattr(g, "is_non_player_rp_mod", False):
@@ -351,7 +388,13 @@ def get_item_visibility(
     if not viewer_nations:
         return (0, False)
 
-    tier = compute_visibility(viewer_nations, nation_id)
+    # Merchants get their own computation (host nation's baseline exposure
+    # + the merchant's own visibility_modifiers) rather than a plain
+    # nation-to-nation lookup — see compute_merchant_visibility's docstring.
+    if data_type == "merchants":
+        tier = compute_merchant_visibility(viewer_nations, item)
+    else:
+        tier = compute_visibility(viewer_nations, nation_id)
     return (tier, False)
 
 

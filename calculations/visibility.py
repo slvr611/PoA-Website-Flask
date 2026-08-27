@@ -306,6 +306,105 @@ def compute_visibility(viewer_nations, target_nation_id: str) -> int:
     return max(_compute_visibility_for_one(vn, target_nation_id) for vn in viewer_nations)
 
 
+def _structural_relationship_bonus(viewer_nation: dict, target: dict) -> int:
+    """Region / overlord-vassal / shared-market / diplomatic-pact bonus
+    between a viewer nation and a target nation document — the portion of
+    visibility that comes from the two nations' actual relationship,
+    independent of either side's own visibility_modifiers.
+
+    Shared by nation-to-nation visibility (_compute_visibility_for_one) and
+    merchant "baseline" visibility (_compute_merchant_visibility_for_one) —
+    a merchant company shares its host nation's structural exposure, but
+    not the host's own modifiers (see that function's docstring)."""
+    viewer_id = str(viewer_nation["_id"])
+    target_id = str(target["_id"])
+    bonus = 0
+
+    # Same region
+    viewer_region = str(viewer_nation.get("region") or "")
+    target_region = str(target.get("region") or "")
+    if viewer_region and viewer_region == target_region:
+        bonus += 1
+
+    # Vassal / Overlord (either direction)
+    if str(target.get("overlord") or "") == viewer_id:
+        bonus += 2
+    elif str(viewer_nation.get("overlord") or "") == target_id:
+        bonus += 2
+
+    # Shared market
+    viewer_markets = {
+        str(ml["market"])
+        for ml in mongo.db.market_links.find({"member": viewer_id}, {"market": 1})
+        if ml.get("market")
+    }
+    if viewer_markets:
+        target_markets = {
+            str(ml["market"])
+            for ml in mongo.db.market_links.find({"member": target_id}, {"market": 1})
+            if ml.get("market")
+        }
+        if viewer_markets & target_markets:
+            bonus += 1
+
+    # Diplomatic pact
+    pact = mongo.db.diplo_relations.find_one(
+        {
+            "$or": [
+                {"nation_1": viewer_id, "nation_2": target_id},
+                {"nation_1": target_id, "nation_2": viewer_id},
+            ],
+            "pact_type": {"$in": ["Non-Aggression Pact", "Defensive Pact", "Military Alliance"]},
+        },
+        {"pact_type": 1}
+    )
+    if pact:
+        pact_type = pact.get("pact_type", "")
+        if pact_type == "Non-Aggression Pact":
+            bonus += 1
+        elif pact_type in ("Defensive Pact", "Military Alliance"):
+            bonus += 2
+
+    return bonus
+
+
+def _offensive_visibility_bonus(viewer_nation: dict, target: dict) -> int:
+    """Sum of the viewer's own offensive visibility modifiers that reach
+    `target` (all-nations, matching region, or matching nation name) — this
+    is the viewer's own spying capability, so it applies the same way
+    whether the viewer is looking at a nation or at a merchant company
+    stationed in one (see _compute_merchant_visibility_for_one)."""
+    offensive_bonus = 0
+    viewer_vis_mods = viewer_nation.get("visibility_modifiers", [])
+    target_region = str(target.get("region") or "")
+    needs_target_region = any(
+        vm.get("target_type") == "region"
+        for vm in viewer_vis_mods
+        if vm.get("type") == "offensive"
+    )
+    target_region_name = ""
+    if needs_target_region and target_region:
+        try:
+            region_doc = mongo.db.regions.find_one({"_id": ObjectId(target_region)}, {"name": 1})
+            target_region_name = region_doc.get("name", "") if region_doc else ""
+        except Exception:
+            pass
+
+    for vm in viewer_vis_mods:
+        if vm.get("type") != "offensive":
+            continue
+        tt = vm.get("target_type", "all_nations")
+        tv = vm.get("target_value", "")
+        if tt == "all_nations":
+            offensive_bonus += vm.get("value", 0)
+        elif tt == "region" and tv and tv == target_region_name:
+            offensive_bonus += vm.get("value", 0)
+        elif tt == "specific_nation" and tv and tv == target.get("name", ""):
+            offensive_bonus += vm.get("value", 0)
+
+    return offensive_bonus
+
+
 def _compute_visibility_for_one(viewer_nation: dict, target_nation_id: str) -> int:
     """Single-viewer-nation implementation — see compute_visibility."""
     viewer_id = str(viewer_nation["_id"])
@@ -324,84 +423,82 @@ def _compute_visibility_for_one(viewer_nation: dict, target_nation_id: str) -> i
     if not target:
         return 0
 
-    bonus = 0
-
-    # Same region
-    viewer_region = str(viewer_nation.get("region") or "")
-    target_region = str(target.get("region") or "")
-    if viewer_region and viewer_region == target_region:
-        bonus += 1
-
-    # Vassal / Overlord (either direction)
-    if str(target.get("overlord") or "") == viewer_id:
-        bonus += 2
-    elif str(viewer_nation.get("overlord") or "") == target_nation_id:
-        bonus += 2
-
-    # Shared market
-    viewer_markets = {
-        str(ml["market"])
-        for ml in mongo.db.market_links.find({"member": viewer_id}, {"market": 1})
-        if ml.get("market")
-    }
-    if viewer_markets:
-        target_markets = {
-            str(ml["market"])
-            for ml in mongo.db.market_links.find({"member": target_nation_id}, {"market": 1})
-            if ml.get("market")
-        }
-        if viewer_markets & target_markets:
-            bonus += 1
-
-    # Diplomatic pact
-    pact = mongo.db.diplo_relations.find_one(
-        {
-            "$or": [
-                {"nation_1": viewer_id, "nation_2": target_nation_id},
-                {"nation_1": target_nation_id, "nation_2": viewer_id},
-            ],
-            "pact_type": {"$in": ["Non-Aggression Pact", "Defensive Pact", "Military Alliance"]},
-        },
-        {"pact_type": 1}
-    )
-    if pact:
-        pact_type = pact.get("pact_type", "")
-        if pact_type == "Non-Aggression Pact":
-            bonus += 1
-        elif pact_type in ("Defensive Pact", "Military Alliance"):
-            bonus += 2
-
-    # Offensive visibility modifiers from viewer
-    offensive_bonus = 0
-    needs_target_region = any(
-        vm.get("target_type") == "region"
-        for vm in viewer_nation.get("visibility_modifiers", [])
-        if vm.get("type") == "offensive"
-    )
-    target_region_name = ""
-    if needs_target_region and target_region:
-        try:
-            region_doc = mongo.db.regions.find_one({"_id": ObjectId(target_region)}, {"name": 1})
-            target_region_name = region_doc.get("name", "") if region_doc else ""
-        except Exception:
-            pass
-
-    for vm in viewer_nation.get("visibility_modifiers", []):
-        if vm.get("type") != "offensive":
-            continue
-        tt = vm.get("target_type", "all_nations")
-        tv = vm.get("target_value", "")
-        if tt == "all_nations":
-            offensive_bonus += vm.get("value", 0)
-        elif tt == "region" and tv and tv == target_region_name:
-            offensive_bonus += vm.get("value", 0)
-        elif tt == "specific_nation" and tv and tv == target.get("name", ""):
-            offensive_bonus += vm.get("value", 0)
+    bonus = _structural_relationship_bonus(viewer_nation, target)
+    offensive_bonus = _offensive_visibility_bonus(viewer_nation, target)
 
     # Defensive visibility modifiers on target
     defensive_penalty = sum(
         vm.get("value", 0)
         for vm in target.get("visibility_modifiers", [])
+        if vm.get("type") == "defensive"
+    )
+
+    return max(0, min(4, bonus + offensive_bonus + defensive_penalty))
+
+
+def compute_merchant_visibility(viewer_nations, merchant: dict) -> int:
+    """
+    Compute the HIGHEST visibility tier (0-4) that any of the viewer's
+    nations has into a merchant company, based on the nation the merchant is
+    currently stationed in (merchant["location"]).
+
+    A merchant company:
+      - Is fully visible (tier 4) to the nation it's currently stationed in.
+      - Otherwise shares that host nation's *structural* baseline exposure
+        to the viewer (region/overlord-vassal/shared-market/diplomatic-pact
+        bonus, plus the viewer's own offensive visibility reach) — but NOT
+        the host nation's own visibility_modifiers. Those represent
+        investments the nation itself made in its own secrecy or reach and
+        don't automatically extend to a merchant company just because it
+        happens to be stationed there.
+      - Is instead gated by its OWN visibility_modifiers (added the same
+        generic way a nation's are, via its `modifiers` array) — most
+        notably its own defensive visibility.
+
+    Accepts either a list of nation docs or a single nation dict for
+    viewer_nations, matching compute_visibility.
+    """
+    if isinstance(viewer_nations, dict):
+        viewer_nations = [viewer_nations]
+    if not viewer_nations:
+        return 0
+
+    location_id = str(merchant.get("location", "") or "")
+    if not location_id:
+        return 0
+
+    return max(
+        _compute_merchant_visibility_for_one(vn, location_id, merchant)
+        for vn in viewer_nations
+    )
+
+
+def _compute_merchant_visibility_for_one(viewer_nation: dict, location_id: str, merchant: dict) -> int:
+    """Single-viewer-nation implementation — see compute_merchant_visibility."""
+    viewer_id = str(viewer_nation["_id"])
+    if viewer_id == location_id:
+        return 4
+
+    try:
+        location_oid = ObjectId(location_id)
+    except Exception:
+        return 0
+
+    host = mongo.db.nations.find_one(
+        {"_id": location_oid},
+        {"_id": 1, "region": 1, "overlord": 1, "name": 1}
+    )
+    if not host:
+        return 0
+
+    bonus = _structural_relationship_bonus(viewer_nation, host)
+    offensive_bonus = _offensive_visibility_bonus(viewer_nation, host)
+
+    # The merchant's OWN defensive visibility modifiers — not the host
+    # nation's — gate how well it can be seen.
+    defensive_penalty = sum(
+        vm.get("value", 0)
+        for vm in merchant.get("visibility_modifiers", [])
         if vm.get("type") == "defensive"
     )
 

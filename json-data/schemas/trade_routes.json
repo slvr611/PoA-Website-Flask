@@ -91,6 +91,18 @@
         "bsonType": ["string", "null"],
         "label": "Proposal Note",
         "description": "Optional message from the proposer, visible to the accepting nation"
+      },
+      "raid_checked_sessions": {
+        "bsonType": "array",
+        "label": "Raid-Checked Sessions",
+        "description": "Session numbers this route has already been rolled against for the complex-trade bandit camp raid check (prevents re-rolling the same session's delivery twice when the two nations share more than one market with a bandit camp)",
+        "items": { "bsonType": "number" }
+      },
+      "raided_sessions": {
+        "bsonType": "array",
+        "label": "Raided Sessions",
+        "description": "Session numbers whose delivery was lost to a bandit camp — that session's resources_a_to_b/resources_b_to_a nets to zero for both sides",
+        "items": { "bsonType": "number" }
       }
     }
   }

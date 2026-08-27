@@ -203,7 +203,7 @@
           "Prophet": {},
           "Quartermaster": {
             "_modifiers": [
-              { "modifier_type": "progress_slots", "tier": 0, "value": 1, "scope": "character_ruling_nation" }
+              { "modifier_type": "progress_slots", "tier": "0", "value": 1, "scope": "character_ruling_nation" }
             ]
           },
           "Scholar": {},
@@ -566,10 +566,41 @@
         "show_breakdown": true,
         "hidden": true
       },
+      "0_progress_slots": {
+        "bsonType": "number",
+        "label": "0 Progress Slots",
+        "description": "The number of 0 progress slots the character has available",
+        "calculated": true
+      },
+      "1_progress_slots": {
+        "bsonType": "number",
+        "label": "1 Progress Slots",
+        "description": "The number of 1 progress slots the character has available",
+        "calculated": true,
+        "base_value": 3
+      },
+      "2_progress_slots": {
+        "bsonType": "number",
+        "label": "2 Progress Slots",
+        "description": "The number of 2 progress slots the character has available",
+        "calculated": true
+      },
+      "3_progress_slots": {
+        "bsonType": "number",
+        "label": "3 Progress Slots",
+        "description": "The number of 3 progress slots the character has available",
+        "calculated": true
+      },
+      "4_progress_slots": {
+        "bsonType": "number",
+        "label": "4 Progress Slots",
+        "description": "The number of 4 progress slots the character has available",
+        "calculated": true
+      },
       "progress_quests": {
         "bsonType": "array",
         "label": "Progress Quests",
-        "description": "The ongoing quests the merchant company is currently working on",
+        "description": "The ongoing quests the character is currently working on",
         "items": {
           "bsonType": "object",
           "properties": {
@@ -586,12 +617,12 @@
             "progress_per_tick": {
               "bsonType": "number",
               "label": "Progress Per Tick",
-              "description": "The amount of progress the merchant company makes on the quest each tick"
+              "description": "The amount of progress the character makes on the quest each tick"
             },
             "current_progress": {
               "bsonType": "number",
               "label": "Progress",
-              "description": "The amount of progress the merchant company has made on the quest"
+              "description": "The amount of progress the character has made on the quest"
             },
             "required_progress": {
               "bsonType": "number",

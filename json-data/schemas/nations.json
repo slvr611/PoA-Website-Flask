@@ -2237,6 +2237,14 @@
         "hidden": true,
         "view_access_level": 10
       },
+      "disease_immunities": {
+        "bsonType": "array",
+        "label": "Disease Immunities",
+        "description": "Names of diseases (from the diseases collection, e.g. \"Vampirism\") this nation can never be newly infected with. Only blocks NEW infection attempts (spread tick, cross-nation spread, admin/seed infection) — a nation already carrying the disease before immunity was added keeps its existing infected pops.",
+        "items": {
+          "bsonType": "string"
+        }
+      },
       "modifiers": {
         "bsonType": "array",
         "label": "Ongoing Modifiers",

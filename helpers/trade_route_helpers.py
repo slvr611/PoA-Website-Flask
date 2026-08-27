@@ -313,6 +313,10 @@ def last_delivery_session(route):
 
 def is_delivering(route, session):
     """True if the route should deliver resources this session."""
+    if session in route.get("raided_sessions", []):
+        # Lost to a bandit camp this session (tick_helpers.complex_trade_bandit_loss_tick) —
+        # nets to zero for both sides, same as if the trade never happened.
+        return False
     fds = first_delivery_session(route)
     if fds is None or session < fds:
         return False

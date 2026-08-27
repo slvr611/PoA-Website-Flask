@@ -23,7 +23,7 @@
             "member_nation_stability_gain_chance_per_market_tier": 0.05
           },
           "Illicit": {
-            "trade_risk": 0.15,
+            "bandit_camp_spawn_chance": 0.15,
             "member_nation_money_income_per_bandit_camp": 200
           },
           "Hub": {
@@ -33,15 +33,15 @@
           },
           "Luxury": {
             "generate_luxury_resources_per_market_tier": 1,
-            "trade_risk_per_owner_luxury": -0.02
+            "bandit_camp_spawn_chance_per_owner_luxury": -0.02
           },
           "Maritime": {
-            "trade_risk_per_owner_naval_unit": -0.01,
+            "bandit_camp_spawn_chance_per_owner_naval_unit": -0.01,
             "member_naval_unit_discount": -0.1,
             "sea_route_cost": -1
           },
           "Militant": {
-            "trade_risk_per_owner_land_unit": -0.01,
+            "bandit_camp_spawn_chance_per_owner_land_unit": -0.01,
             "member_land_unit_discount": -0.1,
             "land_route_cost": -1
           }
@@ -174,9 +174,18 @@
       "trade_risk": {
         "bsonType": "number",
         "label": "Trade Risk",
-        "description": "The risk of trading in the market",
+        "description": "The risk of trading in the market. Purely informational: 0% normally, 50% if the market currently has a bandit camp anywhere in it.",
         "format": "percentage",
         "calculated": true,
+        "base_value": 0
+      },
+      "bandit_camp_spawn_chance": {
+        "bsonType": "number",
+        "label": "Bandit Camp Spawn Chance",
+        "description": "The chance a new bandit camp spawns somewhere in this market's trade network each session",
+        "format": "percentage",
+        "calculated": true,
+        "show_breakdown": true,
         "base_value": 0.05
       },
       "members": {

@@ -281,6 +281,15 @@ def _calculate_and_attach_fields(data_type, target):
         _update_tech_costs(target)
         from calculations.visibility import collect_visibility_modifiers
         target["visibility_modifiers"] = collect_visibility_modifiers(target)
+    elif data_type == "merchants":
+        calculated_fields = calculate_all_fields(target, schema, target_data_type)
+        target.update(calculated_fields)
+        # Merchant companies can carry their own offensive/defensive
+        # visibility modifiers (via their `modifiers` array) — same generic
+        # mechanism nations use — so compute_merchant_visibility has
+        # something to read (see calculations/visibility.py).
+        from calculations.visibility import collect_visibility_modifiers
+        target["visibility_modifiers"] = collect_visibility_modifiers(target)
     else:
         calculated_fields = calculate_all_fields(target, schema, target_data_type)
         target.update(calculated_fields)
