@@ -1383,6 +1383,7 @@ class NationForm(BaseSchemaForm):
 
     progress_quests = FieldList(FormField(ProgressQuestForm), min_entries=0)
     shared_quests = FieldList(FormField(SharedQuestForm), min_entries=0)
+    disease_immunities = FieldList(SelectField("Disease", choices=[]), min_entries=0)
 
     notes = TextAreaField("Notes")
     rp_mod_notes = TextAreaField("RP Mod Notes")
@@ -1484,6 +1485,20 @@ class NationForm(BaseSchemaForm):
                     sq_field.disease.choices = disease_choices
                     if hasattr(sq_field, 'slot'):
                         sq_field.slot.choices = available_slots
+
+        if hasattr(self, 'disease_immunities'):
+            # disease_immunities stores disease NAMES, not ids (see
+            # helpers.disease_helpers.nation_is_immune_to_disease) — a plain
+            # name is what admins can type/see directly on the disease item
+            # page, and matches the field's existing name-based lookup.
+            from app_core import mongo as _mongo
+            immunity_choices = [("", "-- Select Disease --")] + [
+                (d["name"], d["name"])
+                for d in _mongo.db.diseases.find({}, {"name": 1}).sort("name", 1)
+                if d.get("name")
+            ]
+            for entry in self.disease_immunities:
+                entry.choices = immunity_choices
         _t2 = _pc()
 
         district_choices = [("", "Empty Slot")]

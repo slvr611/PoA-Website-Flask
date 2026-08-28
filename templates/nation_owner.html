@@ -1792,7 +1792,7 @@
 		{% endif %}
 	</div>
 
-	{% if nation_disease_rows or shared_quest_rows %}
+	{% if nation_disease_rows or shared_quest_rows or editable %}
 	<div class="tab-panel active surface-card" data-tab="overview" style="margin:16px 28px;">
 		<h3>Diseases</h3>
 		{% set _tier = nation_field_tier("diseases") %}
@@ -1850,6 +1850,32 @@
 					{% endfor %}
 				</tbody>
 			</table>
+		</div>
+		{% endif %}
+
+		{% if editable %}
+		<h3 style="margin-top:16px;">Disease Immunities</h3>
+		<p class="empty-state">Diseases this nation can never be newly infected with. Only blocks NEW infections (spread tick, cross-nation spread, admin/seed infection) — pops already infected before immunity is added keep their existing infection.</p>
+		<div class="table-wrapper">
+			<table class="kh-table">
+				<thead><tr><th>Disease</th><th>Actions</th></tr></thead>
+				<tbody id="disease_immunities-tbody">
+					{% for di_field in form.disease_immunities %}
+						<tr>
+							<td>{{ di_field(class="form-control") }}</td>
+							<td><button type="button" class="btn btn-danger" onclick="this.closest('tr').remove(); reindexDiseaseImmunities();">Remove</button></td>
+						</tr>
+					{% endfor %}
+				</tbody>
+			</table>
+		</div>
+		<button type="button" class="pill-btn pill-btn-sm" onclick="addDiseaseImmunity()">Add Immunity</button>
+		{% elif nation.get("disease_immunities") %}
+		<h3 style="margin-top:16px;">Disease Immunities</h3>
+		<div style="display:flex;flex-wrap:wrap;gap:6px;">
+			{% for disease_name in nation.get("disease_immunities", []) %}
+				<span class="chip chip-sage">{{ disease_name }}</span>
+			{% endfor %}
 		</div>
 		{% endif %}
 		{% else %}
@@ -2659,6 +2685,31 @@
 					<td><button type="button" class="btn btn-danger" onclick="removeFromArray(this, 'shared_quests')">Remove</button></td>
 				`;
 				tbody.appendChild(newRow);
+			}
+
+			function addDiseaseImmunity() {
+				const tbody = document.getElementById('disease_immunities-tbody');
+				const i = tbody.children.length;
+				const diseaseOpts = ['<option value="">-- Select Disease --</option>']
+					.concat(DISEASE_OPTIONS.map(d => `<option value="${d.name}">${d.name}</option>`))
+					.join('');
+				const newRow = document.createElement('tr');
+				newRow.innerHTML = `
+					<td><select class="form-control" name="disease_immunities-${i}" id="disease_immunities-${i}">${diseaseOpts}</select></td>
+					<td><button type="button" class="btn btn-danger" onclick="this.closest('tr').remove(); reindexDiseaseImmunities();">Remove</button></td>
+				`;
+				tbody.appendChild(newRow);
+			}
+
+			function reindexDiseaseImmunities() {
+				const tbody = document.getElementById('disease_immunities-tbody');
+				Array.from(tbody.children).forEach((row, index) => {
+					const select = row.querySelector('select');
+					if (select) {
+						select.name = `disease_immunities-${index}`;
+						select.id = `disease_immunities-${index}`;
+					}
+				});
 			}
 
 			function removeFromArray(button, categoryName) {
