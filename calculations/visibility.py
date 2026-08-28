@@ -147,17 +147,43 @@ def get_viewer_nations(g_user) -> list:
         player_id_str = str(player["_id"])
         nation_ids = set()
 
-        # Every character's ruling nation — $nin (not just $ne: None) is
+        # Every character's ruling org — $nin (not just $ne: None) is
         # required since ruling_nation_org defaults to "" (not null) on a
-        # character that isn't currently ruling anything.
+        # character that isn't currently ruling anything. ruling_nation_org
+        # is polymorphic (collections: nations, merchants, mercenaries), so
+        # not every id collected here is actually a nation yet.
+        org_ids = set()
         for character in mongo.db.characters.find(
             {"player": player_id_str, "ruling_nation_org": {"$exists": True, "$nin": [None, ""]}},
             {"ruling_nation_org": 1}
         ):
             try:
-                nation_ids.add(ObjectId(str(character["ruling_nation_org"])))
+                org_ids.add(ObjectId(str(character["ruling_nation_org"])))
             except Exception:
                 continue
+
+        nation_ids = set(org_ids)
+
+        # A character ruling a merchant company (not a nation) shouldn't
+        # leave that player with zero viewer-nation perspective — the
+        # merchant inherits its current host nation's viewpoint on
+        # everything else, same as a merchant's own page is fully visible
+        # to its leaders regardless of viewer_nations (see is_item_owner).
+        if org_ids:
+            real_nation_ids = {
+                n["_id"] for n in mongo.db.nations.find({"_id": {"$in": list(org_ids)}}, {"_id": 1})
+            }
+            merchant_only_ids = org_ids - real_nation_ids
+            if merchant_only_ids:
+                for merchant in mongo.db.merchants.find(
+                    {"_id": {"$in": list(merchant_only_ids)}}, {"location": 1}
+                ):
+                    loc = merchant.get("location")
+                    if loc:
+                        try:
+                            nation_ids.add(ObjectId(str(loc)))
+                        except Exception:
+                            pass
 
         # Direct player attribution via nation.players
         for nation in mongo.db.nations.find({"players": player_id_str}, {"_id": 1}):

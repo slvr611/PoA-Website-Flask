@@ -322,19 +322,28 @@ def is_item_owner(data_type: str, item: dict, user) -> bool:
         return char is not None
 
     if data_type == "merchants":
-        leader_oids = []
-        for leader_id in item.get("leaders", []):
-            if not leader_id:
-                continue
-            try:
-                leader_oids.append(ObjectId(str(leader_id)))
-            except Exception:
-                continue
-        if not leader_oids:
+        # "leaders" is a queryTargetAttribute (reverse-lookup) field — it is
+        # NEVER actually stored on the merchant document itself (raw docs
+        # carry leaders: [] or None always), only populated at read time via
+        # get_linked_objects. Reading item.get("leaders", []) here always
+        # returned nothing, so this never matched — same reverse-lookup
+        # pattern as the "nations" branch above, keyed by ruling_nation_org
+        # (the same polymorphic field characters use to reference whichever
+        # org — nation, merchant, or mercenary — they currently rule).
+        merchant_id = str(item.get("_id", ""))
+        if not merchant_id:
             return False
         char = mongo.db.characters.find_one(
-            {"player": player_id, "_id": {"$in": leader_oids}}, {"_id": 1}
+            {"player": player_id, "ruling_nation_org": merchant_id}, {"_id": 1}
         )
+        if not char:
+            try:
+                char = mongo.db.characters.find_one(
+                    {"player": player_id,
+                     "ruling_nation_org": ObjectId(merchant_id)}, {"_id": 1}
+                )
+            except Exception:
+                pass
         return char is not None
 
     return False

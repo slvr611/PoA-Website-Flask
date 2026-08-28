@@ -174,13 +174,24 @@ class TestCollectVisibilityModifiersWorksForMerchants:
 
 
 class TestIsItemOwnerForMerchants:
+    """"leaders" is a queryTargetAttribute (reverse-lookup) field — real
+    merchant documents NEVER actually store it (raw docs carry leaders: []
+    or None always; it's only populated at read time via get_linked_objects).
+    So ownership must be checked the same way as nations: a reverse lookup
+    on characters.ruling_nation_org (the same polymorphic field characters
+    use to reference whichever org — nation, merchant, or mercenary — they
+    currently rule), not by reading item["leaders"]."""
+
     def test_leader_players_own_the_merchant(self, test_db):
         from unittest.mock import patch
         player_id = ObjectId()
         leader_id = ObjectId()
+        merchant_id = ObjectId()
         test_db["players"].insert_one({"_id": player_id, "id": "user-1"})
-        test_db["characters"].insert_one({"_id": leader_id, "player": str(player_id)})
-        merchant = {"leaders": [str(leader_id)]}
+        test_db["characters"].insert_one({
+            "_id": leader_id, "player": str(player_id), "ruling_nation_org": str(merchant_id),
+        })
+        merchant = {"_id": merchant_id, "leaders": []}
         with patch("helpers.visibility_helpers.mongo", **{"db": test_db}):
             assert is_item_owner("merchants", merchant, {"id": "user-1"}) is True
 
@@ -189,17 +200,21 @@ class TestIsItemOwnerForMerchants:
         player_id = ObjectId()
         other_player_id = ObjectId()
         leader_id = ObjectId()
+        merchant_id = ObjectId()
         test_db["players"].insert_one({"_id": player_id, "id": "user-1"})
         test_db["players"].insert_one({"_id": other_player_id, "id": "user-2"})
-        test_db["characters"].insert_one({"_id": leader_id, "player": str(other_player_id)})
-        merchant = {"leaders": [str(leader_id)]}
+        test_db["characters"].insert_one({
+            "_id": leader_id, "player": str(other_player_id), "ruling_nation_org": str(merchant_id),
+        })
+        merchant = {"_id": merchant_id, "leaders": []}
         with patch("helpers.visibility_helpers.mongo", **{"db": test_db}):
             assert is_item_owner("merchants", merchant, {"id": "user-1"}) is False
 
     def test_no_leaders_means_no_owner(self, test_db):
         from unittest.mock import patch
         player_id = ObjectId()
+        merchant_id = ObjectId()
         test_db["players"].insert_one({"_id": player_id, "id": "user-1"})
-        merchant = {"leaders": []}
+        merchant = {"_id": merchant_id, "leaders": []}
         with patch("helpers.visibility_helpers.mongo", **{"db": test_db}):
             assert is_item_owner("merchants", merchant, {"id": "user-1"}) is False
