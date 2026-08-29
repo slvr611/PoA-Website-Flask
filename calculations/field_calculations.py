@@ -20,7 +20,7 @@ def _build_nation_calc_cache(target):
     if not target_id:
         return {}
 
-    pops = list(category_data["pops"]["database"].find({"nation": target_id}, {"race": 1, "culture": 1, "religion": 1, "slave": 1, "disease": 1}))
+    pops = list(category_data["pops"]["database"].find({"nation": target_id}, {"race": 1, "culture": 1, "religion": 1, "slave": 1, "diseases": 1}))
     race_ids = list({pop.get("race", "") for pop in pops if pop.get("race")})
 
     race_object_ids = []
