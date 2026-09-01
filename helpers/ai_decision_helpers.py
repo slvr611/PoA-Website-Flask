@@ -2798,6 +2798,174 @@ def sync_nation_cities(nation, dry_run=True, tiles_with_city=None, owned_tiles=N
     return report
 
 
+def sync_nation_districts(nation, dry_run=True, tiles_with_district=None, owned_tiles=None):
+    """
+    Reconcile a nation's `districts` array against district objects placed on
+    its owned map tiles. Two one-way operations, never destructive — mirrors
+    sync_nation_cities exactly; see its docstring for the tiles_with_district/
+    owned_tiles batch-fetch rationale.
+
+    1. Map → Nation: any tile owned by this nation with a `district` object
+       (excluding an imperial-quarter claim — tile.district.imperial=True is
+       a separate single-instance mechanism tied to nation.imperial_district,
+       not the districts array) whose id isn't in nation.districts gets
+       appended to nation.districts. The node value isn't stored on the
+       tile's district object, so it's resolved from the tile's own `node`
+       field, same as _claim_district_tile does when the AI first places one.
+
+    2. Nation → Map: any nation.districts entry with a real def_key set
+       (blank placeholder slots, and legacy type-based districts — no
+       def_key, never placed on the map by design, see ai_decision_tick's
+       own "if c_source == 'db'" gate — are skipped) whose id isn't placed
+       on any owned tile gets placed using the same adjacency-aware
+       tile-scoring logic the AI uses when building a new district
+       (_pick_district_tile). Nomadic nations are skipped entirely: their
+       districts live on the nation doc only and must never be placed on
+       map tiles.
+
+    Existing districts/tiles are never modified or removed.
+
+    Returns {
+        "name": str,
+        "added_to_nation": [{"id","def_key","node"}, ...],
+        "placed_on_map": [{"id","def_key","coord":[q,r],"rationale"}, ...],
+        "unplaceable": [{"id","def_key"}, ...],
+    }
+    When dry_run is False, performs the DB writes for both directions.
+    """
+    nation_name = nation.get("name", "")
+    nation_districts = nation.get("districts", []) or []
+    nation_district_ids = {d.get("_id") for d in nation_districts if isinstance(d, dict) and d.get("_id")}
+
+    if tiles_with_district is None:
+        tiles_with_district = list(mongo.db.hex_map_tiles.find(
+            {"owner": nation_name, "district": {"$exists": True, "$ne": None}},
+            {"q": 1, "r": 1, "district": 1, "node": 1},
+        )) if nation_name else []
+    tile_district_ids = {
+        t["district"]["id"]: t for t in tiles_with_district
+        if isinstance(t.get("district"), dict) and t["district"].get("id") and not t["district"].get("imperial")
+    }
+
+    report = {
+        "name": nation_name,
+        "added_to_nation": [],
+        "placed_on_map": [],
+        "unplaceable": [],
+    }
+
+    # --- Direction 1: Map → Nation ---
+    blank_indices = [
+        i for i, d in enumerate(nation_districts)
+        if isinstance(d, dict) and not d.get("def_key") and not d.get("type")
+    ]
+    set_ops = {}
+    push_entries = []
+    blank_cursor = 0
+    for did, tile in tile_district_ids.items():
+        if did in nation_district_ids:
+            continue
+        district_data = tile["district"]
+        node = tile.get("node") or {}
+        if isinstance(node, dict):
+            node_key = node.get("resource_type") or node.get("value") or node.get("resource") or ""
+        else:
+            node_key = str(node) if node else ""
+        if node_key == "none":
+            node_key = ""
+        entry = {
+            "_id": did,
+            "def_key": district_data.get("def_key", ""),
+            "node": node_key,
+            "upgrades": [],
+        }
+        if blank_cursor < len(blank_indices):
+            idx = blank_indices[blank_cursor]
+            blank_cursor += 1
+            for field, value in entry.items():
+                set_ops[f"districts.{idx}.{field}"] = value
+        else:
+            push_entries.append(entry)
+        report["added_to_nation"].append({
+            "id": did, "def_key": entry["def_key"], "node": entry["node"],
+        })
+
+    if not dry_run and (set_ops or push_entries):
+        update_doc = {}
+        if set_ops:
+            update_doc["$set"] = set_ops
+        if push_entries:
+            update_doc["$push"] = {"districts": {"$each": push_entries}}
+        mongo.db.nations.update_one({"_id": nation["_id"]}, update_doc)
+
+    # --- Direction 2: Nation → Map ---
+    to_place = [
+        d for d in nation_districts
+        if isinstance(d, dict) and d.get("_id") and d["_id"] not in tile_district_ids and d.get("def_key")
+    ]
+    if to_place and _nation_is_nomadic(nation):
+        report["skipped_nomadic"] = [
+            {"id": d["_id"], "def_key": d.get("def_key", "")}
+            for d in to_place
+        ]
+        to_place = []
+    if to_place and nation_name:
+        from calculations.field_calculations import _compute_legal_placement
+        prices = _base_prices()
+        state = evaluate_nation_state(nation)
+        baseline_w = _weights_from_net(
+            state["net_production"], state["stockpiles"], prices, state["money_income"],
+            active_resources=state.get("active_resources"), money_stock=state.get("money"),
+        )
+
+        # Computed once per nation, not once per district — same reasoning
+        # as sync_nation_cities's single legal_base computation.
+        nation.pop("_legal_placement_cache", None)
+        legal_base = _compute_legal_placement(nation, owned_tiles=owned_tiles)
+        reserved_coords = set()
+
+        for d in to_place:
+            def_key = d.get("def_key", "")
+            dd = mongo.db.district_defs.find_one({"key": def_key})
+            if not dd:
+                report["unplaceable"].append({
+                    "id": d["_id"], "def_key": def_key,
+                    "reason": "no matching district_defs entry",
+                })
+                continue
+
+            legal = legal_base
+            if reserved_coords:
+                legal = dict(legal_base)
+                for tile_list_key in ("legal_land_tiles", "legal_water_tiles", "legal_city_tiles"):
+                    legal[tile_list_key] = [
+                        t for t in legal_base.get(tile_list_key, [])
+                        if t["coord"] not in reserved_coords
+                    ]
+
+            coord, rationale = _pick_district_tile(legal, dd, def_key, baseline_w, prices)
+            if not coord:
+                report["unplaceable"].append({"id": d["_id"], "def_key": def_key})
+                continue
+
+            reserved_coords.add(tuple(coord))
+            report["placed_on_map"].append({
+                "id": d["_id"], "def_key": def_key,
+                "coord": [coord[0], coord[1]], "rationale": rationale,
+            })
+
+            if not dry_run:
+                mongo.db.hex_map_tiles.update_one(
+                    {"q": coord[0], "r": coord[1]},
+                    {"$set": {"district": {
+                        "id": d["_id"], "def_key": def_key,
+                        "display_name": dd.get("display_name", def_key), "type": "",
+                    }}},
+                )
+
+    return report
+
+
 def _district_category(dk):
     """Category of a district def, via the per-tick cache when loaded."""
     global _DISTRICT_DEFS_CACHE
@@ -3114,7 +3282,19 @@ def evaluate_goal_district(old_nation, new_nation, state, goal, need_weights, pr
                     state["stockpiles"].get(r, 0) >= amt
                     for r, amt in cost.items() if r != "money"
                 )
-                if money_ok and res_ok:
+                # A non-nomadic nation's city must have a legal tile to go
+                # on — _select_best_city only sets "placement" when
+                # _score_best_city_tile/capital_coord actually found one.
+                # Previously this wasn't checked here at all: money_ok/
+                # res_ok alone gated the build, city_plan.get("placement")
+                # being None just made _claim_city_tile no-op on a None
+                # coord — so the city still got paid for and added to
+                # new_nation["cities"], existing only on the nation page
+                # with nothing on the map. Treating "no legal tile" the
+                # same as "can't afford" (the else branch below) closes
+                # that gap.
+                placement_ok = is_nomadic or bool(city_plan.get("placement"))
+                if money_ok and res_ok and placement_ok:
                     # Deduct resources
                     for r, amt in cost.items():
                         if r == "money":
@@ -3135,8 +3315,8 @@ def evaluate_goal_district(old_nation, new_nation, state, goal, need_weights, pr
                     if is_nomadic:
                         coord, node_key = None, ""
                     else:
-                        placement = city_plan.get("placement")
-                        coord = (placement["q"], placement["r"]) if placement else None
+                        placement = city_plan["placement"]
+                        coord = (placement["q"], placement["r"])
                         node_key = _claim_city_tile(
                             old_nation.get("name", ""), city_id, city_type,
                             coord, set_capital=city_plan.get("set_capital", False),
@@ -3175,12 +3355,15 @@ def evaluate_goal_district(old_nation, new_nation, state, goal, need_weights, pr
                     )
                     district_log.append(f"  Re-evaluated goal: {goal['display_name']} (score {goal['score']})")
                 else:
-                    # Can't afford city — set as plan
+                    # Can't afford it, or (non-nomadic) no legal tile to
+                    # place it on — either way, save as plan rather than
+                    # building a phantom nation-only entry.
                     current_plan = old_nation.get("ai_state", {}).get("planned_district")
                     if current_plan and current_plan.get("source") == "city" and current_plan.get("key") == city_plan.get("key"):
                         city_plan["sessions_saving"] = current_plan.get("sessions_saving", 0) + 1
                     district_plan = city_plan
-                    district_log.append(f"Saving for city: {city_plan['display_name']} (session {city_plan.get('sessions_saving', 0) + 1})")
+                    reason = "" if placement_ok else " — no legal tile available"
+                    district_log.append(f"Saving for city: {city_plan['display_name']} (session {city_plan.get('sessions_saving', 0) + 1}){reason}")
                     break
 
         # --- Try district ---
@@ -3228,23 +3411,40 @@ def evaluate_goal_district(old_nation, new_nation, state, goal, need_weights, pr
                 for r, amt in c_cost.items() if r != "money"
             )
 
-            if money_ok and res_ok:
+            # A non-nomadic nation's db-sourced district must have a legal
+            # tile to go on. Previously this wasn't gated here at all:
+            # money_ok/res_ok alone decided whether to build, and a failed
+            # _pick_district_tile (or a missing district_defs entry) just
+            # left coord/node_key at their None/"" defaults — the district
+            # was still paid for and added to new_nation["districts"]
+            # regardless, existing only on the nation page with nothing on
+            # the map. Resolving placement BEFORE the cost gate (and
+            # folding a placement failure into the same "can't afford, save
+            # for later" path below) closes that gap.
+            needs_map_placement = c_source == "db" and not is_nomadic
+            coord, node_key, dd = None, "", None
+            placement_ok = True
+            if needs_map_placement:
+                dd = mongo.db.district_defs.find_one({"key": c_key})
+                if not dd:
+                    placement_ok = False
+                else:
+                    legal_for_pick = _compute_legal_placement(old_nation, owned_tiles=owned_tiles_snapshot)
+                    coord, _tile_rationale = _pick_district_tile(
+                        legal_for_pick, dd, c_key, scoring_weights, prices
+                    )
+                    if not coord:
+                        placement_ok = False
+
+            if money_ok and res_ok and placement_ok:
                 import uuid
                 district_id = uuid.uuid4().hex[:8]
-                coord, node_key, dd = None, "", None
-                if c_source == "db" and not is_nomadic:
-                    dd = mongo.db.district_defs.find_one({"key": c_key})
-                    if dd:
-                        legal_for_pick = _compute_legal_placement(old_nation, owned_tiles=owned_tiles_snapshot)
-                        coord, tile_rationale = _pick_district_tile(
-                            legal_for_pick, dd, c_key, scoring_weights, prices
-                        )
-                        if coord:
-                            node_key = _claim_district_tile(
-                                old_nation.get("name", ""), district_id, c_key,
-                                dd.get("display_name", c_key), coord, dry_run=dry_run,
-                                pending_tiles=pending_tiles,
-                            )
+                if coord:
+                    node_key = _claim_district_tile(
+                        old_nation.get("name", ""), district_id, c_key,
+                        dd.get("display_name", c_key), coord, dry_run=dry_run,
+                        pending_tiles=pending_tiles,
+                    )
                 new_entry = (
                     {"_id": district_id, "def_key": c_key, "node": node_key, "upgrades": []}
                     if c_source == "db"
@@ -3330,7 +3530,9 @@ def evaluate_goal_district(old_nation, new_nation, state, goal, need_weights, pr
                 built_count += 1
                 built_this_round = True
             else:
-                # Can't afford the best district — set as plan and stop building
+                # Can't afford it, or (non-nomadic, db-sourced) no legal
+                # tile to place it on — either way, save as plan rather
+                # than building a phantom nation-only entry.
                 district_plan = {
                     "key": c_key,
                     "display_name": c_name,
@@ -3342,7 +3544,8 @@ def evaluate_goal_district(old_nation, new_nation, state, goal, need_weights, pr
                 current_plan = old_nation.get("ai_state", {}).get("planned_district")
                 if current_plan and current_plan.get("key") == c_key:
                     district_plan["sessions_saving"] = current_plan.get("sessions_saving", 0) + 1
-                district_log.append(f"Saving for: {c_name} (session {district_plan['sessions_saving'] + 1}) — {c_rationale}")
+                reason = c_rationale if placement_ok else "no legal tile available"
+                district_log.append(f"Saving for: {c_name} (session {district_plan['sessions_saving'] + 1}) — {reason}")
                 break
 
         if not built_this_round:

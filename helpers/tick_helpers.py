@@ -395,6 +395,84 @@ def _commit_pending_changes(pending):
     return global_modifiers.get("session_counter", 0) if global_modifiers else 0
 
 
+# ---------------------------------------------------------------------------
+# Player tick summary attribution helpers
+# ---------------------------------------------------------------------------
+
+# Tick functions whose results are never useful in the player-facing digest
+# even for a player nation — too routine/frequent to be worth surfacing
+# there (still recorded in the full tick summary).
+_EXCLUDED_FROM_PLAYER_SUMMARY_TICK_LABELS = {
+    "Nation Stability Tick",
+}
+
+
+def _org_leader_has_real_player(org_id_str, character_db):
+    """True if any character whose ruling_nation_org is this org (a
+    merchant/mercenary/faction _id) has a real player attached.
+
+    "leaders" on merchants/mercenaries/factions is a queryTargetAttribute
+    (reverse-lookup) field — it is NEVER actually stored on the org's own
+    document (raw docs always carry leaders: [] or None), only populated at
+    read time via get_linked_objects. Reading org.get("leaders", []) here
+    always returned nothing, so no merchant/mercenary/faction tick result
+    ever reached the player summary — the same class of bug fixed for
+    ownership checks in helpers/visibility_helpers.py's is_item_owner.
+    """
+    if not org_id_str:
+        return False
+    try:
+        leader = character_db.find_one(
+            {"ruling_nation_org": org_id_str, "player": {"$exists": True, "$nin": [None, ""]}},
+            {"_id": 1},
+        )
+    except Exception:
+        return False
+    return leader is not None
+
+
+def _character_tick_is_player_relevant(character, nation_db):
+    """Whether a character's OWN tick events (aging, stat gains, heal/death
+    rolls, artifact loss, ...) belong in the player-facing digest.
+
+    Requires a real player (character.get("player") — note this can be
+    None, "", or a real id string; only the last counts, so this must be a
+    truthy check, not an `is not None` check, which the old code used and
+    which incorrectly treated "" as "has a player").
+
+    Beyond that: a character who currently rules a nation that is
+    specifically an AI vassal of a player (the vassal itself isn't a
+    player nation, but its overlord is) is excluded — that's just noise
+    about the overlord's own vassal management, not something worth
+    surfacing to the player audience. Ruling nothing, ruling a player
+    nation, or ruling an AI nation that ISN'T a player's vassal are all
+    still included.
+    """
+    if not character.get("player"):
+        return False
+    ruling_org_id = character.get("ruling_nation_org", "")
+    if not ruling_org_id:
+        return True
+    try:
+        ruled_nation = nation_db.find_one(
+            {"_id": ObjectId(ruling_org_id)}, {"temperament": 1, "overlord": 1}
+        )
+    except Exception:
+        return True
+    if not ruled_nation:
+        return True  # ruling_nation_org points to a merchant/mercenary, not a nation
+    if ruled_nation.get("temperament") == "Player":
+        return True
+    overlord_id = ruled_nation.get("overlord")
+    if not overlord_id:
+        return True  # an AI nation with no overlord at all isn't "a player's vassal"
+    try:
+        overlord = nation_db.find_one({"_id": ObjectId(overlord_id)}, {"temperament": 1})
+    except Exception:
+        return True
+    return not (overlord and overlord.get("temperament") == "Player")
+
+
 def tick(form_data):
     if "run_Backup Database" in form_data:
         success, message = backup_database()
@@ -435,13 +513,14 @@ def tick(form_data):
     
     if collect_character_data:
         character_schema, character_db = get_data_on_category("characters")
+        _, _char_nation_db = get_data_on_category("nations")
         old_characters = list(character_db.find().sort("name", ASCENDING))
         new_characters = []
         for character in old_characters:
             if character:
                 character.update(calculate_all_fields(character, character_schema, "character"))
                 new_characters.append(deepcopy(character))
-        
+
         for tick_function_label, tick_function in CHARACTER_TICK_FUNCTIONS.items():
             run_key = f"run_{tick_function_label}"
             if run_key in form_data:
@@ -452,7 +531,7 @@ def tick(form_data):
                     if tick_function is not modifier_decay_tick and _in_stasis(old_characters[i]):
                         continue
                     result = _dispatch(tick_function, pending, old_characters[i], new_characters[i], character_schema)
-                    if old_characters[i].get("player", None) is not None:
+                    if _character_tick_is_player_relevant(old_characters[i], _char_nation_db):
                         player_tick_summary += result
                     full_tick_summary += result
 
@@ -480,13 +559,13 @@ def tick(form_data):
                 print(tick_function_label)
                 for i in range(len(old_artifacts)):
                     result = _dispatch(tick_function, pending, old_artifacts[i], new_artifacts[i], artifact_schema)
-                    character = old_artifacts[i].get("owner", "None")
-                    if character != "None":
+                    owner_id = old_artifacts[i].get("owner", "")
+                    if owner_id and owner_id != "None":
                         try:
-                            character = character_db.find_one({"_id": ObjectId(character)})
-                            if character.get("player", "None") is not None:
+                            owner = character_db.find_one({"_id": ObjectId(owner_id)})
+                            if owner and owner.get("player"):
                                 player_tick_summary += result
-                        except:
+                        except Exception:
                             pass
                     full_tick_summary += result
 
@@ -513,15 +592,8 @@ def tick(form_data):
                 print(tick_function_label)
                 for i in range(len(old_merchants)):
                     result = _dispatch(tick_function, pending, old_merchants[i], new_merchants[i], merchant_schema)
-                    leaders = old_merchants[i].get("leaders", [])
-                    for leader in leaders:
-                        try:
-                            character = character_db.find_one({"_id": ObjectId(leader)})
-                            if character.get("player", "None") is not None:
-                                player_tick_summary += result
-                                break
-                        except:
-                            pass
+                    if _org_leader_has_real_player(str(old_merchants[i]["_id"]), character_db):
+                        player_tick_summary += result
                     full_tick_summary += result
 
 
@@ -548,15 +620,8 @@ def tick(form_data):
                 print(tick_function_label)
                 for i in range(len(old_mercenaries)):
                     result = _dispatch(tick_function, pending, old_mercenaries[i], new_mercenaries[i], mercenary_schema)
-                    leaders = old_mercenaries[i].get("leaders", [])
-                    for leader in leaders:
-                        try:
-                            character = character_db.find_one({"_id": ObjectId(leader)})
-                            if character.get("player", "None") is not None:
-                                player_tick_summary += result
-                                break
-                        except:
-                            pass
+                    if _org_leader_has_real_player(str(old_mercenaries[i]["_id"]), character_db):
+                        player_tick_summary += result
                     full_tick_summary += result
 
 
@@ -583,15 +648,8 @@ def tick(form_data):
                 print(tick_function_label)
                 for i in range(len(old_factions)):
                     result = _dispatch(tick_function, pending, old_factions[i], new_factions[i], faction_schema)
-                    leaders = old_factions[i].get("leaders", [])
-                    for leader in leaders:
-                        try:
-                            character = character_db.find_one({"_id": ObjectId(leader)})
-                            if character.get("player", "None") is not None:
-                                player_tick_summary += result
-                                break
-                        except:
-                            pass
+                    if _org_leader_has_real_player(str(old_factions[i]["_id"]), character_db):
+                        player_tick_summary += result
                     full_tick_summary += result
 
 
@@ -644,6 +702,14 @@ def tick(form_data):
             if _in_stasis(old_nations[i]) or _undead_horde_tick_blocked(old_nations[i], ""):
                 new_nations[i]["resource_desires"] = []
 
+        # Accumulates {"from_id", "to_id", "to_temperament"} entries appended
+        # by pop_flee_tick (see _FLEE_EVENT_AWARE_TICK_FUNCTIONS) — lets the
+        # player_tick_summary check below see the DESTINATION nation's
+        # temperament, not just the source nation this dispatch call was
+        # made for, so a pop fleeing INTO a player nation from an AI source
+        # is caught too, not just fleeing out of one.
+        flee_events = []
+
         for tick_function_label, tick_function in NATION_TICK_FUNCTIONS.items():
             run_key = f"run_{tick_function_label}"
             if run_key in form_data:
@@ -665,8 +731,14 @@ def tick(form_data):
                         # compliance loss) instead of stasis's universal one.
                         if tick_function is not modifier_decay_tick and _undead_horde_tick_blocked(old_nations[i], tick_function_label):
                             continue
-                        result = _dispatch(tick_function, pending, old_nations[i], new_nations[i], nation_schema, pending_tiles=pending_tiles)
-                        if old_nations[i].get("temperament", "None") == "Player":
+                        _flee_events_before = len(flee_events)
+                        result = _dispatch(tick_function, pending, old_nations[i], new_nations[i], nation_schema, pending_tiles=pending_tiles, flee_events=flee_events)
+                        fled_to_a_player_nation = any(
+                            e.get("to_temperament") == "Player" for e in flee_events[_flee_events_before:]
+                        )
+                        if tick_function_label in _EXCLUDED_FROM_PLAYER_SUMMARY_TICK_LABELS:
+                            pass
+                        elif old_nations[i].get("temperament", "None") == "Player" or fled_to_a_player_nation:
                             player_tick_summary += result
                         elif tick_function_label in VASSAL_SPECIFIC_NATION_TICK_FUNCTIONS and old_nations[i].get("overlord", "None") != "None":
                             overlord = old_nations[i].get("overlord", "None")
@@ -2920,6 +2992,7 @@ def disease_job_death_tick(_old_nations, _new_nations, _schema, pending=None):
                 nation_roles[str(n["_id"])] = n.get("prosperity_role")
 
         died = 0
+        died_by_nation_id = {}
         for pop in infected_pops:
             pop_id_str = str(pop["_id"])
             if pop_id_str in already_queued:
@@ -2941,9 +3014,29 @@ def disease_job_death_tick(_old_nations, _new_nations, _schema, pending=None):
                 )
                 already_queued.add(pop_id_str)
                 died += 1
+                nation_id_str = str(pop.get("nation", ""))
+                died_by_nation_id[nation_id_str] = died_by_nation_id.get(nation_id_str, 0) + 1
 
         if died:
-            result += f"{disease_name}: {died} pop(s) died from job death chance.\n"
+            # Name which nation(s) actually lost pops — an aggregate count
+            # with no nation attribution (the previous behavior) meant a
+            # nation's pop loss was effectively invisible in the tick
+            # summary, discoverable only by manually diffing pop counts.
+            nation_names = {}
+            nation_object_ids = []
+            for nid_str in died_by_nation_id:
+                try:
+                    nation_object_ids.append(ObjectId(nid_str))
+                except Exception:
+                    continue
+            if nation_object_ids:
+                for n in mongo.db.nations.find({"_id": {"$in": nation_object_ids}}, {"name": 1}):
+                    nation_names[str(n["_id"])] = n.get("name", "Unknown")
+            breakdown = ", ".join(
+                f"{nation_names.get(nid, 'Unknown Nation')}: {count}"
+                for nid, count in died_by_nation_id.items()
+            )
+            result += f"{disease_name}: {died} pop(s) died from job death chance ({breakdown}).\n"
 
     return result
 
@@ -2965,13 +3058,20 @@ def _forced_flee_destination_for_region(region_id):
         if mod.get("modifier_type") == "forced_flee_destination":
             target_name = mod.get("target_value", "")
             if target_name:
-                return mongo.db.nations.find_one({"name": target_name}, {"_id": 1, "name": 1})
+                return mongo.db.nations.find_one({"name": target_name}, {"_id": 1, "name": 1, "temperament": 1})
     return None
 
-def pop_flee_tick(old_nation, new_nation, schema, pending=None):
+def pop_flee_tick(old_nation, new_nation, schema, pending=None, flee_events=None):
     """Roll nation's pop_flee_chance once; on success one excess pop flees to
     a random non-Closed nation in the same region — unless the region has a
     Forced Flee Destination modifier, in which case it always goes there.
+
+    When flee_events (a list) is given, a successful flee appends
+    {"from_id": ..., "to_id": ..., "to_temperament": ...} to it — this is
+    how tick()'s player_tick_summary attribution learns the DESTINATION
+    nation's temperament, since fleeing INTO a player nation from an AI
+    source is just as relevant to the player audience as fleeing OUT of one,
+    but the outer loop only ever sees old_nation (the source) directly.
     """
     pop_count   = old_nation.get("pop_count", 0)
     eff_cap     = old_nation.get("effective_pop_capacity", 0)
@@ -2999,7 +3099,7 @@ def pop_flee_tick(old_nation, new_nation, schema, pending=None):
                     "_id": {"$ne": old_nation["_id"]},
                     "citizenship_stance": {"$ne": "Closed"},
                 },
-                {"_id": 1, "name": 1},
+                {"_id": 1, "name": 1, "temperament": 1},
             ))
         except Exception:
             return ""
@@ -3044,6 +3144,12 @@ def pop_flee_tick(old_nation, new_nation, schema, pending=None):
             f"to {destination.get('name', 'Unknown')} due to overcrowding"
         ),
     )
+    if flee_events is not None:
+        flee_events.append({
+            "from_id": str(old_nation["_id"]),
+            "to_id": str(destination["_id"]),
+            "to_temperament": destination.get("temperament"),
+        })
     return (
         f"A pop fled from {old_nation.get('name', 'Unknown')} "
         f"to {destination.get('name', 'Unknown')} due to overcrowding.\n"
@@ -3830,16 +3936,28 @@ _TILE_PENDING_AWARE_TICK_FUNCTIONS = {
     complex_trade_bandit_loss_tick,
 }
 
+# Separate registry, same reasoning, for functions that report a
+# cross-nation event (currently just a pop fleeing FROM the nation being
+# processed TO some other nation) into a shared `flee_events` list, so the
+# caller can tell whether the DESTINATION nation (not just the one this
+# dispatch call was made for) is player-relevant. See pop_flee_tick and
+# tick()'s player_tick_summary attribution.
+_FLEE_EVENT_AWARE_TICK_FUNCTIONS = {
+    pop_flee_tick,
+}
 
-def _dispatch(tick_function, pending, *args, pending_tiles=None):
-    """Call a registered tick function, binding `pending` and/or
-    `pending_tiles` in only if that function is registered for them — every
+
+def _dispatch(tick_function, pending, *args, pending_tiles=None, flee_events=None):
+    """Call a registered tick function, binding `pending`/`pending_tiles`/
+    `flee_events` in only if that function is registered for them — every
     other tick function's call signature is completely unaffected."""
     kwargs = {}
     if tick_function in _PENDING_AWARE_TICK_FUNCTIONS:
         kwargs["pending"] = pending
     if tick_function in _TILE_PENDING_AWARE_TICK_FUNCTIONS:
         kwargs["pending_tiles"] = pending_tiles
+    if tick_function in _FLEE_EVENT_AWARE_TICK_FUNCTIONS:
+        kwargs["flee_events"] = flee_events
     if kwargs:
         return functools.partial(tick_function, **kwargs)(*args)
     return tick_function(*args)

@@ -42,7 +42,7 @@ class TestForcedFleeDestinationForRegion:
         with patch("helpers.tick_helpers.mongo", MagicMock(db=fake_db)):
             result = th._forced_flee_destination_for_region(str(region_id))
         assert result == dest_nation
-        fake_db.nations.find_one.assert_called_once_with({"name": "Haven"}, {"_id": 1, "name": 1})
+        fake_db.nations.find_one.assert_called_once_with({"name": "Haven"}, {"_id": 1, "name": 1, "temperament": 1})
 
     def test_named_nation_not_found_returns_none(self):
         region_id = ObjectId()
