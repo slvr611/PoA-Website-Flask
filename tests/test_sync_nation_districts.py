@@ -67,6 +67,36 @@ class TestSyncNationDistrictsMapToNation:
         assert len(updated["districts"]) == 1
         assert updated["districts"][0]["_id"] == "abc12345"
 
+    def test_blank_slot_fill_and_append_together_do_not_conflict(self, test_db):
+        """Real production bug: when a blank slot needs filling (,$set on
+        "districts.N.field") AND another map-only district needs appending
+        ($push on "districts") in the SAME apply call, MongoDB rejects a
+        single update_doc combining both — error 40, "Updating the path
+        'districts' would create a conflict at 'districts'" — since $set on
+        a sub-path and $push on the parent path overlap. Both writes must
+        succeed when issued as two separate update_one calls."""
+        nation_id = ObjectId()
+        test_db["nations"].insert_one({
+            "_id": nation_id, "name": "Test Nation",
+            "districts": [{"_id": "slot1"}],  # one blank placeholder slot
+        })
+        nation = test_db["nations"].find_one({"_id": nation_id})
+        test_db["hex_map_tiles"].insert_many([
+            {"q": 1, "r": 1, "owner": "Test Nation",
+             "district": {"id": "abc12345", "def_key": "farm", "display_name": "Farm", "type": ""},
+             "node": None},
+            {"q": 2, "r": 1, "owner": "Test Nation",
+             "district": {"id": "def67890", "def_key": "quarry", "display_name": "Quarry", "type": ""},
+             "node": None},
+        ])
+        with _patched_mongo(test_db):
+            adh.sync_nation_districts(nation, dry_run=False)
+
+        updated = test_db["nations"].find_one({"_id": nation_id})
+        assert len(updated["districts"]) == 2
+        ids = {d["_id"] for d in updated["districts"]}
+        assert ids == {"abc12345", "def67890"}
+
     def test_imperial_district_claim_is_ignored(self, test_db):
         """Imperial quarter districts are a separate single-instance
         mechanism (nation.imperial_district) unrelated to the districts

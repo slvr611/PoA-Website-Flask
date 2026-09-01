@@ -2710,13 +2710,18 @@ def sync_nation_cities(nation, dry_run=True, tiles_with_city=None, owned_tiles=N
             "id": cid, "name": entry["name"], "type": entry["type"],
         })
 
-    if not dry_run and (set_ops or push_entries):
-        update_doc = {}
+    if not dry_run:
+        # $set on "cities.N.field" and $push on "cities" conflict when sent
+        # in the same update (MongoDB error 40, "would create a conflict") —
+        # they overlap on the same top-level path. Must be two separate
+        # update_one calls whenever both blank-slot fills and appends are
+        # needed in the same pass, not one combined update_doc.
         if set_ops:
-            update_doc["$set"] = set_ops
+            mongo.db.nations.update_one({"_id": nation["_id"]}, {"$set": set_ops})
         if push_entries:
-            update_doc["$push"] = {"cities": {"$each": push_entries}}
-        mongo.db.nations.update_one({"_id": nation["_id"]}, update_doc)
+            mongo.db.nations.update_one(
+                {"_id": nation["_id"]}, {"$push": {"cities": {"$each": push_entries}}}
+            )
 
     # --- Direction 2: Nation → Map ---
     # Skip blank placeholder entries (no type set) — these are unused city
@@ -2890,13 +2895,18 @@ def sync_nation_districts(nation, dry_run=True, tiles_with_district=None, owned_
             "id": did, "def_key": entry["def_key"], "node": entry["node"],
         })
 
-    if not dry_run and (set_ops or push_entries):
-        update_doc = {}
+    if not dry_run:
+        # $set on "districts.N.field" and $push on "districts" conflict when
+        # sent in the same update (MongoDB error 40, "would create a
+        # conflict") — they overlap on the same top-level path. Must be two
+        # separate update_one calls whenever both blank-slot fills and
+        # appends are needed in the same pass, not one combined update_doc.
         if set_ops:
-            update_doc["$set"] = set_ops
+            mongo.db.nations.update_one({"_id": nation["_id"]}, {"$set": set_ops})
         if push_entries:
-            update_doc["$push"] = {"districts": {"$each": push_entries}}
-        mongo.db.nations.update_one({"_id": nation["_id"]}, update_doc)
+            mongo.db.nations.update_one(
+                {"_id": nation["_id"]}, {"$push": {"districts": {"$each": push_entries}}}
+            )
 
     # --- Direction 2: Nation → Map ---
     to_place = [
