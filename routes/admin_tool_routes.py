@@ -1223,6 +1223,55 @@ def sync_cities_apply():
     return redirect(url_for("admin_tool_routes.admin_tools"))
 
 
+@admin_tool_routes.route("/admin/sync_districts", methods=["GET"])
+@admin_required
+def sync_districts_preview():
+    """Read-only preview of district sync between the map and AI nation pages."""
+    from helpers.ai_decision_helpers import sync_nation_districts
+
+    player_ids = _get_player_nation_ids()
+    ai_nations = list(mongo.db.nations.find({"_id": {"$nin": list(player_ids)}}).sort("name", ASCENDING))
+    tiles_by_owner = _all_tiles_by_owner()
+
+    reports = []
+    for n in ai_nations:
+        owned = tiles_by_owner.get(n.get("name", ""), [])
+        report = sync_nation_districts(n, dry_run=True, tiles_with_district=owned, owned_tiles=owned)
+        if report["added_to_nation"] or report["placed_on_map"] or report["unplaceable"]:
+            reports.append(report)
+
+    return render_template("sync_districts.html", reports=reports)
+
+
+@admin_tool_routes.route("/admin/sync_districts/apply", methods=["POST"])
+@admin_required
+def sync_districts_apply():
+    """Apply the district sync between the map and AI nation pages for all non-player nations."""
+    from helpers.ai_decision_helpers import sync_nation_districts
+    from helpers.hex_map_helpers import bump_tile_version
+
+    player_ids = _get_player_nation_ids()
+    ai_nations = list(mongo.db.nations.find({"_id": {"$nin": list(player_ids)}}))
+    tiles_by_owner = _all_tiles_by_owner()
+
+    total_add = total_place = total_unplaceable = 0
+    for n in ai_nations:
+        owned = tiles_by_owner.get(n.get("name", ""), [])
+        report = sync_nation_districts(n, dry_run=False, tiles_with_district=owned, owned_tiles=owned)
+        total_add += len(report["added_to_nation"])
+        total_place += len(report["placed_on_map"])
+        total_unplaceable += len(report["unplaceable"])
+
+    if total_place:
+        bump_tile_version()
+
+    msg = f"Synced districts: {total_add} added to nation pages, {total_place} placed on the map."
+    if total_unplaceable:
+        msg += f" {total_unplaceable} could not be placed (no legal tile)."
+    flash(msg, "success")
+    return redirect(url_for("admin_tool_routes.admin_tools"))
+
+
 # ---------------------------------------------------------------------------
 # Wipe concessions
 # ---------------------------------------------------------------------------
