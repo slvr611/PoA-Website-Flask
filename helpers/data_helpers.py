@@ -75,12 +75,30 @@ def get_user_entities():
     
     # Get all nations/orgs ruled by player's characters
     ruled_entity_ids = [str(char.get("ruling_nation_org")) for char in characters if char.get("ruling_nation_org")]
-    
+    ruled_object_ids = []
+    for id in ruled_entity_ids:
+        try:
+            ruled_object_ids.append(ObjectId(id))
+        except Exception:
+            continue
+
+    # A nation can also be owned directly (nation.players), independent of
+    # any ruling character — e.g. a nation with no character ruler at all.
+    # Both attribution paths must count here, same as ownership is already
+    # checked elsewhere (helpers.visibility_helpers.is_item_owner,
+    # calculations.visibility.get_viewer_nations) — this previously only
+    # looked at ruling characters, so a directly-attributed player's nation
+    # never showed up in their own Quick Links.
+    nation_query_ids = list({
+        *ruled_object_ids,
+        *(n["_id"] for n in mongo.db.nations.find({"players": player_id}, {"_id": 1})),
+    })
+
     nations = list(mongo.db.nations.find(
-        {"_id": {"$in": [ObjectId(id) for id in ruled_entity_ids]}},
+        {"_id": {"$in": nation_query_ids}},
         {"name": 1}
     ).sort("name", ASCENDING))
-    
+
     mercenaries = list(mongo.db.mercenaries.find(
         {"_id": {"$in": [ObjectId(id) for id in ruled_entity_ids]}},
         {"name": 1}

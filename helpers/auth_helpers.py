@@ -61,8 +61,20 @@ def owner_required(item_type):
 
             elif item_type == "nations" or item_type == "organizations":
                 nation = mongo.db.nations.find_one({"name": item_ref})
-                print(user_nations_orgs)
-                if not nation or str(nation.get("_id")) not in user_nations_orgs:
+                # A nation can be owned two ways: via a ruling character
+                # (user_nations_orgs, built above) OR direct attribution in
+                # nation.players — a nation with no ruling character at all
+                # still needs this second path checked, same as
+                # helpers.visibility_helpers.is_item_owner and
+                # calculations.visibility.get_viewer_nations already do.
+                # This branch previously only checked the first path, so a
+                # directly-attributed player with no ruling character was
+                # wrongly denied access to their own nation.
+                has_access = bool(nation) and (
+                    str(nation.get("_id")) in user_nations_orgs
+                    or user_id in nation.get("players", [])
+                )
+                if not has_access:
                     flash("You don't have permission to access this nation.")
                     return redirect(url_for("base_routes.home"))
 
