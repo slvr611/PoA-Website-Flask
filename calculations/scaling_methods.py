@@ -403,6 +403,25 @@ def per_x_nations_in_shared_market(target, scaling_x=1, scaling_extra="", contex
     return int(count / divisor)
 
 
+def per_x_ruling_character_artifact_slots(target, scaling_x=1, scaling_extra="", context=None):
+    """Scales by the HIGHEST artifact_slots among the target nation's current
+    ruling characters (characters.ruling_nation_org == this nation's _id) —
+    the max, not a sum, so multiple rulers don't stack the bonus."""
+    from app_core import mongo as _mongo
+    nation_id = str(target.get("_id", ""))
+    if not nation_id:
+        return 0
+    try:
+        rulers = _mongo.db.characters.find(
+            {"ruling_nation_org": nation_id}, {"artifact_slots": 1}
+        )
+        best = max((r.get("artifact_slots", 0) or 0 for r in rulers), default=0)
+    except Exception:
+        best = 0
+    divisor = float(scaling_x) if scaling_x else 1
+    return int(best / divisor)
+
+
 # Registry — each key must match scaling_types.json (plus legacy aliases).
 SCALING_METHODS = {
     "flat": flat,
@@ -439,6 +458,7 @@ SCALING_METHODS = {
     "per_x_excess_territory": per_x_excess_territory,
     "per_x_nations_in_shared_market": per_x_nations_in_shared_market,
     "per_x_unit_upkeep": per_x_unit_upkeep,
+    "per_x_ruling_character_artifact_slots": per_x_ruling_character_artifact_slots,
 }
 
 

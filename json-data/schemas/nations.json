@@ -911,6 +911,7 @@
           "Ruthless Meritocracy",
           "Disjointed Anarchists",
           "Archivist State",
+          "Artificer State",
           "Chaotic Throng",
           "Misfit Band",
           "Iron-Fisted Dictatorship",
@@ -958,6 +959,14 @@
               { "modifier_type": "effective_territory", "value": -10, "scope": "nation_self", "scaling": "per_x_administration", "scaling_x": 1 },
               { "modifier_type": "tech_cost_modifier", "value": -1, "scope": "nation_self", "scaling": "per_x_administration", "scaling_x": 5 },
               { "modifier_type": "resource_windfall_pct_of_tech_cost", "value": 0.5, "scope": "nation_self" }
+            ]
+          },
+          "Artificer State": {
+            "city_slots": 1,
+            "_modifiers": [
+              { "modifier_type": "effective_territory", "value": -10, "scope": "nation_self", "scaling": "per_x_administration", "scaling_x": 1 },
+              { "modifier_type": "artifact_slots", "value": 20, "scope": "nation_ruling_characters" },
+              { "modifier_type": "effective_territory", "value": 2, "scope": "nation_self", "scaling": "per_x_ruling_character_artifact_slots", "scaling_x": 1 }
             ]
           },
           "Chaotic Throng": {
@@ -2115,7 +2124,7 @@
       "diplomatic_range": {
         "bsonType": "number",
         "label": "Diplomatic Range",
-        "description": "The maximum hex distance at which this nation can engage in diplomacy. Calculated as 5 × administration + 2 × trade speed.",
+        "description": "The maximum hex distance at which this nation can engage in diplomacy. Calculated as 2 × administration + 2 × trade speed.",
         "calculated": true
       },
       "0_progress_slots": {

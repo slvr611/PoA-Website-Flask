@@ -44,6 +44,7 @@
         ],
         "fields": [
           "modifiers",
+          "government_type",
           {"wonders": ["external_modifiers", "modifiers"]}
         ]
       }

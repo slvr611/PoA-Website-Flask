@@ -1343,7 +1343,7 @@ CUSTOM_COMPUTE_FUNCTIONS = {
     "progress_per_session": compute_progress_per_session,
     "era_resource_stockpile_kept": compute_era_resource_stockpile_kept,
     "diplomatic_range": lambda field, target, base_value, field_schema, otm:
-        int(5 * target.get("administration", 0) + 2 * target.get("trade_speed", 0) + otm.get(field, 0)),
+        int(2 * target.get("administration", 0) + 2 * target.get("trade_speed", 0) + otm.get(field, 0)),
     "trade_risk": compute_trade_risk,
     "bandit_camp_spawn_chance": compute_bandit_camp_spawn_chance,
 }

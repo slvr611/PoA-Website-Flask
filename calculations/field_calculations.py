@@ -1946,6 +1946,35 @@ def _extract_labeled_from_object(obj, required_fields, linked_schema, target_dat
                 final_key, final_val = _apply_special_mod_multipliers(stripped, val, obj, linked_schema)
                 if final_val:
                     entry_mods[final_key] = entry_mods.get(final_key, 0) + final_val
+            # Scope-based "_modifiers" embedded in the law (same shape as an
+            # entity's own "modifiers" array) — mirrors the "modifiers
+            # array" branch below, since flat law keys and scoped law
+            # _modifiers are two different authoring styles for the same
+            # underlying idea, and both need to reach the tooltip.
+            if law_mods.get("_modifiers"):
+                _scope_defs_local = json_data.get("scope_definitions", {})
+                _mtype_data_local = json_data.get("modifier_types", {})
+                from calculations.source_adapters import _resolve_modifier_type as _res_mod_type_ext
+                for modifier in law_mods["_modifiers"]:
+                    scope = modifier.get("scope", "")
+                    if scope:
+                        if _scope_defs_local.get(scope, {}).get("target_type", "") != target_data_type:
+                            continue
+                    else:
+                        mod_type = modifier.get("modifier_type", "")
+                        if mod_type:
+                            applicable_to = _mtype_data_local.get(mod_type, {}).get("applicable_to", [])
+                            if applicable_to and target_data_type not in applicable_to:
+                                continue
+                    mod_field = _res_mod_type_ext(modifier)
+                    mod_val = modifier.get("value", 0)
+                    if mod_field and mod_val:
+                        scaling = modifier.get("scaling", "flat")
+                        scaling_x = float(modifier.get("scaling_x") or 1)
+                        scaling_extra = modifier.get("scaling_extra") or ""
+                        if scaling and scaling != "flat" and target is not None:
+                            mod_val = mod_val * get_scaling_multiplier(scaling, target, scaling_x=scaling_x, scaling_extra=scaling_extra)
+                        entry_mods[mod_field] = entry_mods.get(mod_field, 0) + mod_val
             if entry_mods:
                 field_label = req_field_schema.get("label", req_field.replace("_", " ").title())
                 sub_label = f"{base_label} ({field_label}: {field_value})"
@@ -3627,7 +3656,57 @@ def collect_external_modifiers_from_object(object, required_fields, linked_objec
                                 value *= member_count
                                 modifier = modifier.replace("_per_member", "")
                             collected_modifiers.append({modifier: value})
-                
+
+                    # A law can also embed a scope-based "_modifiers" list
+                    # (same shape as an entity's own "modifiers" array)
+                    # instead of flat {target_data_type}_-prefixed keys —
+                    # e.g. a government type's nation_ruling_characters-
+                    # scoped bonus meant to flow to whoever rules the
+                    # nation. Only the flat-key form was ever extracted
+                    # above, so a law's scoped _modifiers had no path to
+                    # reach a linked entity at all; this mirrors the
+                    # scope-checking already done for a plain "modifiers"
+                    # array just below.
+                    if law_modifiers.get("_modifiers"):
+                        _sd = json_data.get("scope_definitions", {})
+                        _mtype_data = json_data.get("modifier_types", {})
+                        from calculations.source_adapters import _resolve_modifier_type as _rmt
+                        for law_modifier in law_modifiers["_modifiers"]:
+                            scope = law_modifier.get("scope", "")
+                            if required_scope:
+                                if scope != required_scope:
+                                    continue
+                            elif scope:
+                                if _sd.get(scope, {}).get("target_type", "") != target_data_type:
+                                    continue
+                            else:
+                                mod_type = law_modifier.get("modifier_type", "")
+                                if mod_type:
+                                    applicable_to = _mtype_data.get(mod_type, {}).get("applicable_to", [])
+                                    if applicable_to and target_data_type not in applicable_to:
+                                        continue
+                            mod_type = law_modifier.get("modifier_type", "")
+                            type_def = _mtype_data.get(mod_type, {})
+                            expand_all_attrs = any(
+                                ef.get("source") == "attributes" and str(law_modifier.get(ef["key"]) or "") == "attribute"
+                                for ef in type_def.get("extra_fields", [])
+                            )
+                            field = _rmt(law_modifier)
+                            val = law_modifier.get("value", 0)
+                            if val and (field or expand_all_attrs):
+                                scaling = law_modifier.get("scaling", "flat")
+                                scaling_x = float(law_modifier.get("scaling_x") or 1)
+                                scaling_extra = law_modifier.get("scaling_extra") or ""
+                                if scaling and scaling != "flat" and target is not None:
+                                    val = val * get_scaling_multiplier(scaling, target, scaling_x=scaling_x, scaling_extra=scaling_extra)
+                                if expand_all_attrs:
+                                    for stat in _ALL_CHAR_STATS:
+                                        expanded = field.replace("attribute", stat)
+                                        if expanded:
+                                            collected_modifiers.append({expanded: val})
+                                elif field:
+                                    collected_modifiers.append({field: val})
+
                 elif field_type == "array" and req_field == "modifiers":
                     for modifier in object[req_field]:
                         # Check for custom prefix first
