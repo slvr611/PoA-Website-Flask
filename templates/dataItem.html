@@ -185,6 +185,25 @@
 		{% endif %}
         <button type="submit" formaction="{{ request.path }}/request">Request</button>
     </form>
+
+	{% if data_type == "pops" and g.user and g.user.is_admin and pop_diseases %}
+	<div class="table-wrapper">
+		<table class="info-table">
+			<tr class="resources-header-row"><th colspan="2" class="resources-header">Diseases</th></tr>
+			{% for d in pop_diseases %}
+			<tr>
+				<th>{{ d.name }}</th>
+				<td>
+					<form method="POST" action="/pops/{{ item._id }}/cure_disease/{{ d.id }}" style="display:inline;"
+					      onsubmit="return confirm('Remove {{ d.name }} from this pop?')">
+						<button type="submit" class="btn btn-danger">Remove</button>
+					</form>
+				</td>
+			</tr>
+			{% endfor %}
+		</table>
+	</div>
+	{% endif %}
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>

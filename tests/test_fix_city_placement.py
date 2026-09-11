@@ -74,7 +74,7 @@ class TestSameNationDistanceViolation:
         assert tuple(moved["from"]) == (1, 0)
         new_coord = tuple(moved["to"])
         assert hex_distance(new_coord[0], new_coord[1], 0, 0) >= MIN_DIST
-        assert not report["unplaceable"]
+        assert not report["removed"]
         assert not report["flagged_player"]
 
 
@@ -116,19 +116,21 @@ class TestPlayerVsPlayerViolationIsOnlyFlagged:
         )
 
         assert not report["moved"]
-        assert not report["unplaceable"]
+        assert not report["removed"]
         flagged_ids = {f["id"] for f in report["flagged_player"]}
         assert flagged_ids == {"p1_city", "p2_city"}
 
 
-class TestUnplaceableWhenNoLegalTileExists:
-    def test_ai_city_stays_and_is_reported_unplaceable(self):
+class TestRemovedAndRefundedWhenNoLegalTileExists:
+    def test_ai_city_is_removed_and_refund_computed_in_dry_run(self):
         """Alpha's entire territory is just the two conflicting city tiles —
-        there's no empty tile anywhere for city_b to relocate to."""
+        there's no empty tile anywhere for city_b to relocate to, so it's
+        removed instead of left in its illegal spot. dry_run=True must still
+        compute (but not persist) the refund."""
         alpha = _nation("Alpha")
         tiles = [
             _tile(0, 0, "Alpha", city=_city("city_a"), capital=True),
-            _tile(1, 0, "Alpha", city=_city("city_b")),
+            _tile(1, 0, "Alpha", city=_city("city_b", city_type="generic")),
         ]
         tiles_by_owner = {"Alpha": tiles}
 
@@ -138,8 +140,91 @@ class TestUnplaceableWhenNoLegalTileExists:
         )
 
         assert not report["moved"]
-        assert len(report["unplaceable"]) == 1
-        assert report["unplaceable"][0]["id"] == "city_b"
+        assert len(report["removed"]) == 1
+        removed = report["removed"][0]
+        assert removed["id"] == "city_b"
+        assert removed["refunded"] == {"wood": 10, "stone": 6, "food": 6}  # generic city's cost
+        # dry_run: nothing actually written to the tile dict.
+        assert tiles[1].get("city") is not None
+
+    def test_dry_run_false_removes_from_map_nation_and_refunds_resources(self, test_db):
+        alpha_id = ObjectId()
+        alpha = {
+            "_id": alpha_id, "name": "Alpha", "administration": 3,
+            "government_type": "Fallen Monarchy",
+            "resource_production": {}, "resource_consumption": {}, "resource_excess": {},
+            "resource_storage": {"wood": 5, "stone": 0}, "jobs": {}, "job_details": {},
+            "money": 0, "money_income": 0, "region": "",
+            "cities": [
+                {"_id": "city_a", "type": "generic", "name": ""},
+                {"_id": "city_b", "type": "generic", "name": ""},
+            ],
+        }
+        test_db["nations"].insert_one(alpha)
+
+        raw_tiles = [
+            _tile(0, 0, "Alpha", city=_city("city_a"), capital=True),
+            _tile(1, 0, "Alpha", city=_city("city_b", city_type="generic")),
+        ]
+        for t in raw_tiles:
+            test_db["hex_map_tiles"].insert_one(t)
+        tiles_by_owner = {"Alpha": list(test_db["hex_map_tiles"].find({"owner": "Alpha"}))}
+
+        with patch.object(adh, "mongo", MagicMock(db=test_db)):
+            report = adh.fix_city_and_capital_placement(
+                dry_run=False, tiles_by_owner=tiles_by_owner,
+                all_nations=[alpha], player_nation_ids=set(),
+            )
+
+        assert len(report["removed"]) == 1
+        assert report["removed"][0]["refunded"] == {"wood": 10, "stone": 6, "food": 6}
+
+        # Removed from the map tile.
+        tile_b = test_db["hex_map_tiles"].find_one({"q": 1, "r": 0})
+        assert not tile_b.get("city")
+
+        # Removed from the nation's cities array.
+        updated_nation = test_db["nations"].find_one({"_id": alpha_id})
+        remaining_ids = {c["_id"] for c in updated_nation.get("cities", [])}
+        assert remaining_ids == {"city_a"}
+
+        # Refunded into resource_storage (existing 5 wood + 10 refunded = 15; no cap set).
+        assert updated_nation["resource_storage"]["wood"] == 15
+        assert updated_nation["resource_storage"]["stone"] == 6
+        assert updated_nation["resource_storage"]["food"] == 6
+
+    def test_capped_refund_does_not_exceed_resource_capacity(self, test_db):
+        """A player city anchors first regardless of alphabetical order, so
+        Alpha's lone city (its only owned tile — nowhere to relocate to) is
+        the one forced into the "no legal tile" removal path here."""
+        alpha_id = ObjectId()
+        alpha = {
+            "_id": alpha_id, "name": "Alpha", "administration": 3,
+            "government_type": "Fallen Monarchy",
+            "resource_production": {}, "resource_consumption": {}, "resource_excess": {},
+            "resource_storage": {"wood": 5}, "nation_resource_capacity": {"wood": 8},
+            "jobs": {}, "job_details": {}, "money": 0, "money_income": 0, "region": "",
+            "cities": [{"_id": "city_a", "type": "generic", "name": ""}],
+        }
+        test_db["nations"].insert_one(alpha)
+        player = {"_id": ObjectId(), "name": "PlayerNation"}
+
+        player_tiles = [_tile(0, 0, "PlayerNation", city=_city("player_city", city_type="generic"), capital=True)]
+        alpha_tiles = [_tile(1, 0, "Alpha", city=_city("city_a", city_type="generic"))]
+        for t in player_tiles + alpha_tiles:
+            test_db["hex_map_tiles"].insert_one(t)
+        tiles_by_owner = {"PlayerNation": player_tiles, "Alpha": alpha_tiles}
+
+        with patch.object(adh, "mongo", MagicMock(db=test_db)):
+            report = adh.fix_city_and_capital_placement(
+                dry_run=False, tiles_by_owner=tiles_by_owner,
+                all_nations=[alpha, player], player_nation_ids={player["_id"]},
+            )
+
+        assert len(report["removed"]) == 1
+        assert report["removed"][0]["id"] == "city_a"
+        updated_nation = test_db["nations"].find_one({"_id": alpha_id})
+        assert updated_nation["resource_storage"]["wood"] == 8  # capped, not 5 + 10 = 15
 
 
 class TestCapitalRecentering:

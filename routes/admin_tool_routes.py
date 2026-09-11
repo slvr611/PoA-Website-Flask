@@ -1322,15 +1322,15 @@ def fix_city_placement_apply():
         dry_run=False, tiles_by_owner=tiles_by_owner, all_nations=all_nations, player_nation_ids=player_ids,
     )
 
-    if report["moved"] or report["capitals_recentered"]:
+    if report["moved"] or report["removed"] or report["capitals_recentered"]:
         bump_tile_version()
 
     msg = (
         f"Fixed city placement: {len(report['moved'])} AI city/cities relocated, "
         f"{len(report['capitals_recentered'])} capital(s) recentered/cleaned up."
     )
-    if report["unplaceable"]:
-        msg += f" {len(report['unplaceable'])} AI city/cities could not be relocated (no legal tile)."
+    if report["removed"]:
+        msg += f" {len(report['removed'])} AI city/cities had no legal tile and were removed (resources refunded)."
     if report["flagged_player"]:
         msg += f" {len(report['flagged_player'])} player-owned city/cities flagged for manual review (not moved)."
     flash(msg, "success")

@@ -720,6 +720,21 @@ def _render_item_form(data_type, schema, form, item=None, item_ref=None, title=N
             editable=True,
         )
 
+    pop_diseases = []
+    if data_type == "pops" and item:
+        # diseases.json's linked_object array has no generic form-field
+        # implementation (see forms.py's array/linked_object branch), so it
+        # never appears in the schema-driven field loop below — this is the
+        # only way to remove one from a pop's edit page.
+        disease_ids = [d for d in (item.get("diseases") or []) if d]
+        if disease_ids:
+            valid_oids = [ObjectId(d) for d in disease_ids if ObjectId.is_valid(d)]
+            id_to_name = {
+                str(d["_id"]): d.get("name", str(d["_id"]))
+                for d in mongo.db.diseases.find({"_id": {"$in": valid_oids}}, {"name": 1})
+            }
+            pop_diseases = [{"id": d, "name": id_to_name.get(d, d)} for d in disease_ids]
+
     return render_template(
         "dataItem.html",
         title=title,
@@ -730,6 +745,7 @@ def _render_item_form(data_type, schema, form, item=None, item_ref=None, title=N
         entity_source_type=_SOURCE_TYPE_MAP.get(data_type, ""),
         data_type=data_type,
         editable=True,
+        pop_diseases=pop_diseases,
     )
 
 

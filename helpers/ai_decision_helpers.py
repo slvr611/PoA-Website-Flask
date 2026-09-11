@@ -2964,8 +2964,14 @@ def fix_city_and_capital_placement(dry_run=True, min_distance=MIN_CITY_TILE_DIST
        (_score_best_city_tile), additionally excluding any tile too close to
        another city. Player-owned cities are NEVER moved — a violation is
        only ever resolved by moving the AI side of it; a violation with no
-       fixable side (player vs player, or an AI city with nowhere legal left
-       to go) is reported instead of silently ignored.
+       fixable side is either reported (player vs player) or, for an AI city
+       with nowhere legal left to go, removed outright — cleared from the
+       map tile AND from the nation's `cities` array, with the city type's
+       build cost (json-data/cities.json) refunded back into the nation's
+       resource_storage (capped at nation_resource_capacity where set), same
+       as any other resource refund in this codebase — leaving it in its
+       illegal spot forever isn't a fix, and simply deleting it would be a
+       silent resource sink for the AI that paid for it.
 
        Cities are processed in a stable order — every player city is
        anchored first (never re-evaluated for movement), then AI cities
@@ -2989,14 +2995,15 @@ def fix_city_and_capital_placement(dry_run=True, min_distance=MIN_CITY_TILE_DIST
 
     Returns {
         "moved": [{"nation","id","name","type","from":[q,r],"to":[q,r],"rationale"}],
-        "unplaceable": [{"nation","id","name","type","coord":[q,r],
-                          "conflicts":[{"nation","coord":[q,r]}, ...]}],
+        "removed": [{"nation","id","name","type","coord":[q,r],
+                      "conflicts":[{"nation","coord":[q,r]}, ...], "refunded":{resource: amount}}],
         "flagged_player": [{"nation","id","name","type","coord":[q,r],
                              "conflicts":[{"nation","coord":[q,r]}, ...]}],
         "capitals_recentered": [{"nation","previous_capitals":[[q,r], ...],
                                   "new_capital":[q,r] or None,"had_duplicates":bool}],
     }
-    dry_run=True computes everything without writing to the DB.
+    dry_run=True computes everything (including the refund total) without
+    writing to the DB.
     """
     if all_nations is None:
         all_nations = list(mongo.db.nations.find())
@@ -3015,7 +3022,7 @@ def fix_city_and_capital_placement(dry_run=True, min_distance=MIN_CITY_TILE_DIST
     nations_by_name = {n.get("name", ""): n for n in all_nations if n.get("name")}
     player_names = {n.get("name", "") for n in all_nations if n.get("_id") in player_nation_ids}
 
-    report = {"moved": [], "unplaceable": [], "flagged_player": [], "capitals_recentered": []}
+    report = {"moved": [], "removed": [], "flagged_player": [], "capitals_recentered": []}
 
     # ---- Pass 1: minimum city-to-city distance ----
     all_entries = []
@@ -3074,12 +3081,41 @@ def fix_city_and_capital_placement(dry_run=True, min_distance=MIN_CITY_TILE_DIST
             moved_entry["coord"] = new_coord
             anchored.append(moved_entry)
         else:
-            report["unplaceable"].append({
+            # No legal tile exists anywhere for this AI city to move to —
+            # leaving it in its illegal spot forever isn't a fix. Remove it
+            # from both the map and the nation, and refund what it cost to
+            # build so the AI isn't just out the resources.
+            refund = dict(json_data.get("cities", {}).get(e["city_type"], {}).get("cost", {}))
+            if nation is not None:
+                if refund:
+                    storage = dict(nation.get("resource_storage", {}) or {})
+                    caps = nation.get("nation_resource_capacity") or {}
+                    for res, amt in refund.items():
+                        new_amount = storage.get(res, 0) + amt
+                        cap = caps.get(res)
+                        if cap is not None:
+                            new_amount = min(new_amount, cap)
+                        storage[res] = new_amount
+                    nation["resource_storage"] = storage
+                if not dry_run:
+                    update = {"$pull": {"cities": {"_id": e["city_id"]}}}
+                    if refund:
+                        update["$set"] = {"resource_storage": nation["resource_storage"]}
+                    mongo.db.nations.update_one({"_id": nation["_id"]}, update)
+                    mongo.db.hex_map_tiles.update_one(
+                        {"_id": e["tile"]["_id"]}, {"$unset": {"city": "", "capital": ""}}
+                    )
+                    e["tile"].pop("city", None)
+                    e["tile"].pop("capital", None)
+
+            report["removed"].append({
                 "nation": e["nation_name"], "id": e["city_id"], "name": e["city_name"],
                 "type": e["city_type"], "coord": [coord[0], coord[1]],
                 "conflicts": [{"nation": c["nation_name"], "coord": [c["coord"][0], c["coord"][1]]} for c in conflicts],
+                "refunded": refund,
             })
-            anchored.append(e)
+            # Not anchored — the tile is now empty, so it's no longer an
+            # obstacle for any later city in this same pass.
 
     # Report any player city still touching a violation once the AI side has
     # done everything it can — player-vs-player, or player-vs-an AI city

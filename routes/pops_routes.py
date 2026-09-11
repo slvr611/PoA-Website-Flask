@@ -1,7 +1,8 @@
-from flask import Blueprint, render_template, request, jsonify, g
+from flask import Blueprint, render_template, request, jsonify, g, flash, redirect
 from app_core import mongo
 from helpers.auth_helpers import admin_required
 from helpers.change_helpers import request_change, approve_change, system_request_change, system_approve_change
+from helpers.disease_helpers import cure_pop
 from pymongo import ASCENDING
 from bson import ObjectId
 import random
@@ -286,3 +287,33 @@ def pops_flee_pop():
         "destination": destination.get("name", "Unknown"),
         "change_id": str(change_id),
     })
+
+
+@pops_routes.route("/pops/<pop_id>/cure_disease/<disease_id>", methods=["POST"])
+@admin_required
+def pops_cure_disease(pop_id, disease_id):
+    """Admin correction: remove one disease from a single pop, from that
+    pop's own edit page. Mirrors diseases_item.html's "Cure Nation's Pops"
+    tool, but scoped to one pop instead of every pop in a nation — same
+    direct cure_pop call (not routed through the change-request workflow),
+    since this is a system-correction utility, not a normal player edit."""
+    try:
+        pop_oid = ObjectId(pop_id)
+    except Exception:
+        flash("Invalid pop id.", "error")
+        return redirect("/pops")
+
+    pop = mongo.db.pops.find_one({"_id": pop_oid})
+    if not pop:
+        flash("Pop not found.", "error")
+        return redirect("/pops")
+
+    disease_name = disease_id
+    if ObjectId.is_valid(disease_id):
+        disease = mongo.db.diseases.find_one({"_id": ObjectId(disease_id)}, {"name": 1})
+        if disease:
+            disease_name = disease.get("name", disease_id)
+
+    cure_pop(pop, disease_id)
+    flash(f"Removed {disease_name} from this pop.", "success")
+    return redirect(f"/pops/edit/{pop_id}")
