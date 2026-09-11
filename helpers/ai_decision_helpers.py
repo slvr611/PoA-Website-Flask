@@ -2868,6 +2868,37 @@ def _tile_has_node(tile):
     return bool(node_key) and node_key != "none"
 
 
+def _pick_fallback_capital_tile(owned_tiles):
+    """Pick a capital tile for a nation with no cities AND no capital at all
+    — the most central owned, non-water tile (lowest sum of hex distance to
+    every other owned tile), ties broken by node presence then coordinate,
+    mirroring the with-cities centrality rule. Every nation needs SOME
+    capital even before it has built a single city: _compute_legal_placement
+    can only ever bootstrap a nation's first building from an existing
+    capital tile (or an existing building) — with neither, legal_city_tiles
+    stays permanently empty and the nation could never place anything.
+    Returns the tile dict, or None if the nation owns no eligible tile at all.
+    """
+    from calculations.field_calculations import WATER_TERRAINS
+    land_tiles = [t for t in owned_tiles if t.get("terrain") not in WATER_TERRAINS]
+    if not land_tiles:
+        return None
+    coords = [(t["q"], t["r"]) for t in land_tiles]
+
+    def _centrality(t):
+        tc = (t["q"], t["r"])
+        return sum(hex_distance(tc[0], tc[1], c[0], c[1]) for c in coords)
+
+    min_score = min(_centrality(t) for t in land_tiles)
+    candidates = [t for t in land_tiles if _centrality(t) == min_score]
+    if len(candidates) > 1:
+        noded = [t for t in candidates if _tile_has_node(t)]
+        if noded:
+            candidates = noded
+    candidates.sort(key=lambda t: (t["q"], t["r"]))
+    return candidates[0]
+
+
 def _fetch_world_city_coords():
     """Every (q, r) anywhere on the map that currently holds a city, in one
     query — the single-fetch cache callers should build once (per admin-tool
@@ -2985,9 +3016,22 @@ def fix_city_and_capital_placement(dry_run=True, min_distance=MIN_CITY_TILE_DIST
        to the nation's other cities, ties broken by preferring a city that
        sits on a resource/magic node, then by coordinate for determinism.
        Any other tile flagged capital=True for that nation (duplicates, or
-       one left over from a since-moved/removed city) is cleared. Nomadic
-       nations (cities never touch the map) and player nations (capital
-       left entirely to the player) are skipped.
+       one left over from a since-moved/removed city) is cleared.
+
+       A nation with NO cities at all still gets a capital: an existing
+       single capital is left alone, duplicates collapse to one (kept, not
+       wiped), and a nation with no capital at all gets one designated —
+       the most central owned, non-water tile, same node/coordinate
+       tie-break as above — rather than being left with nothing. A nation
+       is never left with zero capitals by this pass: _compute_legal_placement
+       can only ever bootstrap a nation's very first building (city or
+       district) from an existing capital tile, so a nation with neither a
+       city nor a capital could never place anything, ever, even after this
+       tool "fixes" it — including one whose only city this same pass just
+       removed for having nowhere legal to relocate to (see step 1).
+
+       Nomadic nations (cities never touch the map) and player nations
+       (capital left entirely to the player) are skipped.
 
     Step 2 runs against the post-step-1 positions so preview (dry_run=True)
     and apply (dry_run=False) agree on what "central" means once distance
@@ -3143,17 +3187,41 @@ def fix_city_and_capital_placement(dry_run=True, min_distance=MIN_CITY_TILE_DIST
         city_tiles = [t for t in owned_tiles if isinstance(t.get("city"), dict) and t["city"].get("id")]
 
         if not city_tiles:
+            if len(current_capitals) == 1:
+                continue  # exactly one capital already, nothing to fix
             if current_capitals:
+                # Duplicate capital flags with no city anywhere to prefer —
+                # keep one (lowest coordinate, for determinism) and clear
+                # the rest, rather than wiping all of them: every nation
+                # needs a capital even before it has built its first city.
+                keep = sorted(current_capitals, key=lambda t: (t["q"], t["r"]))[0]
                 if not dry_run:
                     for t in current_capitals:
-                        mongo.db.hex_map_tiles.update_one({"_id": t["_id"]}, {"$unset": {"capital": ""}})
-                        t.pop("capital", None)
+                        if t is not keep:
+                            mongo.db.hex_map_tiles.update_one({"_id": t["_id"]}, {"$unset": {"capital": ""}})
+                            t.pop("capital", None)
                 report["capitals_recentered"].append({
                     "nation": nation_name,
                     "previous_capitals": [[t["q"], t["r"]] for t in current_capitals],
-                    "new_capital": None,
-                    "had_duplicates": len(current_capitals) > 1,
+                    "new_capital": [keep["q"], keep["r"]],
+                    "had_duplicates": True,
                 })
+                continue
+            # No capital at all — designate a fallback one so the nation is
+            # never left completely without an anchor point (see
+            # _pick_fallback_capital_tile's docstring for why that matters).
+            candidate = _pick_fallback_capital_tile(owned_tiles)
+            if not candidate:
+                continue  # owns no eligible tile at all; nothing to designate
+            if not dry_run:
+                mongo.db.hex_map_tiles.update_one({"_id": candidate["_id"]}, {"$set": {"capital": True}})
+                candidate["capital"] = True
+            report["capitals_recentered"].append({
+                "nation": nation_name,
+                "previous_capitals": [],
+                "new_capital": [candidate["q"], candidate["r"]],
+                "had_duplicates": False,
+            })
             continue
 
         coords = [(t["q"], t["r"]) for t in city_tiles]

@@ -337,6 +337,135 @@ class TestCapitalRecentering:
         assert report["capitals_recentered"] == []
 
 
+class TestNationsWithNoCitiesStillGetACapital:
+    def test_existing_single_capital_with_no_city_is_left_alone(self):
+        """A brand-new AI nation that hasn't built a city yet already has
+        exactly one capital tile — nothing to fix."""
+        alpha = _nation("Alpha")
+        tiles = _grid_tiles("Alpha", size=2, exclude={(0, 0)})
+        tiles.append(_tile(0, 0, "Alpha", capital=True))
+        tiles_by_owner = {"Alpha": tiles}
+
+        report = adh.fix_city_and_capital_placement(
+            dry_run=True, tiles_by_owner=tiles_by_owner,
+            all_nations=[alpha], player_nation_ids=set(),
+        )
+
+        assert report["capitals_recentered"] == []
+
+    def test_duplicate_capitals_with_no_city_collapse_to_one_kept(self):
+        """Two capital-flagged tiles, neither with a city — previously ALL
+        capital flags got wiped in this case; now exactly one must survive
+        (the lowest-coordinate one, for determinism)."""
+        alpha = _nation("Alpha")
+        tiles = _grid_tiles("Alpha", size=3, exclude={(0, 0), (2, 0)})
+        tiles.append(_tile(0, 0, "Alpha", capital=True))
+        tiles.append(_tile(2, 0, "Alpha", capital=True))
+        tiles_by_owner = {"Alpha": tiles}
+
+        report = adh.fix_city_and_capital_placement(
+            dry_run=True, tiles_by_owner=tiles_by_owner,
+            all_nations=[alpha], player_nation_ids=set(),
+        )
+
+        assert len(report["capitals_recentered"]) == 1
+        rec = report["capitals_recentered"][0]
+        assert rec["had_duplicates"] is True
+        assert rec["new_capital"] == [0, 0]
+        assert sorted(rec["previous_capitals"]) == [[0, 0], [2, 0]]
+
+    def test_no_capital_and_no_city_gets_one_designated(self):
+        """A nation with zero cities AND zero capital would otherwise never
+        be able to place its very first building (_compute_legal_placement
+        can only bootstrap from an existing capital or building) — this is
+        exactly the state left behind by removing a nation's only city for
+        having nowhere legal to relocate to (see the distance-rule pass)."""
+        alpha = _nation("Alpha")
+        tiles = _grid_tiles("Alpha", size=2)  # no capital, no city anywhere
+        tiles_by_owner = {"Alpha": tiles}
+
+        report = adh.fix_city_and_capital_placement(
+            dry_run=True, tiles_by_owner=tiles_by_owner,
+            all_nations=[alpha], player_nation_ids=set(),
+        )
+
+        assert len(report["capitals_recentered"]) == 1
+        rec = report["capitals_recentered"][0]
+        assert rec["previous_capitals"] == []
+        assert rec["new_capital"] is not None
+        assert rec["had_duplicates"] is False
+
+    def test_fallback_capital_prefers_a_node_among_equally_central_tiles(self):
+        alpha = _nation("Alpha")
+        # Two tiles, equally central to each other (any 2-tile set ties);
+        # only one has a node.
+        tiles = [
+            _tile(-1, 0, "Alpha", node=None),
+            _tile(1, 0, "Alpha", node={"resource_type": "iron"}),
+        ]
+        tiles_by_owner = {"Alpha": tiles}
+
+        report = adh.fix_city_and_capital_placement(
+            dry_run=True, tiles_by_owner=tiles_by_owner,
+            all_nations=[alpha], player_nation_ids=set(),
+        )
+
+        rec = report["capitals_recentered"][0]
+        assert rec["new_capital"] == [1, 0]
+
+    def test_fallback_capital_never_picked_on_water(self):
+        alpha = _nation("Alpha")
+        tiles = [
+            _tile(0, 0, "Alpha", terrain="deep_water"),
+            _tile(1, 0, "Alpha", terrain="plains"),
+        ]
+        tiles_by_owner = {"Alpha": tiles}
+
+        report = adh.fix_city_and_capital_placement(
+            dry_run=True, tiles_by_owner=tiles_by_owner,
+            all_nations=[alpha], player_nation_ids=set(),
+        )
+
+        rec = report["capitals_recentered"][0]
+        assert rec["new_capital"] == [1, 0]
+
+    def test_nation_that_owns_no_tiles_at_all_is_skipped(self):
+        alpha = _nation("Alpha")
+        report = adh.fix_city_and_capital_placement(
+            dry_run=True, tiles_by_owner={"Alpha": []},
+            all_nations=[alpha], player_nation_ids=set(),
+        )
+
+        assert report["capitals_recentered"] == []
+
+    def test_dry_run_false_persists_the_designated_capital(self, test_db):
+        alpha_id = ObjectId()
+        alpha = {
+            "_id": alpha_id, "name": "Alpha", "administration": 3,
+            "government_type": "Fallen Monarchy",
+            "resource_production": {}, "resource_consumption": {}, "resource_excess": {},
+            "resource_storage": {}, "jobs": {}, "job_details": {}, "money": 0,
+            "money_income": 0, "region": "",
+        }
+        test_db["nations"].insert_one(alpha)
+        raw_tiles = _grid_tiles("Alpha", size=2)
+        for t in raw_tiles:
+            test_db["hex_map_tiles"].insert_one(t)
+        tiles_by_owner = {"Alpha": list(test_db["hex_map_tiles"].find({"owner": "Alpha"}))}
+
+        with patch.object(adh, "mongo", MagicMock(db=test_db)):
+            report = adh.fix_city_and_capital_placement(
+                dry_run=False, tiles_by_owner=tiles_by_owner,
+                all_nations=[alpha], player_nation_ids=set(),
+            )
+
+        rec = report["capitals_recentered"][0]
+        new_q, new_r = rec["new_capital"]
+        tile = test_db["hex_map_tiles"].find_one({"q": new_q, "r": new_r})
+        assert tile.get("capital") is True
+        assert test_db["hex_map_tiles"].count_documents({"owner": "Alpha", "capital": True}) == 1
+
+
 class TestApplyWritesToTheDatabase:
     def test_dry_run_false_persists_the_move_and_capital_change(self, test_db):
         alpha = {

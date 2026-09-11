@@ -11,8 +11,9 @@
         cleared from both the map and the nation's city list, with its build cost refunded back into the
         nation's resources. Player-owned cities are never moved or removed, only flagged below for manual
         review. Afterward, each AI nation's capital is moved onto whichever of its own cities is most central
-        (preferring one with a node), and any duplicate or orphaned capital flags are cleared. Player
-        nations' capitals are never touched.
+        (preferring one with a node), and any duplicate or orphaned capital flags are cleared. A nation with
+        no cities at all still keeps (or gets assigned) exactly one capital, so it's never left unable to
+        place anything at all. Player nations' capitals are never touched.
     </p>
 
     {% set total_changes = report.moved|length + report.removed|length + report.capitals_recentered|length %}
