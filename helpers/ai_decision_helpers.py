@@ -18,6 +18,13 @@ from copy import deepcopy
 from bson import ObjectId
 
 from app_core import mongo, json_data, category_data
+from helpers.hex_map_helpers import hex_distance
+
+# Minimum hex distance required between any two cities on the map,
+# regardless of owner — enforced both retroactively (see
+# fix_city_and_capital_placement) and prospectively wherever the AI or a
+# sync tool chooses a NEW city tile (_select_best_city, sync_nation_cities).
+MIN_CITY_TILE_DISTANCE = 3
 
 # Resources broadly useful for almost any goal or district — the AI keeps a
 # higher baseline urgency for these even when self-sustaining, since they're
@@ -2498,7 +2505,9 @@ def _claim_city_tile(nation_name, city_id, city_type, coord, set_capital=False, 
     return node_key if node_key != "none" else ""
 
 
-def _select_best_city(old_nation, state, exclude_types=None, owned_tiles=None):
+def _select_best_city(old_nation, state, exclude_types=None, owned_tiles=None,
+                       world_city_coords=None, min_distance=MIN_CITY_TILE_DISTANCE,
+                       already_has_a_city_this_call=False):
     """
     For grow_population: pick the best city to build (or replace).
     Evaluates conditional modifiers against the nation's current state to find
@@ -2510,8 +2519,26 @@ def _select_best_city(old_nation, state, exclude_types=None, owned_tiles=None):
     _compute_legal_placement so a district/city claimed earlier in the same
     call is correctly seen here — map writes are deferred to the tick's
     commit phase now, so a fresh DB query wouldn't see them yet.
+    world_city_coords: every (q, r) anywhere on the map holding a city (any
+    owner) — candidate tiles within min_distance of one of these are
+    excluded, same rule the Fix City Placement admin tool enforces
+    retroactively. Self-fetches with a single query if not provided (a
+    caller processing many nations in one pass, e.g. a tick run, should
+    build this once and pass the same mutable set through every call —
+    see evaluate_goal_district's docstring for how it's kept current as
+    new cities are decided within the same pass).
+    already_has_a_city_this_call: True once evaluate_goal_district has
+    already built at least one city THIS call. The "has_city" check below
+    otherwise reads old_nation["cities"], which never changes during the
+    call (only new_nation["cities"] does) — without this override, a
+    second city built in the same call would wrongly hit the "first city
+    must go on the capital" branch again and land on the SAME capital tile
+    as the first, silently overwriting it on the map instead of going
+    through the normal scored/distance-filtered placement below.
     Returns a plan dict with source='city', or None if no city avenue exists.
     """
+    if world_city_coords is None:
+        world_city_coords = _fetch_world_city_coords()
     cities_data = json_data.get("cities", {})
     city_slots = old_nation.get("city_slots", 0)
     existing_cities = old_nation.get("cities", [])
@@ -2557,8 +2584,18 @@ def _select_best_city(old_nation, state, exclude_types=None, owned_tiles=None):
             active_resources=state.get("active_resources"), money_stock=state.get("money"),
         )
 
+        # Distance-filtered view for scored placement — the forced capital
+        # placement below is exempt (it's a fixed administrative point being
+        # reused, not a new tile being chosen).
+        legal_scored = dict(legal)
+        legal_scored["legal_city_tiles"] = _filter_legal_tiles_by_distance(
+            legal.get("legal_city_tiles", []), world_city_coords, min_distance
+        )
+
         best = city_scores[0]
-        has_city = len(existing_cities) > 0 and any(c.get("type") for c in existing_cities)
+        has_city = already_has_a_city_this_call or (
+            len(existing_cities) > 0 and any(c.get("type") for c in existing_cities)
+        )
         capital_coord = legal.get("capital_coord")
 
         if not has_city:
@@ -2569,12 +2606,12 @@ def _select_best_city(old_nation, state, exclude_types=None, owned_tiles=None):
                 tile_rationale = "capital (first city)"
             else:
                 tile_coord, _, tile_rationale = _score_best_city_tile(
-                    legal, best[0], baseline_w, prices
+                    legal_scored, best[0], baseline_w, prices
                 )
                 tile_rationale = f"auto-capital: {tile_rationale}" if tile_rationale else "auto-capital"
         else:
             tile_coord, _, tile_rationale = _score_best_city_tile(
-                legal, best[0], baseline_w, prices
+                legal_scored, best[0], baseline_w, prices
             )
 
         placement_info = ""
@@ -2623,7 +2660,8 @@ def _select_best_city(old_nation, state, exclude_types=None, owned_tiles=None):
     return None
 
 
-def sync_nation_cities(nation, dry_run=True, tiles_with_city=None, owned_tiles=None):
+def sync_nation_cities(nation, dry_run=True, tiles_with_city=None, owned_tiles=None,
+                        world_city_coords=None, min_distance=MIN_CITY_TILE_DISTANCE):
     """
     Reconcile a nation's `cities` array against city objects placed on its
     owned map tiles. Two one-way operations, never destructive:
@@ -2633,7 +2671,9 @@ def sync_nation_cities(nation, dry_run=True, tiles_with_city=None, owned_tiles=N
     2. Nation → Map: any nation.cities entry with a real type set (blank
        placeholder slots are skipped) whose id isn't placed on any owned
        tile gets placed using the same tile-scoring logic the AI uses when
-       building a new city (_score_best_city_tile / capital fallback).
+       building a new city (_score_best_city_tile / capital fallback),
+       excluding any tile within min_distance of an existing city anywhere
+       on the map (any owner) — see MIN_CITY_TILE_DISTANCE.
 
     Existing cities/tiles are never modified or removed.
 
@@ -2647,6 +2687,12 @@ def sync_nation_cities(nation, dry_run=True, tiles_with_city=None, owned_tiles=N
     (passed straight through to _compute_legal_placement), same reasoning —
     avoids a second per-nation query for the placement scan.
 
+    world_city_coords: every (q, r) anywhere on the map holding a city (any
+    owner). Self-fetches with a single query if not given; a caller syncing
+    many nations in one pass should build this ONCE and pass the same
+    mutable set through every call (it's added to here as each city is
+    placed, so the next nation in the same batch sees it immediately).
+
     Returns {
         "name": str,
         "added_to_nation": [{"id","name","type"}, ...],
@@ -2655,6 +2701,8 @@ def sync_nation_cities(nation, dry_run=True, tiles_with_city=None, owned_tiles=N
     }
     When dry_run is False, performs the DB writes for both directions.
     """
+    if world_city_coords is None:
+        world_city_coords = _fetch_world_city_coords()
     nation_name = nation.get("name", "")
     nation_cities = nation.get("cities", []) or []
     nation_city_ids = {c.get("_id") for c in nation_cities if c.get("_id")}
@@ -2758,13 +2806,18 @@ def sync_nation_cities(nation, dry_run=True, tiles_with_city=None, owned_tiles=N
         reserved_coords = set()
 
         for c in to_place:
+            # Exclude tiles already claimed earlier in this same loop
+            # (reserved_coords) and any tile within min_distance of a city
+            # anywhere on the map (world_city_coords) — the capital-fallback
+            # branch below is exempt, same reasoning as _select_best_city:
+            # it reuses a fixed pre-existing point rather than choosing one.
+            avoid = reserved_coords | world_city_coords
             legal = legal_base
-            if reserved_coords:
+            if avoid:
                 legal = dict(legal_base)
-                legal["legal_city_tiles"] = [
-                    t for t in legal_base.get("legal_city_tiles", [])
-                    if t["coord"] not in reserved_coords
-                ]
+                legal["legal_city_tiles"] = _filter_legal_tiles_by_distance(
+                    legal_base.get("legal_city_tiles", []), avoid, min_distance
+                )
             city_type = c.get("type", "generic")
 
             if not has_city_on_map:
@@ -2784,6 +2837,7 @@ def sync_nation_cities(nation, dry_run=True, tiles_with_city=None, owned_tiles=N
                 continue
 
             reserved_coords.add(tuple(coord))
+            world_city_coords.add(tuple(coord))
             report["placed_on_map"].append({
                 "id": c["_id"], "name": c.get("name", ""), "type": city_type,
                 "coord": [coord[0], coord[1]], "rationale": rationale,
@@ -2799,6 +2853,309 @@ def sync_nation_cities(nation, dry_run=True, tiles_with_city=None, owned_tiles=N
                 )
 
             has_city_on_map = True
+
+    return report
+
+
+def _tile_has_node(tile):
+    """True if this hex tile carries a resource/magic node (dict or legacy
+    string shape) — same detection _claim_city_tile uses."""
+    node = tile.get("node") or {}
+    if isinstance(node, dict):
+        node_key = node.get("resource_type") or node.get("value") or node.get("resource") or ""
+    else:
+        node_key = str(node) if node else ""
+    return bool(node_key) and node_key != "none"
+
+
+def _fetch_world_city_coords():
+    """Every (q, r) anywhere on the map that currently holds a city, in one
+    query — the single-fetch cache callers should build once (per admin-tool
+    invocation, or once per tick run) and reuse/mutate, rather than querying
+    per nation. See MIN_CITY_TILE_DISTANCE's call sites for how it's kept
+    up to date as new cities are decided within the same pass."""
+    return set(
+        (t["q"], t["r"]) for t in mongo.db.hex_map_tiles.find(
+            {"city": {"$exists": True, "$ne": None}}, {"q": 1, "r": 1, "_id": 0}
+        )
+    )
+
+
+def _filter_legal_tiles_by_distance(legal_city_tiles, avoid_coords, min_distance):
+    """legal_city_tiles entries (each a dict with a "coord" key) that are at
+    least min_distance from every coordinate in avoid_coords. avoid_coords
+    may be empty/falsy, in which case every tile passes through unfiltered."""
+    if not avoid_coords:
+        return legal_city_tiles
+    return [
+        t for t in legal_city_tiles
+        if all(hex_distance(t["coord"][0], t["coord"][1], a[0], a[1]) >= min_distance for a in avoid_coords)
+    ]
+
+
+def _find_relocation_tile(nation, owned_tiles, city_type, avoid_coords, min_distance):
+    """Pick the best legal tile for `nation` to relocate a city to: the same
+    node/admin-range scoring the AI uses when building a new city
+    (_score_best_city_tile), restricted to tiles at least `min_distance`
+    from every coordinate in avoid_coords. Returns (coord, rationale), or
+    (None, "") if nothing qualifies.
+
+    Operates on a shallow copy of `nation` so _compute_legal_placement's
+    _legal_placement_cache is always recomputed fresh here, never leaking a
+    stale cache onto the caller's nation dict across repeated calls (e.g.
+    when the same nation has more than one violating city to relocate).
+    """
+    from calculations.field_calculations import _compute_legal_placement
+    nation = dict(nation)
+    nation.pop("_legal_placement_cache", None)
+    legal = _compute_legal_placement(nation, owned_tiles=owned_tiles)
+    candidates = _filter_legal_tiles_by_distance(legal.get("legal_city_tiles", []), avoid_coords, min_distance)
+    if not candidates:
+        return None, ""
+    legal_filtered = dict(legal)
+    legal_filtered["legal_city_tiles"] = candidates
+    prices = _base_prices()
+    state = evaluate_nation_state(nation)
+    weights = _weights_from_net(
+        state["net_production"], state["stockpiles"], prices, state["money_income"],
+        active_resources=state.get("active_resources"), money_stock=state.get("money"),
+    )
+    coord, _, rationale = _score_best_city_tile(legal_filtered, city_type, weights, prices)
+    return coord, rationale
+
+
+def _write_city_move(old_tile, new_coord, entry, owned_tiles):
+    """Move a city from old_tile onto new_coord, carrying its capital flag
+    (if any) along with it. Mutates old_tile/the matching tile dict in
+    owned_tiles in place, in addition to writing to the DB, so a nation with
+    more than one violating city sees accurate state on its next
+    _find_relocation_tile call within the same pass."""
+    mongo.db.hex_map_tiles.update_one(
+        {"_id": old_tile["_id"]}, {"$unset": {"city": "", "capital": ""}}
+    )
+    city_payload = {"id": entry["city_id"], "name": entry["city_name"], "type": entry["city_type"]}
+    update = {"city": city_payload}
+    if entry["is_capital"]:
+        update["capital"] = True
+
+    new_tile = next((t for t in owned_tiles if (t["q"], t["r"]) == new_coord), None)
+    if new_tile is not None:
+        mongo.db.hex_map_tiles.update_one({"_id": new_tile["_id"]}, {"$set": update})
+        new_tile["city"] = city_payload
+        if entry["is_capital"]:
+            new_tile["capital"] = True
+    else:
+        mongo.db.hex_map_tiles.update_one({"q": new_coord[0], "r": new_coord[1]}, {"$set": update})
+
+    old_tile.pop("city", None)
+    old_tile.pop("capital", None)
+
+
+def fix_city_and_capital_placement(dry_run=True, min_distance=MIN_CITY_TILE_DISTANCE,
+                                    tiles_by_owner=None, all_nations=None, player_nation_ids=None):
+    """
+    World-wide correction pass (not scoped to one nation):
+
+    1. Minimum distance — every pair of cities anywhere on the map, regardless
+       of owner (including two cities of the SAME nation), must be at least
+       `min_distance` hex tiles apart. AI-owned cities that violate this are
+       relocated to the best legal tile using the same node/admin-range
+       scoring the AI itself uses when building a new city
+       (_score_best_city_tile), additionally excluding any tile too close to
+       another city. Player-owned cities are NEVER moved — a violation is
+       only ever resolved by moving the AI side of it; a violation with no
+       fixable side (player vs player, or an AI city with nowhere legal left
+       to go) is reported instead of silently ignored.
+
+       Cities are processed in a stable order — every player city is
+       anchored first (never re-evaluated for movement), then AI cities
+       sorted by (nation name, city id) — so each city is checked against
+       every previously-settled position, including AI cities already
+       relocated earlier in this same pass, and the result is deterministic.
+
+    2. Capital recentering — for every AI nation with at least one city on
+       the (post-step-1) map, the capital is moved onto whichever of its own
+       cities is most central: the one with the lowest sum of hex distance
+       to the nation's other cities, ties broken by preferring a city that
+       sits on a resource/magic node, then by coordinate for determinism.
+       Any other tile flagged capital=True for that nation (duplicates, or
+       one left over from a since-moved/removed city) is cleared. Nomadic
+       nations (cities never touch the map) and player nations (capital
+       left entirely to the player) are skipped.
+
+    Step 2 runs against the post-step-1 positions so preview (dry_run=True)
+    and apply (dry_run=False) agree on what "central" means once distance
+    violations are resolved.
+
+    Returns {
+        "moved": [{"nation","id","name","type","from":[q,r],"to":[q,r],"rationale"}],
+        "unplaceable": [{"nation","id","name","type","coord":[q,r],
+                          "conflicts":[{"nation","coord":[q,r]}, ...]}],
+        "flagged_player": [{"nation","id","name","type","coord":[q,r],
+                             "conflicts":[{"nation","coord":[q,r]}, ...]}],
+        "capitals_recentered": [{"nation","previous_capitals":[[q,r], ...],
+                                  "new_capital":[q,r] or None,"had_duplicates":bool}],
+    }
+    dry_run=True computes everything without writing to the DB.
+    """
+    if all_nations is None:
+        all_nations = list(mongo.db.nations.find())
+    if tiles_by_owner is None:
+        tiles_by_owner = {}
+        for t in mongo.db.hex_map_tiles.find(
+            {"owner": {"$nin": [None, ""]}},
+            {"q": 1, "r": 1, "terrain": 1, "district": 1, "city": 1, "wonder": 1,
+             "capital": 1, "node": 1, "owner": 1},
+        ):
+            tiles_by_owner.setdefault(t.get("owner", ""), []).append(t)
+    if player_nation_ids is None:
+        from routes.admin_tool_routes import _get_player_nation_ids
+        player_nation_ids = _get_player_nation_ids()
+
+    nations_by_name = {n.get("name", ""): n for n in all_nations if n.get("name")}
+    player_names = {n.get("name", "") for n in all_nations if n.get("_id") in player_nation_ids}
+
+    report = {"moved": [], "unplaceable": [], "flagged_player": [], "capitals_recentered": []}
+
+    # ---- Pass 1: minimum city-to-city distance ----
+    all_entries = []
+    for nation_name, tiles in tiles_by_owner.items():
+        for t in tiles:
+            city = t.get("city")
+            if not isinstance(city, dict) or not city.get("id"):
+                continue
+            all_entries.append({
+                "nation_name": nation_name,
+                "tile": t,
+                "coord": (t["q"], t["r"]),
+                "city_id": city.get("id"),
+                "city_type": city.get("type", "generic"),
+                "city_name": city.get("name", ""),
+                "is_capital": bool(t.get("capital")),
+            })
+
+    player_entries = [e for e in all_entries if e["nation_name"] in player_names]
+    ai_entries = sorted(
+        (e for e in all_entries if e["nation_name"] not in player_names),
+        key=lambda e: (e["nation_name"], e["city_id"]),
+    )
+
+    # anchored: cities whose final position is settled, in settlement order —
+    # every later city is checked against all of these, and joins them once
+    # its own fate (stay / move / stuck) is decided.
+    anchored = list(player_entries)
+
+    for e in ai_entries:
+        coord = e["coord"]
+        conflicts = [
+            a for a in anchored
+            if hex_distance(coord[0], coord[1], a["coord"][0], a["coord"][1]) < min_distance
+        ]
+        if not conflicts:
+            anchored.append(e)
+            continue
+
+        nation = nations_by_name.get(e["nation_name"])
+        owned_tiles = tiles_by_owner.get(e["nation_name"], [])
+        new_coord, rationale = (None, "")
+        if nation is not None:
+            avoid = [a["coord"] for a in anchored]
+            new_coord, rationale = _find_relocation_tile(nation, owned_tiles, e["city_type"], avoid, min_distance)
+
+        if new_coord:
+            if not dry_run:
+                _write_city_move(e["tile"], new_coord, e, owned_tiles)
+            report["moved"].append({
+                "nation": e["nation_name"], "id": e["city_id"], "name": e["city_name"],
+                "type": e["city_type"], "from": [coord[0], coord[1]], "to": [new_coord[0], new_coord[1]],
+                "rationale": rationale,
+            })
+            moved_entry = dict(e)
+            moved_entry["coord"] = new_coord
+            anchored.append(moved_entry)
+        else:
+            report["unplaceable"].append({
+                "nation": e["nation_name"], "id": e["city_id"], "name": e["city_name"],
+                "type": e["city_type"], "coord": [coord[0], coord[1]],
+                "conflicts": [{"nation": c["nation_name"], "coord": [c["coord"][0], c["coord"][1]]} for c in conflicts],
+            })
+            anchored.append(e)
+
+    # Report any player city still touching a violation once the AI side has
+    # done everything it can — player-vs-player, or player-vs-an AI city
+    # that had nowhere legal to go (never a resolved player-vs-AI case,
+    # since that AI city has already moved away by this point).
+    for e in player_entries:
+        conflicts = [
+            a for a in anchored
+            if (a["nation_name"], a["city_id"]) != (e["nation_name"], e["city_id"])
+            and hex_distance(e["coord"][0], e["coord"][1], a["coord"][0], a["coord"][1]) < min_distance
+        ]
+        if conflicts:
+            report["flagged_player"].append({
+                "nation": e["nation_name"], "id": e["city_id"], "name": e["city_name"],
+                "type": e["city_type"], "coord": [e["coord"][0], e["coord"][1]],
+                "conflicts": [{"nation": c["nation_name"], "coord": [c["coord"][0], c["coord"][1]]} for c in conflicts],
+            })
+
+    # ---- Pass 2: capital recentering (uses post-step-1 positions) ----
+    for nation_name, nation in nations_by_name.items():
+        if nation_name in player_names or _nation_is_nomadic(nation):
+            continue
+        owned_tiles = tiles_by_owner.get(nation_name, [])
+        current_capitals = [t for t in owned_tiles if t.get("capital")]
+        city_tiles = [t for t in owned_tiles if isinstance(t.get("city"), dict) and t["city"].get("id")]
+
+        if not city_tiles:
+            if current_capitals:
+                if not dry_run:
+                    for t in current_capitals:
+                        mongo.db.hex_map_tiles.update_one({"_id": t["_id"]}, {"$unset": {"capital": ""}})
+                        t.pop("capital", None)
+                report["capitals_recentered"].append({
+                    "nation": nation_name,
+                    "previous_capitals": [[t["q"], t["r"]] for t in current_capitals],
+                    "new_capital": None,
+                    "had_duplicates": len(current_capitals) > 1,
+                })
+            continue
+
+        coords = [(t["q"], t["r"]) for t in city_tiles]
+        if len(city_tiles) == 1:
+            target_tile = city_tiles[0]
+        else:
+            def _centrality(t):
+                tc = (t["q"], t["r"])
+                return sum(hex_distance(tc[0], tc[1], c[0], c[1]) for c in coords)
+            min_score = min(_centrality(t) for t in city_tiles)
+            central_candidates = [t for t in city_tiles if _centrality(t) == min_score]
+            if len(central_candidates) > 1:
+                noded = [t for t in central_candidates if _tile_has_node(t)]
+                if noded:
+                    central_candidates = noded
+            central_candidates.sort(key=lambda t: (t["q"], t["r"]))
+            target_tile = central_candidates[0]
+
+        target_coord = (target_tile["q"], target_tile["r"])
+        current_coords = [(t["q"], t["r"]) for t in current_capitals]
+        if current_coords == [target_coord]:
+            continue
+
+        if not dry_run:
+            for t in current_capitals:
+                if (t["q"], t["r"]) != target_coord:
+                    mongo.db.hex_map_tiles.update_one({"_id": t["_id"]}, {"$unset": {"capital": ""}})
+                    t.pop("capital", None)
+            if not target_tile.get("capital"):
+                mongo.db.hex_map_tiles.update_one({"_id": target_tile["_id"]}, {"$set": {"capital": True}})
+                target_tile["capital"] = True
+
+        report["capitals_recentered"].append({
+            "nation": nation_name,
+            "previous_capitals": [[c[0], c[1]] for c in current_coords],
+            "new_capital": [target_coord[0], target_coord[1]],
+            "had_duplicates": len(current_capitals) > 1,
+        })
 
     return report
 
@@ -3185,7 +3542,7 @@ def _goal_adjusted_need_weights(need_weights, goal_type, state=None):
     return w
 
 
-def evaluate_goal_district(old_nation, new_nation, state, goal, need_weights, prices, upkeep_assignments, log, dry_run=False, pending_tiles=None):
+def evaluate_goal_district(old_nation, new_nation, state, goal, need_weights, prices, upkeep_assignments, log, dry_run=False, pending_tiles=None, world_city_coords=None):
     """
     Build affordable districts and cities in a loop. After each build:
     - Re-evaluate upkeep assignments (new districts may unlock better jobs)
@@ -3203,8 +3560,21 @@ def evaluate_goal_district(old_nation, new_nation, state, goal, need_weights, pr
     in-memory `owned_tiles` snapshot (see below) so a second/third build
     later in the SAME call still sees earlier ones from this call.
 
-    Returns (district_plan, district_scores, district_log, upkeep_assignments, goal).
+    world_city_coords: every (q, r) anywhere on the map holding a city,
+    forwarded to _select_best_city so a new city respects the minimum
+    distance rule against EVERY nation's cities, not just this one's own
+    owned_tiles_snapshot. Self-fetches with a single query if not given (the
+    AI Goals Preview tool's one-nation-at-a-time call, where an N+1 concern
+    doesn't apply). The real tick path builds this ONCE for the whole
+    per-nation loop and passes the same mutable set through every nation —
+    see tick_helpers.tick()'s "AI Decision Tick" dispatch. Whenever a city
+    IS placed below, its coordinate is added to this set immediately (even
+    though the DB write itself is deferred via pending_tiles), so a second
+    city built by THIS nation later in the same call, or another nation
+    processed later in the same tick, correctly treats it as taken.
     """
+    if world_city_coords is None:
+        world_city_coords = _fetch_world_city_coords()
     from calculations.field_calculations import check_job_requirements, _compute_legal_placement
 
     district_log = []
@@ -3263,6 +3633,7 @@ def evaluate_goal_district(old_nation, new_nation, state, goal, need_weights, pr
 
     personality = get_ai_personality(old_nation)
     built_city_types = set()
+    cities_built_this_call = 0
 
     # Count def_keys already claimed on map tiles (safety net against out-of-sync
     # nation docs that miss a previous tile claim — prevents exceeding map_count).
@@ -3284,7 +3655,11 @@ def evaluate_goal_district(old_nation, new_nation, state, goal, need_weights, pr
 
         # --- Try city if goal is grow_population ---
         if goal.get("type") == "grow_population":
-            city_plan = _select_best_city(old_nation, state, exclude_types=built_city_types, owned_tiles=owned_tiles_snapshot)
+            city_plan = _select_best_city(
+                old_nation, state, exclude_types=built_city_types, owned_tiles=owned_tiles_snapshot,
+                world_city_coords=world_city_coords,
+                already_has_a_city_this_call=cities_built_this_call > 0,
+            )
             if city_plan:
                 cost = city_plan.get("cost", {})
                 money_ok = state["money"] >= cost.get("money", 0)
@@ -3352,7 +3727,9 @@ def evaluate_goal_district(old_nation, new_nation, state, goal, need_weights, pr
                         if city_plan.get("set_capital", False):
                             city_fields["capital"] = True
                         _mark_tile_claimed(coord, **city_fields)
+                        world_city_coords.add(coord)
 
+                    cities_built_this_call += 1
                     built_city_types.add(city_plan.get("key", ""))
                     district_log.append(f"Built city: {city_plan['display_name']}")
                     built_count += 1
@@ -4125,7 +4502,7 @@ def generate_goal_trade_desires(state, goal, personality, district_plan, project
 # Main AI tick
 # ---------------------------------------------------------------------------
 
-def ai_decision_tick(old_nation, new_nation, schema, pending_tiles=None):
+def ai_decision_tick(old_nation, new_nation, schema, pending_tiles=None, world_city_coords=None):
     """
     Main per-nation AI tick — goal-first architecture.
     Must run AFTER nation_job_cleanup_tick in NATION_TICK_FUNCTIONS.
@@ -4133,6 +4510,13 @@ def ai_decision_tick(old_nation, new_nation, schema, pending_tiles=None):
     pending_tiles: forwarded to evaluate_goal_district so any district/city
     tile claim this nation makes is deferred to the tick's commit phase
     instead of written immediately — see _queue_tile_write.
+
+    world_city_coords: forwarded to evaluate_goal_district — every (q, r)
+    anywhere on the map holding a city, shared and mutated across every
+    nation processed in the same tick run so a new city always respects the
+    minimum distance rule against the whole world, not just its own
+    territory, without querying per nation. See tick_helpers.tick()'s "AI
+    Decision Tick" dispatch for where this is built once per tick.
 
     Flow:
       1. Evaluate state, personality, prices
@@ -4216,7 +4600,7 @@ def ai_decision_tick(old_nation, new_nation, schema, pending_tiles=None):
         district_plan, district_scores, district_log, upkeep_assignments, goal = evaluate_goal_district(
             old_nation, new_nation, state, goal, need_weights,
             market_prices, upkeep_assignments, log, dry_run=False,
-            pending_tiles=pending_tiles,
+            pending_tiles=pending_tiles, world_city_coords=world_city_coords,
         )
 
         # Re-compute upkeep floor with final state (districts may have changed available jobs)

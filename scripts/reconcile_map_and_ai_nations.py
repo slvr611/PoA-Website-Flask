@@ -78,12 +78,25 @@ def _all_tiles_by_owner():
     return by_owner
 
 
+def _world_city_coords_from_tiles_by_owner(tiles_by_owner):
+    """Derive the world-wide city-coordinate set straight from the already
+    batch-fetched tiles_by_owner instead of an extra query."""
+    coords = set()
+    for tiles in tiles_by_owner.values():
+        for t in tiles:
+            city = t.get("city")
+            if isinstance(city, dict) and city.get("id"):
+                coords.add((t["q"], t["r"]))
+    return coords
+
+
 def main():
     apply = "--apply" in sys.argv
 
     player_ids = _player_nation_ids()
     ai_nations = list(mongo.db.nations.find({"_id": {"$nin": list(player_ids)}}).sort("name", 1))
     tiles_by_owner = _all_tiles_by_owner()
+    world_city_coords = _world_city_coords_from_tiles_by_owner(tiles_by_owner)
 
     print(f"{len(ai_nations)} AI nations. {'APPLYING' if apply else 'DRY RUN — nothing written'}\n")
 
@@ -101,7 +114,10 @@ def main():
         tiles_with_city = [t for t in owned if t.get("city")]
 
         d_report = sync_nation_districts(n, dry_run=not apply, tiles_with_district=tiles_with_district, owned_tiles=owned)
-        c_report = sync_nation_cities(n, dry_run=not apply, tiles_with_city=tiles_with_city, owned_tiles=owned)
+        c_report = sync_nation_cities(
+            n, dry_run=not apply, tiles_with_city=tiles_with_city, owned_tiles=owned,
+            world_city_coords=world_city_coords,
+        )
 
         touched = any(d_report[k] for k in ("added_to_nation", "placed_on_map", "unplaceable")) or \
             any(c_report[k] for k in ("added_to_nation", "placed_on_map", "unplaceable"))

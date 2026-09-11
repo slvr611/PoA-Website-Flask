@@ -8,6 +8,7 @@ from helpers.ai_decision_helpers import (
     ai_decision_tick, ai_market_matching_tick, market_price_tick,
     run_ai_market_matching_standalone,
     _load_district_defs_cache, _clear_district_defs_cache,
+    _fetch_world_city_coords,
 )
 from helpers.mech_rp_helpers import ai_mech_rp_tick
 from helpers.trade_route_helpers import run_trade_route_lifecycle, _current_session as _tr_current_session
@@ -720,6 +721,15 @@ def tick(form_data):
                 is_ai_tick = tick_function_label == "AI Decision Tick"
                 if is_ai_tick:
                     _load_district_defs_cache()
+                # Same one-query-instead-of-per-nation idea for the minimum
+                # city distance rule: every nation's new-city decision needs
+                # to see every OTHER nation's cities too, not just its own
+                # territory. Built once here, then mutated in place by
+                # _select_best_city/evaluate_goal_district as each nation
+                # actually places a city, so later nations in this same loop
+                # see it immediately even though the real DB write is
+                # deferred to pending_tiles until the tick's commit phase.
+                world_city_coords = _fetch_world_city_coords() if is_ai_tick else None
                 try:
                     for i in range(len(old_nations)):
                         # Stasis blocks every tick function except modifier decay, so
@@ -732,7 +742,10 @@ def tick(form_data):
                         if tick_function is not modifier_decay_tick and _undead_horde_tick_blocked(old_nations[i], tick_function_label):
                             continue
                         _flee_events_before = len(flee_events)
-                        result = _dispatch(tick_function, pending, old_nations[i], new_nations[i], nation_schema, pending_tiles=pending_tiles, flee_events=flee_events)
+                        result = _dispatch(
+                            tick_function, pending, old_nations[i], new_nations[i], nation_schema,
+                            pending_tiles=pending_tiles, flee_events=flee_events, world_city_coords=world_city_coords,
+                        )
                         fled_to_a_player_nation = any(
                             e.get("to_temperament") == "Player" for e in flee_events[_flee_events_before:]
                         )
@@ -3946,11 +3959,21 @@ _FLEE_EVENT_AWARE_TICK_FUNCTIONS = {
     pop_flee_tick,
 }
 
+# Separate registry, same reasoning, for functions that choose NEW city
+# tiles and need to see every city on the map (any owner) to respect
+# ai_decision_helpers.MIN_CITY_TILE_DISTANCE — see tick()'s "AI Decision
+# Tick" dispatch for where the shared, mutated-in-place coordinate set is
+# built once per tick run instead of once per nation.
+_WORLD_CITY_COORDS_AWARE_TICK_FUNCTIONS = {
+    ai_decision_tick,
+}
 
-def _dispatch(tick_function, pending, *args, pending_tiles=None, flee_events=None):
+
+def _dispatch(tick_function, pending, *args, pending_tiles=None, flee_events=None, world_city_coords=None):
     """Call a registered tick function, binding `pending`/`pending_tiles`/
-    `flee_events` in only if that function is registered for them — every
-    other tick function's call signature is completely unaffected."""
+    `flee_events`/`world_city_coords` in only if that function is registered
+    for them — every other tick function's call signature is completely
+    unaffected."""
     kwargs = {}
     if tick_function in _PENDING_AWARE_TICK_FUNCTIONS:
         kwargs["pending"] = pending
@@ -3958,6 +3981,8 @@ def _dispatch(tick_function, pending, *args, pending_tiles=None, flee_events=Non
         kwargs["pending_tiles"] = pending_tiles
     if tick_function in _FLEE_EVENT_AWARE_TICK_FUNCTIONS:
         kwargs["flee_events"] = flee_events
+    if tick_function in _WORLD_CITY_COORDS_AWARE_TICK_FUNCTIONS:
+        kwargs["world_city_coords"] = world_city_coords
     if kwargs:
         return functools.partial(tick_function, **kwargs)(*args)
     return tick_function(*args)

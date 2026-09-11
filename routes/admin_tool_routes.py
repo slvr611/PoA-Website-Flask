@@ -1174,6 +1174,19 @@ def _all_tiles_by_owner():
     return by_owner
 
 
+def _world_city_coords_from_tiles_by_owner(tiles_by_owner):
+    """Derive the world-wide city-coordinate set straight from an already
+    batch-fetched tiles_by_owner (see _all_tiles_by_owner) instead of an
+    extra query — its projection already includes "city"."""
+    coords = set()
+    for tiles in tiles_by_owner.values():
+        for t in tiles:
+            city = t.get("city")
+            if isinstance(city, dict) and city.get("id"):
+                coords.add((t["q"], t["r"]))
+    return coords
+
+
 @admin_tool_routes.route("/admin/sync_cities", methods=["GET"])
 @admin_required
 def sync_cities_preview():
@@ -1183,11 +1196,14 @@ def sync_cities_preview():
     player_ids = _get_player_nation_ids()
     ai_nations = list(mongo.db.nations.find({"_id": {"$nin": list(player_ids)}}).sort("name", ASCENDING))
     tiles_by_owner = _all_tiles_by_owner()
+    world_city_coords = _world_city_coords_from_tiles_by_owner(tiles_by_owner)
 
     reports = []
     for n in ai_nations:
         owned = tiles_by_owner.get(n.get("name", ""), [])
-        report = sync_nation_cities(n, dry_run=True, tiles_with_city=owned, owned_tiles=owned)
+        report = sync_nation_cities(
+            n, dry_run=True, tiles_with_city=owned, owned_tiles=owned, world_city_coords=world_city_coords,
+        )
         if report["added_to_nation"] or report["placed_on_map"] or report["unplaceable"]:
             reports.append(report)
 
@@ -1204,11 +1220,14 @@ def sync_cities_apply():
     player_ids = _get_player_nation_ids()
     ai_nations = list(mongo.db.nations.find({"_id": {"$nin": list(player_ids)}}))
     tiles_by_owner = _all_tiles_by_owner()
+    world_city_coords = _world_city_coords_from_tiles_by_owner(tiles_by_owner)
 
     total_add = total_place = total_unplaceable = 0
     for n in ai_nations:
         owned = tiles_by_owner.get(n.get("name", ""), [])
-        report = sync_nation_cities(n, dry_run=False, tiles_with_city=owned, owned_tiles=owned)
+        report = sync_nation_cities(
+            n, dry_run=False, tiles_with_city=owned, owned_tiles=owned, world_city_coords=world_city_coords,
+        )
         total_add += len(report["added_to_nation"])
         total_place += len(report["placed_on_map"])
         total_unplaceable += len(report["unplaceable"])
@@ -1268,6 +1287,52 @@ def sync_districts_apply():
     msg = f"Synced districts: {total_add} added to nation pages, {total_place} placed on the map."
     if total_unplaceable:
         msg += f" {total_unplaceable} could not be placed (no legal tile)."
+    flash(msg, "success")
+    return redirect(url_for("admin_tool_routes.admin_tools"))
+
+
+@admin_tool_routes.route("/admin/fix_city_placement", methods=["GET"])
+@admin_required
+def fix_city_placement_preview():
+    """Read-only preview of the city-distance and capital-recentering correction pass."""
+    from helpers.ai_decision_helpers import fix_city_and_capital_placement
+
+    player_ids = _get_player_nation_ids()
+    all_nations = list(mongo.db.nations.find())
+    tiles_by_owner = _all_tiles_by_owner()
+
+    report = fix_city_and_capital_placement(
+        dry_run=True, tiles_by_owner=tiles_by_owner, all_nations=all_nations, player_nation_ids=player_ids,
+    )
+    return render_template("fix_city_placement.html", report=report)
+
+
+@admin_tool_routes.route("/admin/fix_city_placement/apply", methods=["POST"])
+@admin_required
+def fix_city_placement_apply():
+    """Apply the city-distance and capital-recentering correction pass for all non-player nations."""
+    from helpers.ai_decision_helpers import fix_city_and_capital_placement
+    from helpers.hex_map_helpers import bump_tile_version
+
+    player_ids = _get_player_nation_ids()
+    all_nations = list(mongo.db.nations.find())
+    tiles_by_owner = _all_tiles_by_owner()
+
+    report = fix_city_and_capital_placement(
+        dry_run=False, tiles_by_owner=tiles_by_owner, all_nations=all_nations, player_nation_ids=player_ids,
+    )
+
+    if report["moved"] or report["capitals_recentered"]:
+        bump_tile_version()
+
+    msg = (
+        f"Fixed city placement: {len(report['moved'])} AI city/cities relocated, "
+        f"{len(report['capitals_recentered'])} capital(s) recentered/cleaned up."
+    )
+    if report["unplaceable"]:
+        msg += f" {len(report['unplaceable'])} AI city/cities could not be relocated (no legal tile)."
+    if report["flagged_player"]:
+        msg += f" {len(report['flagged_player'])} player-owned city/cities flagged for manual review (not moved)."
     flash(msg, "success")
     return redirect(url_for("admin_tool_routes.admin_tools"))
 

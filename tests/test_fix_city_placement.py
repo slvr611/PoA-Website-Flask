@@ -1,0 +1,290 @@
+"""
+Tests for helpers.ai_decision_helpers.fix_city_and_capital_placement — the
+admin tool that:
+
+1. Enforces a minimum 3-tile hex distance between every pair of cities on
+   the map, regardless of owner (including two cities of the SAME nation).
+   AI-owned violators are relocated using the same node/admin-range scoring
+   the AI uses when building a new city; player-owned cities are NEVER
+   moved and are instead flagged for manual review.
+2. Recenters each AI nation's capital onto whichever of its own cities is
+   most central (lowest sum of hex distance to its other cities, ties
+   broken by preferring a city with a resource/magic node), collapsing any
+   duplicate or orphaned capital flags. Player nations' capitals are never
+   touched, and nomadic nations (cities never touch the map) are skipped.
+"""
+from unittest.mock import MagicMock, patch
+from bson import ObjectId
+
+import helpers.ai_decision_helpers as adh
+from helpers.hex_map_helpers import hex_distance
+
+MIN_DIST = adh.MIN_CITY_TILE_DISTANCE
+
+
+def _nation(name, administration=3, government_type="Fallen Monarchy"):
+    return {
+        "_id": ObjectId(), "name": name, "administration": administration,
+        "government_type": government_type,
+        "resource_production": {}, "resource_consumption": {}, "resource_excess": {},
+        "resource_storage": {}, "jobs": {}, "job_details": {}, "money": 0,
+        "money_income": 0, "region": "",
+    }
+
+
+def _tile(q, r, owner, city=None, capital=False, node=None, terrain="plains"):
+    return {
+        "_id": ObjectId(), "q": q, "r": r, "terrain": terrain, "owner": owner,
+        "city": city, "capital": capital, "node": node,
+    }
+
+
+def _city(city_id, city_type="generic", name=""):
+    return {"id": city_id, "type": city_type, "name": name}
+
+
+def _grid_tiles(owner, size=4, exclude=()):
+    """Every (q, r) in [-size, size]^2 except `exclude`, owned by `owner`."""
+    tiles = []
+    for q in range(-size, size + 1):
+        for r in range(-size, size + 1):
+            if (q, r) in exclude:
+                continue
+            tiles.append(_tile(q, r, owner))
+    return tiles
+
+
+class TestSameNationDistanceViolation:
+    def test_second_city_relocates_away_from_the_first(self):
+        alpha = _nation("Alpha")
+        tiles = _grid_tiles("Alpha", size=5, exclude={(0, 0), (1, 0)})
+        tiles.append(_tile(0, 0, "Alpha", city=_city("city_a"), capital=True))
+        tiles.append(_tile(1, 0, "Alpha", city=_city("city_b")))
+        tiles_by_owner = {"Alpha": tiles}
+
+        report = adh.fix_city_and_capital_placement(
+            dry_run=True, tiles_by_owner=tiles_by_owner,
+            all_nations=[alpha], player_nation_ids=set(),
+        )
+
+        assert len(report["moved"]) == 1
+        moved = report["moved"][0]
+        assert moved["nation"] == "Alpha"
+        assert moved["id"] == "city_b"
+        assert tuple(moved["from"]) == (1, 0)
+        new_coord = tuple(moved["to"])
+        assert hex_distance(new_coord[0], new_coord[1], 0, 0) >= MIN_DIST
+        assert not report["unplaceable"]
+        assert not report["flagged_player"]
+
+
+class TestCrossNationDistanceViolation:
+    def test_ai_city_relocates_away_from_player_city_which_stays_put(self):
+        player_nation = _nation("PlayerNation")
+        ai_nation = _nation("Alpha")
+        player_tiles = _grid_tiles("PlayerNation", size=2)
+        player_tiles.append(_tile(0, 0, "PlayerNation", city=_city("player_city"), capital=True))
+        ai_tiles = _grid_tiles("Alpha", size=5, exclude={(0, 0), (1, 0)})
+        ai_tiles.append(_tile(1, 0, "Alpha", city=_city("ai_city")))
+        tiles_by_owner = {"PlayerNation": player_tiles, "Alpha": ai_tiles}
+
+        report = adh.fix_city_and_capital_placement(
+            dry_run=True, tiles_by_owner=tiles_by_owner,
+            all_nations=[player_nation, ai_nation],
+            player_nation_ids={player_nation["_id"]},
+        )
+
+        assert len(report["moved"]) == 1
+        assert report["moved"][0]["nation"] == "Alpha"
+        assert report["moved"][0]["id"] == "ai_city"
+        assert not report["flagged_player"], "player city should not be flagged once the AI side moved away"
+
+
+class TestPlayerVsPlayerViolationIsOnlyFlagged:
+    def test_neither_player_city_moves_both_are_flagged(self):
+        p1 = _nation("PlayerOne")
+        p2 = _nation("PlayerTwo")
+        tiles1 = _grid_tiles("PlayerOne", size=2)
+        tiles1.append(_tile(0, 0, "PlayerOne", city=_city("p1_city"), capital=True))
+        tiles2 = _grid_tiles("PlayerTwo", size=2)
+        tiles2.append(_tile(1, 0, "PlayerTwo", city=_city("p2_city"), capital=True))
+        tiles_by_owner = {"PlayerOne": tiles1, "PlayerTwo": tiles2}
+
+        report = adh.fix_city_and_capital_placement(
+            dry_run=True, tiles_by_owner=tiles_by_owner,
+            all_nations=[p1, p2], player_nation_ids={p1["_id"], p2["_id"]},
+        )
+
+        assert not report["moved"]
+        assert not report["unplaceable"]
+        flagged_ids = {f["id"] for f in report["flagged_player"]}
+        assert flagged_ids == {"p1_city", "p2_city"}
+
+
+class TestUnplaceableWhenNoLegalTileExists:
+    def test_ai_city_stays_and_is_reported_unplaceable(self):
+        """Alpha's entire territory is just the two conflicting city tiles —
+        there's no empty tile anywhere for city_b to relocate to."""
+        alpha = _nation("Alpha")
+        tiles = [
+            _tile(0, 0, "Alpha", city=_city("city_a"), capital=True),
+            _tile(1, 0, "Alpha", city=_city("city_b")),
+        ]
+        tiles_by_owner = {"Alpha": tiles}
+
+        report = adh.fix_city_and_capital_placement(
+            dry_run=True, tiles_by_owner=tiles_by_owner,
+            all_nations=[alpha], player_nation_ids=set(),
+        )
+
+        assert not report["moved"]
+        assert len(report["unplaceable"]) == 1
+        assert report["unplaceable"][0]["id"] == "city_b"
+
+
+class TestCapitalRecentering:
+    def test_capital_moves_to_the_most_central_city(self):
+        alpha = _nation("Alpha")
+        # Cities along a line: (-6,0), (0,0), (6,0). (0,0) is most central.
+        tiles = [
+            _tile(-6, 0, "Alpha", city=_city("west"), capital=True),
+            _tile(0, 0, "Alpha", city=_city("center")),
+            _tile(6, 0, "Alpha", city=_city("east")),
+        ]
+        tiles_by_owner = {"Alpha": tiles}
+
+        report = adh.fix_city_and_capital_placement(
+            dry_run=True, tiles_by_owner=tiles_by_owner,
+            all_nations=[alpha], player_nation_ids=set(),
+        )
+
+        assert len(report["capitals_recentered"]) == 1
+        rec = report["capitals_recentered"][0]
+        assert rec["nation"] == "Alpha"
+        assert tuple(rec["new_capital"]) == (0, 0)
+        assert rec["previous_capitals"] == [[-6, 0]]
+
+    def test_ties_prefer_a_city_with_a_node(self):
+        alpha = _nation("Alpha")
+        # With exactly 2 cities, centrality (sum of distance to the nation's
+        # OTHER cities) is always tied between them — the node tie-break
+        # is what decides it.
+        tiles = [
+            _tile(-3, 0, "Alpha", city=_city("no_node"), capital=True),
+            _tile(3, 0, "Alpha", city=_city("has_node"), node={"resource_type": "iron"}),
+        ]
+        tiles_by_owner = {"Alpha": tiles}
+
+        report = adh.fix_city_and_capital_placement(
+            dry_run=True, tiles_by_owner=tiles_by_owner,
+            all_nations=[alpha], player_nation_ids=set(),
+        )
+
+        rec = report["capitals_recentered"][0]
+        assert tuple(rec["new_capital"]) == (3, 0)
+
+    def test_duplicate_capitals_collapse_to_one(self):
+        alpha = _nation("Alpha")
+        tiles = [
+            _tile(0, 0, "Alpha", city=_city("a"), capital=True),
+            _tile(10, 0, "Alpha", city=_city("b"), capital=True),
+        ]
+        tiles_by_owner = {"Alpha": tiles}
+
+        report = adh.fix_city_and_capital_placement(
+            dry_run=True, tiles_by_owner=tiles_by_owner,
+            all_nations=[alpha], player_nation_ids=set(),
+        )
+
+        assert len(report["capitals_recentered"]) == 1
+        rec = report["capitals_recentered"][0]
+        assert rec["had_duplicates"] is True
+        assert sorted(rec["previous_capitals"]) == [[0, 0], [10, 0]]
+
+    def test_already_correct_single_capital_is_left_alone(self):
+        alpha = _nation("Alpha")
+        tiles = [_tile(0, 0, "Alpha", city=_city("only"), capital=True)]
+        tiles_by_owner = {"Alpha": tiles}
+
+        report = adh.fix_city_and_capital_placement(
+            dry_run=True, tiles_by_owner=tiles_by_owner,
+            all_nations=[alpha], player_nation_ids=set(),
+        )
+
+        assert report["capitals_recentered"] == []
+
+    def test_player_nation_capital_is_never_touched(self):
+        player = _nation("PlayerNation")
+        tiles = [
+            _tile(-6, 0, "PlayerNation", city=_city("west"), capital=True),
+            _tile(0, 0, "PlayerNation", city=_city("center")),
+            _tile(6, 0, "PlayerNation", city=_city("east")),
+        ]
+        tiles_by_owner = {"PlayerNation": tiles}
+
+        report = adh.fix_city_and_capital_placement(
+            dry_run=True, tiles_by_owner=tiles_by_owner,
+            all_nations=[player], player_nation_ids={player["_id"]},
+        )
+
+        assert report["capitals_recentered"] == []
+
+    def test_nomadic_nation_is_skipped(self):
+        """Nomadic nations' cities never touch the map — nothing here to
+        recenter even though capital flags exist on paper."""
+        from app_core import category_data
+        laws = category_data["nations"]["schema"]["properties"]["government_type"]["laws"]
+        nomadic_gov = next((k for k, v in laws.items() if v.get("nomadic", 0) > 0), None)
+        assert nomadic_gov, "expected at least one nomadic government type in nations.json"
+
+        alpha = _nation("Alpha", government_type=nomadic_gov)
+        tiles = [
+            _tile(-6, 0, "Alpha", city=_city("west"), capital=True),
+            _tile(0, 0, "Alpha", city=_city("center")),
+        ]
+        tiles_by_owner = {"Alpha": tiles}
+
+        report = adh.fix_city_and_capital_placement(
+            dry_run=True, tiles_by_owner=tiles_by_owner,
+            all_nations=[alpha], player_nation_ids=set(),
+        )
+
+        assert report["capitals_recentered"] == []
+
+
+class TestApplyWritesToTheDatabase:
+    def test_dry_run_false_persists_the_move_and_capital_change(self, test_db):
+        alpha = {
+            "_id": ObjectId(), "name": "Alpha", "administration": 3,
+            "government_type": "Fallen Monarchy",
+            "resource_production": {}, "resource_consumption": {}, "resource_excess": {},
+            "resource_storage": {}, "jobs": {}, "job_details": {}, "money": 0,
+            "money_income": 0, "region": "",
+        }
+        test_db["nations"].insert_one(alpha)
+
+        raw_tiles = _grid_tiles("Alpha", size=5, exclude={(0, 0), (1, 0)})
+        raw_tiles.append(_tile(0, 0, "Alpha", city=_city("city_a"), capital=True))
+        raw_tiles.append(_tile(1, 0, "Alpha", city=_city("city_b")))
+        for t in raw_tiles:
+            test_db["hex_map_tiles"].insert_one(t)
+        tiles_by_owner = {"Alpha": list(test_db["hex_map_tiles"].find({"owner": "Alpha"}))}
+
+        with patch.object(adh, "mongo", MagicMock(db=test_db)):
+            report = adh.fix_city_and_capital_placement(
+                dry_run=False, tiles_by_owner=tiles_by_owner,
+                all_nations=[alpha], player_nation_ids=set(),
+            )
+
+        assert len(report["moved"]) == 1
+        old_tile = test_db["hex_map_tiles"].find_one({"q": 1, "r": 0})
+        assert not old_tile.get("city")
+        new_q, new_r = report["moved"][0]["to"]
+        new_tile = test_db["hex_map_tiles"].find_one({"q": new_q, "r": new_r})
+        assert new_tile["city"]["id"] == "city_b"
+
+        if report["capitals_recentered"]:
+            rec = report["capitals_recentered"][0]
+            new_cap_q, new_cap_r = rec["new_capital"]
+            cap_tile = test_db["hex_map_tiles"].find_one({"q": new_cap_q, "r": new_cap_r})
+            assert cap_tile.get("capital") is True

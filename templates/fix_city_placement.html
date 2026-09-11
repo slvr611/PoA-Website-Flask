@@ -1,0 +1,139 @@
+{% extends "layout.html" %}
+{% block title %}Fix City Placement{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1>Fix City Placement</h1>
+    <p class="text-muted" style="margin-bottom:1rem;">
+        Enforces a minimum distance of 3 tiles between every pair of cities on the map, regardless of owner.
+        AI-owned cities that violate this are relocated using the same node/admin-range scoring the AI uses
+        when building a new city; player-owned cities are never moved, only flagged below for manual review.
+        Afterward, each AI nation's capital is moved onto whichever of its own cities is most central
+        (preferring one with a node), and any duplicate or orphaned capital flags are cleared. Player
+        nations' capitals are never touched.
+    </p>
+
+    {% set total_changes = report.moved|length + report.capitals_recentered|length %}
+    <div style="display:flex;gap:1rem;margin-bottom:1.5rem;align-items:center;">
+        <form action="/admin/fix_city_placement/apply" method="POST">
+            <button type="submit" class="btn btn-primary"
+                    onclick="return confirm('Apply {{ report.moved|length }} city relocation(s) and {{ report.capitals_recentered|length }} capital change(s)? This cannot be undone.')"
+                    {% if not total_changes %}disabled{% endif %}>
+                Apply Fix ({{ report.moved|length }} relocation(s), {{ report.capitals_recentered|length }} capital change(s))
+            </button>
+        </form>
+        <a href="/admin_tools" class="btn btn-secondary">Back</a>
+    </div>
+
+    <h2 style="font-size:1.1rem;">Relocated AI Cities</h2>
+    {% if not report.moved %}
+    <p class="text-muted">No AI cities violate the minimum distance rule.</p>
+    {% else %}
+    <div style="overflow-x:auto;margin-bottom:1.5rem;">
+        <table class="info-table" style="font-size:0.85rem;">
+            <thead>
+                <tr>
+                    <th>Nation</th><th>City</th><th>From</th><th>To</th><th>Rationale</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in report.moved %}
+                <tr>
+                    <td><a href="/nations/item/{{ c.nation }}" target="_blank">{{ c.nation }}</a></td>
+                    <td>{{ c.name or "(unnamed)" }} <span class="text-muted">({{ c.type }})</span></td>
+                    <td>({{ c.from[0] }}, {{ c.from[1] }})</td>
+                    <td>({{ c.to[0] }}, {{ c.to[1] }})</td>
+                    <td class="text-muted">{{ c.rationale }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    <h2 style="font-size:1.1rem;">Unplaceable AI Cities <span class="text-muted">(no legal tile satisfies the distance rule)</span></h2>
+    {% if not report.unplaceable %}
+    <p class="text-muted">None.</p>
+    {% else %}
+    <div style="overflow-x:auto;margin-bottom:1.5rem;">
+        <table class="info-table" style="font-size:0.85rem;">
+            <thead>
+                <tr><th>Nation</th><th>City</th><th>Coord</th><th>Conflicts With</th></tr>
+            </thead>
+            <tbody>
+                {% for c in report.unplaceable %}
+                <tr>
+                    <td><a href="/nations/item/{{ c.nation }}" target="_blank">{{ c.nation }}</a></td>
+                    <td>{{ c.name or "(unnamed)" }} <span class="text-muted">({{ c.type }})</span></td>
+                    <td>({{ c.coord[0] }}, {{ c.coord[1] }})</td>
+                    <td style="color:#c8a96e;">
+                        {% for x in c.conflicts %}
+                        <div>{{ x.nation }} at ({{ x.coord[0] }}, {{ x.coord[1] }})</div>
+                        {% endfor %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    <h2 style="font-size:1.1rem;">Flagged Player Cities <span class="text-muted">(never moved — review manually)</span></h2>
+    {% if not report.flagged_player %}
+    <p class="text-muted">None.</p>
+    {% else %}
+    <div style="overflow-x:auto;margin-bottom:1.5rem;">
+        <table class="info-table" style="font-size:0.85rem;">
+            <thead>
+                <tr><th>Nation</th><th>City</th><th>Coord</th><th>Conflicts With</th></tr>
+            </thead>
+            <tbody>
+                {% for c in report.flagged_player %}
+                <tr>
+                    <td><a href="/nations/item/{{ c.nation }}" target="_blank">{{ c.nation }}</a></td>
+                    <td>{{ c.name or "(unnamed)" }} <span class="text-muted">({{ c.type }})</span></td>
+                    <td>({{ c.coord[0] }}, {{ c.coord[1] }})</td>
+                    <td style="color:#c8a96e;">
+                        {% for x in c.conflicts %}
+                        <div>{{ x.nation }} at ({{ x.coord[0] }}, {{ x.coord[1] }})</div>
+                        {% endfor %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    <h2 style="font-size:1.1rem;">Capitals Recentered / Cleaned Up</h2>
+    {% if not report.capitals_recentered %}
+    <p class="text-muted">Every AI nation's capital is already on its most central city, with no duplicates.</p>
+    {% else %}
+    <div style="overflow-x:auto;">
+        <table class="info-table" style="font-size:0.85rem;">
+            <thead>
+                <tr><th>Nation</th><th>Previous Capital(s)</th><th>New Capital</th><th>Had Duplicates?</th></tr>
+            </thead>
+            <tbody>
+                {% for c in report.capitals_recentered %}
+                <tr>
+                    <td><a href="/nations/item/{{ c.nation }}" target="_blank">{{ c.nation }}</a></td>
+                    <td>
+                        {% if c.previous_capitals %}
+                        {% for p in c.previous_capitals %}
+                        <div>({{ p[0] }}, {{ p[1] }})</div>
+                        {% endfor %}
+                        {% else %}
+                        <span class="text-muted">none</span>
+                        {% endif %}
+                    </td>
+                    <td>{% if c.new_capital %}({{ c.new_capital[0] }}, {{ c.new_capital[1] }}){% else %}<span class="text-muted">none</span>{% endif %}</td>
+                    <td>{{ "Yes" if c.had_duplicates else "No" }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
