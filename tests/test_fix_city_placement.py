@@ -32,10 +32,10 @@ def _nation(name, administration=3, government_type="Fallen Monarchy"):
     }
 
 
-def _tile(q, r, owner, city=None, capital=False, node=None, terrain="plains"):
+def _tile(q, r, owner, city=None, capital=False, node=None, terrain="plains", district=None, wonder=None):
     return {
         "_id": ObjectId(), "q": q, "r": r, "terrain": terrain, "owner": owner,
-        "city": city, "capital": capital, "node": node,
+        "city": city, "capital": capital, "node": node, "district": district, "wonder": wonder,
     }
 
 
@@ -464,6 +464,130 @@ class TestNationsWithNoCitiesStillGetACapital:
         tile = test_db["hex_map_tiles"].find_one({"q": new_q, "r": new_r})
         assert tile.get("capital") is True
         assert test_db["hex_map_tiles"].count_documents({"owner": "Alpha", "capital": True}) == 1
+
+
+class TestCapitalNeverPlacedOnAnExistingDistrict:
+    """A capital hex may only ever be built on with a city, never a
+    district (_compute_legal_placement's own rule) — so a capital-flagged
+    tile that already has a district on it is invalid and must be moved,
+    even when it's the nation's only capital and there are no cities at
+    all. This only matters in the "capital exists, no cities" branch of
+    Pass 2 — once a nation has any city, capital recentering only ever
+    picks among its own city tiles, none of which could hold a district."""
+
+    def test_single_capital_sitting_on_a_district_is_moved_to_a_clean_tile(self):
+        alpha = _nation("Alpha")
+        tiles = _grid_tiles("Alpha", size=2, exclude={(0, 0)})
+        tiles.append(_tile(0, 0, "Alpha", capital=True, district={"id": "d1", "def_key": "farm"}))
+        tiles_by_owner = {"Alpha": tiles}
+
+        report = adh.fix_city_and_capital_placement(
+            dry_run=True, tiles_by_owner=tiles_by_owner,
+            all_nations=[alpha], player_nation_ids=set(),
+        )
+
+        assert len(report["capitals_recentered"]) == 1
+        rec = report["capitals_recentered"][0]
+        assert rec["previous_capitals"] == [[0, 0]]
+        assert rec["new_capital"] != [0, 0]
+
+    def test_single_capital_on_a_wonder_is_also_moved(self):
+        alpha = _nation("Alpha")
+        tiles = _grid_tiles("Alpha", size=2, exclude={(0, 0)})
+        tiles.append(_tile(0, 0, "Alpha", capital=True, wonder={"id": "w1", "def_key": "great_library"}))
+        tiles_by_owner = {"Alpha": tiles}
+
+        report = adh.fix_city_and_capital_placement(
+            dry_run=True, tiles_by_owner=tiles_by_owner,
+            all_nations=[alpha], player_nation_ids=set(),
+        )
+
+        rec = report["capitals_recentered"][0]
+        assert rec["new_capital"] != [0, 0]
+
+    def test_duplicate_capitals_prefers_the_one_without_a_district(self):
+        alpha = _nation("Alpha")
+        tiles = _grid_tiles("Alpha", size=3, exclude={(0, 0), (2, 0)})
+        tiles.append(_tile(0, 0, "Alpha", capital=True, district={"id": "d1", "def_key": "farm"}))
+        tiles.append(_tile(2, 0, "Alpha", capital=True))  # clean
+        tiles_by_owner = {"Alpha": tiles}
+
+        report = adh.fix_city_and_capital_placement(
+            dry_run=True, tiles_by_owner=tiles_by_owner,
+            all_nations=[alpha], player_nation_ids=set(),
+        )
+
+        rec = report["capitals_recentered"][0]
+        assert rec["new_capital"] == [2, 0]
+        assert rec["had_duplicates"] is True
+
+    def test_all_duplicate_capitals_on_districts_falls_back_to_a_fresh_tile(self):
+        alpha = _nation("Alpha")
+        tiles = _grid_tiles("Alpha", size=3, exclude={(0, 0), (2, 0)})
+        tiles.append(_tile(0, 0, "Alpha", capital=True, district={"id": "d1", "def_key": "farm"}))
+        tiles.append(_tile(2, 0, "Alpha", capital=True, district={"id": "d2", "def_key": "mine"}))
+        tiles_by_owner = {"Alpha": tiles}
+
+        report = adh.fix_city_and_capital_placement(
+            dry_run=True, tiles_by_owner=tiles_by_owner,
+            all_nations=[alpha], player_nation_ids=set(),
+        )
+
+        rec = report["capitals_recentered"][0]
+        assert rec["new_capital"] not in ([0, 0], [2, 0])
+        assert rec["had_duplicates"] is True
+
+    def test_no_capital_at_all_never_falls_back_onto_a_district_tile(self):
+        """The general fallback picker (no capital, no city at all) must
+        also skip district/wonder tiles, not just water."""
+        alpha = _nation("Alpha")
+        tiles = [
+            _tile(0, 0, "Alpha", district={"id": "d1", "def_key": "farm"}),
+            _tile(1, 0, "Alpha"),  # only genuinely empty tile
+        ]
+        tiles_by_owner = {"Alpha": tiles}
+
+        report = adh.fix_city_and_capital_placement(
+            dry_run=True, tiles_by_owner=tiles_by_owner,
+            all_nations=[alpha], player_nation_ids=set(),
+        )
+
+        rec = report["capitals_recentered"][0]
+        assert rec["new_capital"] == [1, 0]
+
+    def test_dry_run_false_persists_moving_off_a_district_tile(self, test_db):
+        alpha_id = ObjectId()
+        alpha = {
+            "_id": alpha_id, "name": "Alpha", "administration": 3,
+            "government_type": "Fallen Monarchy",
+            "resource_production": {}, "resource_consumption": {}, "resource_excess": {},
+            "resource_storage": {}, "jobs": {}, "job_details": {}, "money": 0,
+            "money_income": 0, "region": "",
+        }
+        test_db["nations"].insert_one(alpha)
+        raw_tiles = _grid_tiles("Alpha", size=2, exclude={(0, 0)})
+        raw_tiles.append(_tile(0, 0, "Alpha", capital=True, district={"id": "d1", "def_key": "farm"}))
+        for t in raw_tiles:
+            test_db["hex_map_tiles"].insert_one(t)
+        tiles_by_owner = {"Alpha": list(test_db["hex_map_tiles"].find({"owner": "Alpha"}))}
+
+        with patch.object(adh, "mongo", MagicMock(db=test_db)):
+            report = adh.fix_city_and_capital_placement(
+                dry_run=False, tiles_by_owner=tiles_by_owner,
+                all_nations=[alpha], player_nation_ids=set(),
+            )
+
+        rec = report["capitals_recentered"][0]
+        new_q, new_r = rec["new_capital"]
+        assert (new_q, new_r) != (0, 0)
+
+        old_tile = test_db["hex_map_tiles"].find_one({"q": 0, "r": 0})
+        assert not old_tile.get("capital")
+        assert old_tile.get("district")  # the district itself is untouched
+
+        new_tile = test_db["hex_map_tiles"].find_one({"q": new_q, "r": new_r})
+        assert new_tile.get("capital") is True
+        assert not new_tile.get("district")
 
 
 class TestApplyWritesToTheDatabase:
