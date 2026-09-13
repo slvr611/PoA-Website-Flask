@@ -425,7 +425,12 @@ def _unit_types_for_nation(nation, nation_id_str):
             if not count:
                 continue
 
-            details = details_map.get(unit_name, {})
+            details = details_map.get(unit_name)
+            if details is None:
+                # Unit no longer meets its requirements (e.g. the district
+                # it needs was dismantled) — drop it instead of emitting a
+                # phantom entry with a real troop count but 0 stats.
+                continue
             base_name = details.get("base_name", unit_name)
             era = details.get("era", "")
 

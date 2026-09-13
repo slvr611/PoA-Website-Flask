@@ -216,6 +216,13 @@ def compute_working_pop_count(field, target, base_value, field_schema, overall_t
     if not workers_assigned:
         return 0
 
+    # job_details only contains jobs that currently meet their requirements
+    # (e.g. still have the district they need) — exclude the rest so pops
+    # stuck on a now-inaccessible job stop counting as "working".
+    job_details = target.get("job_details")
+    if job_details is not None:
+        workers_assigned = {job: count for job, count in workers_assigned.items() if job in job_details}
+
     value = sum(workers_assigned.values())
     if value is None:
         value = 0
@@ -434,7 +441,15 @@ def compute_unit_count(field, target, base_value, field_schema, overall_total_mo
 
     if not units_assigned:
         return 0
-    
+
+    # unit_details only contains units that currently meet their requirements
+    # (e.g. still have the district they need) — exclude the rest so units
+    # stranded by a dismantled building stop counting towards the total.
+    details_field = field.replace("_count", "_details")
+    unit_details = target.get(details_field)
+    if unit_details is not None:
+        units_assigned = {unit: count for unit, count in units_assigned.items() if unit in unit_details}
+
     value = sum(units_assigned.values())
     if value is None:
         value = 0
@@ -489,6 +504,24 @@ def compute_money_income(field, target, base_value, field_schema, overall_total_
     if overall_total_modifiers.get("money_income_per_bandit_camp", 0):
         bandit_bonus, _ = get_bandit_camp_income_contributions(str(target.get("_id", "")))
         value += bandit_bonus
+
+    return int(value)
+
+
+def compute_merchant_income(field, target, base_value, field_schema, overall_total_modifiers):
+    """Merchant equivalent of compute_money_income's trade-route wiring —
+    merchants have no pop_count/undead-horde/bandit-camp mechanics, so this
+    is just the base (reputation law) value, modifiers, and net money moved
+    by any active trade routes involving this merchant."""
+    value = base_value + overall_total_modifiers.get(field, 0)
+
+    merchant_name = target.get("name", "")
+    if merchant_name:
+        from helpers.trade_route_helpers import _get_cached_routes, get_trade_route_resource_net
+        routes = _get_cached_routes(target)
+        if routes:
+            net = get_trade_route_resource_net(merchant_name, routes)
+            value += net.get("money", 0)
 
     return int(value)
 
@@ -792,13 +825,19 @@ def compute_trade_risk(field, target, base_value, field_schema, overall_total_mo
     return 0.5 if has_camp else 0.0
 
 
+BANDIT_CAMP_SPAWN_CHANCE_FLOOR = 0.05
+
+
 def compute_bandit_camp_spawn_chance(field, target, base_value, field_schema, overall_total_modifiers):
     """Chance a new bandit camp spawns in this market's trade network each
     session (rolled by tick_helpers.bandit_camp_spawn_tick). Base 5%, moved
     by market type (Illicit raises it; Luxury/Maritime/Militant lower it
     per owner luxury/naval/land unit — the same per-unit market-head lookup
     compute_trade_risk used to do) and by member protection stances
-    (market_links.json's market_safety_stance laws)."""
+    (market_links.json's market_safety_stance laws) — but never below
+    BANDIT_CAMP_SPAWN_CHANCE_FLOOR (5%), regardless of how much
+    Luxury/Maritime/Militant/protection-stance reduction stacks up. Every
+    market carries at least a baseline risk."""
     value = base_value + overall_total_modifiers.get(field, 0)
 
     per_naval  = overall_total_modifiers.get("bandit_camp_spawn_chance_per_owner_naval_unit", 0)
@@ -831,7 +870,7 @@ def compute_bandit_camp_spawn_chance(field, target, base_value, field_schema, ov
             except Exception:
                 pass
 
-    return max(0.0, min(1.0, value))
+    return max(BANDIT_CAMP_SPAWN_CHANCE_FLOOR, min(1.0, value))
 
 
 def compute_import_slots(field, target, base_value, field_schema, overall_total_modifiers):
@@ -1263,6 +1302,7 @@ def compute_era_resource_stockpile_kept(field, target, base_value, field_schema,
 ##############################################################
 
 CUSTOM_COMPUTE_FUNCTIONS = {
+    "income": compute_merchant_income,
     "prestige_gain": compute_prestige_gain,
     "administration": compute_administration,
     "effective_territory": compute_field_effective_territory,

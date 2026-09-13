@@ -45,6 +45,15 @@
           "Cult"
         ]
       },
+      "doctrine": {
+        "bsonType": "enum",
+        "label": "Doctrine",
+        "description": "Whether the religion's teachings are interpreted literally or allegorically",
+        "enum": [
+          "Literal",
+          "Allegorical"
+        ]
+      },
       "conversion_strength": {
         "bsonType": "enum",
         "label": "Conversion Strength",

@@ -1,6 +1,7 @@
 import math
 import heapq
 from collections import deque
+from bson import ObjectId
 from app_core import mongo, category_data, json_data
 from helpers.hex_map_helpers import AXIAL_DIRECTIONS
 
@@ -116,40 +117,125 @@ def _is_trade_city(tile, trade_wonder_ids):
     return False
 
 
-def _dijkstra_from_cities(source_nation, target_nations, tiles_raw, portal_map, move_costs, trade_wonder_ids=None):
-    """Multi-source Dijkstra from source_nation's cities toward target cities.
+def _merchant_home_nation_name(merchant_doc):
+    """Return the name of the nation a merchant's `location` points to, or
+    None if unset/unresolvable."""
+    if not merchant_doc:
+        return None
+    location = merchant_doc.get("location")
+    if not location:
+        return None
+    try:
+        nation = mongo.db.nations.find_one({"_id": ObjectId(str(location))}, {"name": 1})
+    except Exception:
+        nation = None
+    return nation.get("name") if nation else None
 
-    Sources: city tiles of source_nation (fallback: all owned tiles).
-    Targets: city tiles of each target nation (fallback: all owned tiles).
-    Traversable: road tiles, tiles owned by source/targets, portal tiles.
 
-    trade_wonder_ids: set of wonder ID strings whose tiles count as city positions.
+def _city_position_by_id(tile_map, city_id):
+    """Look up a city's (q, r) position by its city.id within an already-
+    loaded tile_map. Returns None if not found or not actually a city tile."""
+    if not city_id:
+        return None
+    for pos, t in tile_map.items():
+        city = t.get("city")
+        if isinstance(city, dict) and city.get("id") == city_id:
+            return pos
+    return None
 
-    Returns {nation_name: cost} for each reachable target.
+
+def _additional_trade_city_ids(merchant):
+    """Return the list of city ids granted by this merchant's own
+    "additional_trade_city" modifiers (see json-data/modifier_types.json) —
+    lets a merchant be based in more than one city at once, including
+    cities in other nations. Mirrors collect_visibility_modifiers' approach
+    of reading a merchant's `modifiers` array directly rather than routing
+    through sum_modifier_totals, since this is set-membership, not a total."""
+    return [
+        m.get("city") for m in (merchant or {}).get("modifiers", [])
+        if m.get("modifier_type") == "additional_trade_city" and m.get("city")
+    ]
+
+
+def _party_position_set(party_type, party_name, tile_map, trade_wonder_ids):
+    """Return (position_set, home_nation_name) for a trade party.
+
+    Nations: their owned city tiles (fallback: all owned tiles); home_nation_name
+    is just their own name.
+
+    Merchants: the tile at current_city_id if set and it actually resolves to
+    a city, UNIONED with every city granted by an "additional_trade_city"
+    modifier (each independently resolved the same way — these can belong to
+    any nation, not just the merchant's home one). If current_city_id isn't
+    set/valid and there are no additional cities either, falls back to
+    behaving like a plain member of the home nation (location) — same
+    city-or-all-owned-tiles logic a nation gets. home_nation_name is always
+    the merchant's home nation (used so a merchant's home territory stays
+    freely traversable, the same benefit a nation's own owned tiles get —
+    note this bonus applies only to the primary home nation, not to whatever
+    nations own the merchant's additional cities), or None if unresolvable.
+    """
+    if party_type == "merchant":
+        merchant = mongo.db.merchants.find_one(
+            {"name": party_name}, {"current_city_id": 1, "location": 1, "modifiers": 1}
+        )
+        home_nation = _merchant_home_nation_name(merchant)
+
+        positions = set()
+        primary_pos = _city_position_by_id(tile_map, (merchant or {}).get("current_city_id"))
+        if primary_pos is not None:
+            positions.add(primary_pos)
+        for extra_city_id in _additional_trade_city_ids(merchant):
+            extra_pos = _city_position_by_id(tile_map, extra_city_id)
+            if extra_pos is not None:
+                positions.add(extra_pos)
+
+        if positions:
+            return positions, home_nation
+        # No valid specific city at all — behave like a regular member of the home nation.
+        if not home_nation:
+            return set(), None
+        party_type, party_name = "nation", home_nation
+
+    cities = {pos for pos, t in tile_map.items() if t.get("owner") == party_name and _is_trade_city(t, trade_wonder_ids)}
+    positions = cities or {pos for pos, t in tile_map.items() if t.get("owner") == party_name}
+    return positions, party_name
+
+
+def _dijkstra_from_parties(source_type, source_name, target_parties, tiles_raw, portal_map, move_costs, trade_wonder_ids=None):
+    """Multi-source, multi-target Dijkstra generalizing city-to-city distance
+    to support merchant companies (positioned at one specific city) alongside
+    nations (positioned at any of their owned cities).
+
+    target_parties: list of (party_type, party_name) tuples.
+    Traversable: road tiles, portal tiles, city tiles, and any tile owned by
+    the source's or a target's home nation (a merchant's home nation grants
+    the same free-traversal benefit its own owned tiles would).
+
+    Returns {(party_type, party_name): cost} for each reachable target.
     """
     if trade_wonder_ids is None:
         trade_wonder_ids = set()
-    target_set = set(target_nations) | {source_nation}
 
     tile_map = {(t["q"], t["r"]): t for t in tiles_raw}
 
-    src_cities  = {pos for pos, t in tile_map.items() if t.get("owner") == source_nation and _is_trade_city(t, trade_wonder_ids)}
-    src_pos     = src_cities or {pos for pos, t in tile_map.items() if t.get("owner") == source_nation}
-
-    tgt_cities, tgt_all = {}, {}
-    for nation in target_nations:
-        tgt_cities[nation] = {pos for pos, t in tile_map.items() if t.get("owner") == nation and _is_trade_city(t, trade_wonder_ids)}
-        tgt_all[nation]    = {pos for pos, t in tile_map.items() if t.get("owner") == nation}
-
-    def targets_for(n):
-        return tgt_cities[n] or tgt_all[n]
-
+    src_pos, src_home = _party_position_set(source_type, source_name, tile_map, trade_wonder_ids)
     if not src_pos:
         return {}
 
+    tgt_positions = {}
+    home_nations = set()
+    if src_home:
+        home_nations.add(src_home)
+    for party in target_parties:
+        positions, home = _party_position_set(party[0], party[1], tile_map, trade_wonder_ids)
+        tgt_positions[party] = positions
+        if home:
+            home_nations.add(home)
+
     traversable = {
         pos for pos, t in tile_map.items()
-        if t.get("owner", "") in target_set or t.get("route") or t.get("portal")
+        if t.get("owner", "") in home_nations or t.get("route") or t.get("portal")
         or _is_trade_city(t, trade_wonder_ids)
     }
 
@@ -161,7 +247,7 @@ def _dijkstra_from_cities(source_nation, target_nations, tiles_raw, portal_map, 
             heapq.heappush(heap, (0, pos[0], pos[1]))
 
     reached = {}
-    remaining = set(target_nations)
+    remaining = {party for party in target_parties if tgt_positions[party]}
 
     while heap and remaining:
         cur_cost, q, r = heapq.heappop(heap)
@@ -169,10 +255,10 @@ def _dijkstra_from_cities(source_nation, target_nations, tiles_raw, portal_map, 
         if cur_cost > dist.get(pos, float("inf")):
             continue
 
-        for nation in list(remaining):
-            if pos in targets_for(nation):
-                reached[nation] = cur_cost
-                remaining.discard(nation)
+        for party in list(remaining):
+            if pos in tgt_positions[party]:
+                reached[party] = cur_cost
+                remaining.discard(party)
 
         paired = portal_map.get(pos)
         if paired and paired not in dist:
@@ -197,28 +283,80 @@ def _dijkstra_from_cities(source_nation, target_nations, tiles_raw, portal_map, 
     return reached
 
 
-def get_road_path_distance(nation_a_name, nation_b_name):
-    """Terrain-weighted Dijkstra from nation_a's cities to nation_b's cities.
+def _dijkstra_from_cities(source_nation, target_nations, tiles_raw, portal_map, move_costs, trade_wonder_ids=None):
+    """Nation-only convenience wrapper over _dijkstra_from_parties, kept for
+    existing callers (get_road_path_distance, get_all_trade_distances,
+    get_connectable_nations) that only ever deal with nations.
+
+    Returns {nation_name: cost} for each reachable target — same shape as
+    before this function delegated to the generalized implementation.
+    """
+    reached = _dijkstra_from_parties(
+        "nation", source_nation,
+        [("nation", n) for n in target_nations],
+        tiles_raw, portal_map, move_costs, trade_wonder_ids,
+    )
+    return {name: cost for (_, name), cost in reached.items()}
+
+
+def _trade_tile_load_names(parties):
+    """Expand a list of (party_type, party_name) into every nation name whose
+    owned tiles _load_trade_tiles needs to fetch — each nation party's own
+    name, plus each merchant party's home nation (so its home territory is
+    available for the free-traversal bonus _party_position_set grants it).
+    City/route/portal/wonder tiles are always fetched unconditionally by
+    _load_trade_tiles regardless of this list, so a merchant's own specific
+    city tile is covered either way."""
+    names = set()
+    for party_type, party_name in parties:
+        if party_type == "merchant":
+            merchant = mongo.db.merchants.find_one({"name": party_name}, {"location": 1})
+            home = _merchant_home_nation_name(merchant)
+            if home:
+                names.add(home)
+        else:
+            names.add(party_name)
+    return list(names)
+
+
+def _move_cost_basis_doc(party_type, party_name):
+    """Return the document _nation_move_costs should read overall_total_modifiers
+    from for this party. Merchants don't carry their own terrain-cost
+    modifiers today, so this naturally falls back to unmodified base costs
+    for them (_nation_move_costs handles a doc with no overall_total_modifiers
+    the same as no doc at all)."""
+    collection = mongo.db.merchants if party_type == "merchant" else mongo.db.nations
+    return collection.find_one({"name": party_name}, {"overall_total_modifiers": 1})
+
+
+def get_road_path_distance(nation_a_name, nation_b_name, party_a_type="nation", party_b_type="nation"):
+    """Terrain-weighted Dijkstra from party_a's position(s) to party_b's.
 
     Road tiles always cost 1; other tiles use terrain speed_cost.
     Portal tiles provide free jumps to their paired portal.
 
+    party_a_type/party_b_type: "nation" (default, full backward compatible) or
+    "merchant" — a merchant party is positioned at its specific current city
+    (see _party_position_set) rather than a whole nation's city network.
+
     Returns (cost, connected: bool).
     """
-    if nation_a_name == nation_b_name:
+    if nation_a_name == nation_b_name and party_a_type == party_b_type:
         return 0, True
 
-    nation_a_doc     = mongo.db.nations.find_one({"name": nation_a_name}, {"overall_total_modifiers": 1})
-    tiles_raw        = _load_trade_tiles([nation_a_name, nation_b_name])
+    move_cost_doc    = _move_cost_basis_doc(party_a_type, nation_a_name)
+    tiles_raw        = _load_trade_tiles(_trade_tile_load_names(
+        [(party_a_type, nation_a_name), (party_b_type, nation_b_name)]
+    ))
     portal_map       = _build_portal_map()
-    move_costs       = _nation_move_costs(nation_a_doc)
+    move_costs       = _nation_move_costs(move_cost_doc)
     trade_wonder_ids = _get_trade_source_wonder_ids()
 
-    reached = _dijkstra_from_cities(
-        nation_a_name, [nation_b_name], tiles_raw, portal_map, move_costs,
-        trade_wonder_ids=trade_wonder_ids,
+    reached = _dijkstra_from_parties(
+        party_a_type, nation_a_name, [(party_b_type, nation_b_name)],
+        tiles_raw, portal_map, move_costs, trade_wonder_ids=trade_wonder_ids,
     )
-    cost = reached.get(nation_b_name)
+    cost = reached.get((party_b_type, nation_b_name))
     return (cost, True) if cost is not None else (None, False)
 
 
@@ -578,6 +716,60 @@ def get_connectable_nations(nation_name, nation_trade_speed):
             cspeed = n.get("trade_speed") or 7
             delay  = compute_delay(cost, nation_trade_speed, cspeed)
             results.append({"name": name, "road_distance": cost, "delay": delay})
+
+    results.sort(key=lambda x: x["road_distance"])
+    return results
+
+
+def get_connectable_parties(party_type, party_name, party_trade_speed):
+    """Like get_connectable_nations, but the candidate list includes every
+    OTHER nation and every merchant company (positioned at its specific
+    current city — see _party_position_set — or its home nation's city
+    network if it has none set), and the source itself may be a merchant.
+
+    Returns a list of {name, type, road_distance, delay} dicts, sorted by
+    distance — `type` is "nation" or "merchant", for the caller to record on
+    the trade route (nation_a_type/nation_b_type) and to route acceptance/
+    ownership checks to the right collection.
+    """
+    move_cost_doc = _move_cost_basis_doc(party_type, party_name)
+
+    candidate_nations = list(mongo.db.nations.find(
+        {} if party_type != "nation" else {"name": {"$ne": party_name}},
+        {"name": 1, "trade_speed": 1, "_id": 0},
+    ))
+    candidate_merchants = list(mongo.db.merchants.find(
+        {} if party_type != "merchant" else {"name": {"$ne": party_name}},
+        {"name": 1, "trade_speed": 1, "_id": 0},
+    ))
+    if not candidate_nations and not candidate_merchants:
+        return []
+
+    target_parties = (
+        [("nation", n["name"]) for n in candidate_nations]
+        + [("merchant", m["name"]) for m in candidate_merchants]
+    )
+    tiles_raw = _load_trade_tiles(_trade_tile_load_names(
+        [(party_type, party_name)] + target_parties
+    ))
+    portal_map       = _build_portal_map()
+    move_costs       = _nation_move_costs(move_cost_doc)
+    trade_wonder_ids = _get_trade_source_wonder_ids()
+
+    reached = _dijkstra_from_parties(
+        party_type, party_name, target_parties, tiles_raw, portal_map, move_costs,
+        trade_wonder_ids=trade_wonder_ids,
+    )
+
+    results = []
+    for candidates, ptype in ((candidate_nations, "nation"), (candidate_merchants, "merchant")):
+        for c in candidates:
+            name = c["name"]
+            cost = reached.get((ptype, name))
+            if cost is not None:
+                cspeed = c.get("trade_speed") or 7
+                delay = compute_delay(cost, party_trade_speed, cspeed)
+                results.append({"name": name, "type": ptype, "road_distance": cost, "delay": delay})
 
     results.sort(key=lambda x: x["road_distance"])
     return results

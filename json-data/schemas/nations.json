@@ -910,10 +910,16 @@
           "Fanatical Theocracy",
           "Ruthless Meritocracy",
           "Disjointed Anarchists",
-          "Archivist State",
-          "Artificer State",
           "Chaotic Throng",
           "Misfit Band",
+          "Noble Monarchy",
+          "Virtuous Theocracy",
+          "Righteous Meritocracy",
+          "United Peoples",
+          "Mighty Warband",
+          "Respected Pilgrims",
+          "Archivist State",
+          "Artificer State",
           "Iron-Fisted Dictatorship",
           "Imperial Council",
           "Sacred Vicar",
@@ -952,23 +958,6 @@
               { "modifier_type": "resource_windfall_on_stability_loss", "value": 5, "scope": "nation_self" }
             ]
           },
-          "Archivist State": {
-            "city_slots": 1,
-            "_modifiers": [
-              { "modifier_type": "administration", "value": 1, "scope": "nation_self", "scaling": "per_x_district_category", "scaling_x": 1, "scaling_extra": "education"},
-              { "modifier_type": "effective_territory", "value": -10, "scope": "nation_self", "scaling": "per_x_administration", "scaling_x": 1 },
-              { "modifier_type": "tech_cost_modifier", "value": -1, "scope": "nation_self", "scaling": "per_x_administration", "scaling_x": 5 },
-              { "modifier_type": "resource_windfall_pct_of_tech_cost", "value": 0.5, "scope": "nation_self" }
-            ]
-          },
-          "Artificer State": {
-            "city_slots": 1,
-            "_modifiers": [
-              { "modifier_type": "effective_territory", "value": -10, "scope": "nation_self", "scaling": "per_x_administration", "scaling_x": 1 },
-              { "modifier_type": "artifact_slots", "value": 20, "scope": "nation_ruling_characters" },
-              { "modifier_type": "effective_territory", "value": 2, "scope": "nation_self", "scaling": "per_x_ruling_character_artifact_slots", "scaling_x": 1 }
-            ]
-          },
           "Chaotic Throng": {
             "nomadic": 1,
             "hunter_food_production": 1,
@@ -980,6 +969,65 @@
             "hunter_food_production": 1,
             "max_passive_expansion_chance": 0,
             "nomad_pop_capacity_per_vassal": 1
+          },
+          "Noble Monarchy": {
+            "city_slots": 4,
+            "_modifiers": [
+              { "modifier_type": "attribute",     "attribute": "attribute", "value": 1, "scope": "nation_ruling_characters" },
+              { "modifier_type": "attribute_cap", "attribute": "attribute", "value": 1, "scope": "nation_ruling_characters" },
+              { "modifier_type": "ignorre_elderly", "attribute": "attribute", "value": 1, "scope": "nation_ruling_characters" }
+            ]
+          },
+          "Virtuous Theocracy": {
+            "city_slots": 4
+          },
+          "Righteous Meritocracy": {
+            "city_slots": 4
+          },
+          "United Peoples": {
+            "city_slots": 5,
+            "stability_gain_chance_cap": 0.5,
+            "_modifiers": [
+              { "modifier_type": "effective_territory", "value": 1, "scope": "nation_self", "scaling": "per_x%_stability_gain_chance", "scaling_x": 5 },
+              { "modifier_type": "resource_windfall_on_stability_loss", "value": -5, "scope": "nation_self" }
+            ]
+          },
+          "Mighty Warband": {
+            "nomadic": 1,
+            "hunter_food_production": 1,
+            "max_passive_expansion_chance": 0,
+            "nomad_pop_capacity_per_vassal": 1,
+            "_modifiers": [
+              { "modifier_type": "effective_territory", "value": 2, "scope": "nation_self", "scaling": "per_x_land_unit_slots", "scaling_x": 1 },
+              { "modifier_type": "money_income", "value": -400, "scope": "nation_self", "condition_scaling": "per_x_active_wars", "condition_operator": "<=", "condition_value": 0 }
+            ]
+          },
+          "Respected Pilgrims": {
+            "nomadic": 1,
+            "hunter_food_production": 1,
+            "max_passive_expansion_chance": 0,
+            "nomad_pop_capacity_per_vassal": 1,
+            "_modifiers": [
+              { "modifier_type": "trade_speed", "value": 1, "scope": "nation_self", "scaling": "per_x_pops", "scaling_x": 2 },
+              { "modifier_type": "migration_speed", "value": 1, "scope": "nation_self", "scaling": "per_x_pops", "scaling_x": 2 }
+            ]
+          },
+          "Archivist State": {
+            "city_slots": 1,
+            "_modifiers": [
+              { "modifier_type": "administration", "value": 1, "scope": "nation_self", "scaling": "per_x_district_category", "scaling_x": 1, "scaling_extra": "education"},
+              { "modifier_type": "effective_territory", "value": -10, "scope": "nation_self", "scaling": "per_x_administration", "scaling_x": 1 },
+              { "modifier_type": "tech_cost_modifier", "value": -1, "scope": "nation_self", "scaling": "per_x_administration", "scaling_x": 5 },
+              { "modifier_type": "resource_windfall_pct_of_tech_cost", "value": 0.5, "scope": "nation_self" }
+            ]
+          },
+          "Artificer State": {
+            "city_slots": 3,
+            "_modifiers": [
+              { "modifier_type": "effective_territory", "value": -10, "scope": "nation_self", "scaling": "per_x_administration", "scaling_x": 1 },
+              { "modifier_type": "artifact_slots", "value": 20, "scope": "nation_ruling_characters" },
+              { "modifier_type": "effective_territory", "value": 2, "scope": "nation_self", "scaling": "per_x_ruling_character_artifact_slots", "scaling_x": 1 }
+            ]
           },
           "Iron-Fisted Dictatorship": {
             "resource_production": 1,
@@ -1623,7 +1671,7 @@
         "laws": {
           "None": {},
           "Outlawed": {
-            "stability_gain_chance": 0.2
+            "stability_loss_chance": -20.2
           },
           "Servitude": {
             "karma": -2,

@@ -204,6 +204,83 @@ def per_x_administration(target, scaling_x=1, scaling_extra="", context=None):
     return int(administration / divisor)
 
 
+def per_x_pct_stability_gain_chance(target, scaling_x=1, scaling_extra="", context=None):
+    """Registered under the key "per_x%_stability_gain_chance" (matching
+    scaling_types.json) — Python identifiers can't contain "%", so the
+    function name and registry key necessarily differ here, unlike every
+    other scaling method.
+
+    Scales by stability_gain_chance treated as a whole percentage (0.05 ->
+    5) rather than the raw 0-1 fraction, divided by scaling_x. A plain
+    per_x_-style division of the raw fraction would floor to 0 for almost
+    any realistic scaling_x, since a fraction divided by an integer >= 1
+    stays under 1 — the "%" in the name signals this percentage conversion
+    is deliberate, not a naming mistake.
+    """
+    stability_gain_chance = float(target.get("stability_gain_chance", 0) or 0)
+    divisor = float(scaling_x) if scaling_x else 1
+    return int((stability_gain_chance * 100) / divisor)
+
+
+def per_x_land_unit_slots(target, scaling_x=1, scaling_extra="", context=None):
+    """Scales by the nation's land_unit_capacity (the number of land unit
+    "slots" it can field at any given time) divided by scaling_x."""
+    land_unit_capacity = float(target.get("land_unit_capacity", 0) or 0)
+    divisor = float(scaling_x) if scaling_x else 1
+    return int(land_unit_capacity / divisor)
+
+
+def per_x_active_wars(target, scaling_x=1, scaling_extra="", context=None):
+    """Scales by how many wars the nation is CURRENTLY, actively fighting
+    (any stance — Attacker or Defender), divided by scaling_x.
+
+    A war counts as active using the exact same liveness check
+    helpers/tick_helpers.py's nation_war_support_tick and
+    nation_infamy_decay_tick already use: declared by the current session
+    and not yet ended (session_declared <= current_session and
+    (session_ended is None or session_ended >= current_session)). Mirrors
+    per_x_nations_in_shared_market's pattern of an independent, self-
+    contained DB query rather than relying on a pre-populated field —
+    "wars" is a linked_object array resolved via a join table
+    (war_links), not a plain field already sitting on the target dict.
+
+    Primarily useful as a condition (condition_operator "<=" value 0) to
+    check whether a nation is at peace, e.g. Mighty Warband's income
+    penalty for not being at war — but works as an ordinary multiplier
+    too, for any modifier that should scale with how many wars a nation is
+    juggling at once.
+    """
+    from app_core import mongo as _mongo
+    from bson import ObjectId as _ObjectId
+    nation_id = str(target.get("_id", ""))
+    if not nation_id:
+        return 0
+    try:
+        global_modifiers = _mongo.db.global_modifiers.find_one({"name": "global_modifiers"})
+        current_session = global_modifiers.get("session_counter", 0) if global_modifiers else 0
+
+        links = list(_mongo.db.war_links.find(
+            {"participant": nation_id, "stance": {"$in": ["Attacker", "Defender"]}}
+        ))
+        active_war_ids = set()
+        for link in links:
+            war_id = link.get("war")
+            if not war_id or war_id in active_war_ids:
+                continue
+            war = _mongo.db.wars.find_one({"_id": _ObjectId(war_id)})
+            if not war:
+                continue
+            session_declared = war.get("session_declared", 0)
+            session_ended = war.get("session_ended", None)
+            if session_declared <= current_session and (session_ended is None or session_ended >= current_session):
+                active_war_ids.add(war_id)
+        count = len(active_war_ids)
+    except Exception:
+        count = 0
+    divisor = float(scaling_x) if scaling_x else 1
+    return int(count / divisor)
+
+
 def per_x_resource_produced(target, scaling_x=1, scaling_extra="", context=None):
     production = target.get("resource_production", {}) or {}
     amount = float(production.get(scaling_extra, 0) or 0) if scaling_extra else 0
@@ -422,6 +499,33 @@ def per_x_ruling_character_artifact_slots(target, scaling_x=1, scaling_extra="",
     return int(best / divisor)
 
 
+def per_x_ruling_character_is_adult(target, scaling_x=1, scaling_extra="", context=None):
+    """1 (divided by scaling_x) if ANY of the target nation's current ruling
+    characters (characters.ruling_nation_org == this nation's _id) has
+    age > 0 — i.e. isn't a child — else 0.
+
+    Mirrors per_x_ruling_character_artifact_slots's "best of multiple rulers"
+    pattern (a boolean OR instead of a max), so a nation with several rulers
+    doesn't need all of them to be adults to unlock the bonus. Used as a
+    flat 0/1 scaling gate (e.g. by the Grand Archive of Sapieni-Nabu's
+    research_production bonus, which is disabled while the ruler is a
+    child) rather than as a true per-X divisor.
+    """
+    from app_core import mongo as _mongo
+    nation_id = str(target.get("_id", ""))
+    if not nation_id:
+        return 0
+    try:
+        rulers = _mongo.db.characters.find(
+            {"ruling_nation_org": nation_id}, {"age": 1}
+        )
+        has_adult_ruler = any((r.get("age", 1) or 0) > 0 for r in rulers)
+    except Exception:
+        has_adult_ruler = False
+    divisor = float(scaling_x) if scaling_x else 1
+    return int((1 if has_adult_ruler else 0) / divisor)
+
+
 # Registry — each key must match scaling_types.json (plus legacy aliases).
 SCALING_METHODS = {
     "flat": flat,
@@ -441,6 +545,9 @@ SCALING_METHODS = {
     "per_x_terrain_tiles": per_x_terrain_tiles,
     "per_x_district_category": per_x_district_category,
     "per_x_administration": per_x_administration,
+    "per_x%_stability_gain_chance": per_x_pct_stability_gain_chance,
+    "per_x_land_unit_slots": per_x_land_unit_slots,
+    "per_x_active_wars": per_x_active_wars,
     "per_x_resource_produced": per_x_resource_produced,
     "per_x_resource_nodes": per_x_resource_nodes,
     "per_x_cultures": per_x_cultures,
@@ -459,6 +566,7 @@ SCALING_METHODS = {
     "per_x_nations_in_shared_market": per_x_nations_in_shared_market,
     "per_x_unit_upkeep": per_x_unit_upkeep,
     "per_x_ruling_character_artifact_slots": per_x_ruling_character_artifact_slots,
+    "per_x_ruling_character_is_adult": per_x_ruling_character_is_adult,
 }
 
 

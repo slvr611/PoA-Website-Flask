@@ -75,6 +75,32 @@
             ]
         }
     },
+    "artifact_owner_ruling_merchant": {
+        "name": "Owner's Ruling Merchant",
+        "description": "The merchant organisation run by the character who owns this artifact",
+        "source_type": "artifact",
+        "target_type": "merchant",
+        "resolution": {
+            "type": "chain",
+            "steps": [
+                {"type": "forward_link", "collection": "characters", "link_field": "owner"},
+                {"type": "forward_link", "collection": "merchants", "link_field": "ruling_merchant_org"}
+            ]
+        }
+    },
+    "artifact_owner_ruling_mercenary": {
+        "name": "Owner's Ruling Mercenary",
+        "description": "The mercenary band commanded by the character who owns this artifact",
+        "source_type": "artifact",
+        "target_type": "mercenary",
+        "resolution": {
+            "type": "chain",
+            "steps": [
+                {"type": "forward_link", "collection": "characters", "link_field": "owner"},
+                {"type": "forward_link", "collection": "mercenaries", "link_field": "ruling_mercenary_org"}
+            ]
+        }
+    },
     "merchant_self": {
         "name": "Merchant Org (Self)",
         "description": "The merchant organisation itself",

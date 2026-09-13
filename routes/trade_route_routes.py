@@ -14,8 +14,24 @@ trade_route_routes = Blueprint("trade_route_routes", __name__)
 
 
 # ---------------------------------------------------------------------------
-# Auth helpers
+# Party helpers — a trade route party is either a nation or a merchant
+# company, disambiguated by nation_a_type/nation_b_type (both default to
+# "nation" for backward compatibility with routes created before merchants
+# could participate).
 # ---------------------------------------------------------------------------
+
+def _party_collection(party_type):
+    return mongo.db.merchants if party_type == "merchant" else mongo.db.nations
+
+
+def _party_item_url(party_type, party_name):
+    prefix = "merchants" if party_type == "merchant" else "nations"
+    return f"/{prefix}/item/{party_name}"
+
+
+def _resolve_party_doc(party_type, party_name, projection=None):
+    return _party_collection(party_type).find_one({"name": party_name}, projection)
+
 
 def _player_owns_nation(nation_name):
     """True if the current user owns the named nation, either via a ruling
@@ -38,8 +54,58 @@ def _player_owns_nation(nation_name):
     }))
 
 
-def _can_act_on_nation(nation_name):
-    return bool(g.user and g.user.get("is_admin")) or _player_owns_nation(nation_name)
+def _player_owns_merchant(merchant_name):
+    """True if the current user controls the named merchant company via a
+    character ruling it (character.ruling_nation_org == merchant._id — the
+    same polymorphic field nations use, per helpers.visibility_helpers.
+    is_item_owner's merchants branch). Delegates to is_item_owner so both
+    call sites stay in lockstep with that ownership rule."""
+    if not g.user:
+        return False
+    merchant = mongo.db.merchants.find_one({"name": merchant_name}, {"_id": 1})
+    if not merchant:
+        return False
+    from helpers.visibility_helpers import is_item_owner
+    return is_item_owner("merchants", merchant, g.user)
+
+
+def _can_act_on_party(party_type, party_name):
+    if bool(g.user and g.user.get("is_admin")):
+        return True
+    if party_type == "merchant":
+        return _player_owns_merchant(party_name)
+    return _player_owns_nation(party_name)
+
+
+def _is_ai_party(party_type, doc):
+    """True if no real player controls this party — same admin-approval
+    gate nations already get, generalized to merchants (a merchant with no
+    player-controlled ruling character counts as AI). Both branches check
+    for a character with ruling_nation_org == this party's _id and a real
+    player attached — nations and merchants share that same polymorphic
+    rulership field."""
+    if not doc:
+        return True
+    if party_type == "merchant":
+        merchant_id = str(doc.get("_id", ""))
+        if not merchant_id:
+            return True
+        char = mongo.db.characters.find_one({
+            "ruling_nation_org": merchant_id,
+            "player": {"$exists": True, "$nin": [None, ""]},
+        }, {"_id": 1})
+        return char is None
+    if doc.get("players"):
+        return False
+    nid = str(doc.get("_id", ""))
+    if nid:
+        char = mongo.db.characters.find_one({
+            "ruling_nation_org": nid,
+            "player": {"$exists": True, "$nin": [None, ""]},
+        }, {"_id": 1})
+        if char:
+            return False
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -50,13 +116,15 @@ def _can_act_on_nation(nation_name):
 def propose_trade_route():
     proposer = request.form.get("proposer_nation", "").strip()
     acceptor = request.form.get("acceptor_nation", "").strip()
+    proposer_type = request.form.get("proposer_type", "nation").strip() or "nation"
+    acceptor_type = request.form.get("acceptor_type", "nation").strip() or "nation"
 
-    if not _can_act_on_nation(proposer):
-        flash("You do not have permission to propose a trade route for that nation.", "danger")
+    if not _can_act_on_party(proposer_type, proposer):
+        flash("You do not have permission to propose a trade route for that party.", "danger")
         return redirect(request.referrer or url_for("base_routes.index"))
 
-    if proposer == acceptor:
-        flash("A nation cannot trade with itself.", "danger")
+    if proposer == acceptor and proposer_type == acceptor_type:
+        flash("A party cannot trade with itself.", "danger")
         return redirect(request.referrer or url_for("base_routes.index"))
 
     # Parse resources
@@ -93,14 +161,16 @@ def propose_trade_route():
     proposal_note = request.form.get("proposal_note", "").strip() or None
 
     # Check road connectivity
-    dist, connected = get_road_path_distance(proposer, acceptor)
+    dist, connected = get_road_path_distance(
+        proposer, acceptor, party_a_type=proposer_type, party_b_type=acceptor_type,
+    )
     if not connected:
         flash(f"No road connection found between {proposer} and {acceptor}.", "danger")
         return redirect(request.referrer or url_for("base_routes.index"))
 
     # Compute delay
-    nation_a_doc = mongo.db.nations.find_one({"name": proposer}, {"trade_speed": 1, "temperament": 1, "export_slots": 1, "import_slots": 1, "players": 1})
-    nation_b_doc = mongo.db.nations.find_one({"name": acceptor}, {"trade_speed": 1, "temperament": 1, "players": 1})
+    nation_a_doc = _resolve_party_doc(proposer_type, proposer, {"trade_speed": 1, "temperament": 1, "export_slots": 1, "import_slots": 1, "players": 1})
+    nation_b_doc = _resolve_party_doc(acceptor_type, acceptor, {"trade_speed": 1, "temperament": 1, "players": 1})
     speed_a = (nation_a_doc or {}).get("trade_speed") or 7
     speed_b = (nation_b_doc or {}).get("trade_speed") or 7
     delay = compute_delay(dist, speed_a, speed_b)
@@ -130,6 +200,8 @@ def propose_trade_route():
     route_doc = {
         "nation_a": proposer,
         "nation_b": acceptor,
+        "nation_a_type": proposer_type,
+        "nation_b_type": acceptor_type,
         "proposer": proposer,
         "status": "pending",
         "resources_a_to_b": resources_a_to_b,
@@ -145,25 +217,9 @@ def propose_trade_route():
         "proposal_note": proposal_note,
     }
 
-    # Check if either nation is AI (not assigned to a player).
-    # A nation is "AI" if it has no ruling character with a player, and no
-    # entries in its players array.
-    def _is_ai_nation(nation_doc):
-        if not nation_doc:
-            return True
-        if nation_doc.get("players"):
-            return False
-        nid = str(nation_doc.get("_id", ""))
-        if nid:
-            char = mongo.db.characters.find_one({
-                "ruling_nation_org": nid,
-                "player": {"$exists": True, "$ne": None, "$ne": ""},
-            }, {"_id": 1})
-            if char:
-                return False
-        return True
-
-    involves_ai = _is_ai_nation(nation_a_doc) or _is_ai_nation(nation_b_doc)
+    # Check if either party is AI (not controlled by a real player) —
+    # such routes go to moderator approval instead of taking effect directly.
+    involves_ai = _is_ai_party(proposer_type, nation_a_doc) or _is_ai_party(acceptor_type, nation_b_doc)
     if involves_ai:
         from helpers.change_helpers import request_change
         change_reason = f"Trade route proposed by {proposer} to {acceptor}"
@@ -178,12 +234,12 @@ def propose_trade_route():
             reason=change_reason,
         )
         if change_id:
-            flash(f"Trade route involving an AI nation submitted for moderator approval (change #{change_id}).", "info")
-        return redirect(request.referrer or url_for("nation_routes.nation_item", item_ref=proposer))
+            flash(f"Trade route involving an AI party submitted for moderator approval (change #{change_id}).", "info")
+        return redirect(request.referrer or _party_item_url(proposer_type, proposer))
 
     mongo.db.trade_routes.insert_one(route_doc)
     flash(f"Trade route proposed to {acceptor}. Awaiting their acceptance.", "success")
-    return redirect(request.referrer or url_for("nation_routes.nation_item", item_ref=proposer))
+    return redirect(request.referrer or _party_item_url(proposer_type, proposer))
 
 
 # ---------------------------------------------------------------------------
@@ -209,7 +265,8 @@ def accept_trade_route(route_id):
         return redirect(request.referrer or url_for("base_routes.index"))
 
     acceptor = route["nation_b"]
-    if not _can_act_on_nation(acceptor):
+    acceptor_type = route.get("nation_b_type", "nation")
+    if not _can_act_on_party(acceptor_type, acceptor):
         flash("You do not have permission to accept this trade route.", "danger")
         return redirect(request.referrer or url_for("base_routes.index"))
 
@@ -222,7 +279,7 @@ def accept_trade_route(route_id):
         capacity = 4 if _nations_share_market(na, nb) else 2
         _, import_used = count_route_slots(acceptor)
         export_used, _ = count_route_slots(acceptor)
-        acceptor_doc = mongo.db.nations.find_one({"name": acceptor}, {"import_slots": 1, "export_slots": 1})
+        acceptor_doc = _resolve_party_doc(acceptor_type, acceptor, {"import_slots": 1, "export_slots": 1})
         import_cap = (acceptor_doc or {}).get("import_slots", 3)
         export_cap = (acceptor_doc or {}).get("export_slots", 3)
 
@@ -243,7 +300,7 @@ def accept_trade_route(route_id):
     )
 
     flash(f"Trade route with {route['nation_a']} accepted.", "success")
-    return redirect(request.referrer or url_for("nation_routes.nation_item", item_ref=acceptor))
+    return redirect(request.referrer or _party_item_url(acceptor_type, acceptor))
 
 
 # ---------------------------------------------------------------------------
@@ -269,13 +326,14 @@ def reject_trade_route(route_id):
         return redirect(request.referrer or url_for("base_routes.index"))
 
     rejector = route["nation_b"]
-    if not _can_act_on_nation(rejector):
+    rejector_type = route.get("nation_b_type", "nation")
+    if not _can_act_on_party(rejector_type, rejector):
         flash("You do not have permission to reject this trade route.", "danger")
         return redirect(request.referrer or url_for("base_routes.index"))
 
     mongo.db.trade_routes.update_one({"_id": oid}, {"$set": {"status": "rejected"}})
     flash(f"Trade route from {route['nation_a']} rejected.", "success")
-    return redirect(request.referrer or url_for("nation_routes.nation_item", item_ref=rejector))
+    return redirect(request.referrer or _party_item_url(rejector_type, rejector))
 
 
 # ---------------------------------------------------------------------------
@@ -301,11 +359,15 @@ def cancel_trade_route(route_id):
         return redirect(request.referrer or url_for("base_routes.index"))
 
     canceller = request.form.get("cancelling_nation", "").strip()
-    if canceller not in (route["nation_a"], route["nation_b"]):
+    if canceller == route["nation_a"]:
+        canceller_type = route.get("nation_a_type", "nation")
+    elif canceller == route["nation_b"]:
+        canceller_type = route.get("nation_b_type", "nation")
+    else:
         flash("Invalid cancellation request.", "danger")
         return redirect(request.referrer or url_for("base_routes.index"))
 
-    if not _can_act_on_nation(canceller):
+    if not _can_act_on_party(canceller_type, canceller):
         flash("You do not have permission to cancel this trade route.", "danger")
         return redirect(request.referrer or url_for("base_routes.index"))
 
@@ -313,7 +375,7 @@ def cancel_trade_route(route_id):
     if route.get("status") == "pending":
         mongo.db.trade_routes.update_one({"_id": oid}, {"$set": {"status": "rejected", "cancelled_by": canceller}})
         flash("Trade route proposal withdrawn.", "success")
-        return redirect(request.referrer or url_for("nation_routes.nation_item", item_ref=canceller))
+        return redirect(request.referrer or _party_item_url(canceller_type, canceller))
 
     current_session = _current_session()
     delay = route.get("delay", 0)
@@ -347,7 +409,7 @@ def cancel_trade_route(route_id):
             "success",
         )
 
-    return redirect(request.referrer or url_for("nation_routes.nation_item", item_ref=canceller))
+    return redirect(request.referrer or _party_item_url(canceller_type, canceller))
 
 
 # ---------------------------------------------------------------------------

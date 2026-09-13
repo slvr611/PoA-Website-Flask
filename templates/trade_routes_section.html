@@ -30,6 +30,11 @@
   {% endif %}
 {% endfor %}
 
+{# --- Helper macro: partner name + party type label ----------------------- #}
+{% macro party_label(name, party_type) %}
+  {{ name }}{% if party_type == "merchant" %} <span class="text-muted" style="font-weight:normal;">(Merchant)</span>{% endif %}
+{% endmacro %}
+
 {# --- Helper macro: resource list display -------------------------------- #}
 {% macro resource_list(items, label_prefix="") %}
   {% if items %}
@@ -93,7 +98,7 @@
     <tbody>
       {% for r in pending_incoming %}
       <tr>
-        <td><strong>{{ r.nation_a }}</strong></td>
+        <td><strong>{{ party_label(r.nation_a, r.get('nation_a_type', 'nation')) }}</strong></td>
         <td>{{ resource_list(r.resources_a_to_b) }}</td>
         <td>{{ resource_list(r.resources_b_to_a) }}</td>
         <td>{{ r.road_distance }} tiles {{ delay_badge(r.delay) }}</td>
@@ -136,7 +141,7 @@
     <tbody>
       {% for r in pending_outgoing %}
       <tr>
-        <td><strong>{{ r.nation_b }}</strong></td>
+        <td><strong>{{ party_label(r.nation_b, r.get('nation_b_type', 'nation')) }}</strong></td>
         <td>{{ resource_list(r.resources_a_to_b) }}</td>
         <td>{{ resource_list(r.resources_b_to_a) }}</td>
         <td>{{ r.road_distance }} tiles {{ delay_badge(r.delay) }}</td>
@@ -174,12 +179,13 @@
     <tbody>
       {% for r in active_routes %}
       {% set partner = r.nation_b if r.nation_a == tr_nation_name else r.nation_a %}
+      {% set partner_type = r.get('nation_b_type', 'nation') if r.nation_a == tr_nation_name else r.get('nation_a_type', 'nation') %}
       {% set my_sends    = r.resources_a_to_b if r.nation_a == tr_nation_name else r.resources_b_to_a %}
       {% set my_receives = r.resources_b_to_a if r.nation_a == tr_nation_name else r.resources_a_to_b %}
       {% set first_del = (r.accepted_session + ([1, r.delay]|max)) if r.accepted_session else None %}
       {% set delivering_now = first_del is not none and current_session >= first_del %}
       <tr>
-        <td><strong>{{ partner }}</strong></td>
+        <td><strong>{{ party_label(partner, partner_type) }}</strong></td>
         <td>{{ resource_list(my_sends) }}</td>
         <td>{{ resource_list(my_receives) }}</td>
         <td>{{ r.road_distance }} tiles {{ delay_badge(r.delay) }}</td>
@@ -226,11 +232,12 @@
     <tbody>
       {% for r in ending_routes %}
       {% set partner = r.nation_b if r.nation_a == tr_nation_name else r.nation_a %}
+      {% set partner_type = r.get('nation_b_type', 'nation') if r.nation_a == tr_nation_name else r.get('nation_a_type', 'nation') %}
       {% set my_sends    = r.resources_a_to_b if r.nation_a == tr_nation_name else r.resources_b_to_a %}
       {% set my_receives = r.resources_b_to_a if r.nation_a == tr_nation_name else r.resources_a_to_b %}
       {% set last_del = (r.cancel_session + r.delay) if r.cancel_session is not none else "?" %}
       <tr>
-        <td><strong>{{ partner }}</strong></td>
+        <td><strong>{{ party_label(partner, partner_type) }}</strong></td>
         <td>{{ resource_list(my_sends) }}</td>
         <td>{{ resource_list(my_receives) }}</td>
         <td>Session {{ last_del }}</td>
@@ -258,14 +265,15 @@
   <input type="hidden" name="proposer_nation" value="{{ tr_nation_name }}" form="tr-propose-form">
   <input type="hidden" id="tr-a-to-b-json" name="resources_a_to_b" value="[]" form="tr-propose-form">
   <input type="hidden" id="tr-b-to-a-json" name="resources_b_to_a" value="[]" form="tr-propose-form">
+  <input type="hidden" id="tr-acceptor-type" name="acceptor_type" value="" form="tr-propose-form">
 
   <div style="margin-bottom: 0.6rem;">
     <label style="color: #aaa; font-size: 0.82rem;">Trade Partner</label><br>
-    <select name="acceptor_nation" class="form-control" style="max-width: 280px; font-size: 0.85rem;" id="tr-partner-select" form="tr-propose-form">
-      <option value="">— select nation —</option>
+    <select name="acceptor_nation" class="form-control" style="max-width: 280px; font-size: 0.85rem;" id="tr-partner-select" form="tr-propose-form" onchange="trOnPartnerChange()">
+      <option value="">— select partner —</option>
       {% for cn in connectable_nations %}
-      <option value="{{ cn.name }}" data-distance="{{ cn.road_distance }}" data-delay="{{ cn.delay }}">
-        {{ cn.name }} ({{ cn.road_distance }} tiles, delay {{ cn.delay }})
+      <option value="{{ cn.name }}" data-type="{{ cn.type | default('nation') }}" data-distance="{{ cn.road_distance }}" data-delay="{{ cn.delay }}">
+        {{ cn.name }}{% if cn.type == "merchant" %} (Merchant){% endif %} ({{ cn.road_distance }} tiles, delay {{ cn.delay }})
       </option>
       {% endfor %}
     </select>
@@ -345,6 +353,12 @@ function trCollectRows(containerId) {
   return result;
 }
 
+function trOnPartnerChange() {
+  const select = document.getElementById('tr-partner-select');
+  const opt = select.options[select.selectedIndex];
+  document.getElementById('tr-acceptor-type').value = opt ? (opt.dataset.type || 'nation') : '';
+}
+
 function trSerializeAndValidate() {
   const atob_data = trCollectRows('tr-a-to-b-rows');
   const btoa_data = trCollectRows('tr-b-to-a-rows');
@@ -357,6 +371,7 @@ function trSerializeAndValidate() {
     alert('Please select a trade partner.');
     return false;
   }
+  trOnPartnerChange();
   document.getElementById('tr-a-to-b-json').value = JSON.stringify(atob_data);
   document.getElementById('tr-b-to-a-json').value = JSON.stringify(btoa_data);
   return true;
@@ -364,8 +379,8 @@ function trSerializeAndValidate() {
 </script>
 {% else %}
 <p class="text-muted" style="font-size: 0.85rem;">
-  No nations reachable via road from {{ tr_nation_name }}.
-  Build road tiles connecting to another nation to establish trade routes.
+  No nations or merchant companies reachable via road from {{ tr_nation_name }}.
+  Build road tiles connecting to another party to establish trade routes.
 </p>
 {% endif %}
 {% endif %}

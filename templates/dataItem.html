@@ -144,6 +144,15 @@
 									</tbody>
 								</table>
 								<button type="button" class="btn btn-primary" onclick="addToArray('{{ field.name }}')">Add Negative Title</button>
+							{% elif field.name == 'current_city_id' and data_type == 'merchants' %}
+								<select class="form-control" id="current_city_id" name="current_city_id">
+									<option value="">— no specific city (use home nation's network) —</option>
+									{% set current_location = item.get('location', '') if item else '' %}
+									{% for c in all_cities if c.nation == current_location %}
+										<option value="{{ c.key }}" {% if item and item.get('current_city_id') == c.key %}selected{% endif %}>{{ c.name }}</option>
+									{% endfor %}
+								</select>
+								<small class="form-text text-muted">Only cities in the home nation selected above ("Current Location") are listed. Changing "Current Location" and saving, then editing again, will refresh this list.</small>
 							{% elif schema.properties.get(field.name, {}).get('image') %}
 								{{ field(class="form-control", placeholder="https://...") }}
 								{% if g.user and g.user.is_admin %}
@@ -180,11 +189,24 @@
 			</table>
 		</div>
 
+		{% if data_type == "merchants" %}
+		<h3 style="margin-top:16px;">Trade Routes</h3>
+		{% with editable = True %}
+		{% include "trade_routes_section.html" with context %}
+		{% endwith %}
+		{% endif %}
+
 		{% if g.user.is_admin %}
 			<button type="submit" formaction="{{ request.path }}/save">Save</button>
 		{% endif %}
         <button type="submit" formaction="{{ request.path }}/request">Request</button>
     </form>
+
+	{% if data_type == "merchants" %}
+	{% with editable = True %}
+	{% include "trade_routes_forms.html" with context %}
+	{% endwith %}
+	{% endif %}
 
 	{% if data_type == "pops" and g.user and g.user.is_admin and pop_diseases %}
 	<div class="table-wrapper">
@@ -221,12 +243,26 @@
 	const ALL_JOBS = {{ all_jobs | tojson | safe }};
 	const ALL_JOB_SPECIAL_FIELDS = {{ all_job_special_fields | tojson | safe }};
 	const ALL_ATTRIBUTES = {{ all_attributes | tojson | safe }};
+	const ALL_CITIES = {{ all_cities | tojson | safe }};
 	const ALL_UNIT_CATEGORIES = {{ all_unit_categories | tojson | safe }};
 	const ALL_UNIT_STATS = {{ all_unit_stats | tojson | safe }};
 	const ALL_PROGRESS_TIERS = {{ all_progress_tiers | tojson | safe }};
 	const ALL_TECH_CATEGORIES = {{ all_tech_categories | tojson | safe }};
 	const SCOPE_DEFINITIONS = {{ scope_definitions | tojson | safe }};
 	const ENTITY_SOURCE_TYPE = {{ entity_source_type | default("") | tojson | safe }};
+	// This item's own last-calculated 0-4_progress_slots (falls back to the
+	// schema's base_value for a brand-new, not-yet-saved item) — mirrors
+	// forms.py's BaseSchemaForm.get_available_slots, which is what actually
+	// renders the slot dropdown on page load. Without this, "Add Quest"
+	// could only ever offer "No Slot" plus the spell-slot options, since it
+	// has no other way to know how many progress slots this item has.
+	const ENTITY_PROGRESS_SLOT_COUNTS = [
+		{%- for n in range(5) -%}
+		{{ (item.get(n ~ "_progress_slots", 0) if item
+		    else schema.get("properties", {}).get(n ~ "_progress_slots", {}).get("base_value", 0))
+		   | tojson | safe }}{{ "," if not loop.last }}
+		{%- endfor -%}
+	];
 	const SCOPE_OPTIONS = {{ scopes_by_source_type.get(entity_source_type, []) | tojson | safe }};
 	const SELF_SCOPE_MAP = {"nation": "nation_self", "character": "character_self", "merchant": "merchant_self", "mercenary": "mercenary_self", "artifact": "artifact_owner", "wonder": "wonder_owner_nation", "region": "region_nations", "global": "global_nations"};
 
@@ -289,7 +325,7 @@
 		// missing here (e.g. target_value) is left with no hidden fallback input,
 		// so a stale value from a previously-selected modifier type can leak
 		// into whatever gets submitted for the newly-selected one.
-		const ALL_EXTRA_KEYS = ['resource', 'resource_from', 'resource_to', 'job', 'field', 'attribute', 'unit_category', 'unit_stat', 'tier', 'tech_category', 'terrain', 'node_resource', 'terrain_as', 'target_type', 'target_value', 'unit_name', 'district_key'];
+		const ALL_EXTRA_KEYS = ['resource', 'resource_from', 'resource_to', 'job', 'field', 'attribute', 'unit_category', 'unit_stat', 'tier', 'tech_category', 'terrain', 'node_resource', 'terrain_as', 'target_type', 'target_value', 'unit_name', 'district_key', 'city'];
 		const renderedKeys = new Set();
 		let html = '';
 
@@ -328,6 +364,13 @@
 				let opts = '<option value="">-- Select Attribute --</option>';
 				for (const attr of ALL_ATTRIBUTES) {
 					opts += `<option value="${attr.key}" ${attr.key === cur ? 'selected' : ''}>${attr.name}</option>`;
+				}
+				html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
+					<select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+			} else if (extra.source === 'all_cities') {
+				let opts = '<option value="">-- Select City --</option>';
+				for (const c of ALL_CITIES) {
+					opts += `<option value="${c.key}" ${c.key === cur ? 'selected' : ''}>${c.name}</option>`;
 				}
 				html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
 					<select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
@@ -507,6 +550,34 @@
 		});
 	}
 
+	// ── Progress quest slots ────────────────────────────────────────────────
+	// Mirrors forms.py's BaseSchemaForm.get_available_slots: "No Slot", then
+	// one "N Progress Slot" option per tier this item actually has (> 0),
+	// then the three spell-slot options every entity always offers.
+
+	function buildProgressQuestSlotOptionsHTML(selectedValue) {
+		let html = '<option value="no_slot">No Slot</option>';
+		for (let n = 0; n < ENTITY_PROGRESS_SLOT_COUNTS.length; n++) {
+			if (ENTITY_PROGRESS_SLOT_COUNTS[n] > 0) {
+				html += `<option value="${n}_progress_slot">${n} Progress Slot</option>`;
+			}
+		}
+		html += '<option value="tier_1_spell_slot">Tier 1 Spell Slot</option>';
+		html += '<option value="tier_2_spell_slot">Tier 2 Spell Slot</option>';
+		html += '<option value="tier_3_spell_slot">Tier 3 Spell Slot</option>';
+		return html;
+	}
+
+	function updateProgressQuestSlots() {
+		document.querySelectorAll('select[name*="progress_quests"][name*="-slot"]').forEach(select => {
+			const currentValue = select.value;
+			select.innerHTML = buildProgressQuestSlotOptionsHTML();
+			if (Array.from(select.options).some(option => option.value === currentValue)) {
+				select.value = currentValue;
+			}
+		});
+	}
+
 	// ── Add/Remove array rows ────────────────────────────────────────────────
 
 	function addToArray(fieldName) {
@@ -570,10 +641,7 @@
 			newRow.innerHTML = `
 				<td><input type="text" class="form-control" name="${fieldName}-${currentCount}-quest_name" id="${fieldName}-${currentCount}-quest_name"></td>
 				<td><select class="form-control" name="${fieldName}-${currentCount}-slot" id="${fieldName}-${currentCount}-slot">
-					<option value="no_slot">No Slot</option>
-					<option value="tier_1_spell_slot">Tier 1 Spell Slot</option>
-					<option value="tier_2_spell_slot">Tier 2 Spell Slot</option>
-					<option value="tier_3_spell_slot">Tier 3 Spell Slot</option>
+					${buildProgressQuestSlotOptionsHTML()}
 				</select></td>
 				<td><input type="number" class="form-control" name="${fieldName}-${currentCount}-bonus_progress_per_tick" id="${fieldName}-${currentCount}-bonus_progress_per_tick" value="0"></td>
 				<td><input type="number" class="form-control" name="${fieldName}-${currentCount}-current_progress" id="${fieldName}-${currentCount}-current_progress" value="0"></td>
@@ -900,6 +968,13 @@
 				{% endfor %}
 			</tbody>
 		</table>
+	</div>
+	{% endif %}
+
+	{% if data_type == "merchants" %}
+	<div class="surface-card" style="margin:0 28px 24px;">
+		<h3>Trade Routes</h3>
+		{% include "trade_routes_section.html" with context %}
 	</div>
 	{% endif %}
 </div>

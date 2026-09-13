@@ -568,6 +568,20 @@ def data_item(data_type, item_ref):
             "all_nations": list(mongo.db.nations.find({}, {"name": 1}).sort("name", ASCENDING)),
         }
 
+    trade_route_extras = {}
+    if data_type == "merchants":
+        from helpers.trade_route_helpers import _current_session as _trade_current_session
+        merchant_name = item.get("name", item_ref)
+        trade_route_extras = {
+            "trade_routes": list(mongo.db.trade_routes.find({
+                "$or": [{"nation_a": merchant_name}, {"nation_b": merchant_name}],
+                "status": {"$in": ["pending", "active", "ending"]},
+            })),
+            "current_session": _trade_current_session(),
+            "party_type": "merchant",
+            "nation": item,
+        }
+
     template_name = "units_item.html" if data_type == "units" else "dataItem.html"
     if data_type == "diseases":
         template_name = "diseases_item.html"
@@ -609,6 +623,7 @@ def data_item(data_type, item_ref):
         title=item.get("name", str(item.get("_id", ""))),
         schema=schema,
         item=item,
+        data_type=data_type,
         linked_objects=linked_objects,
         json_data=json_data,
         find_dict_in_list=find_dict_in_list,
@@ -624,6 +639,7 @@ def data_item(data_type, item_ref):
         primary_nations=primary_nations,
         item_view=item_view,
         **disease_extras,
+        **trade_route_extras,
     )
 
 @data_item_routes.route("/<data_type>/edit")
@@ -692,7 +708,7 @@ def _render_item_form(data_type, schema, form, item=None, item_ref=None, title=N
     instead of redirecting back to a blank form.
     """
     dropdown_options = _build_dropdown_options(schema)
-    form.populate_linked_fields(schema, dropdown_options)
+    form.populate_linked_fields(schema, dropdown_options, item=item)
 
     if title is None:
         title = f"Edit {item_ref}" if item_ref else "New " + category_data[data_type]["singularName"]
@@ -735,6 +751,21 @@ def _render_item_form(data_type, schema, form, item=None, item_ref=None, title=N
             }
             pop_diseases = [{"id": d, "name": id_to_name.get(d, d)} for d in disease_ids]
 
+    trade_route_extras = {}
+    if data_type == "merchants" and item:
+        from helpers.trade_route_helpers import _current_session as _trade_current_session, get_connectable_parties
+        merchant_name = item.get("name", item_ref)
+        trade_route_extras = {
+            "trade_routes": list(mongo.db.trade_routes.find({
+                "$or": [{"nation_a": merchant_name}, {"nation_b": merchant_name}],
+                "status": {"$in": ["pending", "active", "ending"]},
+            })),
+            "current_session": _trade_current_session(),
+            "connectable_nations": get_connectable_parties("merchant", merchant_name, item.get("trade_speed", 20)),
+            "party_type": "merchant",
+            "nation": item,
+        }
+
     return render_template(
         "dataItem.html",
         title=title,
@@ -746,6 +777,7 @@ def _render_item_form(data_type, schema, form, item=None, item_ref=None, title=N
         data_type=data_type,
         editable=True,
         pop_diseases=pop_diseases,
+        **trade_route_extras,
     )
 
 
@@ -893,7 +925,7 @@ def data_item_edit_request(data_type, item_ref):
     
     form = form_generator.get_form(data_type, schema, formdata=request.form)
     dropdown_options = _build_dropdown_options(schema)
-    form.populate_linked_fields(schema, dropdown_options)
+    form.populate_linked_fields(schema, dropdown_options, item=item)
 
     if not form.validate():
         flash("Form validation failed!")
@@ -949,7 +981,7 @@ def data_item_edit_approve(data_type, item_ref):
 
     form = form_generator.get_form(data_type, schema, formdata=request.form)
     dropdown_options = _build_dropdown_options(schema)
-    form.populate_linked_fields(schema, dropdown_options)
+    form.populate_linked_fields(schema, dropdown_options, item=item)
 
     if not form.validate():
         flash("Form validation failed!")
@@ -989,26 +1021,45 @@ def data_item_edit_approve(data_type, item_ref):
         after_data=after_data,
         reason=reason
     )
-    
+
     approve_change(change_id)
-    
+
     flash(f"Change request #{change_id} created and approved.")
     
     return redirect("/" + data_type)
 
+def _clone_redirect(data_type, item):
+    """Where to send the user after cloning `item`.
+
+    /go_back relies on session-tracked previous URLs, but that tracking
+    fires on every non-static request — including the /api/s3-image proxy
+    requests the browser makes to load a nation's banner — so it can land
+    on the raw banner image URL instead of navigating back to a real page.
+    For pops (cloned from the "Request Clone" button embedded in the
+    nation edit page) we know exactly where the user should end up, so go
+    there directly instead of trusting /go_back."""
+    if data_type == "pops" and item.get("nation"):
+        try:
+            nation = mongo.db.nations.find_one({"_id": ObjectId(item["nation"])}, {"name": 1})
+        except Exception:
+            nation = None
+        if nation:
+            return redirect(f"/nations/edit/{nation['name']}")
+    return redirect("/go_back")
+
 @data_item_routes.route("/<data_type>/clone/<item_ref>/request", methods=["POST"])
 def data_item_clone_request(data_type, item_ref):
     schema, db, item = get_data_on_item(data_type, item_ref)
-    
+
     form_data = request.form.to_dict()
-    
+
     if "name" in item:
         item["name"] = "Copy of " + item["name"]
-    
+
     item_id = item["_id"]
     reason = form_data.get("reason", "No Reason Given")
     after_data = item
-    
+
     change_id = request_change(
         data_type=data_type,
         item_id=None,
@@ -1017,25 +1068,28 @@ def data_item_clone_request(data_type, item_ref):
         after_data=after_data,
         reason=reason
     )
-    
-    flash(f"Change request #{change_id} created and awaits admin approval.")
-    
-    return redirect("/go_back")
+
+    if data_type == "pops":
+        flash(f"Pop clone requested (change request #{change_id}, awaiting admin approval).")
+    else:
+        flash(f"Change request #{change_id} created and awaits admin approval.")
+
+    return _clone_redirect(data_type, item)
 
 @data_item_routes.route("/<data_type>/clone/<item_ref>/save", methods=["POST"])
 @admin_required
 def data_item_clone_approve(data_type, item_ref):
     schema, db, item = get_data_on_item(data_type, item_ref)
-    
+
     form_data = request.form.to_dict()
-    
+
     if "name" in item:
         item["name"] = "Copy of " + item["name"]
-    
+
     item_id = item["_id"]
     reason = form_data.get("reason", "No Reason Given")
     after_data = item
-    
+
     change_id = request_change(
         data_type=data_type,
         item_id=None,
@@ -1044,12 +1098,15 @@ def data_item_clone_approve(data_type, item_ref):
         after_data=after_data,
         reason=reason
     )
-    
+
     approve_change(change_id)
-    
-    flash(f"Change request #{change_id} created and approved.")
-    
-    return redirect("/go_back")
+
+    if data_type == "pops":
+        flash(f"Pop clone requested (change request #{change_id}, approved).")
+    else:
+        flash(f"Change request #{change_id} created and approved.")
+
+    return _clone_redirect(data_type, item)
 
 @data_item_routes.route("/<data_type>/delete/<item_ref>/request", methods=["POST"])
 def data_item_delete_request(data_type, item_ref):

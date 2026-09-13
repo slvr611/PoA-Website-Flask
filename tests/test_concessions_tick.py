@@ -147,6 +147,135 @@ class TestConcessionsResourceFiltering:
         assert isinstance(result, str)
 
 
+class TestOverlordCapacityPrefersFreshInMemoryData:
+    """Regression test for a real bug: the overlord's resource capacity was
+    always fetched via a database query, which mid-tick still only reflects
+    whatever was persisted at the END of the LAST session — this session's
+    fresh calculate_all_fields results live only in old_nations/new_nations
+    (in memory) until tick()'s commit phase at the very end. So an overlord
+    who lost access to a resource since their last recalculation (e.g. a
+    temporary storage-capacity modifier with a duration expiring) would
+    still show as having it for a full extra session, letting vassals
+    demand a resource (e.g. gunpowder) the overlord no longer actually has.
+    The vassal's own capacity was already read fresh (old_nation, passed in
+    directly) — only the overlord side was stale. Fixed by preferring a
+    nations_by_id lookup (this session's fresh in-memory nations, built
+    once per tick run) over the database when available; the database
+    query remains as a fallback for callers that don't supply it (e.g.
+    tests, or any future direct/manual invocation)."""
+
+    def test_stale_db_overlord_capacity_is_ignored_when_fresh_data_available(self):
+        """The database says the overlord still has gunpowder capacity, but
+        this session's fresh in-memory copy shows it's now 0 — the fresh
+        value must win, so gunpowder is never rolled."""
+        overlord_id = ObjectId()
+        fake_db = MagicMock()
+        # Database (stale — end of LAST session): overlord still had gunpowder.
+        fake_db.nations.find_one.return_value = {
+            "nation_resource_capacity": _capacity(gunpowder=5)
+        }
+        old_nation = _vassal(overlord_id, _capacity(gunpowder=5))
+        # This session's fresh in-memory overlord: gunpowder access lost.
+        nations_by_id = {
+            str(overlord_id): {"nation_resource_capacity": _capacity(gunpowder=0)},
+        }
+
+        with patch("helpers.tick_helpers.mongo", MagicMock(db=fake_db)):
+            for _ in range(50):
+                new_nation = dict(old_nation)
+                th.nation_concessions_tick(old_nation, new_nation, {}, nations_by_id=nations_by_id)
+                assert "gunpowder" not in new_nation.get("concessions", {})
+        fake_db.nations.find_one.assert_not_called()
+
+    def test_fresh_overlord_capacity_allows_gunpowder_when_actually_available(self):
+        """Symmetric case: fresh in-memory data shows gunpowder IS available
+        (even if a stale database snapshot said otherwise) — it must become
+        eligible without needing a database round trip."""
+        overlord_id = ObjectId()
+        fake_db = MagicMock()
+        fake_db.nations.find_one.return_value = {
+            "nation_resource_capacity": _capacity(gunpowder=0)  # stale: locked
+        }
+        old_nation = _vassal(overlord_id, _capacity(gunpowder=5))
+        nations_by_id = {
+            str(overlord_id): {"nation_resource_capacity": _capacity(gunpowder=5)},
+        }
+
+        saw_gunpowder = False
+        with patch("helpers.tick_helpers.mongo", MagicMock(db=fake_db)):
+            for _ in range(200):
+                new_nation = dict(old_nation)
+                th.nation_concessions_tick(old_nation, new_nation, {}, nations_by_id=nations_by_id)
+                if "gunpowder" in new_nation.get("concessions", {}):
+                    saw_gunpowder = True
+                    break
+        assert saw_gunpowder
+        fake_db.nations.find_one.assert_not_called()
+
+    def test_falls_back_to_database_when_overlord_not_in_nations_by_id(self):
+        """nations_by_id is provided (this session did build it) but doesn't
+        contain this particular overlord — falls back to the database
+        rather than treating the overlord as missing entirely."""
+        overlord_id = ObjectId()
+        fake_db = MagicMock()
+        fake_db.nations.find_one.return_value = {
+            "nation_resource_capacity": _capacity(gunpowder=5)
+        }
+        old_nation = _vassal(overlord_id, _capacity(gunpowder=5))
+
+        saw_gunpowder = False
+        with patch("helpers.tick_helpers.mongo", MagicMock(db=fake_db)):
+            for _ in range(200):
+                new_nation = dict(old_nation)
+                th.nation_concessions_tick(old_nation, new_nation, {}, nations_by_id={})
+                if "gunpowder" in new_nation.get("concessions", {}):
+                    saw_gunpowder = True
+                    break
+        assert saw_gunpowder
+        fake_db.nations.find_one.assert_called()
+
+    def test_omitting_nations_by_id_still_falls_back_to_database(self):
+        """Backward compatibility: callers that don't pass nations_by_id at
+        all (e.g. existing tests, or any direct caller) keep working exactly
+        as before."""
+        overlord_id = ObjectId()
+        fake_db = MagicMock()
+        fake_db.nations.find_one.return_value = {"nation_resource_capacity": _capacity()}
+        old_nation = _vassal(overlord_id, _capacity())
+        new_nation = dict(old_nation)
+
+        with patch("helpers.tick_helpers.mongo", MagicMock(db=fake_db)):
+            result = th.nation_concessions_tick(old_nation, new_nation, {})
+
+        assert isinstance(result, str)
+        fake_db.nations.find_one.assert_called()
+
+    def test_dispatch_registers_nation_concessions_tick_as_nations_by_id_aware(self):
+        assert th.nation_concessions_tick in th._NATIONS_BY_ID_AWARE_TICK_FUNCTIONS
+
+    def test_dispatch_forwards_nations_by_id_only_to_registered_functions(self):
+        received = {}
+
+        def fake_aware_tick(old_nation, new_nation, schema, **kwargs):
+            received["aware"] = kwargs.get("nations_by_id")
+            return ""
+
+        def fake_unaware_tick(old_nation, new_nation, schema):
+            received["unaware_called"] = True
+            return ""
+
+        lookup = {"some-id": {"name": "Test"}}
+        th._NATIONS_BY_ID_AWARE_TICK_FUNCTIONS.add(fake_aware_tick)
+        try:
+            th._dispatch(fake_aware_tick, [], {}, {}, {}, nations_by_id=lookup)
+            th._dispatch(fake_unaware_tick, [], {}, {}, {}, nations_by_id=lookup)
+        finally:
+            th._NATIONS_BY_ID_AWARE_TICK_FUNCTIONS.discard(fake_aware_tick)
+
+        assert received["aware"] is lookup
+        assert received["unaware_called"] is True
+
+
 class TestMissingOverlordKey:
     """Regression test for a production crash: a nation whose document has no
     "overlord" key at all (as opposed to overlord == "") crashed both

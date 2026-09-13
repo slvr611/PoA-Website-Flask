@@ -170,7 +170,7 @@ def _parse_synergies(form):
         mods = _parse_indexed_modifiers(form, f"synergies-{i}-modifiers")
         if req or mods:
             synergies.append({
-                "requirement": req.split(",") if "," in req else req,
+                "requirement": [r.strip() for r in req.split(",")] if "," in req else req,
                 "modifiers": mods,
                 "node_active": node_active,
             })

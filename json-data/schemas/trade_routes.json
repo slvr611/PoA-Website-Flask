@@ -5,12 +5,26 @@
       "nation_a": {
         "bsonType": "string",
         "label": "Nation A",
-        "description": "Name of the proposing nation"
+        "description": "Name of the proposing party (a nation or a merchant company — see nation_a_type)"
       },
       "nation_b": {
         "bsonType": "string",
         "label": "Nation B",
-        "description": "Name of the accepting nation"
+        "description": "Name of the accepting party (a nation or a merchant company — see nation_b_type)"
+      },
+      "nation_a_type": {
+        "bsonType": "string",
+        "label": "Nation A Type",
+        "description": "Whether nation_a is a nation or a merchant company. Absent/missing on older routes means nation, for backward compatibility.",
+        "enum": ["nation", "merchant"],
+        "default": "nation"
+      },
+      "nation_b_type": {
+        "bsonType": "string",
+        "label": "Nation B Type",
+        "description": "Whether nation_b is a nation or a merchant company. Absent/missing on older routes means nation, for backward compatibility.",
+        "enum": ["nation", "merchant"],
+        "default": "nation"
       },
       "proposer": {
         "bsonType": "string",

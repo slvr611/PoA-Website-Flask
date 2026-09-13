@@ -2661,7 +2661,7 @@ def _select_best_city(old_nation, state, exclude_types=None, owned_tiles=None,
 
 
 def sync_nation_cities(nation, dry_run=True, tiles_with_city=None, owned_tiles=None,
-                        world_city_coords=None, min_distance=MIN_CITY_TILE_DISTANCE):
+                        world_city_coords=None, world_city_ids=None, min_distance=MIN_CITY_TILE_DISTANCE):
     """
     Reconcile a nation's `cities` array against city objects placed on its
     owned map tiles. Two one-way operations, never destructive:
@@ -2673,7 +2673,12 @@ def sync_nation_cities(nation, dry_run=True, tiles_with_city=None, owned_tiles=N
        tile gets placed using the same tile-scoring logic the AI uses when
        building a new city (_score_best_city_tile / capital fallback),
        excluding any tile within min_distance of an existing city anywhere
-       on the map (any owner) — see MIN_CITY_TILE_DISTANCE.
+       on the map (any owner) — see MIN_CITY_TILE_DISTANCE. An entry whose id
+       is already placed on some tile THIS nation doesn't currently own
+       (e.g. briefly lost mid-war) is never given a second placement — see
+       world_city_ids — it's reported under "skipped_duplicate_elsewhere"
+       instead, since placing one would create a permanent, silently
+       duplicated city that nothing would ever detect afterward.
 
     Existing cities/tiles are never modified or removed.
 
@@ -2693,16 +2698,25 @@ def sync_nation_cities(nation, dry_run=True, tiles_with_city=None, owned_tiles=N
     mutable set through every call (it's added to here as each city is
     placed, so the next nation in the same batch sees it immediately).
 
+    world_city_ids: every city id anywhere on the map (any owner). Self-
+    fetches with a single query if not given; same batching guidance as
+    world_city_coords — pass the same mutable set through every call in a
+    multi-nation pass so an id placed for one nation is immediately excluded
+    for the next.
+
     Returns {
         "name": str,
         "added_to_nation": [{"id","name","type"}, ...],
         "placed_on_map": [{"id","name","type","coord":[q,r],"rationale"}, ...],
         "unplaceable": [{"id","name","type"}, ...],
+        "skipped_duplicate_elsewhere": [{"id","name","type"}, ...],
     }
     When dry_run is False, performs the DB writes for both directions.
     """
     if world_city_coords is None:
         world_city_coords = _fetch_world_city_coords()
+    if world_city_ids is None:
+        world_city_ids = _fetch_world_city_ids()
     nation_name = nation.get("name", "")
     nation_cities = nation.get("cities", []) or []
     nation_city_ids = {c.get("_id") for c in nation_cities if c.get("_id")}
@@ -2722,6 +2736,7 @@ def sync_nation_cities(nation, dry_run=True, tiles_with_city=None, owned_tiles=N
         "added_to_nation": [],
         "placed_on_map": [],
         "unplaceable": [],
+        "skipped_duplicate_elsewhere": [],
     }
 
     # --- Direction 1: Map → Nation ---
@@ -2780,6 +2795,15 @@ def sync_nation_cities(nation, dry_run=True, tiles_with_city=None, owned_tiles=N
         c for c in nation_cities
         if c.get("_id") and c["_id"] not in tile_city_ids and c.get("type")
     ]
+    still_to_place = []
+    for c in to_place:
+        if c["_id"] in world_city_ids:
+            report["skipped_duplicate_elsewhere"].append({
+                "id": c["_id"], "name": c.get("name", ""), "type": c.get("type", ""),
+            })
+        else:
+            still_to_place.append(c)
+    to_place = still_to_place
     if to_place and _nation_is_nomadic(nation):
         report["skipped_nomadic"] = [
             {"id": c["_id"], "name": c.get("name", ""), "type": c.get("type", "")}
@@ -2838,6 +2862,7 @@ def sync_nation_cities(nation, dry_run=True, tiles_with_city=None, owned_tiles=N
 
             reserved_coords.add(tuple(coord))
             world_city_coords.add(tuple(coord))
+            world_city_ids.add(c["_id"])
             report["placed_on_map"].append({
                 "id": c["_id"], "name": c.get("name", ""), "type": city_type,
                 "coord": [coord[0], coord[1]], "rationale": rationale,
@@ -2926,6 +2951,33 @@ def _fetch_world_city_coords():
     return set(
         (t["q"], t["r"]) for t in mongo.db.hex_map_tiles.find(
             {"city": {"$exists": True, "$ne": None}}, {"q": 1, "r": 1, "_id": 0}
+        )
+    )
+
+
+def _fetch_world_city_ids():
+    """Every city id anywhere on the map, regardless of owner. Used by
+    sync_nation_cities to detect a nation.cities entry whose id is already
+    placed on SOME tile that just isn't currently owned by that nation (e.g.
+    briefly captured mid-war when this ran) — without this, Direction 2
+    ("Nation -> Map") can't tell that apart from a genuinely unplaced city,
+    and would place a second copy of the same id on a different tile,
+    creating a permanent, silently-corrupt duplicate that nothing ever
+    detects afterward."""
+    return set(
+        t["city"]["id"] for t in mongo.db.hex_map_tiles.find(
+            {"city.id": {"$exists": True, "$ne": None}}, {"city.id": 1, "_id": 0}
+        )
+    )
+
+
+def _fetch_world_district_ids():
+    """Every district id anywhere on the map, regardless of owner — the
+    district counterpart of _fetch_world_city_ids, for the same reason in
+    sync_nation_districts."""
+    return set(
+        t["district"]["id"] for t in mongo.db.hex_map_tiles.find(
+            {"district.id": {"$exists": True, "$ne": None}}, {"district.id": 1, "_id": 0}
         )
     )
 
@@ -3304,7 +3356,8 @@ def fix_city_and_capital_placement(dry_run=True, min_distance=MIN_CITY_TILE_DIST
     return report
 
 
-def sync_nation_districts(nation, dry_run=True, tiles_with_district=None, owned_tiles=None):
+def sync_nation_districts(nation, dry_run=True, tiles_with_district=None, owned_tiles=None,
+                           world_district_ids=None):
     """
     Reconcile a nation's `districts` array against district objects placed on
     its owned map tiles. Two one-way operations, never destructive — mirrors
@@ -3327,18 +3380,35 @@ def sync_nation_districts(nation, dry_run=True, tiles_with_district=None, owned_
        tile-scoring logic the AI uses when building a new district
        (_pick_district_tile). Nomadic nations are skipped entirely: their
        districts live on the nation doc only and must never be placed on
-       map tiles.
+       map tiles. An entry whose id is already placed on some tile THIS
+       nation doesn't currently own (e.g. briefly lost mid-war) is never
+       given a second placement — see world_district_ids — it's reported
+       under "skipped_duplicate_elsewhere" instead, since placing one would
+       create a permanent, silently duplicated district that nothing would
+       ever detect afterward (and which, if it happens to be the only
+       "building" adjacent to some other district, can make that other
+       district look legally placed when it's actually disconnected from
+       the nation's real territory).
 
     Existing districts/tiles are never modified or removed.
+
+    world_district_ids: every district id anywhere on the map (any owner).
+    Self-fetches with a single query if not given; a caller syncing many
+    nations in one pass should build this ONCE and pass the same mutable
+    set through every call, same batching reasoning as sync_nation_cities's
+    world_city_coords/world_city_ids.
 
     Returns {
         "name": str,
         "added_to_nation": [{"id","def_key","node"}, ...],
         "placed_on_map": [{"id","def_key","coord":[q,r],"rationale"}, ...],
         "unplaceable": [{"id","def_key"}, ...],
+        "skipped_duplicate_elsewhere": [{"id","def_key"}, ...],
     }
     When dry_run is False, performs the DB writes for both directions.
     """
+    if world_district_ids is None:
+        world_district_ids = _fetch_world_district_ids()
     nation_name = nation.get("name", "")
     nation_districts = nation.get("districts", []) or []
     nation_district_ids = {d.get("_id") for d in nation_districts if isinstance(d, dict) and d.get("_id")}
@@ -3358,6 +3428,7 @@ def sync_nation_districts(nation, dry_run=True, tiles_with_district=None, owned_
         "added_to_nation": [],
         "placed_on_map": [],
         "unplaceable": [],
+        "skipped_duplicate_elsewhere": [],
     }
 
     # --- Direction 1: Map → Nation ---
@@ -3414,6 +3485,15 @@ def sync_nation_districts(nation, dry_run=True, tiles_with_district=None, owned_
         d for d in nation_districts
         if isinstance(d, dict) and d.get("_id") and d["_id"] not in tile_district_ids and d.get("def_key")
     ]
+    still_to_place = []
+    for d in to_place:
+        if d["_id"] in world_district_ids:
+            report["skipped_duplicate_elsewhere"].append({
+                "id": d["_id"], "def_key": d.get("def_key", ""),
+            })
+        else:
+            still_to_place.append(d)
+    to_place = still_to_place
     if to_place and _nation_is_nomadic(nation):
         report["skipped_nomadic"] = [
             {"id": d["_id"], "def_key": d.get("def_key", "")}
@@ -3460,6 +3540,7 @@ def sync_nation_districts(nation, dry_run=True, tiles_with_district=None, owned_
                 continue
 
             reserved_coords.add(tuple(coord))
+            world_district_ids.add(d["_id"])
             report["placed_on_map"].append({
                 "id": d["_id"], "def_key": def_key,
                 "coord": [coord[0], coord[1]], "rationale": rationale,

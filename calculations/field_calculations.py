@@ -4,7 +4,10 @@ import threading
 from copy import deepcopy
 from time import perf_counter
 from app_core import mongo, json_data, category_data
-from calculations.compute_functions import compute_pop_count, compute_field, get_bandit_camp_income_contributions
+from calculations.compute_functions import (
+    compute_pop_count, compute_field, get_bandit_camp_income_contributions,
+    BANDIT_CAMP_SPAWN_CHANCE_FLOOR,
+)
 from calculations.scaling_methods import get_scaling_multiplier
 from bson.objectid import ObjectId
 
@@ -555,6 +558,19 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
             overall_total_modifiers[key] = overall_total_modifiers.get(key, 0) + value
     calculated_values = {"district_details": district_details, "job_details": job_details, "land_unit_details": land_unit_details, "naval_unit_details": naval_unit_details, "support_unit_details": support_unit_details}
 
+    # Expose the requirement-filtered details dicts on target itself (not just
+    # calculated_values) so compute_working_pop_count/compute_unit_count below
+    # can tell which jobs/units currently meet their requirements (e.g. still
+    # have the district they need) and exclude the rest from the count fields,
+    # the same way sum_job_totals/sum_unit_totals already exclude them from
+    # resource production/upkeep.
+    if target_data_type in ("nation", "nation_jobs"):
+        target["job_details"] = job_details
+    if target_data_type == "nation":
+        target["land_unit_details"] = land_unit_details
+        target["naval_unit_details"] = naval_unit_details
+        target["support_unit_details"] = support_unit_details
+
     # Correct {resource}_nodes counts using tile-based truth.
     # Multiple buildings on one tile still activate its node only once. For
     # nomadic nations every territory node tile is automatically active.
@@ -634,8 +650,11 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
         # assignment dict), so it never sees the disease-forced virtual jobs
         # merged into the local jobs_assigned copy above. Override with the
         # disease-inclusive total so the "Working Pops" summary matches the
-        # jobs table, which already lists disease-forced rows.
-        _working_pop_count = sum(jobs_assigned.values())
+        # jobs table, which already lists disease-forced rows. Exclude jobs
+        # that no longer meet their requirements (e.g. the district they
+        # need was dismantled) — job_details only contains jobs that still
+        # qualify, same filter sum_job_totals uses for production/upkeep.
+        _working_pop_count = sum(count for job, count in jobs_assigned.items() if job in job_details)
         calculated_values["working_pop_count"] = _working_pop_count
         target["working_pop_count"] = _working_pop_count
 
@@ -4103,14 +4122,7 @@ def _apply_vassal_tribute_modifiers(target, overall_total_modifiers):
             overall_total_modifiers[f"{resource}_production"] = (
                 overall_total_modifiers.get(f"{resource}_production", 0) + v_tribute
             )
-        if v_type == "Provincial":
-            v_research = vassal.get("resource_production", {}).get("research", 0)
-            if v_research > 0:
-                transfer = math.ceil(v_research * 0.5)
-                overall_total_modifiers["research_production"] = (
-                    overall_total_modifiers.get("research_production", 0) + transfer
-                )
-        elif v_type == "Mercantile":
+        if v_type == "Mercantile":
             v_production = vassal.get("resource_production", {})
             for _lux in json_data.get("luxury_resources", []):
                 _lux_key = _lux["key"]
@@ -4700,11 +4712,7 @@ def _build_computed_contributions(
                     v_combined_modifiers[key] = overall_totals.get(key, 0) + v_own_totals.get(key, 0)
             v_tribute_by_resource = _calc_tribute(v_pop, v_type, v_combined_modifiers)
             v_mods = {f"{res}_production": amt for res, amt in v_tribute_by_resource.items() if amt}
-            if v_type == "Provincial":
-                v_research = vassal.get("resource_production", {}).get("research", 0)
-                if v_research > 0:
-                    v_mods["research_production"] = v_mods.get("research_production", 0) + _math.ceil(v_research * 0.5)
-            elif v_type == "Mercantile":
+            if v_type == "Mercantile":
                 v_production = vassal.get("resource_production", {})
                 for _lux in json_data.get("luxury_resources", []):
                     _lux_key = _lux["key"]
@@ -5000,6 +5008,22 @@ def compute_nation_breakdowns(
             _total_entry = next((e for e in _sbd if e["label"] == "Total"), None)
             if _total_entry:
                 _sbd.insert(_sbd.index(_total_entry), {"label": "Uncapped Total", "value": _raw_sum})
+
+    # bandit_camp_spawn_chance: never below BANDIT_CAMP_SPAWN_CHANCE_FLOOR
+    # (5%) — mirrors the stability cap pattern above, just floored instead
+    # of capped: show the true (negative-modifier-reduced) raw sum as
+    # "Unfloored Total" whenever it would otherwise have dropped below the
+    # guaranteed minimum, so the floor's effect is visible, not silent.
+    _bcsc_bd = breakdowns.get("bandit_camp_spawn_chance")
+    if _bcsc_bd:
+        _floor_pct = round(BANDIT_CAMP_SPAWN_CHANCE_FLOOR * 100, 2)
+        _bcsc_entries = [e for e in _bcsc_bd if e["label"] != "Total"]
+        _bcsc_raw_sum = round(sum(e["value"] for e in _bcsc_entries), 2)
+        if _bcsc_raw_sum < _floor_pct:
+            _bcsc_total_entry = next((e for e in _bcsc_bd if e["label"] == "Total"), None)
+            if _bcsc_total_entry:
+                _bcsc_bd.insert(_bcsc_bd.index(_bcsc_total_entry), {"label": "Unfloored Total", "value": _bcsc_raw_sum})
+                _bcsc_bd.insert(_bcsc_bd.index(_bcsc_total_entry), {"label": "Minimum Guarantee", "value": _floor_pct})
 
     # effective_territory — inject Administration contribution before Total
     eff_terr_bd = _field_bd("effective_territory")

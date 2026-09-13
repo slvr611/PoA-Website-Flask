@@ -701,6 +701,15 @@ def my_changes(page=1):
         col = change.get("target_collection", "")
         if col in category_data:
             collections_to_preview[col] = col
+
+            # Add collections for linked fields in the target schema, so
+            # linked_object diffs (e.g. a pop's culture/race/religion) can
+            # resolve names instead of falling back to "None".
+            target_schema = target_schemas.get(col, {}).get("properties", {})
+            for field_name, field_schema in target_schema.items():
+                if field_schema.get("bsonType") == "linked_object" and field_schema.get("collections"):
+                    for linked_collection in field_schema.get("collections", []):
+                        collections_to_preview[linked_collection] = linked_collection
     preview_references = get_preview_references(
         category_data.get("changes", {}).get("schema", {}),
         collections_to_preview

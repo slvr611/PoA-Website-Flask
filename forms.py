@@ -339,6 +339,7 @@ class ModifierForm(Form):
     target_value = StringField("Target Value")
     unit_name = StringField("Unit Name")
     district_key = StringField("District Key")
+    city = StringField("City")
     value = FloatField("Value", default=1)
     max_value = FloatField("Max Value", validators=[Optional()])
     duration = IntegerField("Duration", validators=[NumberRange()], default=-1)
@@ -827,14 +828,32 @@ class BaseSchemaForm(FlaskForm):
         # Check if this is actually a nation or another entity type
         entity_type = schema.get("title", "").lower()
         if entity_type != "nations":
-            # Non-nation entities get 3 basic progress slots + spell slots
-            return [
-                ("no_slot", "No Slot"),
-                ("1_progress_slot", "1 Progress Slot"),
+            # Non-nation entities (characters, merchants, mercenaries) have
+            # their own flat 0-4_progress_slots calculated fields, same as
+            # nations, just without the centralization-law bucketing only
+            # nations use. `nation` here is whatever the caller had on hand
+            # for this entity — the raw DB item's last-calculated fields
+            # when editing an existing one, or {} for a brand-new item not
+            # saved yet, in which case fall back to the schema's own
+            # base_value so the dropdown still reflects something sensible
+            # before the first save.
+            schema_props = schema.get("properties", {})
+            entity = nation or {}
+            available_slots = [("no_slot", "No Slot")]
+            for n in range(5):
+                slot_key = f"{n}_progress_slots"
+                if slot_key in entity:
+                    slot_count = entity.get(slot_key, 0)
+                else:
+                    slot_count = schema_props.get(slot_key, {}).get("base_value", 0)
+                if slot_count and slot_count > 0:
+                    available_slots.append((f"{n}_progress_slot", f"{n} Progress Slot"))
+            available_slots.extend([
                 ("tier_1_spell_slot", "Tier 1 Spell Slot"),
                 ("tier_2_spell_slot", "Tier 2 Spell Slot"),
-                ("tier_3_spell_slot", "Tier 3 Spell Slot")
-            ]
+                ("tier_3_spell_slot", "Tier 3 Spell Slot"),
+            ])
+            return available_slots
 
         # Always use the DB nation — form-derived data excludes external modifiers
         # (wonders, rulers). The DB nation already stores calculated slot fields
@@ -968,7 +987,7 @@ class BaseSchemaForm(FlaskForm):
 
         field.choices = choices
 
-    def populate_linked_fields(self, schema, dropdown_options):
+    def populate_linked_fields(self, schema, dropdown_options, item=None):
         """Populates all linked fields with their options"""
         for field_name, field_schema in schema.get("properties", {}).items():
             if field_schema.get("collections") and field_name in self._fields:
@@ -989,17 +1008,22 @@ class BaseSchemaForm(FlaskForm):
                     node_choices.append((resource.get("key", resource), resource.get("name", resource)))
                 field = getattr(self, field_name)
                 field.choices = node_choices
-            
+
         # Populate progress quest slots for ALL entity types
         if hasattr(self, 'progress_quests'):
-            # Get current form data for slot calculation
-            nation_data = {}
+            # Prefer the raw DB item — it already carries this entity's
+            # last-calculated 0-4_progress_slots (a "calculated": true
+            # field, so DynamicSchemaForm never turns it into a form field
+            # at all — see create_form_class — meaning form-field data can
+            # never reflect it). Fall back to form field data for a
+            # brand-new item that has no DB record yet.
+            entity_data = dict(item) if item else {}
             for field_name, field in self._fields.items():
-                if hasattr(field, 'data') and field.data is not None:
-                    nation_data[field_name] = field.data
-            
-            available_slots = self.get_available_slots(nation_data, schema)
-            
+                if hasattr(field, 'data') and field.data is not None and field_name not in entity_data:
+                    entity_data[field_name] = field.data
+
+            available_slots = self.get_available_slots(entity_data, schema)
+
             for quest_field in self.progress_quests:
                 if hasattr(quest_field, 'slot'):
                     quest_field.slot.choices = available_slots
@@ -1578,8 +1602,13 @@ class JobForm(BaseSchemaForm):
                 if job_field:
                     job_field.data = job_val
     
-    def populate_linked_fields(self, schema, dropdown_options):
-        """Populates all linked fields with their options"""
+    def populate_linked_fields(self, schema, dropdown_options, item=None):
+        """Populates all linked fields with their options.
+
+        `item` is accepted-but-unused here purely so call sites that pass it
+        (routes/data_item_routes.py) can treat every BaseSchemaForm subclass
+        uniformly — JobForm has no progress_quests field to populate.
+        """
         for field_name, field_schema in schema.get("properties", {}).items():
             if field_schema.get("collections"):
                 self.populate_select_field(field_name, self[field_name], schema, dropdown_options)

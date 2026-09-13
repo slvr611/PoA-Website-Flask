@@ -135,6 +135,36 @@ def inject_modifier_data():
         {"key": "strategy", "name": "Strategy"},
     ]
 
+    # Every city on the map, for the merchant "Current City" dropdown
+    # (scoped client-side to the merchant's own home nation) and the
+    # "Additional Trade City" modifier's city picker (deliberately NOT
+    # scoped — a merchant can be based in a city belonging to any nation).
+    # `nation` is the owning nation's _id (string) so it can be matched
+    # client-side against a "Current Location" dropdown's selected value,
+    # which is also that nation's _id.
+    _nation_ids_by_name = {
+        n["name"]: str(n["_id"]) for n in mongo.db.nations.find({}, {"name": 1})
+    }
+    all_cities = []
+    for t in mongo.db.hex_map_tiles.find(
+        {"city": {"$exists": True, "$ne": None}},
+        {"q": 1, "r": 1, "city": 1, "owner": 1},
+    ):
+        city = t.get("city") or {}
+        city_id = city.get("id")
+        if not city_id:
+            continue
+        owner_name = t.get("owner", "")
+        label = city.get("name") or f"Unnamed City ({t.get('q')},{t.get('r')})"
+        if owner_name:
+            label += f" — {owner_name}"
+        all_cities.append({
+            "key": city_id,
+            "name": label,
+            "nation": _nation_ids_by_name.get(owner_name, ""),
+        })
+    all_cities.sort(key=lambda c: c["name"])
+
     jobs = json_data.get("jobs", {})
     all_jobs = sorted(
         [{"key": k, "name": v.get("display_name", k)} for k, v in jobs.items()],
@@ -241,6 +271,7 @@ def inject_modifier_data():
         "unit_upkeep_resource_options": unit_upkeep_resource_options,
         "all_trade_resources": all_trade_resources,
         "all_attributes": all_attributes,
+        "all_cities": all_cities,
         "all_jobs": all_jobs,
         "all_job_special_fields": all_job_special_fields,
         "scope_definitions": scope_definitions,

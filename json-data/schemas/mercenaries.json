@@ -18,7 +18,9 @@
     "external_calculation_requirements": {
       "leaders": [
         "positive_titles",
-        "negative_titles"
+        "negative_titles",
+        "modifiers",
+        {"artifacts": ["external_modifiers", "modifiers"]}
       ]
     },
     "properties": {

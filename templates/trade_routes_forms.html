@@ -11,10 +11,13 @@
   closing the outer form early and orphaning every control after it —
   which silently broke the nation edit page's Save/Request buttons.
 
-  Expected context: nation, trade_routes, editable, connectable_nations.
+  Expected context: nation, trade_routes, editable, connectable_nations,
+  and optionally party_type ("nation", the default, or "merchant" — which
+  collection `nation` itself actually belongs to).
 #}
 {% if editable %}
   {% set tr_nation_name = nation.get("name", "") %}
+  {% set tr_party_type = party_type | default("nation") %}
   {% for r in trade_routes %}
     {% if r.status == "pending" %}
       <form id="tr-frm-{{ r._id }}-accept" action="/trade_routes/{{ r._id }}/accept" method="POST"></form>
@@ -27,6 +30,8 @@
     {% endif %}
   {% endfor %}
   {% if connectable_nations %}
-    <form id="tr-propose-form" action="/trade_routes/propose" method="POST"></form>
+    <form id="tr-propose-form" action="/trade_routes/propose" method="POST">
+      <input type="hidden" name="proposer_type" value="{{ tr_party_type }}">
+    </form>
   {% endif %}
 {% endif %}

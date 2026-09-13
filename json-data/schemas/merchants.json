@@ -15,7 +15,9 @@
     "external_calculation_requirements": {
       "leaders": [
         "positive_titles",
-        "negative_titles"
+        "negative_titles",
+        "modifiers",
+        {"artifacts": ["external_modifiers", "modifiers"]}
       ]
     },
     "properties": {
@@ -86,6 +88,11 @@
           "nations"
         ]
       },
+      "current_city_id": {
+        "bsonType": "string",
+        "label": "Current City",
+        "description": "The specific city (within the home nation set above) this merchant company is currently in. Used to compute trade route distance/reachability from that exact city instead of the home nation's whole city network. Leave unset to fall back to the home nation's city network. A merchant can also be based in additional cities — including in other nations — via the \"Additional Trade City\" modifier."
+      },
       "income": {
         "bsonType": "number",
         "label": "Income",
@@ -117,6 +124,18 @@
         "description": "The amount of resources the merchant company can export each session",
         "calculated": true,
         "base_value": 12
+      },
+      "remaining_import_slots": {
+        "bsonType": "number",
+        "label": "Remaining Import Slots",
+        "description": "The number of import slots the merchant company has available this session, after accounting for ongoing trade routes",
+        "calculated": true
+      },
+      "remaining_export_slots": {
+        "bsonType": "number",
+        "label": "Remaining Export Slots",
+        "description": "The number of export slots the merchant company has available this session, after accounting for ongoing trade routes",
+        "calculated": true
       },
       "resource_storage": {
         "bsonType": "object",

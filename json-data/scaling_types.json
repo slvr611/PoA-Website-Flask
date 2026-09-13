@@ -93,6 +93,24 @@
         "has_x": true,
         "default_x": 1
     },
+    "per_x%_stability_gain_chance": {
+        "name": "Per X% Stability Gain Chance",
+        "description": "Multiplied by the nation's stability_gain_chance expressed as a whole percentage (e.g. 0.5 = 50) divided by X, floored.",
+        "has_x": true,
+        "default_x": 1
+    },
+    "per_x_land_unit_slots": {
+        "name": "Per X Land Unit Slots",
+        "description": "Multiplied by the nation's land unit capacity (how many land units it can field at once) divided by X, floored.",
+        "has_x": true,
+        "default_x": 1
+    },
+    "per_x_active_wars": {
+        "name": "Per X Active Wars",
+        "description": "Multiplied by how many wars the nation is currently, actively fighting (any stance) divided by X, floored. Also usable as a condition (operator '<=' value 0) to check whether a nation is at peace.",
+        "has_x": true,
+        "default_x": 1
+    },
     "per_x_money": {
         "name": "Per X Money",
         "description": "Multiplied by the nation's current money stockpile divided by X, floored.",
@@ -216,6 +234,12 @@
     "per_x_ruling_character_artifact_slots": {
         "name": "Per X Ruling Character Artifact Slots",
         "description": "Multiplied by the highest artifact_slots value among the nation's current ruling characters, divided by X, floored. Uses the maximum, not a sum, so having multiple rulers does not stack the bonus.",
+        "has_x": true,
+        "default_x": 1
+    },
+    "per_x_ruling_character_is_adult": {
+        "name": "Per X Ruling Character Is Adult",
+        "description": "1 divided by X, floored, if ANY of the nation's current ruling characters has age > 0 (isn't a child); otherwise 0. A boolean gate rather than a true per-X scale — set X to 1 to use it as a flat on/off multiplier, e.g. to disable a wonder bonus while the ruler is a child.",
         "has_x": true,
         "default_x": 1
     }

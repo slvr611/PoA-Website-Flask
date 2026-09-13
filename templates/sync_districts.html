@@ -34,6 +34,7 @@
                     <th>Add to Nation Page (from map)</th>
                     <th>Place on Map (from nation page)</th>
                     <th>Unplaceable (no legal tile)</th>
+                    <th>Already Placed Elsewhere (needs manual review)</th>
                 </tr>
             </thead>
             <tbody>
@@ -62,6 +63,15 @@
                         {% if r.unplaceable %}
                         {% for d in r.unplaceable %}
                         <div style="color:#c8a96e;">{{ d.def_key }}{% if d.reason %} <span class="text-muted">({{ d.reason }})</span>{% endif %}</div>
+                        {% endfor %}
+                        {% else %}
+                        <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if r.skipped_duplicate_elsewhere %}
+                        {% for d in r.skipped_duplicate_elsewhere %}
+                        <div style="color:#c66;">{{ d.def_key }} <span class="text-muted">(id={{ d.id }})</span></div>
                         {% endfor %}
                         {% else %}
                         <span class="text-muted">—</span>

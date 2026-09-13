@@ -93,7 +93,7 @@
     },
     "resource_windfall_on_stability_loss": {
         "name": "Resource Windfall on Stability Loss",
-        "description": "Each time the nation loses a level of stability, it gains this many random non-research general resources (1 unit each, possibly repeating the same resource).",
+        "description": "Each time the nation loses a level of stability, it gains (positive value) or loses (negative value) this many random non-research general resources (1 unit each, possibly repeating the same resource). A loss is clamped at 0 per resource.",
         "value_format": "number",
         "field_template": "resource_windfall_on_stability_loss",
         "applicable_to": ["nation"]
@@ -734,6 +734,16 @@
         "field_template": "defensive_visibility",
         "is_visibility_modifier": true,
         "applicable_to": ["nation", "merchant"]
+    },
+    "additional_trade_city": {
+        "name": "Additional Trade City",
+        "description": "Lets this merchant company also be based out of another city (in any nation, not just its own) for trade route reachability — its trade reach becomes the combined reach of every city it's based in, not just its primary one. Add one of these per extra city. The value field is unused.",
+        "value_format": "number",
+        "field_template": "additional_trade_city",
+        "extra_fields": [
+            {"key": "city", "label": "City", "source": "all_cities"}
+        ],
+        "applicable_to": ["merchant"]
     },
     "forced_flee_destination": {
         "name": "Forced Flee Destination",

@@ -163,14 +163,6 @@
           "bsonType": "string"
         }
       },
-      "minimum_trade_risk": {
-        "bsonType": "number",
-        "label": "Minimum Trade Risk",
-        "description": "The minimum risk of trading in the market",
-        "format": "percentage",
-        "calculated": true,
-        "base_value": 0.05
-      },
       "trade_risk": {
         "bsonType": "number",
         "label": "Trade Risk",
@@ -182,7 +174,7 @@
       "bandit_camp_spawn_chance": {
         "bsonType": "number",
         "label": "Bandit Camp Spawn Chance",
-        "description": "The chance a new bandit camp spawns somewhere in this market's trade network each session",
+        "description": "The chance a new bandit camp spawns somewhere in this market's trade network each session. Never below 5%, no matter how much Luxury/Maritime/Militant type bonuses or member protection stances reduce it.",
         "format": "percentage",
         "calculated": true,
         "show_breakdown": true,

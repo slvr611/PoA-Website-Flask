@@ -90,6 +90,24 @@ def _world_city_coords_from_tiles_by_owner(tiles_by_owner):
     return coords
 
 
+def _world_ids_from_tiles_by_owner(tiles_by_owner):
+    """Derive world-wide city/district id sets straight from the already
+    batch-fetched tiles_by_owner instead of two extra queries — passed to
+    sync_nation_cities/sync_nation_districts so a nation.cities/districts
+    entry already sitting on a tile owned by someone else (or briefly
+    excluded here) never gets a second, duplicate placement."""
+    city_ids, district_ids = set(), set()
+    for tiles in tiles_by_owner.values():
+        for t in tiles:
+            city = t.get("city")
+            if isinstance(city, dict) and city.get("id"):
+                city_ids.add(city["id"])
+            district = t.get("district")
+            if isinstance(district, dict) and district.get("id"):
+                district_ids.add(district["id"])
+    return city_ids, district_ids
+
+
 def main():
     apply = "--apply" in sys.argv
 
@@ -97,12 +115,15 @@ def main():
     ai_nations = list(mongo.db.nations.find({"_id": {"$nin": list(player_ids)}}).sort("name", 1))
     tiles_by_owner = _all_tiles_by_owner()
     world_city_coords = _world_city_coords_from_tiles_by_owner(tiles_by_owner)
+    world_city_ids, world_district_ids = _world_ids_from_tiles_by_owner(tiles_by_owner)
 
     print(f"{len(ai_nations)} AI nations. {'APPLYING' if apply else 'DRY RUN — nothing written'}\n")
 
     total = {
         "districts_added_to_nation": 0, "districts_placed_on_map": 0, "districts_unplaceable": 0,
+        "districts_skipped_duplicate": 0,
         "cities_added_to_nation": 0, "cities_placed_on_map": 0, "cities_unplaceable": 0,
+        "cities_skipped_duplicate": 0,
         "nations_touched": 0,
     }
     any_placed_on_map = False
@@ -113,14 +134,17 @@ def main():
         tiles_with_district = [t for t in owned if t.get("district")]
         tiles_with_city = [t for t in owned if t.get("city")]
 
-        d_report = sync_nation_districts(n, dry_run=not apply, tiles_with_district=tiles_with_district, owned_tiles=owned)
+        d_report = sync_nation_districts(
+            n, dry_run=not apply, tiles_with_district=tiles_with_district, owned_tiles=owned,
+            world_district_ids=world_district_ids,
+        )
         c_report = sync_nation_cities(
             n, dry_run=not apply, tiles_with_city=tiles_with_city, owned_tiles=owned,
-            world_city_coords=world_city_coords,
+            world_city_coords=world_city_coords, world_city_ids=world_city_ids,
         )
 
-        touched = any(d_report[k] for k in ("added_to_nation", "placed_on_map", "unplaceable")) or \
-            any(c_report[k] for k in ("added_to_nation", "placed_on_map", "unplaceable"))
+        touched = any(d_report[k] for k in ("added_to_nation", "placed_on_map", "unplaceable", "skipped_duplicate_elsewhere")) or \
+            any(c_report[k] for k in ("added_to_nation", "placed_on_map", "unplaceable", "skipped_duplicate_elsewhere"))
         if not touched:
             continue
 
@@ -142,6 +166,10 @@ def main():
         if d_report.get("skipped_nomadic"):
             for item in d_report["skipped_nomadic"]:
                 print(f"  district skipped (nomadic nation): {item['def_key']} (id={item['id']})")
+        if d_report.get("skipped_duplicate_elsewhere"):
+            total["districts_skipped_duplicate"] += len(d_report["skipped_duplicate_elsewhere"])
+            for item in d_report["skipped_duplicate_elsewhere"]:
+                print(f"  district ALREADY PLACED ELSEWHERE ON MAP (needs manual review): {item['def_key']} (id={item['id']})")
 
         if c_report["added_to_nation"]:
             total["cities_added_to_nation"] += len(c_report["added_to_nation"])
@@ -159,6 +187,10 @@ def main():
         if c_report.get("skipped_nomadic"):
             for item in c_report["skipped_nomadic"]:
                 print(f"  city skipped (nomadic nation): {item['type']} (id={item['id']})")
+        if c_report.get("skipped_duplicate_elsewhere"):
+            total["cities_skipped_duplicate"] += len(c_report["skipped_duplicate_elsewhere"])
+            for item in c_report["skipped_duplicate_elsewhere"]:
+                print(f"  city ALREADY PLACED ELSEWHERE ON MAP (needs manual review): {item['type']} (id={item['id']})")
         print()
 
     print("--- Summary ---")
@@ -166,9 +198,11 @@ def main():
     print(f"Districts added to nation pages: {total['districts_added_to_nation']}")
     print(f"Districts placed on map: {total['districts_placed_on_map']}")
     print(f"Districts unplaceable (no legal tile / no matching district_defs): {total['districts_unplaceable']}")
+    print(f"Districts already placed elsewhere on the map (needs manual review): {total['districts_skipped_duplicate']}")
     print(f"Cities added to nation pages: {total['cities_added_to_nation']}")
     print(f"Cities placed on map: {total['cities_placed_on_map']}")
     print(f"Cities unplaceable: {total['cities_unplaceable']}")
+    print(f"Cities already placed elsewhere on the map (needs manual review): {total['cities_skipped_duplicate']}")
 
     if apply and any_placed_on_map:
         bump_tile_version()

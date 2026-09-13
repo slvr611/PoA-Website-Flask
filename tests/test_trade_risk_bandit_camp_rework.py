@@ -73,11 +73,21 @@ class TestComputeBanditCampSpawnChance:
         )
         assert result == 0.2
 
-    def test_clamped_between_zero_and_one(self):
+    def test_never_drops_below_the_five_percent_floor(self):
+        """Enough negative reduction to go well below (even negative) is
+        still floored at BANDIT_CAMP_SPAWN_CHANCE_FLOOR (5%) — every market
+        carries at least a baseline risk, no matter how much
+        Luxury/Maritime/Militant/protection-stance reduction stacks up."""
         result = cf.compute_bandit_camp_spawn_chance(
             "bandit_camp_spawn_chance", {}, 0.05, {}, {"bandit_camp_spawn_chance": -1}
         )
-        assert result == 0.0
+        assert result == cf.BANDIT_CAMP_SPAWN_CHANCE_FLOOR == 0.05
+
+    def test_clamped_at_one_hundred_percent(self):
+        result = cf.compute_bandit_camp_spawn_chance(
+            "bandit_camp_spawn_chance", {}, 0.05, {}, {"bandit_camp_spawn_chance": 5}
+        )
+        assert result == 1.0
 
     def test_per_owner_naval_unit_scales_by_market_head(self, test_db):
         head_id = ObjectId()
@@ -92,7 +102,27 @@ class TestComputeBanditCampSpawnChance:
             )
         finally:
             real_mongo.db = original_db
-        assert round(result, 10) == 0.02
+        # 0.05 base - 0.01*1*3 = 0.02 raw, floored back up to 0.05 (5%).
+        assert round(result, 10) == cf.BANDIT_CAMP_SPAWN_CHANCE_FLOOR
+
+    def test_per_owner_naval_unit_below_floor_threshold_still_reduces_normally(self, test_db):
+        """A smaller reduction that doesn't cross the floor still applies at
+        full strength — the floor only kicks in once it would actually be
+        needed."""
+        head_id = ObjectId()
+        test_db.nations.insert_one({"_id": head_id, "naval_unit_count": 1, "land_unit_count": 0, "resource_storage": {}})
+        real_mongo, _ = _patched_db(test_db)
+        original_db = real_mongo.db
+        real_mongo.db = test_db
+        try:
+            result = cf.compute_bandit_camp_spawn_chance(
+                "bandit_camp_spawn_chance", {"market_head": str(head_id)}, 0.20, {},
+                {"bandit_camp_spawn_chance_per_owner_naval_unit": -0.01, "market_tier_multiplier": 1},
+            )
+        finally:
+            real_mongo.db = original_db
+        # 0.20 base - 0.01*1*1 = 0.19, well above the floor — untouched.
+        assert round(result, 10) == 0.19
 
 
 class TestIsDeliveringRespectsRaidedSessions:

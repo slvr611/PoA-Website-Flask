@@ -711,6 +711,16 @@ def tick(form_data):
         # is caught too, not just fleeing out of one.
         flee_events = []
 
+        # O(1) lookup into this session's already-recalculated nations, by
+        # id — for a per-nation tick function that needs to read a DIFFERENT
+        # nation's CURRENT data (e.g. a vassal's overlord) without querying
+        # the database, which mid-tick still only holds whatever was
+        # persisted at the END of the LAST session (this session's fresh
+        # calculate_all_fields results above live only in old_nations/
+        # new_nations until the commit phase at the very end of tick()).
+        # See _NATIONS_BY_ID_AWARE_TICK_FUNCTIONS.
+        old_nations_by_id = {str(n.get("_id", "")): n for n in old_nations}
+
         for tick_function_label, tick_function in NATION_TICK_FUNCTIONS.items():
             run_key = f"run_{tick_function_label}"
             if run_key in form_data:
@@ -745,6 +755,7 @@ def tick(form_data):
                         result = _dispatch(
                             tick_function, pending, old_nations[i], new_nations[i], nation_schema,
                             pending_tiles=pending_tiles, flee_events=flee_events, world_city_coords=world_city_coords,
+                            nations_by_id=old_nations_by_id,
                         )
                         fled_to_a_player_nation = any(
                             e.get("to_temperament") == "Player" for e in flee_events[_flee_events_before:]
@@ -1937,42 +1948,56 @@ def nation_income_tick(old_nation, new_nation, schema):
     return "\n".join(lines) + "\n"
 
 def _grant_resource_windfall(old_nation, new_nation, rolls, event_label):
-    """Grant `rolls` units of random non-research general resources (one roll
-    = one unit of one randomly chosen resource, so the same resource can be
-    hit more than once), added directly to storage.
+    """Grant (rolls > 0) or take away (rolls < 0) |rolls| units of random
+    non-research general resources (one roll = one unit of one randomly
+    chosen resource, so the same resource can be hit more than once),
+    applied directly to storage. A loss is clamped at 0 per resource — it
+    can't push storage negative, unlike a grant, which is uncapped (see
+    below).
 
-    Deliberately NOT capped at nation_resource_capacity: windfalls are meant
-    to give the nation a chance to spend an overflow before the cap gets
-    reapplied by Nation Income Tick at the START of next session. Capping here
-    would silently destroy the whole point of a windfall for a nation already
-    near capacity.
+    Deliberately NOT capped at nation_resource_capacity on the grant side:
+    windfalls are meant to give the nation a chance to spend an overflow
+    before the cap gets reapplied by Nation Income Tick at the START of
+    next session. Capping here would silently destroy the whole point of a
+    windfall for a nation already near capacity.
 
     Shared by the tick-driven "resource windfall on X" modifiers (tech
     researched, stability loss, expansion) — mirrors era_formal_storage_bonus_tick's
-    grant pattern. Returns a log line, or "" if rolls <= 0.
+    grant pattern. The same modifier_type can be authored with either sign
+    depending on the government/law's own flavor (e.g. Disjointed Anarchists
+    profits from instability with a positive resource_windfall_on_stability_loss,
+    while United Peoples wastes resources on the same event with a negative
+    one) — this function honors whichever sign it's given rather than
+    assuming windfalls are always a reward. Returns a log line, or "" if
+    rolls == 0.
 
     Must run reading/writing new_nation["resource_storage"] (not old_nation's)
     since Nation Income Tick already rebuilds it earlier in NATION_TICK_FUNCTIONS.
     """
-    if rolls <= 0:
+    if rolls == 0:
         return ""
+    is_loss = rolls < 0
     resource_pool = [r["key"] for r in json_data.get("general_resources", []) if r["key"] != "research"]
     if not resource_pool:
         return ""
 
-    gained = {}
-    for _ in range(int(rolls)):
+    changed = {}
+    for _ in range(int(abs(rolls))):
         resource = random.choice(resource_pool)
-        gained[resource] = gained.get(resource, 0) + 1
+        changed[resource] = changed.get(resource, 0) + 1
 
     storage = new_nation.get("resource_storage") or {}
-    for resource, amount in gained.items():
-        storage[resource] = storage.get(resource, 0) + amount
+    for resource, amount in changed.items():
+        if is_loss:
+            storage[resource] = max(0, storage.get(resource, 0) - amount)
+        else:
+            storage[resource] = storage.get(resource, 0) + amount
     new_nation["resource_storage"] = storage
 
-    gained_str = ", ".join(f"{v} {k}" for k, v in gained.items())
+    changed_str = ", ".join(f"{v} {k}" for k, v in changed.items())
     name = old_nation.get("name", "Unknown")
-    return f"{name} gained {gained_str} from a resource windfall ({event_label}).\n"
+    verb = "lost" if is_loss else "gained"
+    return f"{name} {verb} {changed_str} from a resource windfall ({event_label}).\n"
 
 
 def nation_tech_tick(old_nation, new_nation, schema):
@@ -2188,7 +2213,7 @@ def _resource_storage_capacity(nation_doc):
     return nation_doc.get("nation_resource_capacity") or {}
 
 
-def nation_concessions_tick(old_nation, new_nation, schema):
+def nation_concessions_tick(old_nation, new_nation, schema, nations_by_id=None):
     if old_nation.get("overlord", "") == "":
         return ""
 
@@ -2227,12 +2252,23 @@ def nation_concessions_tick(old_nation, new_nation, schema):
         overlord = None
         overlord_id = old_nation.get("overlord", "")
         if overlord_id:
-            try:
-                overlord = mongo.db.nations.find_one(
-                    {"_id": ObjectId(overlord_id)}, {"nation_resource_capacity": 1}
-                )
-            except Exception:
-                overlord = None
+            # Prefer this session's already-recalculated in-memory nation
+            # (fresh) over a database lookup (stale — see
+            # _NATIONS_BY_ID_AWARE_TICK_FUNCTIONS' comment): the vassal's
+            # own capacity below already comes from old_nation, which is
+            # this-session-fresh, so the overlord side must match or a
+            # resource the overlord no longer has access to (e.g. an
+            # expired storage-capacity modifier) could still look available
+            # for up to one full session after it stopped being true.
+            if nations_by_id is not None:
+                overlord = nations_by_id.get(str(overlord_id))
+            if overlord is None:
+                try:
+                    overlord = mongo.db.nations.find_one(
+                        {"_id": ObjectId(overlord_id)}, {"nation_resource_capacity": 1}
+                    )
+                except Exception:
+                    overlord = None
 
         # Only demand resources BOTH sides can actually hold — e.g. gunpowder
         # (base storage 0) shouldn't come up unless both the vassal and the
@@ -3968,12 +4004,29 @@ _WORLD_CITY_COORDS_AWARE_TICK_FUNCTIONS = {
     ai_decision_tick,
 }
 
+# Separate registry, same reasoning, for a per-nation tick function that
+# needs to read a DIFFERENT nation's CURRENT (this-session) data — e.g. a
+# vassal's overlord — without a mid-tick database query, which would only
+# ever see whatever was persisted at the end of the LAST session (this
+# session's fresh calculate_all_fields results live only in old_nations/
+# new_nations until tick()'s commit phase at the very end). See
+# nation_concessions_tick for the concrete bug this fixes: it used to fetch
+# the overlord via mongo.db.nations.find_one, so an overlord who lost
+# access to a resource (e.g. a temporary storage-capacity modifier
+# expiring) between sessions would still show as having it until their own
+# next recalculation — the vassal's own capacity read was already fresh
+# (old_nation, in memory), only the overlord's was stale.
+_NATIONS_BY_ID_AWARE_TICK_FUNCTIONS = {
+    nation_concessions_tick,
+}
 
-def _dispatch(tick_function, pending, *args, pending_tiles=None, flee_events=None, world_city_coords=None):
+
+def _dispatch(tick_function, pending, *args, pending_tiles=None, flee_events=None,
+               world_city_coords=None, nations_by_id=None):
     """Call a registered tick function, binding `pending`/`pending_tiles`/
-    `flee_events`/`world_city_coords` in only if that function is registered
-    for them — every other tick function's call signature is completely
-    unaffected."""
+    `flee_events`/`world_city_coords`/`nations_by_id` in only if that
+    function is registered for them — every other tick function's call
+    signature is completely unaffected."""
     kwargs = {}
     if tick_function in _PENDING_AWARE_TICK_FUNCTIONS:
         kwargs["pending"] = pending
@@ -3983,6 +4036,8 @@ def _dispatch(tick_function, pending, *args, pending_tiles=None, flee_events=Non
         kwargs["flee_events"] = flee_events
     if tick_function in _WORLD_CITY_COORDS_AWARE_TICK_FUNCTIONS:
         kwargs["world_city_coords"] = world_city_coords
+    if tick_function in _NATIONS_BY_ID_AWARE_TICK_FUNCTIONS:
+        kwargs["nations_by_id"] = nations_by_id
     if kwargs:
         return functools.partial(tick_function, **kwargs)(*args)
     return tick_function(*args)

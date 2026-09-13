@@ -1187,6 +1187,24 @@ def _world_city_coords_from_tiles_by_owner(tiles_by_owner):
     return coords
 
 
+def _world_ids_from_tiles_by_owner(tiles_by_owner):
+    """Derive world-wide city/district id sets from an already batch-fetched
+    tiles_by_owner instead of two extra queries — passed to
+    sync_nation_cities/sync_nation_districts so a nation.cities/districts
+    entry already sitting on a tile owned by someone else never gets a
+    second, duplicate placement."""
+    city_ids, district_ids = set(), set()
+    for tiles in tiles_by_owner.values():
+        for t in tiles:
+            city = t.get("city")
+            if isinstance(city, dict) and city.get("id"):
+                city_ids.add(city["id"])
+            district = t.get("district")
+            if isinstance(district, dict) and district.get("id"):
+                district_ids.add(district["id"])
+    return city_ids, district_ids
+
+
 @admin_tool_routes.route("/admin/sync_cities", methods=["GET"])
 @admin_required
 def sync_cities_preview():
@@ -1197,14 +1215,16 @@ def sync_cities_preview():
     ai_nations = list(mongo.db.nations.find({"_id": {"$nin": list(player_ids)}}).sort("name", ASCENDING))
     tiles_by_owner = _all_tiles_by_owner()
     world_city_coords = _world_city_coords_from_tiles_by_owner(tiles_by_owner)
+    world_city_ids, _ = _world_ids_from_tiles_by_owner(tiles_by_owner)
 
     reports = []
     for n in ai_nations:
         owned = tiles_by_owner.get(n.get("name", ""), [])
         report = sync_nation_cities(
-            n, dry_run=True, tiles_with_city=owned, owned_tiles=owned, world_city_coords=world_city_coords,
+            n, dry_run=True, tiles_with_city=owned, owned_tiles=owned,
+            world_city_coords=world_city_coords, world_city_ids=world_city_ids,
         )
-        if report["added_to_nation"] or report["placed_on_map"] or report["unplaceable"]:
+        if report["added_to_nation"] or report["placed_on_map"] or report["unplaceable"] or report["skipped_duplicate_elsewhere"]:
             reports.append(report)
 
     return render_template("sync_cities.html", reports=reports)
@@ -1221,16 +1241,19 @@ def sync_cities_apply():
     ai_nations = list(mongo.db.nations.find({"_id": {"$nin": list(player_ids)}}))
     tiles_by_owner = _all_tiles_by_owner()
     world_city_coords = _world_city_coords_from_tiles_by_owner(tiles_by_owner)
+    world_city_ids, _ = _world_ids_from_tiles_by_owner(tiles_by_owner)
 
-    total_add = total_place = total_unplaceable = 0
+    total_add = total_place = total_unplaceable = total_duplicate = 0
     for n in ai_nations:
         owned = tiles_by_owner.get(n.get("name", ""), [])
         report = sync_nation_cities(
-            n, dry_run=False, tiles_with_city=owned, owned_tiles=owned, world_city_coords=world_city_coords,
+            n, dry_run=False, tiles_with_city=owned, owned_tiles=owned,
+            world_city_coords=world_city_coords, world_city_ids=world_city_ids,
         )
         total_add += len(report["added_to_nation"])
         total_place += len(report["placed_on_map"])
         total_unplaceable += len(report["unplaceable"])
+        total_duplicate += len(report["skipped_duplicate_elsewhere"])
 
     if total_place:
         bump_tile_version()
@@ -1238,6 +1261,8 @@ def sync_cities_apply():
     msg = f"Synced cities: {total_add} added to nation pages, {total_place} placed on the map."
     if total_unplaceable:
         msg += f" {total_unplaceable} could not be placed (no legal tile)."
+    if total_duplicate:
+        msg += f" {total_duplicate} skipped — already placed on a tile elsewhere on the map (needs manual review)."
     flash(msg, "success")
     return redirect(url_for("admin_tool_routes.admin_tools"))
 
@@ -1251,12 +1276,16 @@ def sync_districts_preview():
     player_ids = _get_player_nation_ids()
     ai_nations = list(mongo.db.nations.find({"_id": {"$nin": list(player_ids)}}).sort("name", ASCENDING))
     tiles_by_owner = _all_tiles_by_owner()
+    _, world_district_ids = _world_ids_from_tiles_by_owner(tiles_by_owner)
 
     reports = []
     for n in ai_nations:
         owned = tiles_by_owner.get(n.get("name", ""), [])
-        report = sync_nation_districts(n, dry_run=True, tiles_with_district=owned, owned_tiles=owned)
-        if report["added_to_nation"] or report["placed_on_map"] or report["unplaceable"]:
+        report = sync_nation_districts(
+            n, dry_run=True, tiles_with_district=owned, owned_tiles=owned,
+            world_district_ids=world_district_ids,
+        )
+        if report["added_to_nation"] or report["placed_on_map"] or report["unplaceable"] or report["skipped_duplicate_elsewhere"]:
             reports.append(report)
 
     return render_template("sync_districts.html", reports=reports)
@@ -1272,14 +1301,19 @@ def sync_districts_apply():
     player_ids = _get_player_nation_ids()
     ai_nations = list(mongo.db.nations.find({"_id": {"$nin": list(player_ids)}}))
     tiles_by_owner = _all_tiles_by_owner()
+    _, world_district_ids = _world_ids_from_tiles_by_owner(tiles_by_owner)
 
-    total_add = total_place = total_unplaceable = 0
+    total_add = total_place = total_unplaceable = total_duplicate = 0
     for n in ai_nations:
         owned = tiles_by_owner.get(n.get("name", ""), [])
-        report = sync_nation_districts(n, dry_run=False, tiles_with_district=owned, owned_tiles=owned)
+        report = sync_nation_districts(
+            n, dry_run=False, tiles_with_district=owned, owned_tiles=owned,
+            world_district_ids=world_district_ids,
+        )
         total_add += len(report["added_to_nation"])
         total_place += len(report["placed_on_map"])
         total_unplaceable += len(report["unplaceable"])
+        total_duplicate += len(report["skipped_duplicate_elsewhere"])
 
     if total_place:
         bump_tile_version()
@@ -1287,6 +1321,8 @@ def sync_districts_apply():
     msg = f"Synced districts: {total_add} added to nation pages, {total_place} placed on the map."
     if total_unplaceable:
         msg += f" {total_unplaceable} could not be placed (no legal tile)."
+    if total_duplicate:
+        msg += f" {total_duplicate} skipped — already placed on a tile elsewhere on the map (needs manual review)."
     flash(msg, "success")
     return redirect(url_for("admin_tool_routes.admin_tools"))
 

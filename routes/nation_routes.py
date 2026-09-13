@@ -679,8 +679,8 @@ def _render_nation_edit(item_ref, form=None):
     }))
     _gm = mongo.db.global_modifiers.find_one({"name": "global_modifiers"}, {"session_counter": 1})
     current_session = _gm.get("session_counter", 0) if _gm else 0
-    from helpers.trade_route_helpers import get_connectable_nations
-    connectable_nations = get_connectable_nations(nation_name, nation.get("trade_speed", 1))
+    from helpers.trade_route_helpers import get_connectable_parties
+    connectable_nations = get_connectable_parties("nation", nation_name, nation.get("trade_speed", 1))
     _r8 = perf_counter()
 
     visibility_level, visibility_bypassed = get_item_visibility(
