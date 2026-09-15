@@ -6,7 +6,16 @@ from app_core import mongo, upload_to_s3
 # Number of sessions (ticks) of non-pending changes to retain.
 # Changes approved/denied more than this many sessions ago will be
 # exported to S3 and deleted from MongoDB on each tick.
-ARCHIVE_AFTER_N_SESSIONS = 20
+#
+# Kept low deliberately: `changes` is the largest collection in the DB by
+# far (each non-pending change is a full before/after document snapshot,
+# tens of KB each) and its size directly drives how long the nightly
+# backup's dump phase takes — every session's worth left unarchived is
+# ~2,000+ extra documents the backup has to read. At 20 this collection
+# was on track to grow to ~4x its size at 5. Archived changes are still
+# searchable via the admin "Archived Change Search" tool, so this is a
+# storage/backup-speed tradeoff, not a data-loss one.
+ARCHIVE_AFTER_N_SESSIONS = 5
 
 
 def archive_old_changes(current_session):

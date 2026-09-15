@@ -1079,7 +1079,27 @@ def collect_mercenary_districts(target, district_details):
     return collected_modifiers
 
 def _get_all_titles():
-    """Return combined title data from JSON files and the DB titles collection."""
+    """Return combined title data from JSON files and the DB titles collection.
+
+    calculate_title_modifiers calls this once per positive_titles/
+    negative_titles evaluation — once for the nation itself and again for
+    each ruling character via TitleAdapter — measured at 8 separate,
+    otherwise-identical titles.find round trips for a single nation
+    calculation. Cached per Flask request (titles don't change mid-request);
+    falls back to an uncached fetch outside a request context."""
+    try:
+        from flask import g as _g
+        cached = getattr(_g, '_all_titles_cache', None)
+        if cached is not None:
+            return cached
+        title_data = _fetch_all_titles()
+        _g._all_titles_cache = title_data
+        return title_data
+    except RuntimeError:
+        return _fetch_all_titles()
+
+
+def _fetch_all_titles():
     title_data = deepcopy(json_data["positive_titles"])
     title_data.update(json_data["negative_titles"])
     try:
@@ -2710,6 +2730,37 @@ def load_db_units(unit_type=None):
     return db_units
 
 
+def _get_cached_district_defs_by_key():
+    """All district_defs keyed by "key", cached per Flask request (mirrors
+    _get_cached_all_tiles's/load_db_units's g-based half). _resolve_def is
+    called from many different places per single nation calculation (once
+    per district per requirement check, job lookup, etc.) — measured at 63
+    separate uncached district_defs.find_one calls for a nation with only 7
+    districts. The whole collection is small (49 documents at last count)
+    and never mutated mid-request by anything a nation calculation
+    triggers, so one bulk fetch replaces all of those round trips.
+
+    No thread-local fallback outside a Flask request (unlike those two) —
+    callers here (the session tick included) run _resolve_def against
+    whatever mongo connection is current at call time, and a
+    threading.local cache would outlive a single tick's worth of work on
+    Python's thread-pool-reused worker threads, silently serving stale
+    district_defs (or another thread's/test's data) on the next thing that
+    happens to run on the same OS thread. Falls back to querying fresh —
+    still one query per distinct def_key per call, same as before this fix,
+    just without the request-scoped bulk-fetch win in that path."""
+    try:
+        from flask import g as _g
+        cached = getattr(_g, '_district_defs_cache', None)
+        if cached is not None:
+            return cached
+        by_key = {d["key"]: d for d in mongo.db.district_defs.find({}) if d.get("key")}
+        _g._district_defs_cache = by_key
+        return by_key
+    except RuntimeError:
+        return {d["key"]: d for d in mongo.db.district_defs.find({}) if d.get("key")}
+
+
 def _resolve_def(district_instance):
     """Return the district definition dict for a nation district instance.
 
@@ -2720,7 +2771,7 @@ def _resolve_def(district_instance):
         return {}
     def_key = district_instance.get("def_key")
     if def_key:
-        return mongo.db.district_defs.find_one({"key": def_key}) or {}
+        return _get_cached_district_defs_by_key().get(def_key, {})
     legacy_type = district_instance.get("type", "")
     if not legacy_type:
         return {}
@@ -2805,7 +2856,15 @@ def _compute_legal_placement(nation, owned_tiles=None):
         "land_nodes": [resource_key, ...],
         "coastal_nodes": [resource_key, ...],
         "water_nodes": [resource_key, ...],
-        "legal_land_tiles": [...],   # adjacency-restricted, for districts
+        "legal_land_tiles": [...],    # adjacency-restricted, for land districts
+        "legal_coastal_tiles": [...], # subset of legal_land_tiles that's also
+                                       # adjacent to water/river, for
+                                       # tile_requirement="coastal" districts
+                                       # (dock/shipyard/wharf) — every entry
+                                       # is the SAME dict object as its
+                                       # legal_land_tiles counterpart, so any
+                                       # in-place field added to one (oor,
+                                       # nearby_oor, ...) is visible via both
         "legal_city_tiles": [...],  # any owned empty land tile, for cities
         "legal_water_tiles": [...], # adjacency-restricted water tiles, for water districts
     }.
@@ -2818,6 +2877,7 @@ def _compute_legal_placement(nation, owned_tiles=None):
         "has_land": False, "has_coastal": False, "has_water": False,
         "land_nodes": [], "coastal_nodes": [], "water_nodes": [],
         "legal_land_tiles": [],
+        "legal_coastal_tiles": [],
         "legal_city_tiles": [],
         "legal_water_tiles": [],
         "metropolis_coords": [],
@@ -2963,12 +3023,19 @@ def _compute_legal_placement(nation, owned_tiles=None):
                     if node_res:
                         result["coastal_nodes"].append(node_res)
 
-                result["legal_land_tiles"].append({
+                land_tile_info = {
                     "coord": coord,
                     "node": node_res,
                     "adj_nodes": adj_nodes,
                     "adj_water_or_building": adj_water_or_building,
-                })
+                }
+                result["legal_land_tiles"].append(land_tile_info)
+                if is_adjacent_water or is_river:
+                    # Same dict object, not a copy — the .oor/nearby_oor
+                    # population below (and any other in-place mutation of
+                    # legal_land_tiles entries) is iterated once and must be
+                    # visible through both lists rather than duplicated.
+                    result["legal_coastal_tiles"].append(land_tile_info)
 
         # Compute out-of-range tiles for admin distance awareness
         admin = nation.get("administration", 1)
@@ -3111,12 +3178,22 @@ def check_district_requirements(nation, district_def):
         if not has_prev:
             return False
 
-    # Uniqueness check — skip if allow_multiple is set
+    # Uniqueness check — skip entirely if allow_multiple is set (no cap at
+    # all); otherwise the nation may hold up to map_count instances
+    # (default 1, e.g. "outpost" is 2) before this def becomes unbuildable.
+    # Must mirror score_buildable_districts's own existing_count-vs-
+    # map_count pre-check exactly — that one only decides whether the AI
+    # bothers to *consider* this def at all, this one is the actual
+    # authoritative gate every caller (AI or otherwise) goes through, so a
+    # def with map_count > 1 previously became permanently unbuildable
+    # past the first instance the moment this stricter, count-blind check
+    # ran, regardless of what the pre-check allowed.
     if not district_def.get("allow_multiple", False):
-        if any(
-            isinstance(inst, dict) and _resolve_def(inst).get("key") == district_def.get("key")
-            for inst in nation.get("districts", [])
-        ):
+        existing_count = sum(
+            1 for inst in nation.get("districts", [])
+            if isinstance(inst, dict) and _resolve_def(inst).get("key") == district_def.get("key")
+        )
+        if existing_count >= district_def.get("map_count", 1):
             return False
 
     reqs = _db_prerequisites_to_requirements(district_def.get("requirements", []))
@@ -3257,44 +3334,50 @@ def check_unit_requirements(target, unit_details,
         
         if check_defensive_pact:
             defensive_pacts = []
-            defensive_pacts = list(mongo.db.diplo_relations.find({"nation_1": str(target.get("_id", "")), "pact_type": {"$eq": "Defensive Pact"}}, {"nation_2": 1}))
-            defensive_pacts += list(mongo.db.diplo_relations.find({"nation_2": str(target.get("_id", "")), "pact_type": {"$eq": "Defensive Pact"}}, {"nation_1": 1}))
-            
-            # Convert defensive pact IDs to nation objects with names
-            defensive_pact_nations = []
+            defensive_pacts = list(mongo.db.diplo_relations.find({"nation_1": str(target.get("_id", "")), "pact_type": {"$eq": "Defensive Pact"}}, {"nation_1": 1, "nation_2": 1}))
+            defensive_pacts += list(mongo.db.diplo_relations.find({"nation_2": str(target.get("_id", "")), "pact_type": {"$eq": "Defensive Pact"}}, {"nation_1": 1, "nation_2": 1}))
+
+            # Convert defensive pact IDs to nation objects with names — one
+            # batched $in query instead of one find_one per pact partner
+            # (this function is called once per unit type being checked, so
+            # a nation with several defensive pacts previously re-resolved
+            # the same partner names on every single unit).
+            partner_ids = []
             for pact in defensive_pacts:
-                nation_id = pact.get("nation_1") if pact.get("nation_1") != str(target.get("_id", "")) else pact.get("nation_2")
-                if nation_id:
-                    nation = mongo.db.nations.find_one({"_id": ObjectId(nation_id)}, {"name": 1})
-                    if nation:
-                        defensive_pact_nations.append({
-                            "id": nation_id,
-                            "name": nation.get("name", "Unknown Nation")
-                        })
-            
+                nid = pact.get("nation_1") if pact.get("nation_1") != str(target.get("_id", "")) else pact.get("nation_2")
+                if nid:
+                    partner_ids.append(nid)
+            defensive_pact_names = set()
+            if partner_ids:
+                for _n in mongo.db.nations.find(
+                    {"_id": {"$in": [ObjectId(nid) for nid in partner_ids]}}, {"name": 1}
+                ):
+                    defensive_pact_names.add(_n.get("name", "Unknown Nation"))
+
             for required_defensive_pact in requirements.get("defensive_pact", []):
-                if required_defensive_pact in [pact["name"] for pact in defensive_pact_nations]:
+                if required_defensive_pact in defensive_pact_names:
                     related = True
 
         if check_military_alliance:
             military_alliances = []
-            military_alliances = list(mongo.db.diplo_relations.find({"nation_1": str(target.get("_id", "")), "pact_type": {"$eq": "Military Alliance"}}, {"nation_2": 1}))
-            military_alliances += list(mongo.db.diplo_relations.find({"nation_2": str(target.get("_id", "")), "pact_type": {"$eq": "Military Alliance"}}, {"nation_1": 1}))
-            
-            # Convert military alliance IDs to nation objects with names
-            military_alliance_nations = []
+            military_alliances = list(mongo.db.diplo_relations.find({"nation_1": str(target.get("_id", "")), "pact_type": {"$eq": "Military Alliance"}}, {"nation_1": 1, "nation_2": 1}))
+            military_alliances += list(mongo.db.diplo_relations.find({"nation_2": str(target.get("_id", "")), "pact_type": {"$eq": "Military Alliance"}}, {"nation_1": 1, "nation_2": 1}))
+
+            # Same batched $in approach as the defensive_pact branch above.
+            partner_ids = []
             for alliance in military_alliances:
-                nation_id = alliance.get("nation_1") if alliance.get("nation_1") != str(target.get("_id", "")) else alliance.get("nation_2")
-                if nation_id:
-                    nation = mongo.db.nations.find_one({"_id": ObjectId(nation_id)}, {"name": 1})
-                    if nation:
-                        military_alliance_nations.append({
-                            "id": nation_id,
-                            "name": nation.get("name", "Unknown Nation")
-                        })
-            
+                nid = alliance.get("nation_1") if alliance.get("nation_1") != str(target.get("_id", "")) else alliance.get("nation_2")
+                if nid:
+                    partner_ids.append(nid)
+            military_alliance_names = set()
+            if partner_ids:
+                for _n in mongo.db.nations.find(
+                    {"_id": {"$in": [ObjectId(nid) for nid in partner_ids]}}, {"name": 1}
+                ):
+                    military_alliance_names.add(_n.get("name", "Unknown Nation"))
+
             for required_military_alliance in requirements.get("military_alliance", []):
-                if required_military_alliance in [alliance["name"] for alliance in military_alliance_nations]:
+                if required_military_alliance in military_alliance_names:
                     related = True
         
         if not related:
@@ -4549,20 +4632,25 @@ def _build_computed_contributions(
     _nation_name = target.get("name", "")
     if _nation_name:
         import math as _math
-        from helpers.trade_route_helpers import _nations_share_market, _slot_cost_for_direction
+        from helpers.trade_route_helpers import _markets_by_nation_name, _slot_cost_for_direction
         _trade_routes = list(mongo.db.trade_routes.find(
             {"$or": [{"nation_a": _nation_name}, {"nation_b": _nation_name}],
              "status": {"$in": ["active", "ending"]}},
             {"nation_a": 1, "nation_b": 1, "resources_a_to_b": 1, "resources_b_to_a": 1, "_id": 0},
         ))
-        _market_cache = {}
+        # Batch-resolve every nation involved to its markets in 2 queries
+        # total instead of one nations.find_one + market_links.find pair per
+        # distinct trade partner (_markets_by_nation_name's docstring).
+        _all_trade_names = {_nation_name}
+        for _tr in _trade_routes:
+            _all_trade_names.add(_tr.get("nation_a", ""))
+            _all_trade_names.add(_tr.get("nation_b", ""))
+        _markets_by_name = _markets_by_nation_name(_all_trade_names)
         for _tr in _trade_routes:
             _na, _nb = _tr.get("nation_a", ""), _tr.get("nation_b", "")
             _partner = _nb if _nation_name == _na else _na
-            _ck = (min(_na, _nb), max(_na, _nb))
-            if _ck not in _market_cache:
-                _market_cache[_ck] = _nations_share_market(_na, _nb)
-            _cap = 4 if _market_cache[_ck] else 2
+            _shares_market = bool(_markets_by_name.get(_na, set()) & _markets_by_name.get(_nb, set()))
+            _cap = 4 if _shares_market else 2
             if _nation_name == _na:
                 _exp = _slot_cost_for_direction(_tr.get("resources_a_to_b", []), _cap)
                 _imp = _slot_cost_for_direction(_tr.get("resources_b_to_a", []), _cap)
@@ -5126,7 +5214,7 @@ def compute_nation_breakdowns(
         from helpers.trade_route_helpers import _get_cached_routes, get_trade_route_source_contributions
         tr_routes = _get_cached_routes(target)
         if tr_routes:
-            tr_contribs = get_trade_route_source_contributions(nation_name_bd, tr_routes)
+            tr_contribs = get_trade_route_source_contributions(nation_name_bd, tr_routes, target=target)
             contributions.extend(tr_contribs)
 
     # Money income — base + modifier contributions + trade route money lines + total

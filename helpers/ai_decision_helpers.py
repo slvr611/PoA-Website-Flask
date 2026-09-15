@@ -2405,26 +2405,44 @@ def _nation_is_nomadic(nation):
         return False
 
 
-def _pick_district_tile(legal_placement, dd, key, need_weights, prices):
-    """Pick the best legal tile to place a district on, reusing the same
-    node-value scoring as city placement (_score_tile).
+def _legal_pool_for_district(legal_placement, dd):
+    """Which of _compute_legal_placement's candidate-tile lists a district
+    definition may be placed on, by its free_placement flag and
+    tile_requirement. Single source of truth for this branching — used by
+    _pick_district_tile (new placement/relocation) and by
+    scripts/audit_disconnected_districts.py's _is_properly_placed
+    (after-the-fact legality check), so the two can never disagree about
+    what counts as a legal tile for a given district type.
 
-    Regular districts are restricted to tiles adjacent to an existing city/
-    district/wonder (legal_land_tiles / legal_water_tiles, depending on
-    tile_requirement). free_placement districts may go anywhere in owned
-    territory matching their terrain limitation (legal_city_tiles).
-    Returns (coord, rationale) or (None, "") if no legal tile exists.
-    """
+    tile_requirement "coastal" (dock/shipyard/wharf) means on land AND
+    adjacent to water/river — legal_coastal_tiles, not the full
+    legal_land_tiles pool, which has no water-adjacency filter at all.
+    free_placement districts may go anywhere in owned territory matching
+    their terrain limitation (legal_city_tiles — land-only; there is
+    currently no free_placement district with tile_requirement
+    water/coastal, so that combination isn't specially handled here)."""
     if not dd:
-        return None, ""
+        return []
     free_placement = dd.get("free_placement", False)
     tile_req = dd.get("tile_requirement", "land")
     if free_placement:
-        tiles = legal_placement.get("legal_city_tiles", [])
+        return legal_placement.get("legal_city_tiles", [])
     elif tile_req == "water":
-        tiles = legal_placement.get("legal_water_tiles", [])
-    else:
-        tiles = legal_placement.get("legal_land_tiles", [])
+        return legal_placement.get("legal_water_tiles", [])
+    elif tile_req == "coastal":
+        return legal_placement.get("legal_coastal_tiles", [])
+    return legal_placement.get("legal_land_tiles", [])
+
+
+def _pick_district_tile(legal_placement, dd, key, need_weights, prices):
+    """Pick the best legal tile to place a district on, reusing the same
+    node-value scoring as city placement (_score_tile). See
+    _legal_pool_for_district for which candidate list a given district type
+    draws from. Returns (coord, rationale) or (None, "") if no legal tile
+    exists."""
+    if not dd:
+        return None, ""
+    tiles = _legal_pool_for_district(legal_placement, dd)
     if not tiles:
         return None, ""
 

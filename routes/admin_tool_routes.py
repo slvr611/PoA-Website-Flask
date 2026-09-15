@@ -2439,7 +2439,8 @@ def clear_job_counts_apply():
 # ---------------------------------------------------------------------------
 # Archived Change Search
 #
-# Changes older than ~20 sessions are exported to S3 as JSON files and
+# Changes older than ARCHIVE_AFTER_N_SESSIONS sessions (see helpers/archive_helpers.py)
+# are exported to S3 as JSON files and
 # deleted from MongoDB (see helpers/archive_helpers.py). This tool scans
 # those exported files directly since they're no longer queryable in the DB.
 # ---------------------------------------------------------------------------
@@ -2566,7 +2567,8 @@ def _search_archived_changes(start_date, end_date, requester_id, approver_id,
 def _search_db_archived_changes(start_date, end_date, requester_id, approver_id,
                                  target_collection="", target_name=""):
     """Search non-pending changes still resident in MongoDB — i.e. changes
-    recent enough (within ~20 sessions) that archive_helpers.py hasn't yet
+    recent enough (within ARCHIVE_AFTER_N_SESSIONS sessions, see
+    helpers/archive_helpers.py) that archive_helpers.py hasn't yet
     exported them to S3 and deleted them from the DB. A live query, so this
     is fast enough to run synchronously (no background job needed)."""
     query = {"status": {"$ne": "Pending"}}

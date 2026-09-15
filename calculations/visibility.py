@@ -529,3 +529,55 @@ def _compute_merchant_visibility_for_one(viewer_nation: dict, location_id: str, 
     )
 
     return max(0, min(4, bonus + offensive_bonus + defensive_penalty))
+
+
+def compute_mercenary_visibility(viewer_nations, mercenary: dict) -> int:
+    """
+    Compute the HIGHEST visibility tier (0-4) that any of the viewer's
+    nations has into a mercenary company, based on the region it's
+    currently stationed in (mercenary["region"]).
+
+    Unlike merchants, a mercenary company isn't tied to a single host
+    nation (its "patron" is just the nation currently employing it, not an
+    ownership/location link every mercenary has), so there's no equivalent
+    of "fully visible to its host". Instead:
+      - Every viewer nation sharing the mercenary's region gets a flat
+        tier-1 baseline — the same same-region +1 nations already grant
+        each other via _structural_relationship_bonus, just without the
+        vassal/market/pact bonuses (a mercenary company has none of those
+        relationships), plus the viewer's own offensive visibility reach.
+      - Is otherwise gated by its OWN visibility_modifiers (added the same
+        generic way a nation's/merchant's are, via its `modifiers` array),
+        most notably its own defensive visibility.
+
+    Accepts either a list of nation docs or a single nation dict for
+    viewer_nations, matching compute_visibility/compute_merchant_visibility.
+    """
+    if isinstance(viewer_nations, dict):
+        viewer_nations = [viewer_nations]
+    if not viewer_nations:
+        return 0
+
+    return max(
+        _compute_mercenary_visibility_for_one(vn, mercenary)
+        for vn in viewer_nations
+    )
+
+
+def _compute_mercenary_visibility_for_one(viewer_nation: dict, mercenary: dict) -> int:
+    """Single-viewer-nation implementation — see compute_mercenary_visibility."""
+    viewer_region = str(viewer_nation.get("region") or "")
+    merc_region = str(mercenary.get("region") or "")
+
+    bonus = 1 if (viewer_region and viewer_region == merc_region) else 0
+    offensive_bonus = _offensive_visibility_bonus(viewer_nation, mercenary)
+
+    # The mercenary company's OWN defensive visibility modifiers gate how
+    # well it can be seen, same as a merchant's do.
+    defensive_penalty = sum(
+        vm.get("value", 0)
+        for vm in mercenary.get("visibility_modifiers", [])
+        if vm.get("type") == "defensive"
+    )
+
+    return max(0, min(4, bonus + offensive_bonus + defensive_penalty))

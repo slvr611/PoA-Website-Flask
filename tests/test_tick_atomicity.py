@@ -604,3 +604,217 @@ class TestGenerateAiCharacterDeferred:
         # system_approve_change should never be called with None (no requester).
         for call in approve.call_args_list:
             assert call.args[0] is not None
+
+
+# ---------------------------------------------------------------------------
+# Chunk-commit retry and accurate partial-failure reporting
+#
+# Context: production tick (2026-09-15) failed with a MongoDB
+# TransientTransactionError that session.with_transaction() itself couldn't
+# ride out within its own ~120s internal retry budget. Investigating it
+# surfaced a separate, real bug: _run_tick_guarded always reported "FAILED
+# and was fully rolled back — no changes from this run were applied"
+# regardless of how far _commit_pending_changes' chunked commits had
+# actually gotten — true only when the very first chunk is what failed, but
+# _commit_pending_changes' own docstring says earlier successfully-committed
+# chunks are explicitly NOT rolled back. This section covers both fixes:
+# _commit_chunk_with_retry (more resilience against a longer outage) and
+# TickPartialCommitError (an accurate failure message when it still gives
+# up after at least one chunk already committed).
+# ---------------------------------------------------------------------------
+from pymongo.errors import PyMongoError, OperationFailure
+
+
+class _FakeSessionAlwaysSucceeds:
+    def with_transaction(self, callback):
+        return callback(None)
+
+
+def _fake_start_session_cm(session):
+    """A MagicMock context manager whose __enter__ returns `session`, for
+    patching mongo.cx.start_session()'s `with ... as session:` usage."""
+    return MagicMock(__enter__=lambda s: session, __exit__=lambda *a: False)
+
+
+class TestCommitChunkWithRetry:
+    def test_succeeds_on_first_attempt_without_sleeping(self, mock_mongo):
+        with patch("helpers.tick_helpers.mongo", mock_mongo), \
+             patch.object(mock_mongo, "cx", MagicMock(
+                 start_session=MagicMock(return_value=_fake_start_session_cm(_FakeSessionAlwaysSucceeds()))
+             )), \
+             patch("helpers.tick_helpers.time.sleep") as sleep, \
+             patch("helpers.tick_helpers._commit_one_batch") as commit_one_batch:
+            th._commit_chunk_with_retry([{"data_type": "nations"}], set())
+        commit_one_batch.assert_called_once()
+        sleep.assert_not_called()
+
+    def test_retries_after_a_transient_pymongo_error_then_succeeds(self, mock_mongo):
+        call_count = {"n": 0}
+
+        class _FakeSessionFailsOnce:
+            def with_transaction(self, callback):
+                call_count["n"] += 1
+                if call_count["n"] == 1:
+                    raise OperationFailure("Transaction with { txnNumber: 1 } has been aborted.", code=251)
+                return callback(None)
+
+        with patch("helpers.tick_helpers.mongo", mock_mongo), \
+             patch.object(mock_mongo, "cx", MagicMock(
+                 start_session=MagicMock(return_value=_fake_start_session_cm(_FakeSessionFailsOnce()))
+             )), \
+             patch("helpers.tick_helpers.time.sleep") as sleep, \
+             patch("helpers.tick_helpers._commit_one_batch"):
+            th._commit_chunk_with_retry([{"data_type": "nations"}], set())
+
+        assert call_count["n"] == 2, "must have retried exactly once before succeeding"
+        sleep.assert_called_once_with(th._CHUNK_COMMIT_RETRY_DELAY_SECONDS)
+
+    def test_gives_up_after_max_attempts_and_raises(self, mock_mongo):
+        class _FakeSessionAlwaysFails:
+            def with_transaction(self, callback):
+                raise OperationFailure("Transaction with { txnNumber: 1 } has been aborted.", code=251)
+
+        with patch("helpers.tick_helpers.mongo", mock_mongo), \
+             patch.object(mock_mongo, "cx", MagicMock(
+                 start_session=MagicMock(return_value=_fake_start_session_cm(_FakeSessionAlwaysFails()))
+             )), \
+             patch("helpers.tick_helpers.time.sleep") as sleep:
+            try:
+                th._commit_chunk_with_retry([{"data_type": "nations"}], set())
+                assert False, "expected PyMongoError to propagate after exhausting retries"
+            except PyMongoError:
+                pass
+
+        assert sleep.call_count == th._CHUNK_COMMIT_MAX_ATTEMPTS - 1
+
+    def test_non_pymongo_error_is_not_retried(self, mock_mongo):
+        """_commit_one_batch's own validation failure (RuntimeError) is not
+        transient — retrying it would just fail the same way every time, so
+        it must propagate on the very first attempt."""
+        class _FakeSessionRaisesRuntimeError:
+            def with_transaction(self, callback):
+                raise RuntimeError("Tick commit aborted: a queued Update ... could not be applied")
+
+        with patch("helpers.tick_helpers.mongo", mock_mongo), \
+             patch.object(mock_mongo, "cx", MagicMock(
+                 start_session=MagicMock(return_value=_fake_start_session_cm(_FakeSessionRaisesRuntimeError()))
+             )), \
+             patch("helpers.tick_helpers.time.sleep") as sleep:
+            try:
+                th._commit_chunk_with_retry([{"data_type": "nations"}], set())
+                assert False, "expected RuntimeError to propagate"
+            except RuntimeError:
+                pass
+        sleep.assert_not_called()
+
+
+class TestCommitPendingChangesPartialFailure:
+    def test_first_chunk_failing_raises_the_original_error_unwrapped(self, mock_mongo, fake_category_data):
+        """No earlier chunk succeeded — the "fully rolled back" framing is
+        still accurate, so the original exception should propagate as-is,
+        not wrapped in TickPartialCommitError."""
+        mock_mongo.db.global_modifiers.insert_one({"name": "global_modifiers", "session_counter": 1})
+
+        class _FakeSessionAlwaysFails:
+            def with_transaction(self, callback):
+                raise OperationFailure("Transaction with { txnNumber: 1 } has been aborted.", code=251)
+
+        pending = [{
+            "data_type": "nations", "item_id": ObjectId(), "change_type": "Update",
+            "before_data": {}, "after_data": {"money": 5}, "reason": "r", "already_calculated": True,
+        }]
+
+        with patch("helpers.tick_helpers.mongo", mock_mongo), \
+             patch.object(mock_mongo, "cx", MagicMock(
+                 start_session=MagicMock(return_value=_fake_start_session_cm(_FakeSessionAlwaysFails()))
+             )), \
+             patch("helpers.tick_helpers.time.sleep"):
+            try:
+                th._commit_pending_changes(pending)
+                assert False, "expected the original PyMongoError to propagate"
+            except th.TickPartialCommitError:
+                assert False, "must not wrap the error when nothing committed before it"
+            except OperationFailure:
+                pass
+
+    def test_later_chunk_failing_after_an_earlier_success_raises_partial_commit_error(self, mock_mongo, fake_category_data):
+        mock_mongo.db.players.insert_one({"name": "System"})
+        mock_mongo.db.global_modifiers.insert_one({"name": "global_modifiers", "session_counter": 1})
+        nid = ObjectId()
+        mock_mongo.db.nations.insert_one({"_id": nid, "name": "Test Nation", "money": 100})
+        cid = ObjectId()
+        mock_mongo.db.characters.insert_one({"_id": cid, "name": "Test Character"})
+        original_nation = mock_mongo.db.nations.find_one({"_id": nid})
+        original_char = mock_mongo.db.characters.find_one({"_id": cid})
+
+        call_count = {"n": 0}
+
+        class _FakeSessionSucceedsThenFails:
+            def with_transaction(self, callback):
+                call_count["n"] += 1
+                if call_count["n"] == 1:
+                    return callback(None)  # first chunk (nations) commits for real
+                raise OperationFailure("Transaction with { txnNumber: 1 } has been aborted.", code=251)
+
+        # Two different data types => at least two chunks, one item each.
+        pending = [
+            {
+                "data_type": "nations", "item_id": nid, "change_type": "Update",
+                "before_data": dict(original_nation), "after_data": {**original_nation, "money": 105},
+                "reason": "Tick Update for Test Nation", "already_calculated": True,
+            },
+            {
+                "data_type": "characters", "item_id": cid, "change_type": "Update",
+                "before_data": dict(original_char), "after_data": {**original_char, "name": "Renamed"},
+                "reason": "Tick Update for Test Character", "already_calculated": True,
+            },
+        ]
+
+        with patch("helpers.tick_helpers.mongo", mock_mongo), \
+             patch("helpers.change_helpers.mongo", mock_mongo), \
+             patch("helpers.change_helpers.category_data", fake_category_data), \
+             patch("helpers.change_helpers._calculate_and_attach_fields", side_effect=lambda dt, d: d), \
+             patch("helpers.change_helpers.propagate_updates"), \
+             patch.object(mock_mongo, "cx", MagicMock(
+                 start_session=MagicMock(return_value=_fake_start_session_cm(_FakeSessionSucceedsThenFails()))
+             )), \
+             patch("helpers.tick_helpers.time.sleep"):
+            try:
+                th._commit_pending_changes(pending)
+                assert False, "expected TickPartialCommitError"
+            except th.TickPartialCommitError as e:
+                assert e.chunks_committed == 1
+                assert e.items_committed == 1
+
+        # The first chunk's change really did land — not rolled back.
+        final_nation = mock_mongo.db.nations.find_one({"_id": nid})
+        assert final_nation["money"] == 105
+
+
+class TestRunTickGuardedReportsPartialFailureAccurately:
+    def test_partial_commit_error_produces_a_partial_failure_message(self, mock_mongo):
+        summaries = {}
+
+        def fake_target(form_data):
+            raise th.TickPartialCommitError(OperationFailure("boom", code=251), chunks_committed=3, items_committed=42)
+
+        with patch("helpers.tick_helpers.give_tick_summary", side_effect=lambda p, f: summaries.update(full=f)):
+            th._run_tick_guarded(fake_target, {}, "Tick")
+
+        assert "FAILED partway through committing" in summaries["full"]
+        assert "3 chunk(s)" in summaries["full"]
+        assert "42 item(s)" in summaries["full"]
+        assert "were NOT rolled back" in summaries["full"]
+        assert "fully rolled back" not in summaries["full"]
+
+    def test_plain_exception_still_reports_full_rollback(self, mock_mongo):
+        summaries = {}
+
+        def fake_target(form_data):
+            raise OperationFailure("boom", code=251)
+
+        with patch("helpers.tick_helpers.give_tick_summary", side_effect=lambda p, f: summaries.update(full=f)):
+            th._run_tick_guarded(fake_target, {}, "Tick")
+
+        assert "FAILED and was fully rolled back" in summaries["full"]
+        assert "no changes from this run were applied" in summaries["full"]

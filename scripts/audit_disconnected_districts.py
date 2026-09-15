@@ -70,7 +70,8 @@ except Exception:
 from app_core import mongo
 from calculations.field_calculations import _hex_neighbors, _compute_legal_placement
 from helpers.ai_decision_helpers import (
-    _pick_district_tile, _base_prices, evaluate_nation_state, _weights_from_net,
+    _pick_district_tile, _legal_pool_for_district, _base_prices,
+    evaluate_nation_state, _weights_from_net,
 )
 
 
@@ -106,25 +107,26 @@ def _has_adjacent_building(coord, building_coords_excluding_self):
 
 
 def _is_properly_placed(nation, tiles, t, dd):
-    """Authoritative check, reusing _compute_legal_placement itself rather
-    than re-deriving its adjacency/bootstrap/free-placement rules by hand:
-    if this tile's district were empty right now, would _pick_district_tile
-    ever offer this exact coordinate back as a legal spot for a district of
-    this type? If yes, it's correctly placed even if a naive "does it touch
-    another district/city" check would call it isolated — e.g. a lone
-    district adjacent to a bare capital tile (capital=True, no city built
-    there yet) is legal via _compute_legal_placement's own bootstrap rule,
-    and a free_placement district (currently just "outpost") is legal
-    anywhere in owned territory by design."""
+    """Authoritative check, reusing _compute_legal_placement and
+    _legal_pool_for_district themselves rather than re-deriving their
+    adjacency/bootstrap/free-placement/terrain rules by hand: if this
+    tile's district were empty right now, would _pick_district_tile ever
+    offer this exact coordinate back as a legal spot for a district of
+    this type? If yes, it's correctly placed even if a naive "does it
+    touch another district/city" check would call it isolated — e.g. a
+    lone district adjacent to a bare capital tile (capital=True, no city
+    built there yet) is legal via _compute_legal_placement's own bootstrap
+    rule, a free_placement district (currently just "outpost") is legal
+    anywhere in owned territory by design, and a "coastal" district
+    (dock/shipyard/wharf) is only legal on land adjacent to water/river —
+    sharing _legal_pool_for_district with _pick_district_tile means this
+    check and actual placement can never disagree about that."""
     coord = (t["q"], t["r"])
     tiles_for_calc = [{**x, "district": None} if x is t else x for x in tiles]
     nation_local = dict(nation)
     nation_local.pop("_legal_placement_cache", None)
     legal = _compute_legal_placement(nation_local, owned_tiles=tiles_for_calc)
-    if dd.get("free_placement", False):
-        pool = legal.get("legal_city_tiles", [])
-    else:
-        pool = legal.get("legal_land_tiles", []) + legal.get("legal_water_tiles", [])
+    pool = _legal_pool_for_district(legal, dd)
     return coord in {c["coord"] for c in pool}, legal
 
 

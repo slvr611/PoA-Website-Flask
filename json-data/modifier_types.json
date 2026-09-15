@@ -726,14 +726,14 @@
             {"key": "target_type", "label": "Target Type", "source": "visibility_target_types"},
             {"key": "target_value", "label": "Target (region or nation name)", "optional": true}
         ],
-        "applicable_to": ["nation", "merchant"]
+        "applicable_to": ["nation", "merchant", "mercenary"]
     },
     "defensive_visibility": {
         "name": "Defensive Visibility",
         "value_format": "number",
         "field_template": "defensive_visibility",
         "is_visibility_modifier": true,
-        "applicable_to": ["nation", "merchant"]
+        "applicable_to": ["nation", "merchant", "mercenary"]
     },
     "additional_trade_city": {
         "name": "Additional Trade City",

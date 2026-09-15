@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, request, redirect, flash, jsonify,
 from forms import form_generator
 from helpers.data_helpers import get_data_on_category, get_data_on_item
 from helpers.change_helpers import request_change, approve_change, recalculate_object
-from helpers.render_helpers import get_linked_objects
+from helpers.render_helpers import get_linked_objects, get_linked_objects_parallel
 from helpers.form_helpers import validate_form_with_jsonschema
 from routes.nation_routes import edit_nation, nation_edit_request, nation_edit_approve
 from app_core import category_data, mongo, rarity_rankings, json_data, find_dict_in_list, upload_bytes_to_s3
@@ -17,7 +17,7 @@ import os
 
 
 _DEMOGRAPHIC_TYPES = frozenset(("races", "cultures", "religions"))
-_VISIBILITY_GATED_TYPES = frozenset({"characters", "artifacts", "merchants"})
+_VISIBILITY_GATED_TYPES = frozenset({"characters", "artifacts", "merchants", "mercenaries"})
 
 # Data types where even the "request a change, pending admin approval" flow
 # is admin-only — unlike nations/artifacts/etc., where any player can
@@ -1353,19 +1353,29 @@ def religions_list():
 @data_item_routes.route("/markets/item/<item_ref>")
 def market_item(item_ref):
     schema, db, market = get_data_on_item("markets", item_ref)
-    linked_objects = get_linked_objects(schema, market)
-    
-    # Get all nations that are members of this market
-    member_nations = []
-    market_links_db = category_data["market_links"]["database"]
-    market_links = list(market_links_db.find({"market": str(market["_id"])}, {"member": 1}))
-    market["members"] = [link["member"] for link in market_links]
+    # Parallel fan-out over independent per-field round trips (members,
+    # market_head, etc.) rather than sequential — same pattern already used
+    # for nation pages (routes/nation_routes.py), see get_linked_objects_parallel's
+    # docstring for the measured win on a real (non-local) DB connection.
+    linked_objects = get_linked_objects_parallel(schema, market)
+
+    # Get all nations that are members of this market. "members" is a
+    # market_links join-table reverse-lookup — never a field stored on the
+    # market document itself (same gotcha as merchants'/mercenaries'
+    # "leaders") — and get_linked_objects (above) already resolved it via
+    # that join table for display, so reuse those ids here instead of
+    # re-querying market_links. A single batched, projected query (just the
+    # fields resource_desires actually needs) replaces what used to be one
+    # unprojected find_one per member — on a 30-member market that meant 30
+    # separate ~60KB full-document fetches (~19s total) just to read
+    # resource_desires off each nation.
+    member_ids = [m["_id"] for m in linked_objects.get("members", []) if m.get("_id")]
     nations_db = category_data["nations"]["database"]
-    for member_id in market["members"]:
-        nation = nations_db.find_one({"_id": ObjectId(member_id)})
-        if nation:
-            member_nations.append(nation)
-    
+    member_nations = list(nations_db.find(
+        {"_id": {"$in": member_ids}},
+        {"name": 1, "resource_desires": 1},
+    ))
+
     # Collect resource desires from all member nations
     resource_desires = []
     for nation in member_nations:

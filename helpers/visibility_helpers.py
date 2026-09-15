@@ -30,6 +30,13 @@ from app_core import mongo
 # "direct"  : the item IS the nation
 # "one_hop" : item[nation_field] is the nation ObjectId
 # "two_hop" : item[owner_field] → hop_collection document → [nation_field]
+# "region"  : item[region_field] is a region ObjectId, not a nation one — a
+#             mercenary company has no single owning nation (only a region
+#             it's stationed in, and a "patron" nation that merely employs
+#             it), so this resolves to a region id used only as the
+#             has-a-placement truthy check in get_item_visibility; the
+#             actual tier computation for these types dispatches to their
+#             own compute_*_visibility function instead of compute_visibility.
 VISIBILITY_CONFIG = {
     "nations": {
         "resolution": "direct",
@@ -47,6 +54,10 @@ VISIBILITY_CONFIG = {
     "merchants": {
         "resolution": "one_hop",
         "nation_field": "location",
+    },
+    "mercenaries": {
+        "resolution": "region",
+        "region_field": "region",
     },
 }
 
@@ -135,6 +146,27 @@ ITEM_VIEW_FIELD_TIERS = {
         "luxury_district": 3, "progress_quests": 3, "modifiers": 3,
         # Tier 4 — treasury and resource reserves (most sensitive)
         "income": 4, "treasury": 4, "resource_storage": 4,
+    },
+    # Mirrors the merchants tiering philosophy: identity/reputation public,
+    # hiring logistics low-tier, financial budgets mid-tier, actual military
+    # composition most sensitive (mirrors nations' land_units/naval_units
+    # at tier 4). "treasury" and "progress_quests" already carry their own
+    # admin-only view_access_level gate in mercenaries.json — a separate,
+    # stricter axis from this nation-relationship tier scale — so they're
+    # deliberately absent here.
+    "mercenaries": {
+        # Tier 1 — hiring logistics
+        "leaders": 1, "ruler_artifact_slots": 1,
+        "hiring_cost": 1, "mech_rp_hiring_cost": 1, "max_units": 1,
+        # Tier 2 — financial standing
+        "upkeep": 2, "land_budget": 2, "land_budget_spent": 2,
+        "naval_budget": 2, "naval_budget_spent": 2,
+        # Tier 3 — districts / progress slots / modifiers
+        "districts": 3, "0_progress_slots": 3, "1_progress_slots": 3,
+        "2_progress_slots": 3, "3_progress_slots": 3, "4_progress_slots": 3,
+        "modifiers": 3, "notes": 3,
+        # Tier 4 — actual military composition (most sensitive)
+        "land_units": 4, "naval_units": 4,
     },
 }
 
@@ -243,6 +275,16 @@ def get_nation_id_for_item(data_type: str, item: dict):
             return None
         return str(raw)
 
+    if resolution == "region":
+        raw = item.get(cfg["region_field"])
+        if not raw:
+            return None
+        try:
+            ObjectId(str(raw))  # validate
+        except Exception:
+            return None
+        return str(raw)
+
     if resolution == "two_hop":
         owner_raw = item.get(cfg["owner_field"])
         if not owner_raw:
@@ -276,9 +318,11 @@ def is_item_owner(data_type: str, item: dict, user) -> bool:
     """
     Return True if the logged-in user owns the given item.
     Ownership rules:
-        nations    : user has a character with ruling_nation_org == item._id
-        characters : item["player"] matches user's player._id
-        artifacts  : owner character["player"] matches user's player._id
+        nations     : user has a character with ruling_nation_org == item._id
+        characters  : item["player"] matches user's player._id
+        artifacts   : owner character["player"] matches user's player._id
+        merchants   : user has a character with ruling_nation_org == item._id
+        mercenaries : user has a character with ruling_nation_org == item._id
     """
     if not user:
         return False
@@ -346,6 +390,26 @@ def is_item_owner(data_type: str, item: dict, user) -> bool:
                 pass
         return char is not None
 
+    if data_type == "mercenaries":
+        # Same reverse-lookup pattern as "merchants" above — a mercenary
+        # company's leaders are found via ruling_nation_org, never a field
+        # stored on the mercenary document itself.
+        mercenary_id = str(item.get("_id", ""))
+        if not mercenary_id:
+            return False
+        char = mongo.db.characters.find_one(
+            {"player": player_id, "ruling_nation_org": mercenary_id}, {"_id": 1}
+        )
+        if not char:
+            try:
+                char = mongo.db.characters.find_one(
+                    {"player": player_id,
+                     "ruling_nation_org": ObjectId(mercenary_id)}, {"_id": 1}
+                )
+            except Exception:
+                pass
+        return char is not None
+
     return False
 
 
@@ -373,7 +437,9 @@ def get_item_visibility(
 
     Never writes to the DB — callers decide whether to log.
     """
-    from calculations.visibility import get_viewer_nations, compute_visibility, compute_merchant_visibility
+    from calculations.visibility import (
+        get_viewer_nations, compute_visibility, compute_merchant_visibility, compute_mercenary_visibility,
+    )
 
     # 1. Non-player admin or non-player RP mod → always full access, no log
     if is_non_player_admin or getattr(g, "is_non_player_rp_mod", False):
@@ -397,11 +463,13 @@ def get_item_visibility(
     if not viewer_nations:
         return (0, False)
 
-    # Merchants get their own computation (host nation's baseline exposure
-    # + the merchant's own visibility_modifiers) rather than a plain
-    # nation-to-nation lookup — see compute_merchant_visibility's docstring.
+    # Merchants and mercenaries get their own computation rather than a
+    # plain nation-to-nation lookup — see compute_merchant_visibility's and
+    # compute_mercenary_visibility's docstrings.
     if data_type == "merchants":
         tier = compute_merchant_visibility(viewer_nations, item)
+    elif data_type == "mercenaries":
+        tier = compute_mercenary_visibility(viewer_nations, item)
     else:
         tier = compute_visibility(viewer_nations, nation_id)
     return (tier, False)

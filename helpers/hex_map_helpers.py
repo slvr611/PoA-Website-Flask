@@ -26,7 +26,11 @@ def _get_cached_all_tiles():
         cached = getattr(_g, '_hex_admin_tile_cache', None)
         if cached is not None:
             return cached
-        tiles = list(mongo.db.hex_map_tiles.find({}, _projection))
+        # batch_size forces the whole ~11.5k-tile map into one round trip
+        # instead of pymongo's default ~101-doc-then-16MB batching, which
+        # measured at ~8.6s here vs. ~3s for a single batch — most of the
+        # cost is round-trip count, not payload size, for this collection.
+        tiles = list(mongo.db.hex_map_tiles.find({}, _projection).batch_size(20000))
         _g._hex_admin_tile_cache = tiles
         return tiles
     except RuntimeError:
@@ -35,7 +39,7 @@ def _get_cached_all_tiles():
     cached = getattr(_admin_tile_cache_local, 'tiles', None)
     if cached is not None:
         return cached
-    tiles = list(mongo.db.hex_map_tiles.find({}, _projection))
+    tiles = list(mongo.db.hex_map_tiles.find({}, _projection).batch_size(20000))
     _admin_tile_cache_local.tiles = tiles
     return tiles
 

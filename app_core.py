@@ -379,47 +379,60 @@ def backup_mongodb():
             wTimeoutMS=600000
         )
         db = client[db_name]
-        
+
         # Get all collections
         collections = db.list_collection_names()
-        
-        # Create a directory for each collection
-        for collection_name in collections:
-            collection_dir = os.path.join(backup_path, db_name)
-            os.makedirs(collection_dir, exist_ok=True)
-            
-            # Get collection reference
+
+        collection_dir = os.path.join(backup_path, db_name)
+        os.makedirs(collection_dir, exist_ok=True)
+
+        # Each collection is dumped independently (its own file, no shared
+        # state), and per the investigation into slow backups, most of the
+        # wall-clock cost is server round-trip time to fill the *first*
+        # batch of each query rather than raw transfer bandwidth — so
+        # collections dumped concurrently mostly overlap that latency
+        # instead of paying it one after another. Bounded (not one thread
+        # per collection) so this doesn't pile extra concurrent load onto
+        # what measurements showed is likely an already-throughput-limited
+        # cluster tier.
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        _DUMP_MAX_WORKERS = 6
+
+        def _dump_collection(collection_name):
             collection = db[collection_name]
-            
-            # Stream documents in batches to reduce memory usage
             batch_size = 1000
             file_path = os.path.join(collection_dir, f"{collection_name}.json")
-            
+
             with open(file_path, 'w') as f:
                 f.write('[\n')
                 first_doc = True
-                
+
                 # Use cursor with batch processing
                 cursor = collection.find({}).batch_size(batch_size)
-                
+
                 for doc in cursor:
                     # Convert ObjectId to string for JSON serialization
                     if '_id' in doc and hasattr(doc['_id'], '__str__'):
                         doc['_id'] = str(doc['_id'])
-                    
+
                     # Convert any other ObjectId fields
                     for key, value in doc.items():
                         if hasattr(value, '__str__') and str(type(value)) == "<class 'bson.objectid.ObjectId'>":
                             doc[key] = str(value)
-                    
+
                     # Write document to file immediately
                     if not first_doc:
                         f.write(',\n')
                     json.dump(doc, f, default=str, indent=2)
                     first_doc = False
-                
+
                 f.write('\n]')
-        
+
+        with ThreadPoolExecutor(max_workers=_DUMP_MAX_WORKERS) as executor:
+            futures = {executor.submit(_dump_collection, name): name for name in collections}
+            for future in as_completed(futures):
+                future.result()  # re-raise so a failed collection aborts the whole backup, same as before
+
         # Create a zip file of the backup with compression
         import zipfile
         

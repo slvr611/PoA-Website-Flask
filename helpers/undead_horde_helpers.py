@@ -26,12 +26,36 @@ UNDEAD_HORDE_JOB_KEY = "undead_horde"
 
 def nation_is_undead_horde(nation):
     """True when `nation`'s primary race has positive_trait == "Ravenous"
-    AND negative_trait == "Mindless" together."""
+    AND negative_trait == "Mindless" together.
+
+    Called repeatedly for the same nation within a single calculation
+    (compute_money_income/compute_resource_production/compute_resource_
+    consumption/collect_undead_horde_job each call it independently) —
+    measured at 6 separate, otherwise-identical races.find_one round trips
+    for one nation calculation. A race's traits can't change mid-request,
+    so the result is cached per Flask request, keyed by race_id."""
     if not nation:
         return False
     race_id = nation.get("primary_race")
     if not race_id:
         return False
+
+    try:
+        from flask import g as _g
+        cache = getattr(_g, '_undead_horde_race_cache', None)
+        if cache is None:
+            cache = {}
+            _g._undead_horde_race_cache = cache
+        if race_id in cache:
+            return cache[race_id]
+        result = _fetch_is_undead_horde_race(race_id)
+        cache[race_id] = result
+        return result
+    except RuntimeError:
+        return _fetch_is_undead_horde_race(race_id)
+
+
+def _fetch_is_undead_horde_race(race_id):
     try:
         race = mongo.db.races.find_one(
             {"_id": ObjectId(str(race_id))},

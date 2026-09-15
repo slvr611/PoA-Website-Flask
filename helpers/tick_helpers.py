@@ -1,6 +1,8 @@
 import uuid
 import math
 import functools
+import time
+from pymongo.errors import PyMongoError
 from bson import ObjectId
 from helpers.data_helpers import get_data_on_category
 import gc
@@ -314,6 +316,57 @@ def _chunked(items, size):
         yield items[i:i + size]
 
 
+# How many times to retry a whole chunk commit after session.with_transaction
+# itself already gave up (it has its own ~120s internal retry budget for
+# TransientTransactionError before raising) — and how long to wait between
+# attempts. A fresh session + fresh transaction each attempt, so this is
+# purely additional wall-clock resilience against a longer-than-usual Atlas
+# blip (replica-set election, brief network partition), not a workaround for
+# anything non-transient: RuntimeError from _commit_one_batch's own
+# validation isn't a PyMongoError, so it always propagates immediately
+# without retry, same as before this existed.
+_CHUNK_COMMIT_MAX_ATTEMPTS = 3
+_CHUNK_COMMIT_RETRY_DELAY_SECONDS = 10
+
+
+def _commit_chunk_with_retry(chunk, skip_propagate_ids):
+    """Commit one chunk, retrying the whole session.with_transaction() call
+    (a brand new session/transaction each attempt) up to
+    _CHUNK_COMMIT_MAX_ATTEMPTS times if it raises a PyMongoError — extending
+    total resilience against a transient outage well beyond
+    with_transaction's own single-call retry budget."""
+    for attempt in range(1, _CHUNK_COMMIT_MAX_ATTEMPTS + 1):
+        try:
+            with mongo.cx.start_session() as session:
+                session.with_transaction(
+                    lambda s, _items=chunk: _commit_one_batch(s, _items, skip_propagate_ids=skip_propagate_ids)
+                )
+            return
+        except PyMongoError as e:
+            if attempt >= _CHUNK_COMMIT_MAX_ATTEMPTS:
+                raise
+            print(
+                f"Chunk commit attempt {attempt}/{_CHUNK_COMMIT_MAX_ATTEMPTS} "
+                f"failed with a Mongo error, retrying in "
+                f"{_CHUNK_COMMIT_RETRY_DELAY_SECONDS}s: {e}"
+            )
+            time.sleep(_CHUNK_COMMIT_RETRY_DELAY_SECONDS)
+
+
+class TickPartialCommitError(Exception):
+    """Raised by _commit_pending_changes when a chunk fails after at least
+    one earlier chunk in the same tick already committed successfully —
+    those earlier chunks are NOT rolled back (see _commit_pending_changes's
+    docstring), so the blanket "fully rolled back" framing _run_tick_guarded
+    otherwise reports would be false. Carries enough detail for an accurate
+    message instead."""
+    def __init__(self, original, chunks_committed, items_committed):
+        self.original = original
+        self.chunks_committed = chunks_committed
+        self.items_committed = items_committed
+        super().__init__(str(original))
+
+
 def _commit_pending_changes(pending):
     """Apply every change queued via _queue_change, grouped into one
     transaction per CHUNK of up to _COMMIT_CHUNK_SIZE items of the same
@@ -364,7 +417,17 @@ def _commit_pending_changes(pending):
     Each chunk uses session.with_transaction(), pymongo's own recommended
     pattern for transactions — it automatically retries the whole chunk on
     a TransientTransactionError (e.g. a brief replica-set election), which
-    a plain start_transaction()/commit_transaction() pair does not.
+    a plain start_transaction()/commit_transaction() pair does not. On top
+    of that, _commit_chunk_with_retry retries the entire with_transaction
+    call itself a few more times if it still gives up, for resilience
+    against a longer-than-usual outage.
+
+    If a chunk fails after at least one earlier chunk already committed,
+    raises TickPartialCommitError instead of the original exception — see
+    its docstring — so callers (namely _run_tick_guarded) can report that
+    those earlier chunks were NOT rolled back, instead of the blanket
+    "nothing was applied" claim that's only true when the very first chunk
+    is what failed.
 
     Returns the current session_counter (read fresh, after every chunk
     commits) for callers that need it afterward, e.g. archive_old_changes
@@ -384,13 +447,19 @@ def _commit_pending_changes(pending):
         # currently committing — see _commit_one_batch's docstring for why.
         skip_propagate_ids = {(item["data_type"], str(item["item_id"])) for item in pending}
 
+        chunks_committed = 0
+        items_committed = 0
         for dt in order:
             merged_items = _merge_pending_by_entity(by_type[dt])
             for chunk in _chunked(merged_items, _COMMIT_CHUNK_SIZE):
-                with mongo.cx.start_session() as session:
-                    session.with_transaction(
-                        lambda s, _items=chunk: _commit_one_batch(s, _items, skip_propagate_ids=skip_propagate_ids)
-                    )
+                try:
+                    _commit_chunk_with_retry(chunk, skip_propagate_ids)
+                except Exception as e:
+                    if chunks_committed:
+                        raise TickPartialCommitError(e, chunks_committed, items_committed) from e
+                    raise
+                chunks_committed += 1
+                items_committed += len(chunk)
 
     global_modifiers = mongo.db["global_modifiers"].find_one({"name": "global_modifiers"})
     return global_modifiers.get("session_counter", 0) if global_modifiers else 0
@@ -926,17 +995,33 @@ def _run_tick_guarded(target, form_data, label):
     """Run tick()/era_tick() and make sure a failure is actually visible
     somewhere an admin will see it, instead of a bare thread crash whose
     only trace is whatever reached the process logs before it died (see the
-    KeyError: 'overlord' incident that prompted this). Failure here always
-    means the deferred-commit transaction was never opened or was aborted —
-    per _commit_pending_changes, nothing from this run was applied."""
+    KeyError: 'overlord' incident that prompted this).
+
+    Most failures happen before or during the pure-compute phase, or on the
+    very first commit chunk — in those cases nothing was ever written, so
+    the deferred-commit transaction really was never opened or was aborted
+    with nothing applied. But once at least one chunk has committed,
+    _commit_pending_changes raises TickPartialCommitError instead of the
+    original exception specifically so this can report that truthfully
+    (those earlier chunks are NOT rolled back — see its docstring) rather
+    than always claiming a full rollback regardless of how far the commit
+    phase actually got."""
     try:
         target(form_data)
     except Exception as e:
         import traceback
-        error_text = (
-            f"{label} FAILED and was fully rolled back — no changes from this "
-            f"run were applied.\n\nError: {e}\n\n{traceback.format_exc()}"
-        )
+        if isinstance(e, TickPartialCommitError):
+            error_text = (
+                f"{label} FAILED partway through committing — "
+                f"{e.chunks_committed} chunk(s) totalling {e.items_committed} "
+                f"item(s) were already applied and were NOT rolled back "
+                f"before the failure below.\n\nError: {e.original}\n\n{traceback.format_exc()}"
+            )
+        else:
+            error_text = (
+                f"{label} FAILED and was fully rolled back — no changes from this "
+                f"run were applied.\n\nError: {e}\n\n{traceback.format_exc()}"
+            )
         print(error_text)
         try:
             give_tick_summary(error_text, error_text)
@@ -3407,6 +3492,223 @@ def district_duration_tick(old_nation, new_nation, schema):
     new_nation["modifiers"] = modifiers
     return result
 
+
+def _tile_terrain_matches_requirement(tile, requirement):
+    """Does a placed tile's terrain satisfy a district/city terrain
+    requirement — "land" (the default for districts, and always implied
+    for cities, which have no per-type terrain requirement of their own),
+    "water", or "coastal" (on land/river AND adjacent to a water/river
+    tile — dock/shipyard/wharf)? Mirrors
+    calculations.field_calculations._compute_legal_placement's own land/
+    water/coastal classification, at the single already-placed-tile level
+    rather than the "is there anywhere legal" nation-wide question."""
+    from calculations.field_calculations import WATER_TERRAINS, _hex_neighbors
+    terrain = tile.get("terrain", "")
+    is_water = terrain in WATER_TERRAINS
+    is_river = terrain == "river"
+    if requirement == "water":
+        return is_water or is_river
+    if requirement == "coastal":
+        if is_water:
+            return False
+        owner = tile.get("owner")
+        for nq, nr in _hex_neighbors(tile.get("q"), tile.get("r")):
+            nb = mongo.db.hex_map_tiles.find_one({"owner": owner, "q": nq, "r": nr}, {"terrain": 1})
+            if nb and (nb.get("terrain") in WATER_TERRAINS or nb.get("terrain") == "river"):
+                return True
+        return False
+    return not is_water  # "land" (default) — rivers count as land too
+
+
+def ai_duplicate_building_cleanup_tick(old_nation, new_nation, schema, pending_tiles=None):
+    """Each tick, an AI nation checks its own districts and cities for a
+    "real" duplicate — not the same _id claimed on two map tiles (a data-
+    corruption class already fixed at the source, see sync_nation_cities/
+    sync_nation_districts's world_city_ids/world_district_ids guards), but
+    two DISTINCT entries of a type that isn't supposed to allow more than
+    one. The only path that can create this today is the Assimilation Tool
+    (routes/admin_tool_routes.py's assimilation_tool_execute), which merges
+    two nations' districts/cities arrays with no uniqueness check at all —
+    if both nations already had their own "forge", the merged nation ends
+    up with two, each with a real, distinct _id.
+
+    Districts: a def_key is a duplicate if district_defs.<key>.allow_multiple
+    is falsy (matches check_district_requirements's own build-time gate —
+    currently every district def has allow_multiple=False, so any def_key
+    appearing twice qualifies) and it appears more than once.
+
+    Cities: a type is a duplicate if it appears more than once, EXCEPT
+    "generic" — mirrors _select_best_city's existing
+    existing_city_types.discard("generic") exemption, the only place in
+    this codebase today that already treats generic specially.
+
+    Districts: up to district_defs.<key>.map_count instances are kept (not
+    just 1 — e.g. "outpost" is 2), matching check_district_requirements's
+    own build-time cap exactly, so a nation legitimately holding its full
+    allowance is never touched. Cities have no such per-type cap field, so
+    exactly 1 non-generic instance of each type is kept. Every instance
+    beyond the kept set is dismantled: removed from nation.districts/
+    cities, its map tile (if placed) cleared, and 1/4 of its build cost
+    (json-data cities / district_defs "cost", each resource rounded up)
+    refunded into resource_storage, capped at nation_resource_capacity —
+    same refund convention as fix_city_and_capital_placement /
+    scripts/fix_disconnected_districts.py.
+
+    Which instance(s) are kept respects terrain, not just array order: for
+    districts, copies whose current tile actually satisfies the def's
+    tile_requirement (land/water/coastal — see
+    _tile_terrain_matches_requirement) are preferred over ones that don't,
+    so a "coastal" dock that isn't really adjacent to water loses out to a
+    properly-placed copy even if it happens to come first in the array
+    (ties, or instances not placed on the map to check, fall back to
+    original array order). For cities, the capital-flagged copy is
+    preferred first (a capital must never be dismantled), then whichever
+    copy is on land (cities have no per-type terrain requirement of their
+    own, but are always land-only).
+
+    Player nations are untouched (temperament == "Player" gate, same
+    convention as ai_decision_tick)."""
+    if old_nation.get("temperament", "Player") == "Player":
+        return ""
+
+    result = ""
+    caps = new_nation.get("nation_resource_capacity") or {}
+    storage = dict(new_nation.get("resource_storage", {}) or {})
+
+    def _refund(cost):
+        for res, amt in (cost or {}).items():
+            if not amt:
+                continue
+            give = math.ceil(amt / 4)
+            if not give:
+                continue
+            new_amount = storage.get(res, 0) + give
+            cap = caps.get(res)
+            if cap is not None:
+                new_amount = min(new_amount, cap)
+            storage[res] = new_amount
+
+    # --- Districts ---
+    districts = list(new_nation.get("districts", []) or [])
+    by_def_key = {}
+    for d in districts:
+        if not isinstance(d, dict):
+            continue
+        dk = d.get("def_key", "")
+        if not dk:
+            continue
+        by_def_key.setdefault(dk, []).append(d)
+
+    dup_def_keys = [dk for dk, insts in by_def_key.items() if len(insts) > 1]
+    remove_district_ids = set()
+    if dup_def_keys:
+        defs_by_key = {
+            dd["key"]: dd for dd in mongo.db.district_defs.find({"key": {"$in": dup_def_keys}})
+        }
+        for dk in dup_def_keys:
+            dd = defs_by_key.get(dk)
+            if not dd or dd.get("allow_multiple", False):
+                continue
+            insts = by_def_key[dk]
+            # map_count (default 1) is the real cap — e.g. "outpost" is 2,
+            # matching check_district_requirements's own build-time gate
+            # (see its docstring comment). Only the excess PAST map_count
+            # is dismantled; a nation legitimately holding exactly
+            # map_count instances is left alone entirely.
+            map_count = dd.get("map_count", 1) or 1
+            if len(insts) <= map_count:
+                continue
+            # Among the instances, prefer keeping whichever copies actually
+            # sit on terrain valid for this district's tile_requirement
+            # (e.g. a "coastal" dock not actually adjacent to water is the
+            # one that should go first) — ties (or instances not placed on
+            # the map to check) fall back to original array order.
+            requirement = dd.get("tile_requirement", "land")
+            tiles_by_district_id = {
+                t["district"]["id"]: t for t in mongo.db.hex_map_tiles.find(
+                    {"district.id": {"$in": [i.get("_id") for i in insts]}},
+                )
+            }
+            def _terrain_ok(inst):
+                tile = tiles_by_district_id.get(inst.get("_id"))
+                return bool(tile) and _tile_terrain_matches_requirement(tile, requirement)
+            ranked = sorted(insts, key=lambda i: not _terrain_ok(i))
+            keep_ids = {i.get("_id") for i in ranked[:map_count]}
+            extras = [i for i in insts if i.get("_id") not in keep_ids]
+            cost = dd.get("cost", {}) or {}
+            for extra in extras:
+                extra_id = extra.get("_id")
+                remove_district_ids.add(extra_id)
+                _refund(cost)
+                tile = tiles_by_district_id.get(extra_id)
+                if tile:
+                    _queue_tile_write(pending_tiles, tile["_id"], {"district": None})
+                result += (
+                    f"{old_nation.get('name', '?')}: dismantled duplicate district "
+                    f"{dd.get('display_name', dk)} (id={extra_id}), refunded 1/4 of {cost}\n"
+                )
+    if remove_district_ids:
+        new_nation["districts"] = [
+            d for d in districts if not (isinstance(d, dict) and d.get("_id") in remove_district_ids)
+        ]
+
+    # --- Cities ---
+    cities = list(new_nation.get("cities", []) or [])
+    by_type = {}
+    for c in cities:
+        if not isinstance(c, dict):
+            continue
+        ct = c.get("type", "")
+        if not ct or ct == "generic":
+            continue
+        by_type.setdefault(ct, []).append(c)
+
+    remove_city_ids = set()
+    for ct, insts in by_type.items():
+        if len(insts) <= 1:
+            continue
+        inst_ids = [i.get("_id") for i in insts]
+        tiles_by_city_id = {
+            t["city"]["id"]: t for t in mongo.db.hex_map_tiles.find({"city.id": {"$in": inst_ids}})
+        }
+        # Prefer the capital-flagged copy (never dismantle a nation's
+        # capital); failing that, prefer whichever copy is actually on land
+        # — cities have no per-type terrain requirement of their own, but
+        # are always land-only (legal_city_tiles excludes water tiles), so
+        # a copy sitting on water is the wrong one regardless of type.
+        keep = next(
+            (i for i in insts if tiles_by_city_id.get(i["_id"], {}).get("capital")),
+            None,
+        )
+        if keep is None:
+            keep = next(
+                (i for i in insts
+                 if i.get("_id") in tiles_by_city_id
+                 and _tile_terrain_matches_requirement(tiles_by_city_id[i["_id"]], "land")),
+                insts[0],
+            )
+        extras = [i for i in insts if i is not keep]
+        cost = json_data.get("cities", {}).get(ct, {}).get("cost", {}) or {}
+        for extra in extras:
+            extra_id = extra.get("_id")
+            remove_city_ids.add(extra_id)
+            _refund(cost)
+            tile = tiles_by_city_id.get(extra_id)
+            if tile and not tile.get("capital"):
+                _queue_tile_write(pending_tiles, tile["_id"], {"city": None})
+            result += (
+                f"{old_nation.get('name', '?')}: dismantled duplicate city "
+                f"{ct} (id={extra_id}), refunded 1/4 of {cost}\n"
+            )
+    if remove_city_ids:
+        new_nation["cities"] = [
+            c for c in cities if not (isinstance(c, dict) and c.get("_id") in remove_city_ids)
+        ]
+
+    new_nation["resource_storage"] = storage
+    return result
+
+
 ###########################################################
 # Era / Age Tick Functions
 ###########################################################
@@ -3857,6 +4159,7 @@ NATION_TICK_FUNCTIONS = {
     "Nation Progress Quests Tick": progress_quests_tick,
     "Nation Job Cleanup Tick": nation_job_cleanup_tick,
     "AI Decision Tick": ai_decision_tick,
+    "AI Duplicate Building Cleanup Tick": ai_duplicate_building_cleanup_tick,
     "AI Mech RP Tick": ai_mech_rp_tick,
     "Nation Disease Spread Tick": nation_disease_spread_tick,
     "Nation Accepted Disease Spread Tick": nation_accepted_spread_tick,
@@ -3983,6 +4286,7 @@ _TILE_PENDING_AWARE_TICK_FUNCTIONS = {
     nation_passive_expansion_tick,
     bandit_camp_spawn_tick,
     complex_trade_bandit_loss_tick,
+    ai_duplicate_building_cleanup_tick,
 }
 
 # Separate registry, same reasoning, for functions that report a

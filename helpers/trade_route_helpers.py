@@ -412,6 +412,25 @@ def compute_delay(road_distance, trade_speed_a, trade_speed_b):
 # ---------------------------------------------------------------------------
 
 def _current_session():
+    """The current session counter — a singleton value that can only change
+    on a tick (a rare, well-defined game event), so it's safe to cache for
+    the lifetime of one Flask request. Callers that don't pass an explicit
+    `session` to functions like get_trade_route_resource_net each call this
+    independently — measured at 5 separate, otherwise-identical
+    global_modifiers.find_one round trips for a single nation calculation."""
+    try:
+        from flask import g as _g
+        cached = getattr(_g, '_current_session_cache', None)
+        if cached is not None:
+            return cached
+        value = _fetch_current_session()
+        _g._current_session_cache = value
+        return value
+    except RuntimeError:
+        return _fetch_current_session()
+
+
+def _fetch_current_session():
     gm = mongo.db.global_modifiers.find_one(
         {"name": "global_modifiers"}, {"session_counter": 1}
     )
@@ -464,19 +483,35 @@ def is_delivering(route, session):
     return True
 
 
-def _nations_in_stasis(names):
+def _nations_in_stasis(names, calc_cache=None):
     """Return the subset of `names` currently carrying a stasis modifier.
 
     A route with either side in stasis stays active (not ended) but is treated
-    as non-delivering — goods stop flowing without disturbing its lifecycle timing."""
-    names = [n for n in names if n]
+    as non-delivering — goods stop flowing without disturbing its lifecycle timing.
+
+    Pass `calc_cache` (a nation/merchant's own target["_calc_cache"] dict) to
+    reuse the result across repeated calls within a single calculation —
+    get_trade_route_resource_net is called independently by
+    compute_money_income/compute_merchant_income/compute_resource_production/
+    compute_resource_consumption, and get_trade_route_source_contributions
+    once more for the tooltip breakdown, all with the exact same routes/names
+    for one target: 5 separate, otherwise-identical nations.find round trips
+    for a single nation calculation, measured live."""
+    names = frozenset(n for n in names if n)
     if not names:
         return set()
+    if calc_cache is not None:
+        cached = calc_cache.setdefault("_stasis_names_by_key", {}).get(names)
+        if cached is not None:
+            return cached
     docs = mongo.db.nations.find(
-        {"name": {"$in": names}, "modifiers.modifier_type": "stasis"},
+        {"name": {"$in": list(names)}, "modifiers.modifier_type": "stasis"},
         {"name": 1},
     )
-    return {d["name"] for d in docs}
+    result = {d["name"] for d in docs}
+    if calc_cache is not None:
+        calc_cache["_stasis_names_by_key"][names] = result
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -500,17 +535,22 @@ def _get_cached_routes(target):
     return cache["active_trade_routes"]
 
 
-def get_trade_route_resource_net(nation_name, routes, session=None):
+def get_trade_route_resource_net(nation_name, routes, session=None, target=None):
     """Compute {resource: net_qty} from a list of active/ending routes.
 
     Positive = net incoming (import), Negative = net outgoing (export).
     Only routes whose delivery window includes `session` are counted.
+
+    Pass `target` (the calling nation/merchant dict) so the stasis lookup
+    can be cached on its _calc_cache — see _nations_in_stasis's docstring.
     """
     if session is None:
         session = _current_session()
 
+    calc_cache = target.setdefault("_calc_cache", {}) if target is not None else None
     stasis_names = _nations_in_stasis(
-        {r.get("nation_a") for r in routes} | {r.get("nation_b") for r in routes}
+        {r.get("nation_a") for r in routes} | {r.get("nation_b") for r in routes},
+        calc_cache=calc_cache,
     )
 
     net = {}
@@ -540,20 +580,25 @@ def get_trade_route_resource_net(nation_name, routes, session=None):
 # Breakdown SourceContributions for tooltips
 # ---------------------------------------------------------------------------
 
-def get_trade_route_source_contributions(nation_name, routes, session=None):
+def get_trade_route_source_contributions(nation_name, routes, session=None, target=None):
     """Return SourceContribution objects for trade route resource breakdowns.
 
     One contribution per (route, direction) pair.  Each carries the
     {resource_key}_production or {resource_key}_consumption modifiers
     that _resource_bd expects.
+
+    Pass `target` (the calling nation/merchant dict) so the stasis lookup
+    can be cached on its _calc_cache — see _nations_in_stasis's docstring.
     """
     from calculations.source_contribution import SourceContribution
 
     if session is None:
         session = _current_session()
 
+    calc_cache = target.setdefault("_calc_cache", {}) if target is not None else None
     stasis_names = _nations_in_stasis(
-        {r.get("nation_a") for r in routes} | {r.get("nation_b") for r in routes}
+        {r.get("nation_a") for r in routes} | {r.get("nation_b") for r in routes},
+        calc_cache=calc_cache,
     )
 
     contribs = []
@@ -623,6 +668,38 @@ def _nations_share_market(nation_a, nation_b):
     return bool(a_markets & b_markets)
 
 
+def _markets_by_nation_name(names):
+    """Batch-resolve {nation_name: {market_id, ...}} for every name in
+    `names` in exactly 2 queries total (name→id, then id→markets via
+    market_links), instead of one nations.find_one + market_links.find PAIR
+    per name — what repeatedly calling _nations_share_market once per trade
+    route did. A nation with several distinct trade partners paid for that
+    N+1 in full every time trade-route slot usage was computed (count_route_slots)
+    or its breakdown re-derived (field_calculations.py's trade route slot
+    usage contribution) — measured live at 8 nations.find_one + 8
+    market_links.find calls for one nation's calculation."""
+    names = [n for n in names if n]
+    if not names:
+        return {}
+    nations_db = category_data.get("nations", {}).get("database")
+    ml = category_data.get("market_links", {}).get("database")
+    if nations_db is None or ml is None:
+        return {}
+
+    id_by_name = {
+        n["name"]: str(n["_id"])
+        for n in nations_db.find({"name": {"$in": names}}, {"name": 1})
+    }
+    if not id_by_name:
+        return {}
+
+    markets_by_id = {}
+    for lnk in ml.find({"member": {"$in": list(id_by_name.values())}}, {"member": 1, "market": 1}):
+        markets_by_id.setdefault(lnk["member"], set()).add(lnk["market"])
+
+    return {name: markets_by_id.get(nid, set()) for name, nid in id_by_name.items()}
+
+
 def _slot_cost_for_direction(resources, slot_capacity):
     """Total export/import slots consumed by a list of {resource, quantity} entries.
 
@@ -661,14 +738,20 @@ def count_route_slots(nation_name, statuses=("active", "ending")):
 
     export_used = 0
     import_used = 0
-    market_cache = {}
+
+    # Batch-resolve every nation name involved (this nation + every distinct
+    # trade partner) to its markets in 2 queries total — see
+    # _markets_by_nation_name's docstring.
+    all_names = {nation_name}
+    for route in routes:
+        all_names.add(route.get("nation_a", ""))
+        all_names.add(route.get("nation_b", ""))
+    markets_by_name = _markets_by_nation_name(all_names)
 
     for route in routes:
         na, nb = route.get("nation_a", ""), route.get("nation_b", "")
-        cache_key = (min(na, nb), max(na, nb))
-        if cache_key not in market_cache:
-            market_cache[cache_key] = _nations_share_market(na, nb)
-        capacity = 4 if market_cache[cache_key] else 2
+        shares_market = bool(markets_by_name.get(na, set()) & markets_by_name.get(nb, set()))
+        capacity = 4 if shares_market else 2
 
         if nation_name == na:
             export_used += _slot_cost_for_direction(route.get("resources_a_to_b", []), capacity)

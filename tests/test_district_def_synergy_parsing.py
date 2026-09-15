@@ -73,7 +73,10 @@ class TestDistrictAdapterSynergyMatchingAgainstLiveNodeData:
             }],
         }
         mock_mongo = MagicMock()
-        mock_mongo.db.district_defs.find_one.return_value = fake_dd
+        # _resolve_def resolves def_key lookups via a bulk find({}) cache
+        # (see _get_cached_district_defs_by_key) rather than a per-key
+        # find_one, so the mock must serve the bulk-fetch shape.
+        mock_mongo.db.district_defs.find.return_value = [fake_dd]
         target = self._target_with_courthouse_on_stone()
         with patch("calculations.field_calculations.mongo", mock_mongo):
             contributions = DistrictAdapter.collect(target, {"properties": {}}, {}, {}, {})

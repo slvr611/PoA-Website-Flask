@@ -491,7 +491,7 @@ def compute_money_income(field, target, base_value, field_schema, overall_total_
         from helpers.trade_route_helpers import _get_cached_routes, get_trade_route_resource_net
         routes = _get_cached_routes(target)
         if routes:
-            net = get_trade_route_resource_net(nation_name, routes)
+            net = get_trade_route_resource_net(nation_name, routes, target=target)
             value += net.get("money", 0)
 
     # Gate only — overall_total_modifiers' value is summed across EVERY
@@ -520,7 +520,7 @@ def compute_merchant_income(field, target, base_value, field_schema, overall_tot
         from helpers.trade_route_helpers import _get_cached_routes, get_trade_route_resource_net
         routes = _get_cached_routes(target)
         if routes:
-            net = get_trade_route_resource_net(merchant_name, routes)
+            net = get_trade_route_resource_net(merchant_name, routes, target=target)
             value += net.get("money", 0)
 
     return int(value)
@@ -677,7 +677,7 @@ def compute_resource_production(field, target, base_value, field_schema, overall
         from helpers.trade_route_helpers import _get_cached_routes, get_trade_route_resource_net
         routes = _get_cached_routes(target)
         if routes:
-            net = get_trade_route_resource_net(nation_name, routes)
+            net = get_trade_route_resource_net(nation_name, routes, target=target)
             for resource, delta in net.items():
                 if delta > 0:
                     production_dict[resource] = production_dict.get(resource, 0) + int(delta)
@@ -731,7 +731,7 @@ def compute_resource_consumption(field, target, base_value, field_schema, overal
         from helpers.trade_route_helpers import _get_cached_routes, get_trade_route_resource_net
         routes = _get_cached_routes(target)
         if routes:
-            net = get_trade_route_resource_net(nation_name, routes)
+            net = get_trade_route_resource_net(nation_name, routes, target=target)
             for resource, delta in net.items():
                 if delta < 0:
                     consumption_dict[resource] = consumption_dict.get(resource, 0) + int(abs(delta))
