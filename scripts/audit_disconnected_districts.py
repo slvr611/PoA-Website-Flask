@@ -130,9 +130,35 @@ def _is_properly_placed(nation, tiles, t, dd):
     return coord in {c["coord"] for c in pool}, legal
 
 
+def _player_nation_ids():
+    """Same definition as routes/admin_tool_routes.py's
+    _get_player_nation_ids / scripts/reconcile_map_and_ai_nations.py's
+    _player_nation_ids: nations ruled by a real player's character, or
+    listing a player directly."""
+    from bson import ObjectId
+    ids = set()
+    for char in mongo.db.characters.find(
+        {"player": {"$exists": True, "$ne": None, "$ne": ""},
+         "ruling_nation_org": {"$exists": True, "$ne": None}},
+        {"ruling_nation_org": 1, "_id": 0},
+    ):
+        rno = char.get("ruling_nation_org")
+        if rno:
+            try:
+                ids.add(ObjectId(str(rno)))
+            except Exception:
+                pass
+    for nation in mongo.db.nations.find(
+        {"players": {"$exists": True, "$ne": [], "$ne": None}}, {"_id": 1}
+    ):
+        ids.add(nation["_id"])
+    return ids
+
+
 def main():
     tiles_by_owner = _all_owned_tiles_by_nation()
     nations_by_name = {n.get("name", ""): n for n in mongo.db.nations.find() if n.get("name")}
+    player_ids = _player_nation_ids()
 
     print(f"{len(tiles_by_owner)} nations own at least one tile.\n")
 
@@ -140,6 +166,9 @@ def main():
     dup_total = 0
     disconnected_total = 0
     relocatable_total = 0
+    player_nations_affected = set()
+    player_dup_total = 0
+    player_disconnected_total = 0
 
     for name, tiles in sorted(tiles_by_owner.items()):
         nation = nations_by_name.get(name)
@@ -182,13 +211,18 @@ def main():
         if not dup_cities and not dup_districts and not disconnected_districts:
             continue
 
-        print(f"=== {name} ===")
+        is_player = nation.get("_id") in player_ids
+        print(f"=== {name} [{'PLAYER' if is_player else 'AI'}] ===")
+        if is_player:
+            player_nations_affected.add(name)
 
         if dup_cities or dup_districts:
             dup_nation_count += 1
         for key, dups in (("city", dup_cities), ("district", dup_districts)):
             for cid, dup_tiles in dups.items():
                 dup_total += 1
+                if is_player:
+                    player_dup_total += 1
                 labels = {_label(key, t[key]) for t in dup_tiles}
                 mismatch = " ** MISMATCHED TYPE/DEF_KEY — likely a stale ghost from an old placement **" if len(labels) > 1 else ""
                 locs = ", ".join(
@@ -218,6 +252,8 @@ def main():
 
             for t in disconnected_districts:
                 disconnected_total += 1
+                if is_player:
+                    player_disconnected_total += 1
                 d = t["district"]
                 def_key = d.get("def_key", "")
                 coord = (t["q"], t["r"])
@@ -256,6 +292,10 @@ def main():
     print(f"Total genuinely disconnected districts found (zero adjacent buildings): {disconnected_total}")
     print(f"  of which a legal relocation tile exists: {relocatable_total}")
     print(f"  of which no legal tile exists (would need refund+removal): {disconnected_total - relocatable_total}")
+    print()
+    print(f"PLAYER nations affected: {len(player_nations_affected)} {sorted(player_nations_affected)}")
+    print(f"  duplicate id groups on PLAYER nations: {player_dup_total}")
+    print(f"  disconnected districts on PLAYER nations: {player_disconnected_total}")
     print("\nThis tool is read-only — nothing was written. No --apply mode exists yet;")
     print("resolving these is a follow-up decision once these findings are reviewed.")
 

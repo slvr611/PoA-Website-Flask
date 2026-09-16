@@ -44,7 +44,12 @@ def archive_old_changes(current_session):
     filename = f"changes_archive_{timestamp}_session-{current_session}.json"
     tmp_path = os.path.join(os.getcwd(), filename)
 
-    with open(tmp_path, 'w') as f:
+    # Explicit UTF-8: without it, open() defaults to the OS's preferred
+    # locale encoding — a legacy codepage on Windows — which can't
+    # represent every character an archived change might contain and
+    # raises UnicodeEncodeError (see the same fix in tick_helpers.py's
+    # give_tick_summary).
+    with open(tmp_path, 'w', encoding='utf-8') as f:
         f.write(json_util.dumps(docs, indent=2))
 
     s3_key = f"backups/{filename}"

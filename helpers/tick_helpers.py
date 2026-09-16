@@ -293,6 +293,17 @@ def _merge_pending_by_entity(items):
             order.append(key)
         else:
             existing = merged_by_id[key]
+            # Temporary diagnostic (2026-09-16 stuck/failing-tick investigation):
+            # print every same-tick multi-queue collision so it's visible which
+            # functions queued competing changes to the same entity, in what
+            # order, before the merge combines them.
+            print(
+                f"_merge_pending_by_entity: merging another change onto "
+                f"{item['data_type']} #{key} — existing reason: {existing['reason']!r}, "
+                f"incoming reason: {item['reason']!r}, "
+                f"existing already_calculated={existing['already_calculated']}, "
+                f"incoming already_calculated={item['already_calculated']}"
+            )
             existing["after_data"] = _merge_after_data(
                 existing["before_data"], existing["after_data"], item["after_data"]
             )
@@ -594,7 +605,7 @@ def tick(form_data):
         for tick_function_label, tick_function in CHARACTER_TICK_FUNCTIONS.items():
             run_key = f"run_{tick_function_label}"
             if run_key in form_data:
-                print(tick_function_label)
+                _log_tick_step(tick_function_label)
                 for i in range(len(old_characters)):
                     # Stasis blocks every tick function except modifier decay, so a
                     # stasis modifier's own duration still counts down and can expire.
@@ -626,7 +637,7 @@ def tick(form_data):
         for tick_function_label, tick_function in ARTIFACT_TICK_FUNCTIONS.items():
             run_key = f"run_{tick_function_label}"
             if run_key in form_data:
-                print(tick_function_label)
+                _log_tick_step(tick_function_label)
                 for i in range(len(old_artifacts)):
                     result = _dispatch(tick_function, pending, old_artifacts[i], new_artifacts[i], artifact_schema)
                     owner_id = old_artifacts[i].get("owner", "")
@@ -659,7 +670,7 @@ def tick(form_data):
         for tick_function_label, tick_function in MERCHANT_TICK_FUNCTIONS.items():
             run_key = f"run_{tick_function_label}"
             if run_key in form_data:
-                print(tick_function_label)
+                _log_tick_step(tick_function_label)
                 for i in range(len(old_merchants)):
                     result = _dispatch(tick_function, pending, old_merchants[i], new_merchants[i], merchant_schema)
                     if _org_leader_has_real_player(str(old_merchants[i]["_id"]), character_db):
@@ -687,7 +698,7 @@ def tick(form_data):
         for tick_function_label, tick_function in MERCENARY_TICK_FUNCTIONS.items():
             run_key = f"run_{tick_function_label}"
             if run_key in form_data:
-                print(tick_function_label)
+                _log_tick_step(tick_function_label)
                 for i in range(len(old_mercenaries)):
                     result = _dispatch(tick_function, pending, old_mercenaries[i], new_mercenaries[i], mercenary_schema)
                     if _org_leader_has_real_player(str(old_mercenaries[i]["_id"]), character_db):
@@ -715,7 +726,7 @@ def tick(form_data):
         for tick_function_label, tick_function in FACTION_TICK_FUNCTIONS.items():
             run_key = f"run_{tick_function_label}"
             if run_key in form_data:
-                print(tick_function_label)
+                _log_tick_step(tick_function_label)
                 for i in range(len(old_factions)):
                     result = _dispatch(tick_function, pending, old_factions[i], new_factions[i], faction_schema)
                     if _org_leader_has_real_player(str(old_factions[i]["_id"]), character_db):
@@ -743,7 +754,7 @@ def tick(form_data):
         for tick_function_label, tick_function in MARKET_TICK_FUNCTIONS.items():
             run_key = f"run_{tick_function_label}"
             if run_key in form_data:
-                print(tick_function_label)
+                _log_tick_step(tick_function_label)
                 for i in range(len(old_markets)):
                     full_tick_summary += _dispatch(tick_function, pending, old_markets[i], new_markets[i], market_schema, pending_tiles=pending_tiles)
 
@@ -793,7 +804,7 @@ def tick(form_data):
         for tick_function_label, tick_function in NATION_TICK_FUNCTIONS.items():
             run_key = f"run_{tick_function_label}"
             if run_key in form_data:
-                print(tick_function_label)
+                _log_tick_step(tick_function_label)
                 # Pre-load district_defs into a module-level cache before the AI
                 # Decision Tick so score_buildable_districts (called up to 6× per
                 # nation × 180 nations) issues only ONE DB query instead of ~1,080.
@@ -851,7 +862,7 @@ def tick(form_data):
 
         for tick_function_label, tick_function in NATION_CROSS_TICK_FUNCTIONS.items():
             if f"run_{tick_function_label}" in form_data:
-                print(tick_function_label)
+                _log_tick_step(tick_function_label)
                 result = _dispatch(tick_function, pending, old_nations, new_nations, nation_schema, pending_tiles=pending_tiles)
                 full_tick_summary += result
 
@@ -991,6 +1002,83 @@ def tick(form_data):
 
     return full_tick_summary
 
+def _tick_heartbeat_start(label):
+    """Record that a tick run has started, in a durable place (Mongo) rather
+    than only stdout — Heroku's log buffer only holds roughly the last
+    hour or so, so a tick that hangs for several hours leaves nothing an
+    admin can look at by the time anyone notices (see the ~7.5-hour stuck
+    Tick incident this was added for: it produced no summary, and by the
+    time it was investigated the logs showing which step it had reached
+    were long gone). Best-effort: a diagnostics write must never break the
+    tick itself."""
+    try:
+        mongo.db.tick_status.update_one(
+            {"_id": "current"},
+            {"$set": {
+                "running": True,
+                "tick_type": label,
+                "tick_started_at": datetime.datetime.now(datetime.timezone.utc),
+                "current_step": "(starting)",
+                "step_started_at": datetime.datetime.now(datetime.timezone.utc),
+            }},
+            upsert=True,
+        )
+    except Exception:
+        pass
+
+
+def _log_tick_step(label):
+    """Print AND durably record the tick step that's currently running.
+    Drop-in replacement for the old bare print(label) calls scattered
+    through tick()/era_tick() — same granularity, just also survives past
+    Heroku's log retention window. See _tick_heartbeat_start."""
+    print(label)
+    try:
+        mongo.db.tick_status.update_one(
+            {"_id": "current"},
+            {"$set": {
+                "current_step": label,
+                "step_started_at": datetime.datetime.now(datetime.timezone.utc),
+            }},
+            upsert=True,
+        )
+    except Exception:
+        pass
+
+
+def _tick_heartbeat_end(result):
+    try:
+        mongo.db.tick_status.update_one(
+            {"_id": "current"},
+            {"$set": {
+                "running": False,
+                "last_result": result,
+                "last_finished_at": datetime.datetime.now(datetime.timezone.utc),
+            }},
+            upsert=True,
+        )
+    except Exception:
+        pass
+
+
+def _enable_revert_warning_after_tick():
+    """A tick just finished — success or failure — so automatically turn on
+    the revert-warning banner (routes/base_routes.py's toggle_revert_warning
+    writes the same field manually; this is the automatic counterpart).
+    Admins reviewing what a tick just did are exactly the ones who'd decide
+    a revert is needed, and a failed/partially-committed tick is if
+    anything more likely to need one than a clean success — so this fires
+    for both outcomes, at the same point tick_status.running is cleared
+    (see _tick_heartbeat_end and is_tick_locked). Best-effort: a failure
+    here must never take down the tick itself."""
+    try:
+        mongo.db.global_modifiers.update_one(
+            {"name": "global_modifiers"}, {"$set": {"revert_warning": True}}, upsert=True,
+        )
+    except Exception:
+        pass
+
+
 def _run_tick_guarded(target, form_data, label):
     """Run tick()/era_tick() and make sure a failure is actually visible
     somewhere an admin will see it, instead of a bare thread crash whose
@@ -1005,7 +1093,20 @@ def _run_tick_guarded(target, form_data, label):
     original exception specifically so this can report that truthfully
     (those earlier chunks are NOT rolled back — see its docstring) rather
     than always claiming a full rollback regardless of how far the commit
-    phase actually got."""
+    phase actually got.
+
+    Also maintains a `tick_status` document in Mongo (see
+    _tick_heartbeat_start/_log_tick_step/_tick_heartbeat_end) so "is a tick
+    currently running, and if so which step, since when" is answerable at
+    any time — including hours into a hang, when Heroku's own log buffer
+    has long since rolled past the point where it happened. That same
+    running flag doubles as the change-approval lockout (see
+    helpers/change_helpers.py's is_tick_locked): approving a pending change
+    is blocked while it's set, though requesting one never is. On the way
+    out — success or failure — this also turns on the revert-warning
+    banner (_enable_revert_warning_after_tick), since a tick just having
+    run is exactly when an admin is most likely to want one."""
+    _tick_heartbeat_start(label)
     try:
         target(form_data)
     except Exception as e:
@@ -1023,10 +1124,15 @@ def _run_tick_guarded(target, form_data, label):
                 f"run were applied.\n\nError: {e}\n\n{traceback.format_exc()}"
             )
         print(error_text)
+        _tick_heartbeat_end("failed")
+        _enable_revert_warning_after_tick()
         try:
             give_tick_summary(error_text, error_text)
         except Exception:
             pass
+    else:
+        _tick_heartbeat_end("success")
+        _enable_revert_warning_after_tick()
 
 
 def run_tick_async(form_data):
@@ -1090,13 +1196,19 @@ def give_tick_summary(player_tick_summary, full_tick_summary):
     player_summary_filename = f"player_tick_summary_{timestamp}.txt"
     player_summary_path = os.path.join(summary_dir, player_summary_filename)
     
-    with open(player_summary_path, 'w') as f:
+    # Explicit encoding: without it, open() defaults to the OS's preferred
+    # locale encoding, which on Windows is a legacy codepage (cp1252 etc.)
+    # that can't represent every character a nation/character/culture name
+    # might contain (e.g. "ī"), raising UnicodeEncodeError and taking the
+    # whole tick down with it — even though the summary itself was already
+    # fully computed successfully at that point.
+    with open(player_summary_path, 'w', encoding='utf-8') as f:
         f.write(player_tick_summary)
 
     full_summary_filename = f"full_tick_summary_{timestamp}.txt"
     full_summary_path = os.path.join(summary_dir, full_summary_filename)
-    
-    with open(full_summary_path, 'w') as f:
+
+    with open(full_summary_path, 'w', encoding='utf-8') as f:
         f.write(full_tick_summary)
     
     
@@ -1233,8 +1345,24 @@ def _pick_succession_titles(succession_type, previous_leader):
     return [random.choice(tier1)] if tier1 else []
 
 
-def generate_ai_character(org, org_schema, character_schema, previous_leader=None, pending=None):
-    """Create and insert an AI ruler for the given nation/org. Returns a log string."""
+def generate_ai_character(org, org_schema, character_schema, previous_leader=None, pending=None, already_calculated=False):
+    """Create and insert an AI ruler for the given nation/org. Returns a log string.
+
+    `already_calculated`: pass True only when `org` is already a freshly
+    calculate_all_fields'd document (e.g. ai_ensure_leader_tick's old_nation,
+    recalculated by tick()'s nations loop before any NATION_TICK_FUNCTIONS
+    dispatch) — this becomes the succession change's own already_calculated
+    flag. Getting this right matters: _merge_pending_by_entity ANDs
+    already_calculated together when merging this change onto the same
+    nation's main "Tick Update for X" (which is always already_calculated=
+    True), so leaving this False here — the previous, always-safe-looking
+    default — was silently downgrading that MERGED item to
+    already_calculated=False, forcing a real check_no_other_changes
+    comparison at commit time that this queued change wasn't designed to
+    pass (see the 2026-09-16 stuck/failing-tick investigation, where this
+    caused a hard TickPartialCommitError, not just a silently-dropped
+    write). Defaults to False for callers (e.g. generate_all_ai_rulers_tick)
+    that pass a raw, not-yet-recalculated org."""
     character_type = random.choice(_RULER_TYPES)
     character_subtype = random.choice(RULER_SUBTYPES[character_type])
     req_strength = RULER_TYPE_STATS[character_type]["strength"]
@@ -1359,6 +1487,7 @@ def generate_ai_character(org, org_schema, character_schema, previous_leader=Non
             before_data=deepcopy(org),
             after_data=new_org,
             reason=f"{'; '.join(reasons)} for {org_name}",
+            already_calculated=already_calculated,
         )
         if pop_selected:
             result += f"  -> Updated {org_name} primary demographics via {succession_type} succession.\n"
@@ -1404,7 +1533,11 @@ def ai_ensure_leader_tick(old_nation, new_nation, schema, pending=None):
     if has_living_leader:
         return ""
     character_schema, _ = get_data_on_category("characters")
-    return generate_ai_character(old_nation, schema, character_schema, pending=pending)
+    # old_nation is old_nations[i] from tick()'s nations loop, which already
+    # ran calculate_all_fields on it before dispatching here — see
+    # generate_ai_character's already_calculated docstring for why this
+    # must be passed accurately rather than left at the default.
+    return generate_ai_character(old_nation, schema, character_schema, pending=pending, already_calculated=True)
 
 
 def character_death_tick(old_character, new_character, schema):
@@ -4268,6 +4401,7 @@ _PENDING_AWARE_TICK_FUNCTIONS = {
     character_heal_then_death_tick,
     artifact_loss_tick,
     ai_ensure_leader_tick,
+    ai_mech_rp_tick,
     pop_flee_tick,
     disease_cure_cross_tick,
     disease_job_death_tick,
@@ -4374,7 +4508,7 @@ def era_tick(form_data):
 
         for label, fn in ERA_NATION_TICK_FUNCTIONS.items():
             if f"run_{label}" in form_data:
-                print(label)
+                _log_tick_step(label)
                 for i in range(len(old_nations)):
                     if _in_stasis(old_nations[i]):
                         continue
@@ -4408,7 +4542,7 @@ def era_tick(form_data):
 
         for label, fn in ERA_CHARACTER_TICK_FUNCTIONS.items():
             if f"run_{label}" in form_data:
-                print(label)
+                _log_tick_step(label)
                 for i in range(len(old_characters)):
                     if _in_stasis(old_characters[i]):
                         continue
@@ -4431,7 +4565,7 @@ def era_tick(form_data):
         if fn is None:
             continue  # handled as a special case above (e.g. Backup Database)
         if f"run_{label}" in form_data:
-            print(label)
+            _log_tick_step(label)
             full_tick_summary += _dispatch(fn, pending)
 
     # ── Commit phase — see tick()'s matching comment. ──────────────────────

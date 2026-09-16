@@ -484,10 +484,35 @@ def _find_name_collision(target_collection, data_type, name, era=None, exclude_i
     return target_collection.find_one(query, session=session)
 
 
+def is_tick_locked():
+    """True while a session/era tick is currently running.
+
+    Reuses the existing tick_status heartbeat (helpers/tick_helpers.py's
+    _tick_heartbeat_start/_tick_heartbeat_end, added for surfacing a stuck
+    tick to admins) rather than a second, separate flag: _run_tick_guarded
+    already sets tick_status.running True the moment the tick's background
+    thread starts, and False the moment it exits — success or failure —
+    also turning on the revert-warning banner at that same point (see
+    _enable_revert_warning_after_tick).
+
+    Requesting a change is never blocked by this; only approving one is,
+    so a tick's own in-flight change queue never conflicts with itself.
+    Always a fresh, uncached read: this gates a real action, unlike
+    routes/base_routes.py's cached revert-warning/tick-lock banner checks,
+    where a few seconds of staleness only affects display, not
+    correctness."""
+    doc = mongo.db.tick_status.find_one({"_id": "current"}, {"running": 1})
+    return bool(doc and doc.get("running"))
+
+
 def approve_change(change_id):
     approver = mongo.db.players.find_one({"id": g.user.get("id", None)})
     if approver is None or not approver.get("is_admin", False):
         flash("You must be an admin to approve changes.", "error")
+        return None
+
+    if is_tick_locked():
+        flash("A tick is currently running — changes can be requested but not approved until it finishes.", "error")
         return None
 
     changes_collection = mongo.db.changes
@@ -767,6 +792,7 @@ def system_approve_change(change_id, session=None, skip_recalculation=False, ski
               f"check_no_other_changes (target was modified since the change "
               f"was requested, or before_requested_data doesn't reflect the "
               f"target's actual state).")
+        print(_describe_check_no_other_changes_failure(before_data, after_data, target))
     return False
 
 
@@ -779,6 +805,10 @@ def force_approve_change(change_id):
     approver = mongo.db.players.find_one({"id": g.user.get("id", None)})
     if approver is None or not approver.get("is_admin", False):
         flash("You must be an admin to approve changes.", "error")
+        return None
+
+    if is_tick_locked():
+        flash("A tick is currently running — changes can be requested but not approved until it finishes.", "error")
         return None
 
     changes_collection = mongo.db.changes
@@ -1218,6 +1248,35 @@ def calculate_int_changes(before_data, after_data):
         if isinstance(b_val, int) and isinstance(a_val, int):
             diff[key] = a_val - b_val
     return diff
+
+def _describe_check_no_other_changes_failure(before_data, after_data, current_data, max_fields=8, max_len=200):
+    """Temporary diagnostic for the "system_approve_change blocked" spam
+    seen during local tick testing (2026-09-16): reports, per top-level
+    field, whether the live document matches before_data, after_data,
+    neither, or is merely nested-different (a dict/list needing recursion
+    to see exactly what changed) — this settles whether the live document
+    was genuinely touched by something outside this change (matches
+    neither) or whether check_no_other_changes' own recursive comparison
+    is what's rejecting an otherwise-identical value.
+    """
+    lines = []
+    all_keys = sorted(set(before_data.keys()) | set(after_data.keys()) | set(current_data.keys()))
+    shown = 0
+    for key in all_keys:
+        if key not in after_data:
+            continue
+        b_val, a_val, c_val = before_data.get(key), after_data.get(key), current_data.get(key)
+        if c_val == b_val:
+            continue  # matches before_data — not part of the mismatch
+        if shown >= max_fields:
+            lines.append(f"  ... and more fields differ (truncated at {max_fields})")
+            break
+        shown += 1
+        verdict = "matches after_data (expected update)" if c_val == a_val else "matches NEITHER before nor after"
+        b_repr, a_repr, c_repr = (repr(v)[:max_len] for v in (b_val, a_val, c_val))
+        lines.append(f"  field '{key}': {verdict}\n    before={b_repr}\n    after ={a_repr}\n    live  ={c_repr}")
+    return "\n".join(lines) if lines else "  (no top-level field differs from before_data — mismatch is nested; see recursive check)"
+
 
 def check_no_other_changes(before_data, after_data, current_data):
     """

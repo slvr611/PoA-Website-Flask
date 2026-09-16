@@ -6,6 +6,20 @@ it, since later phases can be affected by earlier ones (e.g. removing an
 illegal Vandadorian Citadel can newly disconnect districts that were only
 adjacent to it):
 
+PLAYER NATIONS ARE NEVER TOUCHED. Every phase excludes _player_nation_ids()
+(same definition as routes/admin_tool_routes.py's _get_player_nation_ids),
+matching the existing convention elsewhere in this codebase —
+fix_city_and_capital_placement explicitly documents "Player-owned cities
+are NEVER moved", and the /admin/sync_cities /admin/sync_districts routes
+and reconcile_map_and_ai_nations.py all scope to AI nations only. An
+earlier version of this script did NOT apply that exclusion to phases 1, 4,
+and 5 (only phase 3's sync calls were AI-scoped) and silently relocated or
+deduplicated districts/cities in at least 12 player-owned nations (Dyeak,
+Jinying, Khanya, Republic of Elishara, Rye Spirits, Shinra, Sundralund,
+Taika, Te-mooiapitia, The Shattered Accolade, Theronzia, Tychi) before this
+was caught — see the conversation/commit history for that incident. Do not
+remove this exclusion.
+
 1. VANDADORIAN CITADEL REFUND — "vandadorian_citadel" requires
    requirements.name == "Vandador" (json-data/cities.json), so any other
    nation holding one has it through the same historical data corruption.
@@ -66,7 +80,7 @@ from helpers.ai_decision_helpers import (
     _pick_district_tile, _base_prices, evaluate_nation_state, _weights_from_net,
     _pick_fallback_capital_tile, sync_nation_districts, sync_nation_cities,
 )
-from scripts.audit_disconnected_districts import _is_properly_placed
+from scripts.audit_disconnected_districts import _is_properly_placed, _player_nation_ids
 
 
 def _all_owned_tiles_by_nation():
@@ -115,13 +129,14 @@ def _refund_into(nation, cost):
 # Phase 1
 # ---------------------------------------------------------------------------
 
-def phase1_refund_illegal_vandadorian_citadels(dry_run):
+def phase1_refund_illegal_vandadorian_citadels(dry_run, player_ids):
     cost = json_data.get("cities", {}).get("vandadorian_citadel", {}).get("cost", {})
     actions = []
     lost_capital_nations = set()
     removed_tile_ids = set()
     for nation in list(mongo.db.nations.find({
         "cities.type": "vandadorian_citadel", "name": {"$ne": "Vandador"},
+        "_id": {"$nin": list(player_ids)},
     })):
         citadels = [c for c in nation.get("cities", []) if c.get("type") == "vandadorian_citadel"]
         for c in citadels:
@@ -197,25 +212,7 @@ def phase2_assign_fallback_capital(lost_capital_nations, removed_tile_ids, dry_r
 # Phase 3 (sync) is just direct calls to the existing helpers — see main().
 # ---------------------------------------------------------------------------
 
-def phase3_sync_missing_placements(dry_run):
-    player_ids = set()
-    for char in mongo.db.characters.find(
-        {"player": {"$exists": True, "$ne": None, "$ne": ""},
-         "ruling_nation_org": {"$exists": True, "$ne": None}},
-        {"ruling_nation_org": 1, "_id": 0},
-    ):
-        rno = char.get("ruling_nation_org")
-        if rno:
-            try:
-                from bson import ObjectId
-                player_ids.add(ObjectId(str(rno)))
-            except Exception:
-                pass
-    for nation in mongo.db.nations.find(
-        {"players": {"$exists": True, "$ne": [], "$ne": None}}, {"_id": 1}
-    ):
-        player_ids.add(nation["_id"])
-
+def phase3_sync_missing_placements(dry_run, player_ids):
     ai_nations = list(mongo.db.nations.find({"_id": {"$nin": list(player_ids)}}))
     tiles_by_owner = _all_owned_tiles_by_nation()
     world_city_ids, world_district_ids = set(), set()
@@ -248,12 +245,12 @@ def phase3_sync_missing_placements(dry_run):
 # Phase 4
 # ---------------------------------------------------------------------------
 
-def phase4_resolve_duplicates(dry_run):
+def phase4_resolve_duplicates(dry_run, player_ids):
     tiles_by_owner = _all_owned_tiles_by_nation()
     actions = []
     for name, tiles in tiles_by_owner.items():
         nation = mongo.db.nations.find_one({"name": name})
-        if not nation:
+        if not nation or nation["_id"] in player_ids:
             continue
         capital_tile = next((t for t in tiles if t.get("capital")), None)
         capital_coord = (capital_tile["q"], capital_tile["r"]) if capital_tile else None
@@ -294,13 +291,13 @@ def phase4_resolve_duplicates(dry_run):
 # Phase 5
 # ---------------------------------------------------------------------------
 
-def phase5_relocate_disconnected_districts(dry_run):
+def phase5_relocate_disconnected_districts(dry_run, player_ids):
     tiles_by_owner = _all_owned_tiles_by_nation()
     moved, refunded = [], []
 
     for name, tiles in tiles_by_owner.items():
         nation = mongo.db.nations.find_one({"name": name})
-        if not nation:
+        if not nation or nation["_id"] in player_ids:
             continue
 
         # Authoritative per-tile check (shared with audit_disconnected_
@@ -400,8 +397,11 @@ def main():
     apply = "--apply" in sys.argv
     print(f"{'APPLYING' if apply else 'DRY RUN — nothing written'}\n")
 
+    player_ids = _player_nation_ids()
+    print(f"({len(player_ids)} player-owned nations excluded from every phase below)\n")
+
     print("=== Phase 1: refund illegal Vandadorian Citadels ===")
-    p1, lost_capital_nations, removed_tile_ids = phase1_refund_illegal_vandadorian_citadels(dry_run=not apply)
+    p1, lost_capital_nations, removed_tile_ids = phase1_refund_illegal_vandadorian_citadels(dry_run=not apply, player_ids=player_ids)
     for a in p1:
         print(f"  {a['nation']}: remove citadel id={a['id']} at tiles {a['tiles']}, refund {a['refund']}")
     if not p1:
@@ -417,7 +417,7 @@ def main():
     print()
 
     print("=== Phase 3: sync missing nation<->map placements ===")
-    p3 = phase3_sync_missing_placements(dry_run=not apply)
+    p3 = phase3_sync_missing_placements(dry_run=not apply, player_ids=player_ids)
     for name, d_report, c_report in p3:
         print(f"  {name}:")
         for item in d_report["added_to_nation"]:
@@ -437,7 +437,7 @@ def main():
     print()
 
     print("=== Phase 4: resolve duplicate city/district placements ===")
-    p4 = phase4_resolve_duplicates(dry_run=not apply)
+    p4 = phase4_resolve_duplicates(dry_run=not apply, player_ids=player_ids)
     for a in p4:
         print(f"  {a['nation']}: {a['kind']} id={a['id']} — keep {a['kept']}, clear {a['cleared']} ({a['reason']})")
     if not p4:
@@ -445,7 +445,7 @@ def main():
     print()
 
     print("=== Phase 5: relocate disconnected districts ===")
-    moved, refunded = phase5_relocate_disconnected_districts(dry_run=not apply)
+    moved, refunded = phase5_relocate_disconnected_districts(dry_run=not apply, player_ids=player_ids)
     for m in moved:
         print(f"  MOVED {m['nation']}: {m['def_key']} (id={m['id']}) {m['from']} -> {m['to']} ({m['rationale']})")
     for r in refunded:

@@ -28,6 +28,28 @@ def _get_revert_warning() -> bool:
     _revert_cache.update({"active": active, "ts": now})
     return active
 
+
+# ---------------------------------------------------------------------------
+# Tick-lockout banner — same process-level-cache shape as the revert
+# warning above, reading the tick_status heartbeat (helpers/tick_helpers.py)
+# rather than a separate flag. Shorter TTL than the revert warning: this
+# reflects a real, currently-enforced block on approving changes (see
+# helpers/change_helpers.py's is_tick_locked, which always reads fresh),
+# not just an ambient notice, so the banner should catch up quickly.
+# ---------------------------------------------------------------------------
+_tick_lock_cache: dict = {"active": False, "ts": 0.0}
+_TICK_LOCK_CACHE_TTL = 10  # seconds
+
+
+def _get_tick_in_progress() -> bool:
+    now = _time_mod.time()
+    if now - _tick_lock_cache["ts"] < _TICK_LOCK_CACHE_TTL:
+        return _tick_lock_cache["active"]
+    doc = mongo.db.tick_status.find_one({"_id": "current"}, {"running": 1, "_id": 0}) or {}
+    active = bool(doc.get("running"))
+    _tick_lock_cache.update({"active": active, "ts": now})
+    return active
+
 @base_routes.before_app_request
 def inject_now():
     g.now = datetime.datetime.now()
@@ -85,6 +107,11 @@ def calculate_user_permissions():
 @base_routes.before_app_request
 def inject_revert_warning():
     g.revert_warning = _get_revert_warning()
+
+
+@base_routes.before_app_request
+def inject_tick_in_progress():
+    g.tick_in_progress = _get_tick_in_progress()
 
 
 @base_routes.before_app_request

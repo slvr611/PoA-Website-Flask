@@ -209,7 +209,7 @@ def _grant_specific_resource(old_nation, new_nation, resource_key, amount, label
     return f"{name} gained {amount} {resource_key} from {label}.\n"
 
 
-def _apply_grant_resources(old_nation, new_nation, schema, mrp_def, magnitude, target_resource, need_weights, state, dry_run=False, acting_character=None, stat_used=None, conversion_target=None):
+def _apply_grant_resources(old_nation, new_nation, schema, mrp_def, magnitude, target_resource, need_weights, state, dry_run=False, acting_character=None, stat_used=None, conversion_target=None, pending=None):
     if magnitude <= 0 or not target_resource:
         return ""
     return _grant_specific_resource(
@@ -218,7 +218,7 @@ def _apply_grant_resources(old_nation, new_nation, schema, mrp_def, magnitude, t
     )
 
 
-def _apply_adjust_stability(old_nation, new_nation, schema, mrp_def, magnitude, target_resource, need_weights, state, dry_run=False, acting_character=None, stat_used=None, conversion_target=None):
+def _apply_adjust_stability(old_nation, new_nation, schema, mrp_def, magnitude, target_resource, need_weights, state, dry_run=False, acting_character=None, stat_used=None, conversion_target=None, pending=None):
     if magnitude == 0:
         return ""
     from helpers.tick_helpers import adjust_stability
@@ -226,7 +226,7 @@ def _apply_adjust_stability(old_nation, new_nation, schema, mrp_def, magnitude, 
     return adjust_stability(old_nation, new_nation, schema, [int(magnitude)], [label])
 
 
-def _apply_expand_territory(old_nation, new_nation, schema, mrp_def, magnitude, target_resource, need_weights, state, dry_run=False, acting_character=None, stat_used=None, conversion_target=None):
+def _apply_expand_territory(old_nation, new_nation, schema, mrp_def, magnitude, target_resource, need_weights, state, dry_run=False, acting_character=None, stat_used=None, conversion_target=None, pending=None):
     """dry_run=True simulates tile selection (for the read-only AI Goals
     Preview tool) WITHOUT writing to hex_map_tiles/nations or bumping the map
     version — mirrors the dry_run convention already used by
@@ -268,7 +268,7 @@ def _apply_expand_territory(old_nation, new_nation, schema, mrp_def, magnitude, 
     return f"{nation_name} {verb} into {len(claimed)} tile(s) from a mech RP ({mrp_def.get('name', mrp_def.get('key', '?'))}).\n"
 
 
-def _apply_gain_money(old_nation, new_nation, schema, mrp_def, magnitude, target_resource, need_weights, state, dry_run=False, acting_character=None, stat_used=None, conversion_target=None):
+def _apply_gain_money(old_nation, new_nation, schema, mrp_def, magnitude, target_resource, need_weights, state, dry_run=False, acting_character=None, stat_used=None, conversion_target=None, pending=None):
     amount = int(magnitude) * 50
     if amount == 0:
         return ""
@@ -277,7 +277,7 @@ def _apply_gain_money(old_nation, new_nation, schema, mrp_def, magnitude, target
     return f"{name} gained {amount} gold from a mech RP ({mrp_def.get('name', mrp_def.get('key', '?'))}).\n"
 
 
-def _apply_grant_temp_modifier(old_nation, new_nation, schema, mrp_def, magnitude, target_resource, need_weights, state, dry_run=False, acting_character=None, stat_used=None, conversion_target=None):
+def _apply_grant_temp_modifier(old_nation, new_nation, schema, mrp_def, magnitude, target_resource, need_weights, state, dry_run=False, acting_character=None, stat_used=None, conversion_target=None, pending=None):
     if magnitude == 0:
         return ""
     import uuid
@@ -312,7 +312,7 @@ def _score_law_value(law_dict, need_weights):
     return score
 
 
-def _apply_change_law(old_nation, new_nation, schema, mrp_def, magnitude, target_resource, need_weights, state, dry_run=False, acting_character=None, stat_used=None, conversion_target=None):
+def _apply_change_law(old_nation, new_nation, schema, mrp_def, magnitude, target_resource, need_weights, state, dry_run=False, acting_character=None, stat_used=None, conversion_target=None, pending=None):
     if magnitude <= 0:
         return ""
     axis = mrp_def.get("law_axis", "")
@@ -348,10 +348,22 @@ def _apply_change_law(old_nation, new_nation, schema, mrp_def, magnitude, target
     return f"{name} changed its {axis_label} from {current_value} to {best_value} following a mech RP ({mrp_def.get('name', mrp_def.get('key', '?'))}).\n"
 
 
-def _apply_character_training(old_nation, new_nation, schema, mrp_def, magnitude, target_resource, need_weights, state, dry_run=False, acting_character=None, stat_used=None, conversion_target=None):
+def _apply_character_training(old_nation, new_nation, schema, mrp_def, magnitude, target_resource, need_weights, state, dry_run=False, acting_character=None, stat_used=None, conversion_target=None, pending=None):
     """Grant the acting character stat points directly, in the stat used for
     this roll — replaces the AI's old passive per-session stat gain, which
-    used to roll independently for every stat and snowball far past players."""
+    used to roll independently for every stat and snowball far past players.
+
+    Deferred via _queue_change (see its docstring) rather than committing
+    immediately: select_mech_rps can attempt up to MAX_ATTEMPTS_PER_SESSION
+    per nation and can pick the same acting_character more than once in one
+    session, so an immediate commit here would have its check_no_other_changes
+    gate correctly (but unhelpfully) reject the second attempt's write —
+    silently dropping that Character Training gain — because its before_data
+    snapshot predates the first attempt's already-applied modifier. Worse,
+    system_approve_change's dependency propagation from an immediate commit
+    was firing mid-compute-phase and writing to OTHER entities (e.g. the
+    character's nation) directly, corrupting THEIR later deferred commits
+    too — see the 2026-09-16 stuck/failing-tick investigation."""
     gain = int(magnitude)
     if gain == 0 or not acting_character or not stat_used:
         return ""
@@ -365,7 +377,7 @@ def _apply_character_training(old_nation, new_nation, schema, mrp_def, magnitude
     if dry_run:
         return f"{name} would gain {gain} {stat_used} from a mech RP ({mrp_def.get('name', mrp_def.get('key', '?'))}).\n"
     import uuid
-    from helpers.change_helpers import system_request_change, system_approve_change
+    from helpers.tick_helpers import _queue_change
     new_character = deepcopy(acting_character)
     modifiers = list(new_character.get("modifiers") or [])
     modifiers.append({
@@ -377,7 +389,8 @@ def _apply_character_training(old_nation, new_nation, schema, mrp_def, magnitude
         "source": label,
     })
     new_character["modifiers"] = modifiers
-    change_id = system_request_change(
+    _queue_change(
+        pending,
         data_type="characters",
         item_id=acting_character["_id"],
         change_type="Update",
@@ -385,11 +398,10 @@ def _apply_character_training(old_nation, new_nation, schema, mrp_def, magnitude
         after_data=new_character,
         reason=f"Character Training mech RP for {name}",
     )
-    system_approve_change(change_id)
     return f"{name} gained {gain} {stat_used} from a mech RP ({mrp_def.get('name', mrp_def.get('key', '?'))}).\n"
 
 
-def _apply_heir_training(old_nation, new_nation, schema, mrp_def, magnitude, target_resource, need_weights, state, dry_run=False, acting_character=None, stat_used=None, conversion_target=None):
+def _apply_heir_training(old_nation, new_nation, schema, mrp_def, magnitude, target_resource, need_weights, state, dry_run=False, acting_character=None, stat_used=None, conversion_target=None, pending=None):
     """Bank stat points on the nation for whoever succeeds the current ruler.
     Only mutates the in-memory new_nation dict (like every handler besides
     expand_territory), so no dry_run handling is needed here — the actual
@@ -409,7 +421,7 @@ def _apply_heir_training(old_nation, new_nation, schema, mrp_def, magnitude, tar
     return f"{name} banked {gain} {stat_used} of heir training for its next ruler from a mech RP ({mrp_def.get('name', mrp_def.get('key', '?'))}).\n"
 
 
-def _apply_convert_population(old_nation, new_nation, schema, mrp_def, magnitude, target_resource, need_weights, state, dry_run=False, acting_character=None, stat_used=None, conversion_target=None):
+def _apply_convert_population(old_nation, new_nation, schema, mrp_def, magnitude, target_resource, need_weights, state, dry_run=False, acting_character=None, stat_used=None, conversion_target=None, pending=None):
     """Convert pops (domestic or a nearby foreign nation's) to this nation's
     own primary culture/religion. Writes directly to the pops collection —
     like _apply_expand_territory's tile claims, this is a real, immediate DB
@@ -667,7 +679,7 @@ def _pick_acting_character(characters, relevant_stats):
     return max(characters, key=lambda c: sum(c.get(s, 0) for s in stats))
 
 
-def select_mech_rps(old_nation, new_nation, state, goal, secondary_goal, personality, schema, market_prices=None, dry_run=False):
+def select_mech_rps(old_nation, new_nation, state, goal, secondary_goal, personality, schema, market_prices=None, dry_run=False, pending=None):
     """Select and resolve up to MAX_ATTEMPTS_PER_SESSION mech RPs for this
     nation this session, mutating new_nation in place with their effects.
     Returns (attempts_log_list, log_lines) — attempts_log_list is the
@@ -763,7 +775,7 @@ def select_mech_rps(old_nation, new_nation, state, goal, secondary_goal, persona
             effect_summary = handler(
                 old_nation, new_nation, schema, mrp_def, magnitude, target_resource, need_weights, state,
                 dry_run=dry_run, acting_character=acting_character, stat_used=result["stat_used"],
-                conversion_target=conversion_target,
+                conversion_target=conversion_target, pending=pending,
             ) or ""
 
         # Keep local state roughly current so the next attempt this session
@@ -806,11 +818,17 @@ def select_mech_rps(old_nation, new_nation, state, goal, secondary_goal, persona
     return attempts, log_lines
 
 
-def ai_mech_rp_tick(old_nation, new_nation, schema):
+def ai_mech_rp_tick(old_nation, new_nation, schema, pending=None):
     """Nation tick: AI nations attempt up to MAX_ATTEMPTS_PER_SESSION mech RPs
     per session, chosen to serve their already-selected strategic goal (set
     earlier in the same tick pass by AI Decision Tick). No-ops for Player
     nations. Must run after "AI Decision Tick" in NATION_TICK_FUNCTIONS.
+
+    `pending` is forwarded to select_mech_rps so character_training mech RPs
+    defer their character update via _queue_change instead of committing
+    immediately — see _apply_character_training's docstring for why an
+    immediate commit here was corrupting both its own and other entities'
+    later commits within the same tick.
     """
     if old_nation.get("temperament", "Player") == "Player":
         return ""
@@ -835,7 +853,8 @@ def ai_mech_rp_tick(old_nation, new_nation, schema):
             goal, _candidates = select_strategic_goal(old_nation, state, personality, 0.0, market_prices)
 
         attempts, log_lines = select_mech_rps(
-            old_nation, new_nation, state, goal, secondary_goal, personality, schema, market_prices
+            old_nation, new_nation, state, goal, secondary_goal, personality, schema, market_prices,
+            pending=pending,
         )
 
         new_ai_state = dict(ai_state)

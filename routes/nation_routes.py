@@ -5,7 +5,7 @@ from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor
 from helpers.data_helpers import get_data_on_category, get_data_on_item, get_dropdown_options
 from helpers.render_helpers import get_linked_objects, get_linked_objects_parallel
-from helpers.change_helpers import request_change, approve_change, system_approve_change, deep_merge
+from helpers.change_helpers import request_change, approve_change, system_approve_change, deep_merge, is_tick_locked
 from helpers.form_helpers import validate_form_with_jsonschema
 from helpers.auth_helpers import owner_required
 from app_core import category_data, mongo, json_data, find_dict_in_list, upload_bytes_to_s3, app
@@ -997,9 +997,16 @@ def nation_edit_jobs_approve(item_ref):
         after_data=form_data,
         reason="Job Assignment"
     )
-    
-    print(system_approve_change(change_id))
-    flash(f"Change request #{change_id} created and approved.")
+
+    # This route auto-approves its own request (job assignment is normally
+    # instant, not admin-reviewed) — but a running tick locks out approval
+    # the same as it does for admins clicking "Approve", so the request is
+    # still saved as Pending here rather than applied immediately.
+    if is_tick_locked():
+        flash(f"Change request #{change_id} created — a tick is currently running, so it will need to be approved once it finishes.")
+    else:
+        print(system_approve_change(change_id))
+        flash(f"Change request #{change_id} created and approved.")
     return redirect("/nations/item/" + item_ref)
 
 

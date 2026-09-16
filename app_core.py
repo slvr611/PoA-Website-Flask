@@ -403,7 +403,12 @@ def backup_mongodb():
             batch_size = 1000
             file_path = os.path.join(collection_dir, f"{collection_name}.json")
 
-            with open(file_path, 'w') as f:
+            # Explicit UTF-8: without it, open() defaults to the OS's
+            # preferred locale encoding — a legacy codepage on Windows —
+            # which can't represent every character a document might
+            # contain and raises UnicodeEncodeError (see the same fix in
+            # helpers/tick_helpers.py's give_tick_summary).
+            with open(file_path, 'w', encoding='utf-8') as f:
                 f.write('[\n')
                 first_doc = True
 

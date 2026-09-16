@@ -3012,6 +3012,23 @@ input[type="text"].map-btn:focus {
     border-bottom: 2px solid #c06000;
 }
 
+/* Distinct blue "in progress" tone (vs. the amber revert-warning above) so
+   the two read as different kinds of notice at a glance — both can be
+   visible at once (a tick auto-enables the revert warning on the way out). */
+.tick-lockout-banner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    background: #1a3a5c;
+    color: #bfe0ff;
+    font-size: 0.95rem;
+    font-weight: 500;
+    padding: 10px 20px;
+    text-align: center;
+    border-bottom: 2px solid #2f6fa8;
+}
+
 .revert-warning-dismiss {
     background: #c06000;
     color: #fff;
