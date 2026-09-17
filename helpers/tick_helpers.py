@@ -18,7 +18,7 @@ from calculations.field_calculations import calculate_all_fields, collect_laws, 
 from pymongo import ASCENDING
 from helpers.change_helpers import system_request_change, system_approve_change
 from helpers.archive_helpers import archive_old_changes
-from app_core import mongo, json_data, upload_to_s3, character_stats
+from app_core import mongo, json_data, upload_to_s3, character_stats, with_mongo_retry
 from flask import flash
 from app_core import backup_mongodb, category_data, temperament_enum, base_temperament_odds, cultural_trait_temperament_modifiers
 from copy import deepcopy
@@ -2100,17 +2100,21 @@ def complex_trade_bandit_loss_tick(old_market, new_market, schema, pending_tiles
         if current_session in route.get("raid_checked_sessions", []):
             continue  # already resolved this session via another shared market
 
-        mongo.db.trade_routes.update_one(
+        with_mongo_retry(
+            mongo.db.trade_routes.update_one,
             {"_id": route["_id"]},
             {"$addToSet": {"raid_checked_sessions": current_session}},
+            description=f"mark trade route {route.get('nation_a', '?')} <-> {route.get('nation_b', '?')} as raid-checked",
         )
 
         if random.random() >= 0.25:
             continue
 
-        mongo.db.trade_routes.update_one(
+        with_mongo_retry(
+            mongo.db.trade_routes.update_one,
             {"_id": route["_id"]},
             {"$addToSet": {"raided_sessions": current_session}},
+            description=f"mark trade route {route.get('nation_a', '?')} <-> {route.get('nation_b', '?')} as raided",
         )
 
         tile_id = random.choice(camp_tile_ids)

@@ -23,7 +23,7 @@ from copy import deepcopy
 
 from bson import ObjectId
 
-from app_core import mongo, category_data
+from app_core import mongo, category_data, with_mongo_retry
 from helpers.ai_decision_helpers import (
     evaluate_nation_state, get_ai_personality, compute_need_weights,
     get_stored_market_prices, select_strategic_goal,
@@ -249,7 +249,10 @@ def _apply_expand_territory(old_nation, new_nation, schema, mrp_def, magnitude, 
             break
         for (q, r) in to_claim:
             if not dry_run:
-                mongo.db.hex_map_tiles.update_one({"q": q, "r": r}, {"$set": {"owner": nation_name}})
+                with_mongo_retry(
+                    mongo.db.hex_map_tiles.update_one, {"q": q, "r": r}, {"$set": {"owner": nation_name}},
+                    description=f"claim tile ({q},{r}) for {nation_name}",
+                )
             claimed.append((q, r))
             if (q, r) in tile_map:
                 tile_map[(q, r)]["owner"] = nation_name
@@ -260,8 +263,14 @@ def _apply_expand_territory(old_nation, new_nation, schema, mrp_def, magnitude, 
             {"$match": {"owner": nation_name, "terrain": {"$exists": True, "$ne": None}}},
             {"$group": {"_id": "$terrain", "count": {"$sum": 1}}},
         ]
-        counts = {doc["_id"]: doc["count"] for doc in mongo.db.hex_map_tiles.aggregate(pipeline)}
-        mongo.db.nations.update_one({"name": nation_name}, {"$set": {"territory_types": counts}})
+        counts = {doc["_id"]: doc["count"] for doc in with_mongo_retry(
+            lambda: list(mongo.db.hex_map_tiles.aggregate(pipeline)),
+            description=f"recompute territory_types for {nation_name}",
+        )}
+        with_mongo_retry(
+            mongo.db.nations.update_one, {"name": nation_name}, {"$set": {"territory_types": counts}},
+            description=f"save territory_types for {nation_name}",
+        )
         from helpers.hex_map_helpers import bump_tile_version
         bump_tile_version()
     verb = "would expand" if dry_run else "expanded"

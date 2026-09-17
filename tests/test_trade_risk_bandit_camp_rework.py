@@ -359,3 +359,32 @@ class TestComplexTradeBanditLossTick:
         progress_spy.assert_called_once_with(
             1, 1, "Grand Bazaar: route Alpha <-> Beta", force=True,
         )
+
+    def test_route_writes_go_through_with_mongo_retry(self, test_db, monkeypatch):
+        """Regression guard for the 2026-09-17 stuck-tick investigation:
+        a single unwrapped trade_routes.update_one() sat hung for 8+
+        minutes with the shared client having no socket timeout at all.
+        Both writes here must go through with_mongo_retry rather than
+        calling update_one directly."""
+        market_id = ObjectId()
+        self._setup_two_member_market(test_db, market_id)
+        test_db.hex_map_tiles.insert_one({"q": 0, "r": 0, "bandit_camp": {"market": "Grand Bazaar"}})
+        test_db.trade_routes.insert_one({
+            "_id": ObjectId(), "nation_a": "Alpha", "nation_b": "Beta",
+            "status": "active", "accepted_session": 1, "delay": 0, "duration_ticks": None,
+            "resources_a_to_b": [], "resources_b_to_a": [],
+        })
+        monkeypatch.setattr("helpers.trade_route_helpers._current_session", lambda: 1)
+
+        real_mongo, _ = _patched_db(test_db)
+        original_db = real_mongo.db
+        real_mongo.db = test_db
+        try:
+            with patch("helpers.tick_helpers.random.random", return_value=0.0), \
+                 patch("helpers.tick_helpers.with_mongo_retry", wraps=th.with_mongo_retry) as retry_spy:
+                market = {"_id": market_id, "name": "Grand Bazaar"}
+                th.complex_trade_bandit_loss_tick(market, market, {}, pending_tiles=[])
+        finally:
+            real_mongo.db = original_db
+
+        assert retry_spy.call_count == 2, "expected both trade_routes writes to go through with_mongo_retry"

@@ -5,6 +5,7 @@ from flask_discord import DiscordOAuth2Session
 import os
 import json
 import re
+import time
 from dotenv import load_dotenv
 import subprocess
 import datetime
@@ -39,8 +40,85 @@ app.config["DISCORD_REDIRECT_URI"] = os.getenv("DISCORD_REDIRECT_URI")
 
 # Mongo config
 app.config["MONGO_URI"] = os.getenv("MONGO_URI")
-mongo = PyMongo(app)
+# Explicit, finite timeouts: without socketTimeoutMS, pymongo's default is
+# None — unbounded. A socket read/write that never gets a response (a
+# silently dropped connection, a NAT/firewall timeout, an Atlas-side reset
+# the client doesn't notice) then blocks forever: no exception, no retry,
+# nothing to catch. That's exactly what a session tick hung on in
+# production (2026-09-17) — a single trade_routes.update_one() sat stuck
+# for 8+ minutes on an otherwise-healthy connection. connectTimeoutMS/
+# serverSelectionTimeoutMS are pymongo's own defaults, set explicitly here
+# for clarity rather than to change behavior.
+mongo = PyMongo(
+    app,
+    socketTimeoutMS=30000,
+    connectTimeoutMS=20000,
+    serverSelectionTimeoutMS=30000,
+)
 discord = DiscordOAuth2Session(app)
+
+# Number of attempts with_mongo_retry makes before giving up entirely, and
+# the pause between them. 100 attempts at 3s apart is up to ~5 minutes of
+# retrying (plus each attempt's own up-to-30s socketTimeoutMS in the worst
+# case) before the caller's operation is treated as a real failure — a
+# deliberately generous budget for riding out a transient network blip,
+# now that a hung socket can't block forever instead (see the Mongo config
+# comment above).
+MONGO_RETRY_MAX_ATTEMPTS = 100
+MONGO_RETRY_DELAY_SECONDS = 3
+
+
+def with_mongo_retry(func, *args, description=None, max_attempts=MONGO_RETRY_MAX_ATTEMPTS,
+                      delay_seconds=MONGO_RETRY_DELAY_SECONDS, **kwargs):
+    """Call func(*args, **kwargs), retrying on any PyMongo error (a dropped
+    connection, a hung socket now failing fast instead of hanging forever,
+    a transient replica-set election, etc.) instead of letting the first
+    failure end whatever this call was part of — a tick, a request,
+    anything using the shared `mongo` client.
+
+    Prints a message to the console on every failed attempt. If every
+    attempt fails, the final error is made visible somewhere a human will
+    see it — flashed if called from inside a Flask request, otherwise left
+    to propagate (a tick's own _run_tick_guarded already turns any
+    exception escaping the compute phase into a tick summary, so
+    re-raising is sufficient there) — and then re-raised so the caller's
+    own error handling still runs.
+
+    `func` should be a single, idempotent-enough Mongo operation (a find,
+    an update_one/update_many with $set/$addToSet, etc.) — not a whole
+    multi-step function with its own side effects (e.g. a random roll),
+    since retrying would repeat those too. Wrap just the DB call itself:
+
+        with_mongo_retry(
+            mongo.db.trade_routes.update_one,
+            {"_id": route_id}, {"$addToSet": {"raid_checked_sessions": session}},
+            description="mark trade route as raid-checked",
+        )
+    """
+    from pymongo.errors import PyMongoError
+
+    label = description or getattr(func, "__name__", "MongoDB operation")
+    last_error = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            return func(*args, **kwargs)
+        except PyMongoError as e:
+            last_error = e
+            print(f"[mongo retry] {label} failed (attempt {attempt}/{max_attempts}): {e}")
+            if attempt >= max_attempts:
+                break
+            time.sleep(delay_seconds)
+
+    error_text = f"{label} failed after {max_attempts} attempts and was given up on: {last_error}"
+    print(error_text)
+    try:
+        from flask import has_request_context, flash
+        if has_request_context():
+            flash(error_text, "error")
+    except Exception:
+        pass
+    raise last_error
+
 
 @app.template_filter('from_json')
 def from_json_filter(value):
