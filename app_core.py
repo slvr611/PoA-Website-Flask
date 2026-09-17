@@ -46,24 +46,37 @@ app.config["MONGO_URI"] = os.getenv("MONGO_URI")
 # the client doesn't notice) then blocks forever: no exception, no retry,
 # nothing to catch. That's exactly what a session tick hung on in
 # production (2026-09-17) — a single trade_routes.update_one() sat stuck
-# for 8+ minutes on an otherwise-healthy connection. connectTimeoutMS/
-# serverSelectionTimeoutMS are pymongo's own defaults, set explicitly here
-# for clarity rather than to change behavior.
+# for 8+ minutes on an otherwise-healthy connection.
+#
+# socketTimeoutMS started at 30s, then had to be raised: a "fetch every
+# document in a large collection" read (e.g. all nations, all characters)
+# was independently measured taking ~115s+ on this cluster tier even when
+# completely healthy (aggregate transfer/server processing cost, not a
+# network problem — see helpers/hex_map_helpers.py's cache comment for the
+# same phenomenon with hex_map_tiles). At 30s, with_mongo_retry's retries
+# were just re-killing that query before it could ever finish, every time
+# — confirmed via Atlas's own metrics showing healthy, unremarkable load
+# during the "failures." 180s comfortably covers that known-slow case
+# while still being bounded, unlike the original unbounded hang.
+# connectTimeoutMS/serverSelectionTimeoutMS are pymongo's own defaults,
+# set explicitly here for clarity rather than to change behavior.
 mongo = PyMongo(
     app,
-    socketTimeoutMS=30000,
+    socketTimeoutMS=180000,
     connectTimeoutMS=20000,
     serverSelectionTimeoutMS=30000,
 )
 discord = DiscordOAuth2Session(app)
 
 # Number of attempts with_mongo_retry makes before giving up entirely, and
-# the pause between them. 100 attempts at 3s apart is up to ~5 minutes of
-# retrying (plus each attempt's own up-to-30s socketTimeoutMS in the worst
-# case) before the caller's operation is treated as a real failure — a
-# deliberately generous budget for riding out a transient network blip,
-# now that a hung socket can't block forever instead (see the Mongo config
-# comment above).
+# the pause between them. With socketTimeoutMS at 180s (see the Mongo
+# config comment above), 100 attempts is a genuinely large worst-case
+# budget — up to ~5 hours if something stays completely broken the whole
+# time — before the caller's operation is treated as a real failure.
+# Deliberately generous rather than tuned down to a "reasonable" total,
+# since a large bulk fetch can legitimately need most of that per-attempt
+# ceiling even when healthy; a real, persistent outage will still exhaust
+# the budget and report a clean failure well before "forever."
 MONGO_RETRY_MAX_ATTEMPTS = 100
 MONGO_RETRY_DELAY_SECONDS = 3
 
