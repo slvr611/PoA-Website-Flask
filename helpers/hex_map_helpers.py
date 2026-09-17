@@ -18,19 +18,21 @@ _admin_tile_cache_local = threading.local()
 
 def _get_cached_all_tiles():
     """Full hex_map_tiles snapshot, cached per Flask request when available
-    and per background thread otherwise. See compute_admin_range_out_of_range."""
-    _projection = {"q": 1, "r": 1, "terrain": 1, "city": 1, "district": 1,
-                    "wonder": 1, "capital": 1, "owner": 1, "portal": 1, "route": 1, "_id": 0}
+    and per background thread otherwise. See compute_admin_range_out_of_range.
+
+    Reads via get_all_tiles_from_chunks's ~100-document hex_map_tile_chunks
+    mirror rather than scanning all ~11,500 tile documents directly — a
+    direct scan measured at ~8.6s (per-document/round-trip overhead, not
+    payload size — cutting the projection to 2 fields still only got it to
+    ~3s). The mirror self-heals on any tile_version mismatch, so this stays
+    correct even if some write path's chunk-sync was missed.
+    """
     try:
         from flask import g as _g
         cached = getattr(_g, '_hex_admin_tile_cache', None)
         if cached is not None:
             return cached
-        # batch_size forces the whole ~11.5k-tile map into one round trip
-        # instead of pymongo's default ~101-doc-then-16MB batching, which
-        # measured at ~8.6s here vs. ~3s for a single batch — most of the
-        # cost is round-trip count, not payload size, for this collection.
-        tiles = list(mongo.db.hex_map_tiles.find({}, _projection).batch_size(20000))
+        tiles = get_all_tiles_from_chunks()
         _g._hex_admin_tile_cache = tiles
         return tiles
     except RuntimeError:
@@ -39,7 +41,7 @@ def _get_cached_all_tiles():
     cached = getattr(_admin_tile_cache_local, 'tiles', None)
     if cached is not None:
         return cached
-    tiles = list(mongo.db.hex_map_tiles.find({}, _projection).batch_size(20000))
+    tiles = get_all_tiles_from_chunks()
     _admin_tile_cache_local.tiles = tiles
     return tiles
 
@@ -147,8 +149,223 @@ _MAP_TILE_PROJECTION = {
     "bandit_camp": 1,
 }
 
+# ---------------------------------------------------------------------------
+# Tile chunk mirror — a read-optimized copy of hex_map_tiles for "give me
+# every tile" consumers (_get_cached_all_tiles/get_all_tiles), which used to
+# each pay a direct ~11,500-document scan (~8.6s, dominated by per-document/
+# round-trip overhead — see _get_cached_all_tiles's docstring). Grouping
+# tiles into ~100 chunk documents cuts that to ~100 document fetches.
+#
+# hex_map_tiles itself remains the single source of truth; every targeted
+# read (owner-scoped, single (q, r), city.id/district.id lookups, etc.) and
+# every write continues to go straight to it, completely unchanged. Only
+# the handful of full-map-read call sites go through this mirror instead.
+#
+# Freshness: a write that wants the mirror to stay warm calls
+# notify_tile_changed(tile_id) (or _sync_tile_chunk directly) right after
+# writing — this covers the high-frequency paths (tick tile claims, the
+# admin single-tile editor, AI decision writes). Everything else (bulk
+# renames, admin maintenance tools, one-off scripts) only needs to keep
+# calling bump_tile_version() as it already does: get_all_tiles_from_chunks
+# self-heals via a full rebuild whenever the chunk mirror's recorded
+# version doesn't match the live tile_version, so a missed sync hook can
+# only ever cost one extra rebuild, never stale data.
+# ---------------------------------------------------------------------------
+
+_TILE_CHUNK_SIZE = 8
+_HEX_MAP_CONFIG_NAME = "hex_map_config"
+
+
+def _chunk_id(q, r):
+    """Deterministic spatial chunk key — groups nearby tiles together so a
+    full-map read becomes ~100 document fetches instead of ~11,500."""
+    return f"{q // _TILE_CHUNK_SIZE}_{r // _TILE_CHUNK_SIZE}"
+
+
+def rebuild_tile_chunks():
+    """Rebuild hex_map_tile_chunks from scratch off the live hex_map_tiles
+    collection. This is both the one-time backfill and the self-heal path
+    get_all_tiles_from_chunks falls back to on any version mismatch — pays
+    the full ~11,500-document scan once; every full-map read after that
+    (until the next tile write) is a ~100-document chunk fetch instead.
+
+    Returns the tile_version the rebuild was performed at.
+    """
+    tiles = list(mongo.db.hex_map_tiles.find({}, _MAP_TILE_PROJECTION).batch_size(20000))
+    by_chunk = {}
+    for t in tiles:
+        cid = _chunk_id(t["q"], t["r"])
+        by_chunk.setdefault(cid, []).append(t)
+
+    config = mongo.db.global_modifiers.find_one({"name": _HEX_MAP_CONFIG_NAME}, {"tile_version": 1}) or {}
+    current_version = config.get("tile_version", 0)
+
+    for cid, chunk_tiles in by_chunk.items():
+        mongo.db.hex_map_tile_chunks.update_one(
+            {"_id": cid},
+            {"$set": {"tiles": chunk_tiles}},
+            upsert=True,
+        )
+    # Drop any chunk that no longer has tiles (e.g. a coordinate
+    # normalization/cleanup shrank the map) so stale chunks don't linger.
+    mongo.db.hex_map_tile_chunks.delete_many({"_id": {"$nin": list(by_chunk.keys())}})
+
+    mongo.db.global_modifiers.update_one(
+        {"name": _HEX_MAP_CONFIG_NAME},
+        {"$set": {"chunk_synced_version": current_version}},
+        upsert=True,
+    )
+    return current_version
+
+
+def _upsert_tile_into_chunk(tile):
+    """Shared by _sync_tile_chunk/_sync_tile_chunk_by_coord: upsert one
+    already-fetched tile dict into its chunk's tiles array, replacing any
+    existing entry for that (q, r)."""
+    cid = _chunk_id(tile["q"], tile["r"])
+    result = mongo.db.hex_map_tile_chunks.update_one(
+        {"_id": cid, "tiles.q": tile["q"], "tiles.r": tile["r"]},
+        {"$set": {"tiles.$": tile}},
+    )
+    if result.matched_count == 0:
+        # No existing array entry for this (q, r) — either a brand new
+        # tile, or the chunk doesn't exist yet.
+        mongo.db.hex_map_tile_chunks.update_one(
+            {"_id": cid},
+            {"$push": {"tiles": tile}},
+            upsert=True,
+        )
+
+
+def _sync_tile_chunk(tile_id):
+    """Re-fetch one tile by its _id and upsert it into its chunk's tiles
+    array, so a single-tile write keeps the chunk mirror warm without a
+    full rebuild. Re-fetches rather than diffing so it's correct regardless
+    of which fields changed."""
+    tile = mongo.db.hex_map_tiles.find_one({"_id": tile_id}, _MAP_TILE_PROJECTION)
+    if not tile or "q" not in tile or "r" not in tile:
+        return
+    _upsert_tile_into_chunk(tile)
+
+
+def _sync_tile_chunk_by_coord(q, r):
+    """Same as _sync_tile_chunk, for write call sites that key directly off
+    (q, r) rather than a tile's _id (e.g. several AI decision writes)."""
+    tile = mongo.db.hex_map_tiles.find_one(
+        {"q": {"$in": [q, float(q)]}, "r": {"$in": [r, float(r)]}}, _MAP_TILE_PROJECTION
+    )
+    if not tile:
+        return
+    _upsert_tile_into_chunk(tile)
+
+
+def notify_tile_changed(tile_id):
+    """Convenience wrapper for write call sites that need both: bump the
+    frontend's map-cache version and keep the tile-chunk mirror in sync."""
+    bump_tile_version()
+    _sync_tile_chunk(tile_id)
+
+
+def notify_tile_changed_by_coord(q, r):
+    """Same as notify_tile_changed, for call sites keying off (q, r)."""
+    bump_tile_version()
+    _sync_tile_chunk_by_coord(q, r)
+
+
+
+# Process-level cache of the fully-flattened tile list, keyed by the
+# tile_version it was built at — sits in front of the Mongo-persisted chunk
+# mirror. Measured live: reading either the ~11,500-document flat
+# hex_map_tiles collection OR the ~200-document chunk mirror both cost
+# several seconds on this connection (the bottleneck is aggregate data
+# transfer/server processing for "every tile", not round-trip count —
+# splitting it into fewer documents doesn't shrink that). The per-request
+# g/thread-local cache in _get_cached_all_tiles already avoids repeating
+# that cost within a single request/tick thread, but a brand new request
+# (e.g. every separate nation-save HTTP request) starts a fresh `g` and
+# would otherwise pay the full cost again even when not a single tile
+# changed since the last request. This process-wide cache is what actually
+# eliminates that: as long as this worker process has already read a given
+# tile_version once, every later request checks only one cheap ~50ms
+# version doc before reusing the same in-memory list — no per-tile data
+# ever needs to move again until a real tile write bumps the version.
+_process_tile_cache_lock = threading.Lock()
+# Keyed by id(mongo) as well as version — not just version — so a test (or
+# any future reconnect) that swaps in a different `mongo`/database object
+# can never accidentally reuse another connection's cached tiles just
+# because both happen to be at the same tile_version number (e.g. two
+# fresh mongomock databases both starting at version 0). In production
+# `mongo` is one long-lived object for the life of the process, so this
+# adds no real invalidation there.
+_process_tile_cache = {"mongo_id": None, "version": None, "tiles": None}
+
+
+def get_all_tiles_from_chunks():
+    """Return every tile (the same flat list shape a direct hex_map_tiles
+    scan produces). See the module comment above and this file's
+    "Process-level cache" comment for the two layers this reads through.
+
+    Self-heals via a full rebuild whenever the chunk mirror's recorded
+    chunk_synced_version doesn't match the live tile_version (a missed
+    sync hook, or chunks that were never built), so a stale mirror never
+    silently serves wrong data — the worst case is paying one full rebuild
+    instead of hitting the fast path.
+    """
+    mongo_id = id(mongo)
+    config = mongo.db.global_modifiers.find_one(
+        {"name": _HEX_MAP_CONFIG_NAME}, {"tile_version": 1, "chunk_synced_version": 1}
+    ) or {}
+    current_version = config.get("tile_version", 0)
+
+    with _process_tile_cache_lock:
+        if (
+            _process_tile_cache["mongo_id"] == mongo_id
+            and _process_tile_cache["version"] == current_version
+            and _process_tile_cache["tiles"] is not None
+        ):
+            return _process_tile_cache["tiles"]
+
+    synced_version = config.get("chunk_synced_version")
+    if synced_version != current_version:
+        current_version = rebuild_tile_chunks()
+
+    tiles = []
+    for chunk in mongo.db.hex_map_tile_chunks.find({}, {"_id": 0, "tiles": 1}):
+        tiles.extend(chunk.get("tiles", []))
+
+    with _process_tile_cache_lock:
+        _process_tile_cache["mongo_id"] = mongo_id
+        _process_tile_cache["version"] = current_version
+        _process_tile_cache["tiles"] = tiles
+    return tiles
+
+
 def get_all_tiles():
-    return [_coerce_tile(t) for t in mongo.db.hex_map_tiles.find({}, _MAP_TILE_PROJECTION)]
+    return [_coerce_tile(t) for t in get_all_tiles_from_chunks()]
+
+
+def get_tile_ids_by_coords(coords):
+    """Look up hex_map_tiles _id for a small, specific set of (q, r)
+    coordinates.
+
+    get_all_tiles()/get_all_tiles_from_chunks() deliberately don't carry
+    _id (kept out of the chunk mirror), so a caller that reads the map
+    through them but still needs a real _id for a few tiles it's about to
+    write to (e.g. to defer a claim via _queue_tile_write) looks it up
+    here instead. `coords` should be the small handful of tiles actually
+    being written this call, not the whole map — this issues one query
+    with one $or clause per coordinate, not a full scan.
+    """
+    if not coords:
+        return {}
+    or_clauses = [
+        {"q": {"$in": [q, float(q)]}, "r": {"$in": [r, float(r)]}}
+        for q, r in coords
+    ]
+    result = {}
+    for t in mongo.db.hex_map_tiles.find({"$or": or_clauses}, {"q": 1, "r": 1, "_id": 1}):
+        result[(t["q"], t["r"])] = t["_id"]
+    return result
 
 
 def bump_tile_version():
@@ -156,10 +373,15 @@ def bump_tile_version():
 
     Call after any operation that modifies hex_map_tiles or nation colors so that
     browsers know to re-fetch instead of serving stale cached tile data.
+
+    Also the freshness signal get_all_tiles_from_chunks compares against —
+    a write that doesn't also call notify_tile_changed/_sync_tile_chunk
+    directly still keeps the chunk mirror eventually correct: the next
+    full-map read sees a version mismatch and self-heals via a full rebuild.
     """
     try:
         mongo.db.global_modifiers.update_one(
-            {"name": "hex_map_config"},
+            {"name": _HEX_MAP_CONFIG_NAME},
             {"$inc": {"tile_version": 1}},
             upsert=True,
         )
@@ -566,25 +788,27 @@ def get_nations_within_distance(nation_name, max_distance=10):
     within max_distance hexes of any tile owned by nation_name.
 
     Excludes nation_name itself. Returns an empty list if the nation owns no tiles.
+
+    Reads through get_all_tiles_from_chunks (the chunk-backed, process-wide
+    cache) instead of two separate hex_map_tiles queries — one filtered to
+    this nation's own tiles, one to nearly every OTHER tile on the map.
+    Both cost the same ~several seconds on this cluster regardless of
+    projection (aggregate transfer/server processing, not round-trip count
+    — see this module's cache comment), and this function can be called
+    once per nation per mech RP attempt needing a foreign conversion
+    target, so that cost was being paid twice, repeatedly. Read-only, so
+    the shared (uncoerced) tile references from the cache are used
+    directly — no copy needed since nothing here mutates a tile.
     """
-    own_tiles = [
-        (t["q"], t["r"])
-        for t in mongo.db.hex_map_tiles.find(
-            {"owner": nation_name}, {"q": 1, "r": 1, "_id": 0}
-        )
-    ]
+    all_tiles = get_all_tiles_from_chunks()
+    own_tiles = [(t["q"], t["r"]) for t in all_tiles if t.get("owner") == nation_name]
     if not own_tiles:
         return []
 
-    other_tiles = mongo.db.hex_map_tiles.find(
-        {"owner": {"$nin": [None, "", nation_name]}},
-        {"q": 1, "r": 1, "owner": 1, "_id": 0},
-    )
-
     nearby_nations = set()
-    for tile in other_tiles:
+    for tile in all_tiles:
         owner = tile.get("owner")
-        if not owner or owner in nearby_nations:
+        if not owner or owner == nation_name or owner in nearby_nations:
             continue
         tq, tr = tile["q"], tile["r"]
         if any(hex_distance(tq, tr, oq, or_) <= max_distance for oq, or_ in own_tiles):

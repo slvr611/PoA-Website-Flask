@@ -75,6 +75,30 @@ def test_db():
 # Helpers that wire change_helpers to the test database
 # ---------------------------------------------------------------------------
 
+@pytest.fixture(autouse=True)
+def _reset_hex_map_tile_process_cache():
+    """helpers.hex_map_helpers.get_all_tiles_from_chunks keeps a process-wide,
+    in-memory cache of the full tile list, keyed by id(mongo) + tile_version —
+    a real optimization in production, where `mongo` is one long-lived object
+    for the process's whole life (see that module's own comment). In this
+    test suite, every test's `mongo`/`test_db` is a short-lived object that
+    gets garbage collected right after the test, and CPython can and does
+    reuse the same memory address for the next one's `id()` — combined with
+    every fresh mongomock database starting at tile_version 0, two unrelated
+    tests can collide on the exact same cache key, and one would silently
+    see the other's cached tile data (this is exactly what broke
+    test_nation_passive_expansion_pending_tiles.py once nation_passive_
+    expansion_tick started reading tiles through this cache). Reset before
+    every test so no test can ever leak tile-cache state into another,
+    regardless of id() reuse.
+    """
+    import helpers.hex_map_helpers as hex_map_helpers
+    hex_map_helpers._process_tile_cache["mongo_id"] = None
+    hex_map_helpers._process_tile_cache["version"] = None
+    hex_map_helpers._process_tile_cache["tiles"] = None
+    yield
+
+
 @pytest.fixture
 def mock_mongo(test_db):
     """A MagicMock whose ``.db`` attribute is the mongomock test database.

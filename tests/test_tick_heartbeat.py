@@ -164,3 +164,101 @@ class TestEnableRevertWarningAfterTick:
             th._enable_revert_warning_after_tick()
 
         assert _global_modifiers(mock_mongo)["revert_warning"] is True
+
+
+# ---------------------------------------------------------------------------
+# Per-item progress within a long per-category loop
+#
+# Context: "AI Decision Tick" ran for 70+ minutes on production (2026-09-16)
+# with no way to tell whether it was grinding slowly through all ~200
+# nations or stuck on one specific nation — _log_tick_step alone only says
+# which STEP is running, not which ITEM within it. _log_tick_item_progress
+# adds that, throttled so the instrumentation itself doesn't add a
+# meaningful number of extra round-trips to a step already suspected of
+# being too slow.
+# ---------------------------------------------------------------------------
+
+class TestLogTickItemProgress:
+    def test_first_call_writes_immediately(self, mock_mongo):
+        with patch("helpers.tick_helpers.mongo", mock_mongo):
+            th._last_item_progress_write["t"] = 0.0
+            th._log_tick_item_progress(1, 200, "Some Nation")
+
+        doc = _status(mock_mongo)
+        assert doc["current_item_index"] == 1
+        assert doc["current_item_total"] == 200
+        assert doc["current_item_label"] == "Some Nation"
+        assert isinstance(doc["current_item_updated_at"], datetime.datetime)
+
+    def test_throttles_rapid_successive_calls(self, mock_mongo):
+        with patch("helpers.tick_helpers.mongo", mock_mongo):
+            th._last_item_progress_write["t"] = 0.0
+            th._log_tick_item_progress(1, 200, "Nation A")
+            th._log_tick_item_progress(2, 200, "Nation B")  # too soon — must not overwrite
+
+        doc = _status(mock_mongo)
+        assert doc["current_item_label"] == "Nation A"
+
+    def test_force_bypasses_the_throttle(self, mock_mongo):
+        with patch("helpers.tick_helpers.mongo", mock_mongo):
+            th._last_item_progress_write["t"] = 0.0
+            th._log_tick_item_progress(1, 200, "Nation A")
+            th._log_tick_item_progress(2, 200, "Nation B", force=True)
+
+        doc = _status(mock_mongo)
+        assert doc["current_item_label"] == "Nation B"
+
+    def test_writes_again_once_the_interval_has_elapsed(self, mock_mongo):
+        with patch("helpers.tick_helpers.mongo", mock_mongo):
+            th._last_item_progress_write["t"] = 0.0
+            th._log_tick_item_progress(1, 200, "Nation A")
+            th._last_item_progress_write["t"] -= (th._TICK_ITEM_PROGRESS_INTERVAL_SECONDS + 1)
+            th._log_tick_item_progress(2, 200, "Nation B")
+
+        doc = _status(mock_mongo)
+        assert doc["current_item_label"] == "Nation B"
+
+    def test_never_raises_if_the_write_fails(self, mock_mongo):
+        with patch("helpers.tick_helpers.mongo", mock_mongo), \
+             patch.object(mock_mongo.db, "tick_status") as broken_collection:
+            broken_collection.update_one.side_effect = RuntimeError("mongo down")
+            th._last_item_progress_write["t"] = 0.0
+            th._log_tick_item_progress(1, 200, "Nation A")  # must not raise
+
+
+class TestLogTickStepClearsItemProgress:
+    def test_log_tick_step_clears_stale_item_progress_from_a_previous_step(self, mock_mongo):
+        with patch("helpers.tick_helpers.mongo", mock_mongo):
+            th._last_item_progress_write["t"] = 0.0
+            th._log_tick_item_progress(150, 200, "Some Nation")
+            th._log_tick_step("Next Step")
+
+        doc = _status(mock_mongo)
+        assert doc["current_item_index"] is None
+        assert doc["current_item_total"] is None
+        assert doc["current_item_label"] is None
+
+    def test_after_log_tick_step_the_next_item_call_writes_immediately(self, mock_mongo):
+        """The throttle timer resets on a new step so the first item of a
+        short step still gets at least one data point, instead of possibly
+        waiting out the interval left over from the previous step."""
+        with patch("helpers.tick_helpers.mongo", mock_mongo):
+            th._last_item_progress_write["t"] = 0.0
+            th._log_tick_item_progress(1, 5, "Item A")
+            th._log_tick_step("Next Step")
+            th._log_tick_item_progress(1, 3, "Different Item")
+
+        doc = _status(mock_mongo)
+        assert doc["current_item_label"] == "Different Item"
+
+
+class TestTickHeartbeatStartClearsItemProgress:
+    def test_clears_item_progress_from_a_previous_tick(self, mock_mongo):
+        with patch("helpers.tick_helpers.mongo", mock_mongo):
+            th._last_item_progress_write["t"] = 0.0
+            th._log_tick_item_progress(150, 200, "Leftover Nation")
+            th._tick_heartbeat_start("Tick")
+
+        doc = _status(mock_mongo)
+        assert doc["current_item_index"] is None
+        assert doc["current_item_label"] is None

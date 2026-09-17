@@ -64,6 +64,7 @@ class TestNationPassiveExpansionTickDefersTileWrites:
         new_nation = dict(old_nation)
 
         with patch.object(th, "mongo", MagicMock(db=test_db)), \
+             patch.object(hmh, "mongo", MagicMock(db=test_db)), \
              patch.object(hmh, "select_passive_expansion_tiles", return_value=[(1, 0)]):
             th.nation_passive_expansion_tick(old_nation, new_nation, {})
 
@@ -81,6 +82,7 @@ class TestNationPassiveExpansionTickDefersTileWrites:
         pending_tiles = []
 
         with patch.object(th, "mongo", MagicMock(db=test_db)), \
+             patch.object(hmh, "mongo", MagicMock(db=test_db)), \
              patch.object(hmh, "select_passive_expansion_tiles", return_value=[(1, 0)]):
             th.nation_passive_expansion_tick(old_nation, new_nation, {}, pending_tiles=pending_tiles)
 
@@ -101,6 +103,7 @@ class TestNationPassiveExpansionTickDefersTileWrites:
         pending_tiles = []
 
         with patch.object(th, "mongo", MagicMock(db=test_db)), \
+             patch.object(hmh, "mongo", MagicMock(db=test_db)), \
              patch.object(hmh, "select_passive_expansion_tiles", return_value=[(1, 0)]):
             th.nation_passive_expansion_tick(old_nation, new_nation, {}, pending_tiles=pending_tiles)
             # ... tick crashes here before reaching _commit_pending_tile_writes ...
@@ -118,6 +121,7 @@ class TestNationPassiveExpansionTickDefersTileWrites:
         pending_tiles = []
 
         with patch.object(th, "mongo", MagicMock(db=test_db)), \
+             patch.object(hmh, "mongo", MagicMock(db=test_db)), \
              patch.object(hmh, "select_passive_expansion_tiles", return_value=[(1, 0)]):
             th.nation_passive_expansion_tick(old_nation, new_nation, {}, pending_tiles=pending_tiles)
             th._commit_pending_tile_writes(pending_tiles)
@@ -136,10 +140,30 @@ class TestNationPassiveExpansionTickDefersTileWrites:
         pending_tiles = []
 
         with patch.object(th, "mongo", MagicMock(db=test_db)), \
+             patch.object(hmh, "mongo", MagicMock(db=test_db)), \
              patch.object(hmh, "select_passive_expansion_tiles", return_value=[(1, 0)]):
             th.nation_passive_expansion_tick(old_nation, new_nation, {}, pending_tiles=pending_tiles)
 
         assert new_nation["territory_types"] == {"plains": 1, "forest": 1}
+
+    def test_reads_tiles_through_the_chunk_cache_not_a_full_scan(self, test_db):
+        """Regression guard for the 2026-09-16 investigation: a direct
+        hex_map_tiles.find({}) scan measured at ~8.6s on production
+        regardless of projection, and this function runs once per nation
+        whenever its expansion roll succeeds — so it must read through
+        get_all_tiles() (the chunk-backed, process-wide cache), not fall
+        back to scanning the raw collection itself."""
+        _insert_tiles(test_db)
+        old_nation = _make_nation()
+        new_nation = dict(old_nation)
+
+        with patch.object(th, "mongo", MagicMock(db=test_db)), \
+             patch.object(hmh, "mongo", MagicMock(db=test_db)), \
+             patch.object(hmh, "select_passive_expansion_tiles", return_value=[(1, 0)]), \
+             patch.object(hmh, "get_all_tiles", wraps=hmh.get_all_tiles) as get_all_tiles_spy:
+            th.nation_passive_expansion_tick(old_nation, new_nation, {})
+
+        get_all_tiles_spy.assert_called_once()
 
     def test_registered_as_tile_pending_aware(self):
         """_dispatch only forwards pending_tiles to functions registered in

@@ -1,8 +1,10 @@
+import threading
+import traceback
 import uuid
 from datetime import datetime, timezone
 from time import perf_counter
 from app_core import mongo, category_data, json_data
-from flask import g, flash, current_app
+from flask import g, flash, current_app, has_request_context
 from calculations.field_calculations import calculate_all_fields, purge_invalid_district_jobs
 from copy import deepcopy
 from bson import ObjectId
@@ -570,7 +572,7 @@ def approve_change(change_id):
             "after_implemented_data": after_data
         }})
 
-        propagate_updates(
+        _dispatch_propagate_updates(
             changed_data_type=change["target_collection"],
             changed_object_id=inserted_item_id,
             changed_object=after_data,
@@ -625,7 +627,7 @@ def approve_change(change_id):
                 "before_implemented_data": before_data,
                 "after_implemented_data": after_data
             }})
-            propagate_updates(
+            _dispatch_propagate_updates(
                 changed_data_type=change["target_collection"],
                 changed_object_id=change["target"],
                 changed_object=merged if change["change_type"] == "Update" else {},
@@ -706,7 +708,7 @@ def system_approve_change(change_id, session=None, skip_recalculation=False, ski
             "after_implemented_data": after_data
         }}, session=session)
 
-        propagate_updates(
+        _dispatch_propagate_updates(
             changed_data_type=change["target_collection"],
             changed_object_id=inserted_item_id,
             changed_object=after_data,
@@ -769,7 +771,7 @@ def system_approve_change(change_id, session=None, skip_recalculation=False, ski
             }}, session=session)
 
             if change["change_type"] == "Update":
-                propagate_updates(
+                _dispatch_propagate_updates(
                     changed_data_type=change["target_collection"],
                     changed_object_id=change["target"],
                     changed_object=merged,
@@ -778,7 +780,7 @@ def system_approve_change(change_id, session=None, skip_recalculation=False, ski
                     skip_ids=skip_propagate_ids,
                 )
             else:
-                propagate_updates(
+                _dispatch_propagate_updates(
                     changed_data_type=change["target_collection"],
                     changed_object_id=change["target"],
                     changed_object={},
@@ -862,7 +864,7 @@ def force_approve_change(change_id):
         "before_implemented_data": before_data,
         "after_implemented_data": after_data
     }})
-    propagate_updates(
+    _dispatch_propagate_updates(
         changed_data_type=change["target_collection"],
         changed_object_id=change["target"],
         changed_object=merged if change["change_type"] == "Update" else after_data,
@@ -934,7 +936,7 @@ def system_force_approve_change(change_id):
         "before_implemented_data": before_data,
         "after_implemented_data": after_data
     }})
-    propagate_updates(
+    _dispatch_propagate_updates(
         changed_data_type=change["target_collection"],
         changed_object_id=change["target"],
         changed_object=merged if change["change_type"] == "Update" else after_data,
@@ -1025,7 +1027,7 @@ def revert_change(change_id):
             "before_revert_data": current,
             "after_revert_data": {},
         }})
-        propagate_updates(
+        _dispatch_propagate_updates(
             changed_data_type=change["target_collection"],
             changed_object_id=change["target"],
             changed_object={},
@@ -1050,7 +1052,7 @@ def revert_change(change_id):
             "before_revert_data": {},
             "after_revert_data": restored,
         }})
-        propagate_updates(
+        _dispatch_propagate_updates(
             changed_data_type=change["target_collection"],
             changed_object_id=change["target"],
             changed_object=restored,
@@ -1075,7 +1077,7 @@ def revert_change(change_id):
             "before_revert_data": existing,
             "after_revert_data": restored,
         }})
-        propagate_updates(
+        _dispatch_propagate_updates(
             changed_data_type=change["target_collection"],
             changed_object_id=change["target"],
             changed_object=restored,
@@ -1512,3 +1514,74 @@ def propagate_updates(changed_data_type, changed_object_id, changed_object, reas
             recalculate_object(dep["data_type"], dep_id, session=session)
         except Exception as e:
             print(f"Error updating {dep['data_type']} {dep['object_id']}: {e}")
+
+
+# In-flight guard so two overlapping saves of the same object never start
+# two concurrent background cascades for it — see _dispatch_propagate_updates.
+_propagating_ids_lock = threading.Lock()
+_propagating_ids = set()
+
+
+def _propagate_updates_guarded(changed_data_type, changed_object_id, changed_object, reason, skip_ids, key):
+    """Runs propagate_updates in a background thread. Prints a full
+    traceback on failure — this codebase's only error-visibility mechanism
+    for background work (see tick_helpers.py's _run_tick_guarded, the one
+    other place a thread's failure needs to be more visible than a bare
+    thread crash) — and always releases the in-flight guard for `key`,
+    success or failure."""
+    try:
+        propagate_updates(changed_data_type, changed_object_id, changed_object, reason, skip_ids=skip_ids)
+    except Exception:
+        print(f"Background propagate_updates failed for {key}:")
+        traceback.print_exc()
+    finally:
+        with _propagating_ids_lock:
+            _propagating_ids.discard(key)
+
+
+def _dispatch_propagate_updates(changed_data_type, changed_object_id, changed_object, reason="Dependency update", session=None, skip_ids=None):
+    """Entry point every change-approval flow uses instead of calling
+    propagate_updates directly — decides whether the dependent-object
+    cascade can safely run in the background.
+
+    Stays SYNCHRONOUS (identical to calling propagate_updates directly)
+    whenever either is true:
+      - `session` is set: a pymongo ClientSession can't safely be handed to
+        another thread, and the transaction it belongs to (a tick's
+        deferred commit phase — see system_approve_change) may already be
+        committing/rolling back by the time a background thread got around
+        to using it.
+      - there's no live Flask request context: a standalone script (e.g.
+        scripts/seed_hags_suffering_tick.py) or a background thread (the
+        tick itself, an admin_tool_helpers.py async action) has no HTTP
+        response to speed up, and — for a script specifically — its whole
+        process could exit before a background thread finished, silently
+        dropping the cascade.
+
+    Otherwise (an interactive admin HTTP request, no open transaction) runs
+    the cascade in a daemon background thread so the admin's response
+    returns immediately instead of waiting on a full multi-nation
+    recalculation. Skips starting a second background cascade if one for
+    this exact object is already in flight — the object's OWN edit was
+    already saved synchronously before this is ever called, so skipping a
+    duplicate CASCADE just means its dependents catch up on the next
+    save/tick instead of this one, rather than two cascades racing to
+    recalculate the same dependents.
+    """
+    if session is not None or not has_request_context():
+        propagate_updates(changed_data_type, changed_object_id, changed_object, reason, session=session, skip_ids=skip_ids)
+        return
+
+    key = (changed_data_type, str(changed_object_id))
+    with _propagating_ids_lock:
+        if key in _propagating_ids:
+            print(f"Skipping background propagate_updates for {key} — a cascade for it is already in flight.")
+            return
+        _propagating_ids.add(key)
+
+    thread = threading.Thread(
+        target=_propagate_updates_guarded,
+        args=(changed_data_type, changed_object_id, changed_object, reason, skip_ids, key),
+    )
+    thread.daemon = True
+    thread.start()

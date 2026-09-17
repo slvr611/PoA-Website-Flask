@@ -2894,6 +2894,8 @@ def sync_nation_cities(nation, dry_run=True, tiles_with_city=None, owned_tiles=N
                     {"q": coord[0], "r": coord[1]},
                     {"$set": tile_update},
                 )
+                from helpers.hex_map_helpers import notify_tile_changed_by_coord
+                notify_tile_changed_by_coord(coord[0], coord[1])
 
             has_city_on_map = True
 
@@ -3049,9 +3051,12 @@ def _write_city_move(old_tile, new_coord, entry, owned_tiles):
     owned_tiles in place, in addition to writing to the DB, so a nation with
     more than one violating city sees accurate state on its next
     _find_relocation_tile call within the same pass."""
+    from helpers.hex_map_helpers import notify_tile_changed, notify_tile_changed_by_coord
+
     mongo.db.hex_map_tiles.update_one(
         {"_id": old_tile["_id"]}, {"$unset": {"city": "", "capital": ""}}
     )
+    notify_tile_changed(old_tile["_id"])
     city_payload = {"id": entry["city_id"], "name": entry["city_name"], "type": entry["city_type"]}
     update = {"city": city_payload}
     if entry["is_capital"]:
@@ -3060,11 +3065,13 @@ def _write_city_move(old_tile, new_coord, entry, owned_tiles):
     new_tile = next((t for t in owned_tiles if (t["q"], t["r"]) == new_coord), None)
     if new_tile is not None:
         mongo.db.hex_map_tiles.update_one({"_id": new_tile["_id"]}, {"$set": update})
+        notify_tile_changed(new_tile["_id"])
         new_tile["city"] = city_payload
         if entry["is_capital"]:
             new_tile["capital"] = True
     else:
         mongo.db.hex_map_tiles.update_one({"q": new_coord[0], "r": new_coord[1]}, {"$set": update})
+        notify_tile_changed_by_coord(new_coord[0], new_coord[1])
 
     old_tile.pop("city", None)
     old_tile.pop("capital", None)
@@ -3318,12 +3325,15 @@ def fix_city_and_capital_placement(dry_run=True, min_distance=MIN_CITY_TILE_DIST
                 continue  # already exactly right
 
             if not dry_run:
+                from helpers.hex_map_helpers import notify_tile_changed
                 for t in current_capitals:
                     if (t["q"], t["r"]) != keep_coord:
                         mongo.db.hex_map_tiles.update_one({"_id": t["_id"]}, {"$unset": {"capital": ""}})
+                        notify_tile_changed(t["_id"])
                         t.pop("capital", None)
                 if not keep.get("capital"):
                     mongo.db.hex_map_tiles.update_one({"_id": keep["_id"]}, {"$set": {"capital": True}})
+                    notify_tile_changed(keep["_id"])
                     keep["capital"] = True
 
             report["capitals_recentered"].append({
@@ -3356,12 +3366,15 @@ def fix_city_and_capital_placement(dry_run=True, min_distance=MIN_CITY_TILE_DIST
             continue
 
         if not dry_run:
+            from helpers.hex_map_helpers import notify_tile_changed
             for t in current_capitals:
                 if (t["q"], t["r"]) != target_coord:
                     mongo.db.hex_map_tiles.update_one({"_id": t["_id"]}, {"$unset": {"capital": ""}})
+                    notify_tile_changed(t["_id"])
                     t.pop("capital", None)
             if not target_tile.get("capital"):
                 mongo.db.hex_map_tiles.update_one({"_id": target_tile["_id"]}, {"$set": {"capital": True}})
+                notify_tile_changed(target_tile["_id"])
                 target_tile["capital"] = True
 
         report["capitals_recentered"].append({
@@ -3572,6 +3585,8 @@ def sync_nation_districts(nation, dry_run=True, tiles_with_district=None, owned_
                         "display_name": dd.get("display_name", def_key), "type": "",
                     }}},
                 )
+                from helpers.hex_map_helpers import notify_tile_changed_by_coord
+                notify_tile_changed_by_coord(coord[0], coord[1])
 
     return report
 

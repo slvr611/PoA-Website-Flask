@@ -100,6 +100,8 @@ def _queue_tile_write(pending_tiles, tile_id, set_fields):
     callers keep working unchanged."""
     if pending_tiles is None:
         mongo.db.hex_map_tiles.update_one({"_id": tile_id}, {"$set": set_fields})
+        from helpers.hex_map_helpers import notify_tile_changed
+        notify_tile_changed(tile_id)
         return
     pending_tiles.append({"_id": tile_id, "set": dict(set_fields)})
 
@@ -118,6 +120,7 @@ def _commit_pending_tile_writes(pending_tiles):
     don't need it."""
     if not pending_tiles:
         return
+    from helpers.hex_map_helpers import notify_tile_changed
     merged = {}
     order = []
     for item in pending_tiles:
@@ -128,6 +131,12 @@ def _commit_pending_tile_writes(pending_tiles):
         merged[tid].update(item["set"])
     for tid in order:
         mongo.db.hex_map_tiles.update_one({"_id": tid}, {"$set": merged[tid]})
+        # Keep the full-map read mirror warm — see hex_map_helpers.py's
+        # "Tile chunk mirror" module comment. This is the tick's single
+        # chokepoint for most district/city/bandit-camp tile claims, so
+        # covering it here keeps a nation save right after a tick from
+        # paying a full chunk rebuild.
+        notify_tile_changed(tid)
 
 
 def _commit_one_batch(session, items, skip_propagate_ids=None):
@@ -822,6 +831,10 @@ def tick(form_data):
                 world_city_coords = _fetch_world_city_coords() if is_ai_tick else None
                 try:
                     for i in range(len(old_nations)):
+                        _log_tick_item_progress(
+                            i + 1, len(old_nations), old_nations[i].get("name", "?"),
+                            force=(i == 0 or i == len(old_nations) - 1),
+                        )
                         # Stasis blocks every tick function except modifier decay, so
                         # a stasis modifier's own duration still counts down and expires.
                         if tick_function is not modifier_decay_tick and _in_stasis(old_nations[i]):
@@ -1011,6 +1024,7 @@ def _tick_heartbeat_start(label):
     time it was investigated the logs showing which step it had reached
     were long gone). Best-effort: a diagnostics write must never break the
     tick itself."""
+    _last_item_progress_write["t"] = 0.0
     try:
         mongo.db.tick_status.update_one(
             {"_id": "current"},
@@ -1020,6 +1034,10 @@ def _tick_heartbeat_start(label):
                 "tick_started_at": datetime.datetime.now(datetime.timezone.utc),
                 "current_step": "(starting)",
                 "step_started_at": datetime.datetime.now(datetime.timezone.utc),
+                "current_item_index": None,
+                "current_item_total": None,
+                "current_item_label": None,
+                "current_item_updated_at": None,
             }},
             upsert=True,
         )
@@ -1033,12 +1051,63 @@ def _log_tick_step(label):
     through tick()/era_tick() — same granularity, just also survives past
     Heroku's log retention window. See _tick_heartbeat_start."""
     print(label)
+    _last_item_progress_write["t"] = 0.0  # let the new step's first item log immediately
     try:
         mongo.db.tick_status.update_one(
             {"_id": "current"},
             {"$set": {
                 "current_step": label,
                 "step_started_at": datetime.datetime.now(datetime.timezone.utc),
+                "current_item_index": None,
+                "current_item_total": None,
+                "current_item_label": None,
+                "current_item_updated_at": None,
+            }},
+            upsert=True,
+        )
+    except Exception:
+        pass
+
+
+# How often _log_tick_item_progress is actually allowed to write, regardless
+# of how often it's called — see its docstring for why this matters.
+_TICK_ITEM_PROGRESS_INTERVAL_SECONDS = 10
+_last_item_progress_write = {"t": 0.0}
+
+
+def _log_tick_item_progress(index, total, label, force=False):
+    """Best-effort per-item heartbeat for a long per-category loop (e.g. the
+    ~200-nation NATION_TICK_FUNCTIONS loop, where a single step like "AI
+    Decision Tick" or "Nation Passive Expansion Tick" can take from seconds
+    to over an hour depending on what each individual nation triggers).
+
+    _log_tick_step alone only says WHICH STEP is running — after the
+    2026-09-16 incident where "AI Decision Tick" ran for 70+ minutes with no
+    way to tell whether it was grinding slowly through all ~200 nations or
+    stuck on one specific nation, this adds WHICH ITEM within that step,
+    so a future stall can be diagnosed as "nation 143 of 216 (Some Nation
+    Name), unchanged for 40 minutes" instead of just "AI Decision Tick,
+    unchanged for 70 minutes."
+
+    Throttled to once every _TICK_ITEM_PROGRESS_INTERVAL_SECONDS (not once
+    per item): with ~200 items, writing on every single one would add that
+    many extra round-trips to a step that's already the thing being
+    diagnosed for being too slow — the fix must not become part of the
+    problem. `force=True` bypasses the throttle for the first/last item of
+    a loop so short loops still get at least one data point.
+    """
+    now = time.time()
+    if not force and now - _last_item_progress_write["t"] < _TICK_ITEM_PROGRESS_INTERVAL_SECONDS:
+        return
+    _last_item_progress_write["t"] = now
+    try:
+        mongo.db.tick_status.update_one(
+            {"_id": "current"},
+            {"$set": {
+                "current_item_index": index,
+                "current_item_total": total,
+                "current_item_label": label,
+                "current_item_updated_at": datetime.datetime.now(datetime.timezone.utc),
             }},
             upsert=True,
         )
@@ -2720,7 +2789,7 @@ def nation_enclave_compliance_tick(old_nation, new_nation, schema):
 
 
 def nation_passive_expansion_tick(old_nation, new_nation, schema, pending_tiles=None):
-    from helpers.hex_map_helpers import select_passive_expansion_tiles
+    from helpers.hex_map_helpers import select_passive_expansion_tiles, get_all_tiles, get_tile_ids_by_coords
 
     result = ""
 
@@ -2737,16 +2806,21 @@ def nation_passive_expansion_tick(old_nation, new_nation, schema, pending_tiles=
 
     nation_name = old_nation.get("name", "Unknown")
 
-    # Fetch tiles once; reuse across multiple successful rolls so that tiles
-    # claimed in earlier rounds are visible to later rounds. Need _id (unlike
-    # before) since claims now go through _queue_tile_write, which addresses
-    # tiles by _id rather than the q/r filter a direct update_one used.
-    all_tiles = list(mongo.db.hex_map_tiles.find(
-        {},
-        {"q": 1, "r": 1, "terrain": 1, "owner": 1,
-         "city": 1, "district": 1, "wonder": 1, "capital": 1,
-         "portal": 1, "route": 1, "_id": 1},
-    ))
+    # Reads through the chunk-backed, process-wide cache (get_all_tiles)
+    # instead of a raw hex_map_tiles.find({}) scan — a direct scan measured
+    # at ~8.6s on this cluster regardless of projection (aggregate transfer/
+    # server processing cost, not round-trip count — see
+    # helpers/hex_map_helpers.py's module comment), and this function runs
+    # once per nation whenever its expansion roll succeeds, so that cost
+    # was paid repeatedly every tick. get_all_tiles() returns independent
+    # copies (via _coerce_tile), so mutating "owner" below across rounds
+    # can never corrupt the shared cache other callers read from.
+    #
+    # The cache deliberately doesn't carry _id (kept out of the chunk
+    # mirror), so _id — needed for _queue_tile_write below — is looked up
+    # separately via get_tile_ids_by_coords, only for the handful of tiles
+    # actually claimed each round, not the whole map.
+    all_tiles = get_all_tiles()
     tile_map = {(t["q"], t["r"]): t for t in all_tiles}
 
     # For each successful roll, select and claim tiles
@@ -2757,9 +2831,13 @@ def nation_passive_expansion_tick(old_nation, new_nation, schema, pending_tiles=
         if not to_claim:
             break
         expansion_events += 1
+        tile_ids = get_tile_ids_by_coords(to_claim)
         for (q, r) in to_claim:
             tile = tile_map.get((q, r))
             if tile is None:
+                continue
+            tile_id = tile_ids.get((q, r))
+            if tile_id is None:
                 continue
             # Deferred (not an immediate write) so a tick that fails later —
             # e.g. at the final commit transaction — doesn't leave these
@@ -2767,7 +2845,7 @@ def nation_passive_expansion_tick(old_nation, new_nation, schema, pending_tiles=
             # full rollback. See _queue_tile_write's docstring: this closes
             # the same class of gap already fixed there for district/city
             # claims.
-            _queue_tile_write(pending_tiles, tile["_id"], {"owner": nation_name})
+            _queue_tile_write(pending_tiles, tile_id, {"owner": nation_name})
             claimed.append((q, r))
             # Update the in-memory tile so subsequent rounds see the new ownership
             tile["owner"] = nation_name

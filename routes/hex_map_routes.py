@@ -8,6 +8,7 @@ from helpers.auth_helpers import admin_required
 from helpers.hex_map_helpers import (
     get_all_tiles,
     bump_tile_version,
+    notify_tile_changed,
     get_neighbor_tiles,
     is_tile_legally_controllable,
     get_nation_tile_stats,
@@ -537,16 +538,17 @@ def update_hex_map_tile(q, r):
     update["q"] = q
     update["r"] = r
     if current.get("_id"):
-        mongo.db.hex_map_tiles.update_one({"_id": current["_id"]}, {"$set": update})
+        tile_id = current["_id"]
+        mongo.db.hex_map_tiles.update_one({"_id": tile_id}, {"$set": update})
         # Remove any duplicate documents at the same coordinate so stale copies
         # don't win on the next page load.
         mongo.db.hex_map_tiles.delete_many({
             "q": {"$in": [q, float(q)]},
             "r": {"$in": [r, float(r)]},
-            "_id": {"$ne": current["_id"]},
+            "_id": {"$ne": tile_id},
         })
     else:
-        mongo.db.hex_map_tiles.insert_one(update)
+        tile_id = mongo.db.hex_map_tiles.insert_one(update).inserted_id
 
     # Effective state after update
     effective = {**current, **update}
@@ -600,7 +602,7 @@ def update_hex_map_tile(q, r):
         if prev_route_owner and prev_route_owner != eff_route_owner:
             _resync_nation_routes(prev_route_owner)
 
-    bump_tile_version()
+    notify_tile_changed(tile_id)
     return jsonify({"ok": True})
 
 
