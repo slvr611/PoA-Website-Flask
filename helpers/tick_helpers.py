@@ -765,6 +765,10 @@ def tick(form_data):
             if run_key in form_data:
                 _log_tick_step(tick_function_label)
                 for i in range(len(old_markets)):
+                    _log_tick_item_progress(
+                        i + 1, len(old_markets), old_markets[i].get("name", "?"),
+                        force=(i == 0 or i == len(old_markets) - 1),
+                    )
                     full_tick_summary += _dispatch(tick_function, pending, old_markets[i], new_markets[i], market_schema, pending_tiles=pending_tiles)
 
 
@@ -2083,7 +2087,12 @@ def complex_trade_bandit_loss_tick(old_market, new_market, schema, pending_tiles
     camp_tile_ids = list(camp_state.keys())
 
     log_lines = []
-    for route in routes:
+    for route_idx, route in enumerate(routes):
+        _log_tick_item_progress(
+            route_idx + 1, len(routes),
+            f"{market_name}: route {route.get('nation_a', '?')} <-> {route.get('nation_b', '?')}",
+            force=(route_idx == 0 or route_idx == len(routes) - 1),
+        )
         if not is_delivering(route, current_session):
             continue
         if route.get("nation_a") in stasis_names or route.get("nation_b") in stasis_names:

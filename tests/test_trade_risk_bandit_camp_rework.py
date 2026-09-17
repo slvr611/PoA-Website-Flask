@@ -327,3 +327,35 @@ class TestComplexTradeBanditLossTick:
         assert log == ""
         updated_route = test_db.trade_routes.find_one({"_id": route_id})
         assert updated_route.get("raided_sessions", []) == []
+
+    def test_logs_per_route_progress(self, test_db, monkeypatch):
+        """Regression guard for the 2026-09-17 stuck-tick investigation:
+        Complex Trade Bandit Loss Tick stalled for 10+ minutes with no way
+        to tell which of the (few) routes it was on. Each route in the
+        loop must report its own progress, labeled with the market and the
+        two nations involved, so a future stall points at the exact route
+        instead of just the step name."""
+        market_id = ObjectId()
+        self._setup_two_member_market(test_db, market_id)
+        test_db.hex_map_tiles.insert_one({"q": 0, "r": 0, "bandit_camp": {"market": "Grand Bazaar"}})
+        test_db.trade_routes.insert_one({
+            "_id": ObjectId(), "nation_a": "Alpha", "nation_b": "Beta",
+            "status": "active", "accepted_session": 1, "delay": 0, "duration_ticks": None,
+            "resources_a_to_b": [], "resources_b_to_a": [],
+        })
+        monkeypatch.setattr("helpers.trade_route_helpers._current_session", lambda: 1)
+
+        real_mongo, _ = _patched_db(test_db)
+        original_db = real_mongo.db
+        real_mongo.db = test_db
+        try:
+            with patch("helpers.tick_helpers.random.random", return_value=1.0), \
+                 patch("helpers.tick_helpers._log_tick_item_progress") as progress_spy:
+                market = {"_id": market_id, "name": "Grand Bazaar"}
+                th.complex_trade_bandit_loss_tick(market, market, {}, pending_tiles=[])
+        finally:
+            real_mongo.db = original_db
+
+        progress_spy.assert_called_once_with(
+            1, 1, "Grand Bazaar: route Alpha <-> Beta", force=True,
+        )
