@@ -23,6 +23,22 @@ so nothing — including the real "Backup Database" and "Give Tick Summary"
 steps, if selected — can touch production S3, email, or the production
 database. A hard check right after import re-verifies app_core actually
 ended up pointed at a local address before anything runs.
+
+Query report (on by default, see --no-query-report): a pymongo
+CommandListener counts every Mongo command issued during the run, grouped
+by (database, collection, command name), and prints a table sorted by call
+count at the end, flagging any group at or above --n-plus-one-threshold
+(default 50) calls. This is a COUNT-based check, not a timing-based one —
+it exists because a local mongod is fast enough that an N+1 query pattern
+(one query per nation/market/route inside a tick loop) never gets slow
+enough here to notice, even though the exact same pattern at 200+ real
+nations and real network latency in production can turn into a
+multi-hour tick (see the 2026-09-17 AI Decision Tick incident: 216 nations
+at ~2 min/nation, zero errors, zero retries — pure per-nation query count).
+A call count like "216" or "648" lining up with the number of nations/
+markets/routes selected is the signature to look for; the listener has no
+way to know what "too many" means for a given step, so treat the threshold
+as a tripwire for "worth a look", not a hard failure.
 """
 import os
 import sys
@@ -30,6 +46,8 @@ import argparse
 import time
 import faulthandler
 from urllib.parse import urlparse
+
+from pymongo import monitoring
 
 # Running as `python scripts/run_local_tick.py` only puts scripts/ on
 # sys.path, not the project root — app_core.py and helpers/ live there, and
@@ -60,6 +78,72 @@ _EXTERNAL_SERVICE_ENV_VARS = (
 def _looks_local(uri):
     host = (urlparse(uri).hostname or "").lower()
     return host in ("localhost", "127.0.0.1", "::1")
+
+
+class _QueryCounter(monitoring.CommandListener):
+    """pymongo CommandListener that tallies every command issued during the
+    run by (database, collection, command name) — call count and total
+    server-reported duration. Registered globally via
+    pymongo.monitoring.register(), which MUST happen before the app's
+    MongoClient is constructed (i.e. before `import app_core`) — pymongo
+    reads the listener registry once, at MongoClient.__init__ time.
+
+    started()/succeeded()/failed() are correlated via request_id because
+    only the "started" event carries the actual command document (and thus
+    which collection it targets); only "succeeded"/"failed" carry the
+    duration.
+    """
+
+    def __init__(self):
+        self._pending = {}
+        self.stats = {}  # (db, collection, command_name) -> {"count": int, "total_micros": int}
+
+    def started(self, event):
+        collection = event.command.get(event.command_name)
+        if not isinstance(collection, str):
+            collection = "?"
+        self._pending[event.request_id] = (event.database_name, collection, event.command_name)
+
+    def succeeded(self, event):
+        self._finish(event)
+
+    def failed(self, event):
+        self._finish(event)
+
+    def _finish(self, event):
+        key = self._pending.pop(event.request_id, None)
+        if key is None:
+            return
+        entry = self.stats.setdefault(key, {"count": 0, "total_micros": 0})
+        entry["count"] += 1
+        entry["total_micros"] += getattr(event, "duration_micros", 0) or 0
+
+
+def _print_query_report(counter, threshold):
+    if not counter.stats:
+        print("\nQuery report: no Mongo commands were observed.")
+        return
+
+    rows = sorted(counter.stats.items(), key=lambda kv: -kv[1]["count"])
+    total_calls = sum(s["count"] for _, s in rows)
+
+    print(f"\nQuery report ({total_calls} Mongo command(s) issued, by call count):")
+    print(f"{'count':>7}  {'total ms':>10}  {'database.collection':<32}  command")
+    flagged = []
+    for (db, coll, cmd), s in rows:
+        marker = ""
+        if s["count"] >= threshold:
+            marker = f"  <-- {s['count']} calls: possible N+1 (one query per item in a loop?)"
+            flagged.append((db, coll, cmd, s["count"]))
+        print(f"{s['count']:>7}  {s['total_micros'] / 1000:>10.1f}  {db + '.' + coll:<32}  {cmd}{marker}")
+
+    if flagged:
+        print(f"\n{len(flagged)} command shape(s) hit the N+1 threshold ({threshold}+ calls) — "
+              f"if the count matches the number of nations/markets/routes/etc. this step "
+              f"processed, that query is very likely running once per item instead of once "
+              f"total (or once per some shared/cached set).")
+    else:
+        print(f"\nNo command shape reached the N+1 threshold ({threshold}+ calls).")
 
 
 def _force_local_environment(local_uri):
@@ -105,6 +189,18 @@ def _all_labels(th, era):
 
 
 def main():
+    # Nation/character names routinely contain non-ASCII characters, and
+    # tick_status/query-report output includes them — Windows' default
+    # console codepage (cp1252) can't encode most of them and would
+    # otherwise crash the script after a real tick already finished
+    # successfully. reconfigure() is a no-op failure risk only on very old
+    # Pythons; this codebase already requires 3.7+ (f-strings elsewhere).
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--local-uri", default=os.getenv("LOCAL_MONGO_URI", DEFAULT_LOCAL_URI),
                          help=f"Local MongoDB URI to run against (default: {DEFAULT_LOCAL_URI})")
@@ -121,6 +217,14 @@ def main():
     parser.add_argument("--watchdog-seconds", type=int, default=60,
                          help="Dump every thread's stack trace this often while running (default 60s), "
                               "so a hang is diagnosable without attaching a debugger")
+    parser.add_argument("--query-report", dest="query_report", action="store_true", default=True,
+                         help="Print a per-(collection, command) Mongo call-count report at the end "
+                              "(default: on)")
+    parser.add_argument("--no-query-report", dest="query_report", action="store_false",
+                         help="Skip the query-count report")
+    parser.add_argument("--n-plus-one-threshold", type=int, default=50,
+                         help="Flag a (collection, command) pair in the query report once its call "
+                              "count reaches this many (default 50)")
     args = parser.parse_args()
 
     local_uri = args.local_uri
@@ -144,6 +248,14 @@ def main():
         print(f"ERROR: can't reach a local MongoDB server at {local_uri}.")
         print("Start one first, e.g.: mongod --dbpath <some_local_folder>")
         sys.exit(1)
+
+    query_counter = None
+    if args.query_report:
+        # Must register before app_core (and its MongoClient) is imported —
+        # pymongo.monitoring.register() only affects clients constructed
+        # after the call.
+        query_counter = _QueryCounter()
+        monitoring.register(query_counter)
 
     import app_core  # noqa: E402  (must be imported only after the env is forced above)
 
@@ -202,6 +314,9 @@ def main():
     elapsed = time.time() - start
     status = app_core.mongo.db.tick_status.find_one({"_id": "current"})
     print(f"\nFinished in {elapsed:.1f}s. tick_status: {status}")
+
+    if query_counter is not None:
+        _print_query_report(query_counter, args.n_plus_one_threshold)
 
 
 if __name__ == "__main__":

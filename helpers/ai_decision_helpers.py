@@ -18,7 +18,7 @@ from copy import deepcopy
 from bson import ObjectId
 
 from app_core import mongo, json_data, category_data
-from helpers.hex_map_helpers import hex_distance
+from helpers.hex_map_helpers import hex_distance, get_all_tiles_from_chunks
 
 # Minimum hex distance required between any two cities on the map,
 # regardless of owner — enforced both retroactively (see
@@ -1327,20 +1327,30 @@ def get_stored_market_prices(old_nation):
     try:
         market_links_db = category_data["market_links"]["database"]
         my_links = list(market_links_db.find({"member": nation_id}, {"market": 1}))
+        market_ids = []
         for link in my_links:
             market_id = link.get("market")
             if not market_id:
                 continue
             try:
-                market_doc = mongo.db.markets.find_one(
-                    {"_id": ObjectId(market_id)}, {"resource_prices": 1}
-                )
-                if market_doc and "resource_prices" in market_doc:
+                market_ids.append(ObjectId(market_id))
+            except Exception:
+                pass
+        # One batched query instead of one find_one() per linked market —
+        # this function runs once per nation in AI Decision Tick, so an N+1
+        # here means N+1 * (nation count) round trips per tick. Most
+        # nations belong to only 1-3 markets, but at 216 nations even a
+        # small per-nation N adds up (measured live: this was a real,
+        # significant contributor to AI Decision Tick's per-nation cost —
+        # see the 2026-09-17 production slowdown investigation).
+        if market_ids:
+            for market_doc in mongo.db.markets.find(
+                {"_id": {"$in": market_ids}}, {"resource_prices": 1}
+            ):
+                if "resource_prices" in market_doc:
                     for r, p in market_doc["resource_prices"].items():
                         if p > combined.get(r, 0):
                             combined[r] = p  # take highest across multiple markets
-            except Exception:
-                pass
     except Exception:
         pass
 
@@ -3856,12 +3866,19 @@ def evaluate_goal_district(old_nation, new_nation, state, goal, need_weights, pr
     # trip. Also benefits dry_run (a preview building several districts in
     # one pass previously could re-suggest the same tile for more than one
     # of them).
+    # Reads through the chunk-backed, process-wide cache (get_all_tiles_from_chunks)
+    # instead of a per-nation hex_map_tiles.find({"owner": nation_name}) —
+    # this function runs once per nation in AI Decision Tick, so that was
+    # 216 network round trips per tick for a query that costs the same
+    # whether it reads one nation's tiles or the whole map on this cluster
+    # tier (aggregate transfer/server processing, not round-trip count —
+    # see helpers/hex_map_helpers.py's module comment). The cache is read
+    # once per tick and reused for every remaining nation; dict(t) copies
+    # only the handful of tiles this nation actually owns, so later
+    # mutations (_mark_tile_claimed) can never affect the shared cache.
     owned_tiles_snapshot = None
     if not is_nomadic:
-        owned_tiles_snapshot = list(mongo.db.hex_map_tiles.find(
-            {"owner": nation_name},
-            {"q": 1, "r": 1, "terrain": 1, "district": 1, "city": 1, "wonder": 1, "capital": 1, "node": 1, "_id": 0},
-        ))
+        owned_tiles_snapshot = [dict(t) for t in get_all_tiles_from_chunks() if t.get("owner") == nation_name]
 
     def _mark_tile_claimed(coord, **fields):
         """Reflect a just-queued claim in owned_tiles_snapshot and force the
@@ -3895,12 +3912,12 @@ def evaluate_goal_district(old_nation, new_nation, state, goal, need_weights, pr
 
     # Count def_keys already claimed on map tiles (safety net against out-of-sync
     # nation docs that miss a previous tile claim — prevents exceeding map_count).
+    # Derived from owned_tiles_snapshot (same {"owner": nation_name} data,
+    # already fetched above and not yet mutated by any claim in this call)
+    # instead of a second per-nation hex_map_tiles query.
     map_claimed_counts = {}  # {def_key: count_on_map}
-    if not dry_run:
-        for t in mongo.db.hex_map_tiles.find(
-            {"owner": nation_name, "district": {"$exists": True, "$ne": None}},
-            {"district.def_key": 1, "_id": 0}
-        ):
+    if not dry_run and owned_tiles_snapshot:
+        for t in owned_tiles_snapshot:
             dk = (t.get("district") or {}).get("def_key", "")
             if dk:
                 map_claimed_counts[dk] = map_claimed_counts.get(dk, 0) + 1

@@ -211,6 +211,29 @@ class TestGetAllTitlesCachedPerRequest:
         assert "Test Title" in first
         assert len(calls) == 1
 
+    def test_cached_per_thread_outside_a_flask_request(self, monkeypatch):
+        """The session tick never runs inside a Flask request context at
+        all — without a thread-local fallback here, every one of the tick's
+        218 nations paid for its own titles.find (measured live on
+        2026-09-17: 1,554 calls for one AI Decision Tick run)."""
+        calls = []
+
+        class _FakeCollection:
+            def find(self, *a, **k):
+                calls.append(1)
+                return [{"name": "Test Title", "display_name": "Test Title"}]
+
+        class _FakeDb:
+            titles = _FakeCollection()
+
+        monkeypatch.setattr(fc, "mongo", type("M", (), {"db": _FakeDb()})())
+
+        first = fc._get_all_titles()
+        second = fc._get_all_titles()
+
+        assert first is second
+        assert len(calls) == 1
+
 
 class TestNationIsUndeadHordeCachedPerRequest:
     def test_cached_within_one_request_by_race_id(self, flask_app, monkeypatch):
@@ -253,6 +276,32 @@ class TestNationIsUndeadHordeCachedPerRequest:
             assert uhh.nation_is_undead_horde(None) is False
 
         assert calls == []
+
+    def test_cached_per_thread_outside_a_flask_request(self, monkeypatch):
+        """Same as test_cached_within_one_request_by_race_id, but exercising
+        the session tick's actual runtime context (no Flask request at
+        all) — a per-nation call site (compute_money_income,
+        compute_resource_production, compute_resource_consumption,
+        collect_undead_horde_job) must not re-query per call once cached."""
+        calls = []
+
+        class _FakeCollection:
+            def find_one(self, *a, **k):
+                calls.append(1)
+                return {"positive_trait": "Ravenous", "negative_trait": "Mindless"}
+
+        class _FakeDb:
+            races = _FakeCollection()
+
+        monkeypatch.setattr(uhh, "mongo", type("M", (), {"db": _FakeDb()})())
+
+        nation = {"primary_race": "67ef41c689e17a6e9fa6bbc5"}
+        first = uhh.nation_is_undead_horde(nation)
+        second = uhh.nation_is_undead_horde(nation)
+
+        assert first is True
+        assert second is True
+        assert len(calls) == 1
 
 
 class TestCheckUnitRequirementsPactBatching:

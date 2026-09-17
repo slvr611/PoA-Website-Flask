@@ -10,12 +10,19 @@ per request instead of once per lookup — mirrors the existing
 _get_cached_all_tiles/load_db_units g-based caching pattern already used
 elsewhere in this file.
 
-No thread-local fallback (unlike those two) — see
-_get_cached_district_defs_by_key's docstring for why: this codebase's tests
-call _resolve_def-consuming code directly, outside any Flask request
-context, with a fresh mongomock db per test, all in the same OS thread. A
-threading.local cache would leak the first test's district_defs into every
-later test in the same run.
+Now ALSO falls back to a threading.local cache outside a Flask request
+(e.g. the session tick's background thread) — added after live production
+evidence (2026-09-17 AI Decision Tick investigation) showed the
+no-thread-local-fallback version issuing 68,661 district_defs.find({})
+calls for one 218-nation tick, since a tick never runs inside a Flask
+request context at all. Safe because every tick spawns a brand new
+background Thread (see hex_map_helpers.py's _admin_tile_cache_local and
+this file's own _unit_cache_local, the same established pattern) — there is
+no previous tick's thread left to collide with. Tests get an autouse
+conftest.py fixture (_reset_district_defs_thread_cache) that clears this
+cache before every test, since pytest runs all tests in one shared OS
+thread with a fresh mongomock db each time — without that reset, one
+test's cached district_defs would otherwise leak into the next.
 """
 from flask import g
 
@@ -101,12 +108,11 @@ class TestGetCachedDistrictDefsByKeyInsideFlaskRequest:
 
 
 class TestGetCachedDistrictDefsByKeyOutsideFlaskRequest:
-    def test_falls_back_to_a_fresh_uncached_query(self, monkeypatch):
+    def test_bulk_fetch_happens_once_per_thread(self, monkeypatch):
         """Outside a Flask request (e.g. this test itself, or the session
-        tick's background thread), every call re-queries — no thread-local
-        cache, since Python's OS threads get reused across unrelated units
-        of work (different tests, different tick runs) with no reliable
-        invalidation signal available here."""
+        tick's background thread), the thread-local cache means only the
+        FIRST call in a given thread queries — later calls in the same
+        thread reuse it, exactly like the Flask-g path does per request."""
         calls = []
 
         class _FakeCollection:
@@ -120,7 +126,39 @@ class TestGetCachedDistrictDefsByKeyOutsideFlaskRequest:
         fake_mongo = type("FakeMongo", (), {"db": _FakeDb()})()
         monkeypatch.setattr(fc, "mongo", fake_mongo)
 
-        fc._get_cached_district_defs_by_key()
-        fc._get_cached_district_defs_by_key()
+        first = fc._get_cached_district_defs_by_key()
+        second = fc._get_cached_district_defs_by_key()
 
-        assert len(calls) == 2, "No Flask context — each call should query fresh, not leak a stale cache"
+        assert len(calls) == 1, "Expected exactly one district_defs.find() for the whole thread"
+        assert first is second
+        assert first == {"courthouse": {"key": "courthouse"}}
+
+    def test_a_different_thread_gets_its_own_cache(self, monkeypatch):
+        """A separate OS thread (as a separate tick run would be) must never
+        see another thread's cached district_defs — each starts fresh."""
+        import threading
+
+        state = {"defs": [{"key": "a", "v": 1}]}
+
+        class _FakeCollection:
+            def find(self, *args, **kwargs):
+                return list(state["defs"])
+
+        class _FakeDb:
+            district_defs = _FakeCollection()
+
+        fake_mongo = type("FakeMongo", (), {"db": _FakeDb()})()
+        monkeypatch.setattr(fc, "mongo", fake_mongo)
+
+        main_thread_result = fc._get_cached_district_defs_by_key()
+        assert main_thread_result == {"a": {"key": "a", "v": 1}}
+
+        state["defs"] = [{"key": "a", "v": 2}]
+        other_thread_result = {}
+        t = threading.Thread(target=lambda: other_thread_result.update(
+            result=fc._get_cached_district_defs_by_key()
+        ))
+        t.start()
+        t.join()
+
+        assert other_thread_result["result"] == {"a": {"key": "a", "v": 2}}

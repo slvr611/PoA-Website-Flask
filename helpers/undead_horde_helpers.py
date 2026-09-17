@@ -18,10 +18,19 @@ race_positive_trait/race_negative_trait fields are set to "Ravenous"/
 both traits gets the same behavior.
 """
 
+import threading
+
 from bson.objectid import ObjectId
 from app_core import mongo
 
 UNDEAD_HORDE_JOB_KEY = "undead_horde"
+
+# Fallback for nation_is_undead_horde's per-request cache when running
+# outside a Flask request context (e.g. the session tick's background
+# thread — see calculations/field_calculations.py's
+# _district_defs_thread_cache module comment for why a fresh-Thread-per-tick
+# makes this safe). Keyed by race_id, mirroring the g-based cache's dict.
+_undead_horde_thread_cache = threading.local()
 
 
 def nation_is_undead_horde(nation):
@@ -33,7 +42,11 @@ def nation_is_undead_horde(nation):
     consumption/collect_undead_horde_job each call it independently) —
     measured at 6 separate, otherwise-identical races.find_one round trips
     for one nation calculation. A race's traits can't change mid-request,
-    so the result is cached per Flask request, keyed by race_id."""
+    so the result is cached per Flask request, keyed by race_id — and per
+    background thread outside a request context (e.g. the session tick),
+    since that never runs inside a Flask request at all (see
+    calculations/field_calculations.py's _district_defs_thread_cache module
+    comment for why a fresh-Thread-per-tick makes this safe)."""
     if not nation:
         return False
     race_id = nation.get("primary_race")
@@ -52,7 +65,15 @@ def nation_is_undead_horde(nation):
         cache[race_id] = result
         return result
     except RuntimeError:
-        return _fetch_is_undead_horde_race(race_id)
+        cache = getattr(_undead_horde_thread_cache, 'by_race_id', None)
+        if cache is None:
+            cache = {}
+            _undead_horde_thread_cache.by_race_id = cache
+        if race_id in cache:
+            return cache[race_id]
+        result = _fetch_is_undead_horde_race(race_id)
+        cache[race_id] = result
+        return result
 
 
 def _fetch_is_undead_horde_race(race_id):

@@ -76,6 +76,30 @@ def test_db():
 # ---------------------------------------------------------------------------
 
 @pytest.fixture(autouse=True)
+def _reset_tick_thread_local_caches():
+    """Several per-nation-calculation lookups (district_defs, titles,
+    undead-horde race check) fall back to a threading.local cache outside a
+    Flask request context — a real optimization for the session tick, which
+    always runs in its own fresh background Thread (see
+    field_calculations._district_defs_thread_cache's module comment) and so
+    never collides with a previous tick's cached data. Pytest, however, runs
+    every test in the SAME OS thread by default, with a fresh mongomock db
+    per test — without a reset, one test's cached data would silently leak
+    into the next test that calls the same helper outside a Flask request
+    context (caught live: test_district_def_synergy_parsing.py's
+    courthouse-synergy test started failing once the district_defs cache
+    existed, because an earlier test in the same file had already cached
+    different courthouse data).
+    """
+    import calculations.field_calculations as field_calculations
+    import helpers.undead_horde_helpers as undead_horde_helpers
+    field_calculations._district_defs_thread_cache.by_key = None
+    field_calculations._all_titles_thread_cache.title_data = None
+    undead_horde_helpers._undead_horde_thread_cache.by_race_id = None
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _reset_hex_map_tile_process_cache():
     """helpers.hex_map_helpers.get_all_tiles_from_chunks keeps a process-wide,
     in-memory cache of the full tile list, keyed by id(mongo) + tile_version —

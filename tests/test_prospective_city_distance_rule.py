@@ -12,6 +12,7 @@ from unittest.mock import patch
 from bson import ObjectId
 
 import helpers.ai_decision_helpers as adh
+import helpers.hex_map_helpers as hmh
 from helpers.hex_map_helpers import hex_distance
 
 MIN_DIST = adh.MIN_CITY_TILE_DISTANCE
@@ -225,6 +226,7 @@ class TestEvaluateGoalDistrictSharesWorldCityCoordsAcrossBuilds:
 
         fake_mongo = type("FakeMongo", (), {"db": test_db})()
         with patch.object(adh, "mongo", fake_mongo), \
+             patch.object(hmh, "mongo", fake_mongo), \
              patch.object(adh, "score_buildable_districts", return_value=[]), \
              patch.object(adh, "get_ai_personality", return_value={}), \
              patch.object(adh, "_nation_is_nomadic", return_value=False), \

@@ -17,6 +17,21 @@ from bson.objectid import ObjectId
 # the cache and re-querying the units collection on every nation).
 _unit_cache_local = threading.local()
 
+# Same fallback for _get_all_titles — see its own docstring.
+_all_titles_thread_cache = threading.local()
+
+# Same fallback for _get_cached_district_defs_by_key. Its docstring
+# originally called this gap out as accepted ("still one query per distinct
+# def_key per call, same as before this fix") on the assumption that was a
+# modest cost — live measurement during the 2026-09-17 AI Decision Tick
+# investigation found it was actually issuing 68,661 district_defs.find({})
+# calls for a single 218-nation tick (~315/nation, ~34s of pure DB time even
+# against a fast local mongod), since every tick runs entirely outside a
+# Flask request context. Each tick spawns a fresh background Thread (see
+# hex_map_helpers.py's _admin_tile_cache_local, the same pattern), so a
+# thread-local cache here carries no stale-across-ticks risk.
+_district_defs_thread_cache = threading.local()
+
 
 def _build_nation_calc_cache(target):
     target_id = str(target.get("_id", ""))
@@ -1086,7 +1101,11 @@ def _get_all_titles():
     each ruling character via TitleAdapter — measured at 8 separate,
     otherwise-identical titles.find round trips for a single nation
     calculation. Cached per Flask request (titles don't change mid-request);
-    falls back to an uncached fetch outside a request context."""
+    falls back to a thread-local cache outside a request context (e.g. the
+    session tick's background thread — see _district_defs_thread_cache's
+    module comment for why a fresh-Thread-per-tick makes this safe). Without
+    that fallback this was measured issuing 1,554 titles.find calls for a
+    single 218-nation AI Decision Tick (2026-09-17 investigation)."""
     try:
         from flask import g as _g
         cached = getattr(_g, '_all_titles_cache', None)
@@ -1096,7 +1115,12 @@ def _get_all_titles():
         _g._all_titles_cache = title_data
         return title_data
     except RuntimeError:
-        return _fetch_all_titles()
+        cached = getattr(_all_titles_thread_cache, 'title_data', None)
+        if cached is not None:
+            return cached
+        title_data = _fetch_all_titles()
+        _all_titles_thread_cache.title_data = title_data
+        return title_data
 
 
 def _fetch_all_titles():
@@ -2740,15 +2764,11 @@ def _get_cached_district_defs_by_key():
     and never mutated mid-request by anything a nation calculation
     triggers, so one bulk fetch replaces all of those round trips.
 
-    No thread-local fallback outside a Flask request (unlike those two) —
-    callers here (the session tick included) run _resolve_def against
-    whatever mongo connection is current at call time, and a
-    threading.local cache would outlive a single tick's worth of work on
-    Python's thread-pool-reused worker threads, silently serving stale
-    district_defs (or another thread's/test's data) on the next thing that
-    happens to run on the same OS thread. Falls back to querying fresh —
-    still one query per distinct def_key per call, same as before this fix,
-    just without the request-scoped bulk-fetch win in that path."""
+    Falls back to a thread-local cache outside a Flask request (e.g. the
+    session tick's background thread) — see _district_defs_thread_cache's
+    module comment for why this is safe despite Python's thread-pool-reused
+    worker threads elsewhere: every tick starts a brand new Thread, so
+    there's no other tick/request left to leak stale data into."""
     try:
         from flask import g as _g
         cached = getattr(_g, '_district_defs_cache', None)
@@ -2758,7 +2778,12 @@ def _get_cached_district_defs_by_key():
         _g._district_defs_cache = by_key
         return by_key
     except RuntimeError:
-        return {d["key"]: d for d in mongo.db.district_defs.find({}) if d.get("key")}
+        cached = getattr(_district_defs_thread_cache, 'by_key', None)
+        if cached is not None:
+            return cached
+        by_key = {d["key"]: d for d in mongo.db.district_defs.find({}) if d.get("key")}
+        _district_defs_thread_cache.by_key = by_key
+        return by_key
 
 
 def _resolve_def(district_instance):

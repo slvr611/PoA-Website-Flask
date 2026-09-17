@@ -26,6 +26,7 @@ from bson import ObjectId
 import mongomock
 
 import helpers.ai_decision_helpers as adh
+import helpers.hex_map_helpers as hmh
 
 
 def _base_state(money=1000, district_slots=1):
@@ -56,6 +57,7 @@ class TestCityBuildRequiresPlacement:
 
         fake_mongo = type("FakeMongo", (), {"db": test_db})()
         with patch.object(adh, "mongo", fake_mongo), \
+             patch.object(hmh, "mongo", fake_mongo), \
              patch.object(adh, "_select_best_city", return_value=city_plan), \
              patch.object(adh, "score_buildable_districts", return_value=[]), \
              patch.object(adh, "get_ai_personality", return_value={}), \
@@ -128,6 +130,7 @@ class TestDistrictBuildRequiresPlacement:
 
         fake_mongo = type("FakeMongo", (), {"db": test_db})()
         with patch.object(adh, "mongo", fake_mongo), \
+             patch.object(hmh, "mongo", fake_mongo), \
              patch.object(adh, "_select_best_city", return_value=None), \
              patch.object(adh, "score_buildable_districts", return_value=[candidate]), \
              patch.object(adh, "_apply_goal_alignment", return_value=([candidate], set(), set(), set())), \
