@@ -604,7 +604,10 @@ def tick(form_data):
     if collect_character_data:
         character_schema, character_db = get_data_on_category("characters")
         _, _char_nation_db = get_data_on_category("nations")
-        old_characters = list(character_db.find().sort("name", ASCENDING))
+        old_characters = with_mongo_retry(
+            lambda: list(character_db.find().sort("name", ASCENDING)),
+            description="fetch all characters",
+        )
         new_characters = []
         for character in old_characters:
             if character:
@@ -636,7 +639,10 @@ def tick(form_data):
     
     if collect_artifact_data:
         artifact_schema, artifact_db = get_data_on_category("artifacts")
-        old_artifacts = list(artifact_db.find().sort("name", ASCENDING))
+        old_artifacts = with_mongo_retry(
+            lambda: list(artifact_db.find().sort("name", ASCENDING)),
+            description="fetch all artifacts",
+        )
         new_artifacts = []
         for artifact in old_artifacts:
             if artifact:
@@ -669,7 +675,10 @@ def tick(form_data):
     
     if collect_merchant_data:
         merchant_schema, merchant_db = get_data_on_category("merchants")
-        old_merchants = list(merchant_db.find().sort("name", ASCENDING))
+        old_merchants = with_mongo_retry(
+            lambda: list(merchant_db.find().sort("name", ASCENDING)),
+            description="fetch all merchants",
+        )
         new_merchants = []
         for merchant in old_merchants:
             if merchant:
@@ -697,7 +706,10 @@ def tick(form_data):
     
     if collect_mercenary_data:
         mercenary_schema, mercenary_db = get_data_on_category("mercenaries")
-        old_mercenaries = list(mercenary_db.find().sort("name", ASCENDING))
+        old_mercenaries = with_mongo_retry(
+            lambda: list(mercenary_db.find().sort("name", ASCENDING)),
+            description="fetch all mercenaries",
+        )
         new_mercenaries = []
         for mercenary in old_mercenaries:
             if mercenary:
@@ -725,7 +737,10 @@ def tick(form_data):
     
     if collect_faction_data:
         faction_schema, faction_db = get_data_on_category("factions")
-        old_factions = list(faction_db.find().sort("name", ASCENDING))
+        old_factions = with_mongo_retry(
+            lambda: list(faction_db.find().sort("name", ASCENDING)),
+            description="fetch all factions",
+        )
         new_factions = []
         for faction in old_factions:
             if faction:
@@ -753,7 +768,10 @@ def tick(form_data):
     
     if collect_market_data:
         market_schema, market_db = get_data_on_category("markets")
-        old_markets = list(market_db.find().sort("name", ASCENDING))
+        old_markets = with_mongo_retry(
+            lambda: list(market_db.find().sort("name", ASCENDING)),
+            description="fetch all markets",
+        )
         new_markets = []
         for market in old_markets:
             if market:
@@ -781,7 +799,10 @@ def tick(form_data):
     
     if collect_nation_data:
         nation_schema, nation_db = get_data_on_category("nations")
-        old_nations = list(nation_db.find().sort("name", ASCENDING))
+        old_nations = with_mongo_retry(
+            lambda: list(nation_db.find().sort("name", ASCENDING)),
+            description="fetch all nations",
+        )
         new_nations = []
         for nation in old_nations:
             if nation:
@@ -4142,7 +4163,10 @@ def _era_pop_growth_tick_impl(skip_infertile=False):
     from helpers.hex_map_helpers import get_nations_within_distance
 
     _, db = get_data_on_category("nations")
-    nations = list(db.find().sort("name", ASCENDING))
+    nations = with_mongo_retry(
+        lambda: list(db.find().sort("name", ASCENDING)),
+        description="fetch all nations",
+    )
     count = 0
 
     for nation in nations:
@@ -4187,7 +4211,10 @@ def era_artifact_loss_tick(pending=None):
     character_schema, character_db = get_data_on_category("characters")
     _, artifact_db = get_data_on_category("artifacts")
 
-    characters = list(character_db.find().sort("name", ASCENDING))
+    characters = with_mongo_retry(
+        lambda: list(character_db.find().sort("name", ASCENDING)),
+        description="fetch all characters",
+    )
     losses_log = ""
 
     for character in characters:
@@ -4243,7 +4270,10 @@ def era_character_aging_tick(pending=None):
     age_increase = sum(random.randint(1, 4) for _ in range(5))
     result = f"Era Character Aging: all characters age by {age_increase} sessions.\n"
 
-    characters = list(character_db.find().sort("name", ASCENDING))
+    characters = with_mongo_retry(
+        lambda: list(character_db.find().sort("name", ASCENDING)),
+        description="fetch all characters",
+    )
 
     for character in characters:
         if character.get("health_status", "Healthy") == "Dead":
@@ -4590,7 +4620,10 @@ def era_tick(form_data):
 
     if collect_nation_data:
         nation_schema, nation_db = get_data_on_category("nations")
-        old_nations = list(nation_db.find().sort("name", ASCENDING))
+        old_nations = with_mongo_retry(
+            lambda: list(nation_db.find().sort("name", ASCENDING)),
+            description="fetch all nations",
+        )
         new_nations = []
         for nation in old_nations:
             if nation:
@@ -4624,7 +4657,10 @@ def era_tick(form_data):
 
     if collect_character_data:
         character_schema, character_db = get_data_on_category("characters")
-        old_characters = list(character_db.find().sort("name", ASCENDING))
+        old_characters = with_mongo_retry(
+            lambda: list(character_db.find().sort("name", ASCENDING)),
+            description="fetch all characters",
+        )
         new_characters = []
         for character in old_characters:
             if character:
