@@ -546,6 +546,39 @@ class TestCommitPendingChangesMergesDuplicates:
         assert final["modifiers"] == [{"_id": "death", "v": -1}]
 
 
+class TestCommitChunkSize:
+    """Regression test for a real production incident (2026-09-17): the
+    first nations commit chunk (30 items, the size in effect at the time)
+    hit MongoDB's 60-second transaction limit (NoSuchTransaction/
+    TransientTransactionError) three times in a row, each after
+    with_transaction's own ~2-3 minute internal retry budget ran out —
+    _COMMIT_CHUNK_SIZE was lowered from 30 to 12 for more headroom. This
+    pins the new value and confirms _commit_pending_changes actually
+    splits a same-data-type group at that boundary, not some other size."""
+
+    def test_chunk_size_is_12(self):
+        assert th._COMMIT_CHUNK_SIZE == 12
+
+    def test_more_than_one_chunk_size_worth_of_items_splits_into_multiple_chunks(self, mock_mongo):
+        mock_mongo.db.global_modifiers.insert_one({"name": "global_modifiers", "session_counter": 1})
+        pending = [
+            {
+                "data_type": "nations", "item_id": ObjectId(), "change_type": "Update",
+                "before_data": {}, "after_data": {}, "reason": f"Tick Update for nation {i}",
+                "already_calculated": True,
+            }
+            for i in range(th._COMMIT_CHUNK_SIZE + 1)
+        ]
+
+        with patch.object(th, "mongo", mock_mongo), \
+             patch.object(th, "_commit_chunk_with_retry") as commit_spy:
+            th._commit_pending_changes(pending)
+
+        assert commit_spy.call_count == 2, "expected a full chunk plus a 1-item remainder chunk"
+        chunk_sizes = sorted(len(call.args[0]) for call in commit_spy.call_args_list)
+        assert chunk_sizes == [1, th._COMMIT_CHUNK_SIZE]
+
+
 # ---------------------------------------------------------------------------
 # generate_ai_character: no read-back needed for the new character's id
 # ---------------------------------------------------------------------------

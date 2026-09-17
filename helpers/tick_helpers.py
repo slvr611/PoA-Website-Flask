@@ -328,7 +328,21 @@ def _merge_pending_by_entity(items):
 # items (nations) or 400+ (characters), which alone exceeds MongoDB's 60s
 # transaction limit regardless of recalculation cost. Chunking bounds the
 # worst case; see _commit_pending_changes's docstring for the trade-off.
-_COMMIT_CHUNK_SIZE = 30
+#
+# Lowered from 30 to 12 after a real production failure (2026-09-17): the
+# very first nations chunk (30 items, several with a merged "Death of X" +
+# succession change on top of the usual "Tick Update for X") hit MongoDB's
+# NoSuchTransaction/TransientTransactionError three times in a row, each
+# after with_transaction's own ~2-3 minute internal retry budget ran out —
+# well past the 0.5-0.7s/item estimate this size was originally calibrated
+# against, suggesting either elevated Atlas latency that day or per-item
+# cost creeping above the original measurement (get_dependent_objects alone
+# issues 3-4 unconditional dependency-discovery round trips per nation,
+# regardless of whether anything ends up needing recalculation). 30 items
+# left almost no margin even at the documented estimate (30 * 0.7s = 21s of
+# 60s, but real-world variance clearly exceeded that); 12 gives comfortable
+# headroom even at 2-3x the documented per-item cost.
+_COMMIT_CHUNK_SIZE = 12
 
 
 def _chunked(items, size):
