@@ -65,16 +65,17 @@ def per_x_pops(target, scaling_x=1, scaling_extra="", context=None):
 
 
 def _get_unit_defs_cache():
-    """Lazy-load and cache unit definitions for subtype filtering."""
-    if not hasattr(_get_unit_defs_cache, "_cache"):
-        db = category_data["units"]["database"]
-        _get_unit_defs_cache._cache = {
-            u["name"]: u for u in db.find(
-                {}, {"name": 1, "melee": 1, "ranged": 1, "cavalry": 1,
-                     "support": 1, "traits": 1, "_id": 0}
-            )
-        }
-    return _get_unit_defs_cache._cache
+    """Unit definitions for subtype filtering, keyed the same way
+    target.land_units/naval_units are: load_db_units() era-prefixes a unit's
+    key ("Classical Light Archers") whenever its base name ("Light Archers")
+    collides across multiple eras — a raw {name: doc} map keyed straight off
+    the units collection's own "name" field (this function's previous
+    implementation) never matches those era-prefixed keys at all, silently
+    treating every such unit as melee/non-cavalry/non-ranged/non-magical
+    regardless of its real stats. Reuses load_db_units's own request/thread
+    -scoped cache rather than caching independently here."""
+    from calculations.field_calculations import load_db_units
+    return load_db_units()
 
 
 def _count_filtered(units_dict, subtype=""):
@@ -92,14 +93,15 @@ def _count_filtered(units_dict, subtype=""):
     for unit_key, count in units_dict.items():
         if not isinstance(count, (int, float)) or count <= 0:
             continue
-        # Unit keys may be era-prefixed (e.g. "classical_swordsman"); try both
+        # unit_key is already in load_db_units's own key format — era-
+        # prefixed ("Classical Light Archers") whenever the base name
+        # collides across eras, plain otherwise — so no further lookup
+        # fallback is needed here (see _get_unit_defs_cache's docstring).
         udef = defs.get(unit_key) or {}
         is_melee = bool(udef.get("melee"))
         is_cavalry = bool(udef.get("cavalry"))
         is_ranged = bool(udef.get("ranged"))
-        is_magical = any(
-            t.lower() == "magical" for t in (udef.get("traits") or [])
-        )
+        is_magical = bool(udef.get("is_magical"))
 
         if subtype == "infantry" and is_melee and not is_cavalry:
             total += count

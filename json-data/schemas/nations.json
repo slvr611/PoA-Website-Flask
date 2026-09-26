@@ -1671,7 +1671,7 @@
         "laws": {
           "None": {},
           "Outlawed": {
-            "stability_loss_chance": -20.2
+            "stability_loss_chance": -0.2
           },
           "Servitude": {
             "karma": -2,
@@ -2137,7 +2137,7 @@
         "description": "The total number of export slots the nation has available each session, before accounting for ongoing trades",
         "calculated": true,
         "show_breakdown": true,
-        "base_value": 4
+        "base_value": 2
       },
       "import_slots": {
         "bsonType": "number",
@@ -2145,7 +2145,7 @@
         "description": "The total number of import slots the nation has available each session, before accounting for ongoing trades",
         "calculated": true,
         "show_breakdown": true,
-        "base_value": 4
+        "base_value": 2
       },
       "remaining_export_slots": {
         "bsonType": "number",

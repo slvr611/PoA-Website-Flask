@@ -65,7 +65,7 @@
 			"money": 750
 		},
 		"modifiers": {
-			"progress_slots": 1
+			"1_progress_slots": 1
 		},
 		"requirements": {
 			"reputation": ["Acceptable", "Great", "Flawless"]

@@ -838,6 +838,12 @@ def tick(form_data):
         # made for, so a pop fleeing INTO a player nation from an AI source
         # is caught too, not just fleeing out of one.
         flee_events = []
+        # Same idea for a disease spreading externally FROM the nation being
+        # processed (see nation_disease_spread_tick /
+        # _DISEASE_SPREAD_EVENT_AWARE_TICK_FUNCTIONS) — a disease spreading
+        # INTO a player nation from an AI source is caught too, not just
+        # spreading out of one.
+        disease_spread_events = []
 
         # O(1) lookup into this session's already-recalculated nations, by
         # id — for a per-nation tick function that needs to read a DIFFERENT
@@ -848,6 +854,15 @@ def tick(form_data):
         # new_nations until the commit phase at the very end of tick()).
         # See _NATIONS_BY_ID_AWARE_TICK_FUNCTIONS.
         old_nations_by_id = {str(n.get("_id", "")): n for n in old_nations}
+
+        # Captures the same world_city_coords set AI Decision Tick builds
+        # below, so it survives past this loop (where the local
+        # world_city_coords variable itself gets reset to None on every
+        # later label) for AI Market Matching Tick's post-trade decision
+        # pass to reuse — see that dispatch below for why a fresh re-fetch
+        # there wouldn't see cities this same tick's pre-trade pass already
+        # placed (deferred to pending_tiles, not yet in the database).
+        ai_world_city_coords = None
 
         for tick_function_label, tick_function in NATION_TICK_FUNCTIONS.items():
             run_key = f"run_{tick_function_label}"
@@ -868,6 +883,8 @@ def tick(form_data):
                 # see it immediately even though the real DB write is
                 # deferred to pending_tiles until the tick's commit phase.
                 world_city_coords = _fetch_world_city_coords() if is_ai_tick else None
+                if is_ai_tick:
+                    ai_world_city_coords = world_city_coords
                 try:
                     for i in range(len(old_nations)):
                         _log_tick_item_progress(
@@ -884,17 +901,25 @@ def tick(form_data):
                         if tick_function is not modifier_decay_tick and _undead_horde_tick_blocked(old_nations[i], tick_function_label):
                             continue
                         _flee_events_before = len(flee_events)
+                        _disease_spread_events_before = len(disease_spread_events)
                         result = _dispatch(
                             tick_function, pending, old_nations[i], new_nations[i], nation_schema,
                             pending_tiles=pending_tiles, flee_events=flee_events, world_city_coords=world_city_coords,
-                            nations_by_id=old_nations_by_id,
+                            nations_by_id=old_nations_by_id, disease_spread_events=disease_spread_events,
                         )
                         fled_to_a_player_nation = any(
                             e.get("to_temperament") == "Player" for e in flee_events[_flee_events_before:]
                         )
+                        disease_spread_to_a_player_nation = any(
+                            e.get("to_temperament") == "Player" for e in disease_spread_events[_disease_spread_events_before:]
+                        )
                         if tick_function_label in _EXCLUDED_FROM_PLAYER_SUMMARY_TICK_LABELS:
                             pass
-                        elif old_nations[i].get("temperament", "None") == "Player" or fled_to_a_player_nation:
+                        elif (
+                            old_nations[i].get("temperament", "None") == "Player"
+                            or fled_to_a_player_nation
+                            or disease_spread_to_a_player_nation
+                        ):
                             player_tick_summary += result
                         elif tick_function_label in VASSAL_SPECIFIC_NATION_TICK_FUNCTIONS and old_nations[i].get("overlord", "None") != "None":
                             overlord = old_nations[i].get("overlord", "None")
@@ -915,7 +940,10 @@ def tick(form_data):
         for tick_function_label, tick_function in NATION_CROSS_TICK_FUNCTIONS.items():
             if f"run_{tick_function_label}" in form_data:
                 _log_tick_step(tick_function_label)
-                result = _dispatch(tick_function, pending, old_nations, new_nations, nation_schema, pending_tiles=pending_tiles)
+                result = _dispatch(
+                    tick_function, pending, old_nations, new_nations, nation_schema,
+                    pending_tiles=pending_tiles, world_city_coords=ai_world_city_coords,
+                )
                 full_tick_summary += result
 
 
@@ -2937,7 +2965,7 @@ def pop_loss_tick(old_nation, new_nation, schema):
         result += f"{old_nation.get('name', 'Unknown')} has lost a pop.\n"
     return result
 
-def nation_disease_spread_tick(old_nation, new_nation, schema):
+def nation_disease_spread_tick(old_nation, new_nation, schema, disease_spread_events=None):
     """Per-nation disease spread + stage escalation.
 
     For each disease among the nation's pops (a discovered cure does NOT stop
@@ -2950,7 +2978,18 @@ def nation_disease_spread_tick(old_nation, new_nation, schema):
     nations twice as likely). Capped at the infectivity's max share of pops.
     Then checks for stage escalation — newly reached stages can trigger an
     automatic civil war that splits the infected pops into a breakaway nation.
-    """
+
+    `disease_spread_events`: optional list this appends
+    {"from_id", "to_id", "to_temperament"} to whenever the disease spreads
+    EXTERNALLY to another nation — mirrors pop_flee_tick's flee_events. This
+    tick function is dispatched once per SOURCE nation (old_nation), so
+    without this, whether the result text lands in player_tick_summary
+    depended only on the source nation's own temperament — a disease
+    spreading from an AI nation onto a player nation's pop was silently
+    dropped from that player's summary (confirmed live: "Vampirism has
+    spread from The United Valley to Taika" — Taika is a Player nation,
+    The United Valley is not — appeared only in full_tick_summary, never
+    in player_tick_summary)."""
     from helpers.disease_helpers import (
         get_nation_infection_counts, resolve_diseases, get_infectivity_settings,
         active_stage_index, get_stage, infect_random_pops, execute_disease_civil_war,
@@ -3013,6 +3052,12 @@ def nation_disease_spread_tick(old_nation, new_nation, schema):
                     result += f"{disease_name} has spread to another pop in {nation_name} ({infected}/{pop_count} infected).\n"
                     cur_stage_idx = active_stage_index(disease, infected, pop_count)
                 elif succeeded:
+                    if disease_spread_events is not None and ext_target:
+                        disease_spread_events.append({
+                            "from_id": nation_id,
+                            "to_id": str(ext_target.get("_id", "")),
+                            "to_temperament": ext_target.get("temperament", "None"),
+                        })
                     result += (
                         f"{disease_name} has spread from {nation_name} to "
                         f"{ext_target.get('name', 'a nearby nation')}.\n"
@@ -4568,6 +4613,16 @@ _FLEE_EVENT_AWARE_TICK_FUNCTIONS = {
     pop_flee_tick,
 }
 
+# Same reasoning as _FLEE_EVENT_AWARE_TICK_FUNCTIONS, for a disease spreading
+# externally FROM the nation being processed TO some other nation within 5
+# hexes (see nation_disease_spread_tick) — without this, whether the result
+# text reached player_tick_summary depended only on the SOURCE nation's
+# temperament, silently dropping e.g. "Vampirism has spread from <AI nation>
+# to <player nation>" from that player's own summary.
+_DISEASE_SPREAD_EVENT_AWARE_TICK_FUNCTIONS = {
+    nation_disease_spread_tick,
+}
+
 # Separate registry, same reasoning, for functions that choose NEW city
 # tiles and need to see every city on the map (any owner) to respect
 # ai_decision_helpers.MIN_CITY_TILE_DISTANCE — see tick()'s "AI Decision
@@ -4575,6 +4630,7 @@ _FLEE_EVENT_AWARE_TICK_FUNCTIONS = {
 # built once per tick run instead of once per nation.
 _WORLD_CITY_COORDS_AWARE_TICK_FUNCTIONS = {
     ai_decision_tick,
+    ai_market_matching_tick,
 }
 
 # Separate registry, same reasoning, for a per-nation tick function that
@@ -4595,11 +4651,11 @@ _NATIONS_BY_ID_AWARE_TICK_FUNCTIONS = {
 
 
 def _dispatch(tick_function, pending, *args, pending_tiles=None, flee_events=None,
-               world_city_coords=None, nations_by_id=None):
+               world_city_coords=None, nations_by_id=None, disease_spread_events=None):
     """Call a registered tick function, binding `pending`/`pending_tiles`/
-    `flee_events`/`world_city_coords`/`nations_by_id` in only if that
-    function is registered for them — every other tick function's call
-    signature is completely unaffected."""
+    `flee_events`/`world_city_coords`/`nations_by_id`/`disease_spread_events`
+    in only if that function is registered for them — every other tick
+    function's call signature is completely unaffected."""
     kwargs = {}
     if tick_function in _PENDING_AWARE_TICK_FUNCTIONS:
         kwargs["pending"] = pending
@@ -4611,6 +4667,8 @@ def _dispatch(tick_function, pending, *args, pending_tiles=None, flee_events=Non
         kwargs["world_city_coords"] = world_city_coords
     if tick_function in _NATIONS_BY_ID_AWARE_TICK_FUNCTIONS:
         kwargs["nations_by_id"] = nations_by_id
+    if tick_function in _DISEASE_SPREAD_EVENT_AWARE_TICK_FUNCTIONS:
+        kwargs["disease_spread_events"] = disease_spread_events
     if kwargs:
         return functools.partial(tick_function, **kwargs)(*args)
     return tick_function(*args)

@@ -422,7 +422,7 @@
         "extra_fields": [
             {"key": "resource", "label": "Resource", "source": "all_resources"}
         ],
-        "applicable_to": ["nation"]
+        "applicable_to": ["nation", "merchant"]
     },
     "route_capacity": {
         "name": "Route Capacity",

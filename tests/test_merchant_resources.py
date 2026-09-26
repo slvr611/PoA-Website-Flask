@@ -13,13 +13,20 @@ Regression tests for the merchant resource-production/capacity bug fixes:
   modifier grants.
 - Merchants now have a resource_capacity field (compute_merchant_resource_storage_capacity)
   mirroring the nation/market capacity pattern.
+- The "resource_storage_capacity" modifier_type (json-data/modifier_types.json)
+  was applicable_to nation-only, even though compute_merchant_resource_
+  storage_capacity already read the exact same {resource}_storage_capacity /
+  flat resource_storage_capacity keys — the calculation engine was fully
+  ready, but admins had no way to attach the modifier to a merchant's own
+  modifiers array via the UI (its applicable_to filter excluded "merchant").
+  Fixed by adding "merchant" to applicable_to.
 """
-from app_core import json_data
+from app_core import app, category_data, json_data
 from calculations.compute_functions import (
     compute_resource_production,
     compute_merchant_resource_storage_capacity,
 )
-from calculations.field_calculations import calculate_title_modifiers
+from calculations.field_calculations import calculate_title_modifiers, calculate_all_fields
 
 
 class TestTitleModifierKeyFix:
@@ -93,3 +100,31 @@ class TestMerchantResourceCapacity:
             "resource_capacity", {}, 0, {}, {"iron_storage_capacity": 5}
         )
         assert capacity["iron"] == 15
+
+
+class TestResourceStorageCapacityModifierApplicableToMerchant:
+    def test_modifier_type_lists_merchant_as_applicable(self):
+        assert "merchant" in json_data["modifier_types"]["resource_storage_capacity"]["applicable_to"]
+        assert "nation" in json_data["modifier_types"]["resource_storage_capacity"]["applicable_to"]
+
+    def test_merchant_self_scoped_modifier_increases_capacity_end_to_end(self):
+        """The full admin-editor path: a modifier_type/scope entry on a
+        merchant's own modifiers array, run through calculate_all_fields —
+        not just calling compute_merchant_resource_storage_capacity
+        directly with a pre-built totals dict."""
+        schema = category_data["merchants"]["schema"]
+        merchant = {
+            "name": "Test Merchant",
+            "modifiers": [
+                {"modifier_type": "resource_storage_capacity", "resource": "gold",
+                 "value": 25, "scope": "merchant_self", "scaling": "flat"},
+            ],
+        }
+        with app.app_context():
+            calc = calculate_all_fields(dict(merchant), schema, "merchant")
+
+        base_gold = compute_merchant_resource_storage_capacity("resource_capacity", {}, 0, {}, {})["gold"]
+        assert calc["resource_capacity"]["gold"] == base_gold + 25
+        # An unrelated resource must be untouched.
+        base_food = compute_merchant_resource_storage_capacity("resource_capacity", {}, 0, {}, {})["food"]
+        assert calc["resource_capacity"]["food"] == base_food

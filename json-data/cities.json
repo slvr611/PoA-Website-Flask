@@ -14,7 +14,7 @@
 	"agropolis": {
 		"display_name": "Agropolis",
 		"requirements": {
-			"tech": "agricultural_estates"
+			"tech": "agricultural_estate"
 		},
 		"cost": {
 			"wood": 15,

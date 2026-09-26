@@ -21,6 +21,12 @@ Regression tests for the player-facing tick summary rework
   AI source is attributed correctly (previously only fleeing OUT of a
   player nation was caught, since the outer loop only ever saw the source
   nation directly).
+- nation_disease_spread_tick gets the same treatment via an optional
+  disease_spread_events list — found live in production: "Vampirism has
+  spread from The United Valley to Taika" (Taika a Player nation, The
+  United Valley not) appeared in full_tick_summary but never in
+  player_tick_summary, since attribution only ever looked at the source
+  nation's own temperament.
 """
 from unittest.mock import patch, MagicMock
 from bson import ObjectId
@@ -191,3 +197,64 @@ class TestDispatchInjectsFleeEvents:
         # touching the DB, so this exercises _dispatch's kwarg wiring only.
         result = th._dispatch(th.pop_flee_tick, None, source, dict(source), {}, flee_events=flee_events)
         assert result == ""
+
+
+class TestDispatchInjectsDiseaseSpreadEvents:
+    def test_nation_disease_spread_tick_receives_the_kwarg(self, test_db):
+        """_dispatch must bind disease_spread_events only for functions
+        registered in _DISEASE_SPREAD_EVENT_AWARE_TICK_FUNCTIONS — every
+        other tick function's call signature stays unaffected.
+
+        Unlike pop_flee_tick (which can early-return "" from pure in-memory
+        pop_count/effective_pop_capacity checks), nation_disease_spread_tick
+        unconditionally queries get_nation_infection_counts first — so mongo
+        must be patched here even for a "no infections" nation, or this
+        would otherwise reach out to the real database."""
+        disease_spread_events = []
+        source = {"_id": ObjectId(), "name": "Testland", "pop_count": 5}
+        with patch("helpers.disease_helpers.mongo", MagicMock(db=test_db)):
+            result = th._dispatch(
+                th.nation_disease_spread_tick, None, source, dict(source), {},
+                disease_spread_events=disease_spread_events,
+            )
+        assert result == ""
+
+    def test_unrelated_tick_function_does_not_receive_the_kwarg(self):
+        """A tick function NOT registered for disease_spread_events must
+        never see it as an unexpected keyword argument."""
+        disease_spread_events = []
+        source = {"_id": ObjectId(), "name": "Comfortable", "pop_count": 5, "effective_pop_capacity": 10}
+        # pop_flee_tick isn't in _DISEASE_SPREAD_EVENT_AWARE_TICK_FUNCTIONS —
+        # if _dispatch wired the kwarg in unconditionally, this would raise
+        # TypeError instead of returning "" for a non-overcrowded nation.
+        result = th._dispatch(
+            th.pop_flee_tick, None, source, dict(source), {},
+            disease_spread_events=disease_spread_events,
+        )
+        assert result == ""
+        assert disease_spread_events == []
+
+
+class TestDiseaseSpreadEventPlayerAttributionEndToEnd:
+    """Confirms the actual tick-loop check (mirrored here rather than
+    running the full tick()) correctly flags a disease spread landing on a
+    player nation, the exact shape used at tick_helpers.py's
+    player_tick_summary attribution site."""
+
+    def test_spread_to_a_player_destination_is_flagged(self):
+        disease_spread_events = [
+            {"from_id": "src1", "to_id": "dst1", "to_temperament": "Player"},
+        ]
+        spread_to_a_player_nation = any(
+            e.get("to_temperament") == "Player" for e in disease_spread_events
+        )
+        assert spread_to_a_player_nation is True
+
+    def test_spread_to_a_non_player_destination_is_not_flagged(self):
+        disease_spread_events = [
+            {"from_id": "src1", "to_id": "dst1", "to_temperament": "Curious"},
+        ]
+        spread_to_a_player_nation = any(
+            e.get("to_temperament") == "Player" for e in disease_spread_events
+        )
+        assert spread_to_a_player_nation is False

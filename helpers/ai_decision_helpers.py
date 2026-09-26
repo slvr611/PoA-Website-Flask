@@ -4782,6 +4782,34 @@ def ai_decision_tick(old_nation, new_nation, schema, pending_tiles=None, world_c
     Main per-nation AI tick — goal-first architecture.
     Must run AFTER nation_job_cleanup_tick in NATION_TICK_FUNCTIONS.
 
+    Thin wrapper around _run_ai_decision_pass — see that function for the
+    actual flow. Split out so the exact same decision logic can run a
+    second time, post-trade, from ai_market_matching_tick (see
+    _run_ai_decision_pass's own docstring)."""
+    if old_nation.get("temperament", "Player") == "Player":
+        return ""
+    return _run_ai_decision_pass(old_nation, new_nation, schema, pending_tiles=pending_tiles,
+                                  world_city_coords=world_city_coords)
+
+
+def _run_ai_decision_pass(old_nation, new_nation, schema, pending_tiles=None,
+                           world_city_coords=None, pass_label="AI decision"):
+    """
+    Goal-first AI decision pipeline: goal selection, multi-district/city
+    building, and full job reassignment. Called twice per tick for an AI
+    nation that trades — once as ai_decision_tick (pre-trade, whatever
+    resources the nation already had), once again from
+    ai_market_matching_tick after AI Market Matching Tick resolves buy/sell
+    orders (post-trade, so a nation that just traded for what it needed can
+    actually build with it the same session instead of waiting a session).
+
+    Safe to call a second time with no special-casing: the "overlay
+    post-income stockpiles from new_nation" step below already reads
+    new_nation's CURRENT resource_storage/money at call time, so a second
+    call after trades naturally sees the post-trade amounts. jobs/ai_state
+    are fully recomputed and overwritten each call (never merged), so the
+    later call's decision cleanly supersedes the earlier one's.
+
     pending_tiles: forwarded to evaluate_goal_district so any district/city
     tile claim this nation makes is deferred to the tick's commit phase
     instead of written immediately — see _queue_tile_write.
@@ -4791,7 +4819,13 @@ def ai_decision_tick(old_nation, new_nation, schema, pending_tiles=None, world_c
     nation processed in the same tick run so a new city always respects the
     minimum distance rule against the whole world, not just its own
     territory, without querying per nation. See tick_helpers.tick()'s "AI
-    Decision Tick" dispatch for where this is built once per tick.
+    Decision Tick" dispatch for where this is built once per tick, and its
+    "AI Market Matching Tick" dispatch for how the same set survives to be
+    reused for the post-trade call.
+
+    pass_label: prefixes the returned per-nation summary line — "AI
+    decision" for the normal pre-trade call, "AI decision (post-trade)" for
+    the post-trade one — so tick summaries/logs can tell the two apart.
 
     Flow:
       1. Evaluate state, personality, prices
@@ -4803,9 +4837,6 @@ def ai_decision_tick(old_nation, new_nation, schema, pending_tiles=None, world_c
       7. Goal-aware trade desires
       8. Persist ai_state
     """
-    if old_nation.get("temperament", "Player") == "Player":
-        return ""
-
     log = []
 
     try:
@@ -5022,134 +5053,13 @@ def ai_decision_tick(old_nation, new_nation, schema, pending_tiles=None, world_c
         old_nation.pop("_legal_placement_cache", None)
 
     name = old_nation.get("name", "Unknown")
-    return f"{name}: AI decision ({len(log)} actions)\n"
+    return f"{name}: {pass_label} ({len(log)} actions)\n"
 
 
 # ---------------------------------------------------------------------------
 # Mid-session AI market matching (NATION_CROSS_TICK_FUNCTION)
 # ---------------------------------------------------------------------------
 
-
-def _post_trade_build_and_rejob(old_nation, new_nation, log_lines, pending_tiles=None):
-    """After trade matching: if the nation's planned district is now affordable
-    with newly received resources, build it and assign newly idle pops.
-
-    pending_tiles: forwarded to _claim_district_tile so the claim is
-    deferred to the tick's commit phase — see _queue_tile_write. None (the
-    default) makes it write immediately instead, which is correct for
-    run_ai_market_matching_standalone's own already-immediate-commit design
-    (see its call site below) — only the tick-driven ai_market_matching_tick
-    call passes a real list.
-
-    Returns True if a district was built this call.
-    """
-    ai_st = new_nation.get("ai_state") or {}
-    plan = ai_st.get("planned_district")
-    if not plan or not plan.get("key"):
-        return False
-
-    cost = plan.get("cost", {})
-    storage = new_nation.get("resource_storage", {})
-    money = new_nation.get("money", old_nation.get("money", 0))
-
-    if not (money >= cost.get("money", 0) and
-            all(storage.get(r, 0) >= amt for r, amt in cost.items() if r != "money")):
-        return False
-
-    def_key = plan["key"]
-    nation_name = old_nation.get("name", "")
-
-    import uuid
-    district_id = uuid.uuid4().hex[:8]
-    coord, node_key = None, ""
-    dd = None
-    # Nomads build the district on the nation doc only — never claim a map tile.
-    if plan.get("source", "db") == "db" and not _nation_is_nomadic(old_nation):
-        dd = mongo.db.district_defs.find_one({"key": def_key})
-        if dd:
-            from calculations.field_calculations import _compute_legal_placement
-            old_nation.pop("_legal_placement_cache", None)
-            legal = _compute_legal_placement(old_nation)
-            stored_weights = ai_st.get("diagnostic", {}).get("need_weights", {})
-            coord, _ = _pick_district_tile(legal, dd, def_key, stored_weights, {})
-            if coord:
-                node_key = _claim_district_tile(
-                    nation_name, district_id, def_key,
-                    dd.get("display_name", def_key), coord,
-                    pending_tiles=pending_tiles,
-                )
-
-    new_entry = {"_id": district_id, "def_key": def_key, "node": node_key, "upgrades": []}
-    districts = list(new_nation.get("districts", old_nation.get("districts", [])))
-    _insert_filling_empty_slot(districts, new_entry, lambda d: not d.get("def_key") and not d.get("type"))
-    new_nation["districts"] = districts
-
-    for r, amt in cost.items():
-        if r == "money":
-            new_nation["money"] = new_nation.get("money", old_nation.get("money", 0)) - amt
-        else:
-            storage[r] = storage.get(r, 0) - amt
-    new_nation["resource_storage"] = storage
-
-    ai_st["planned_district"] = None
-
-    coord_str = f" at ({coord[0]},{coord[1]})" if coord else ""
-    node_str = f" — node: {node_key}" if node_key else ""
-    log_lines.append(f"{nation_name}: post-trade built {plan.get('display_name', def_key)}{coord_str}{node_str}")
-
-    # Re-evaluate idle pops: assign any pops freed up after the new district
-    # may have unlocked better jobs.
-    try:
-        total_pops = new_nation.get("pops", old_nation.get("pops", 0))
-        assigned_pops = sum(v for v in new_nation.get("jobs", {}).values() if isinstance(v, (int, float)))
-        idle_pops = max(0, total_pops - assigned_pops)
-        if idle_pops <= 0:
-            return True
-
-        # Build a merged state using old computed fields + new resources/districts
-        merged = dict(old_nation)
-        merged["districts"] = new_nation.get("districts", [])
-        merged["resource_storage"] = storage
-        merged["money"] = new_nation.get("money", 0)
-
-        state = evaluate_nation_state(merged)
-
-        goal_data = ai_st.get("strategic_goal") or {}
-        if not goal_data:
-            return True
-
-        prices = get_stored_market_prices(old_nation)
-
-        # projected_net: base net_production + contributions from already-assigned
-        # jobs, with the first units of production filling any clamp-absorbed
-        # malus (e.g. Savior's -1) before counting.
-        projected_net = dict(state["net_production"])
-        clamp_absorbed = dict(state.get("production_clamp_absorbed") or {})
-        all_jobs_data = json_data.get("jobs", {})
-        for jk, cnt in new_nation.get("jobs", {}).items():
-            jd = state["available_jobs"].get(jk) or all_jobs_data.get(jk, {})
-            for r, amt in jd.get("production", {}).items():
-                if isinstance(amt, (int, float)):
-                    projected_net[r] = projected_net.get(r, 0) + _consume_clamp_absorbed(clamp_absorbed, r, amt * cnt)
-            for r, amt in jd.get("upkeep", {}).items():
-                if isinstance(amt, (int, float)):
-                    projected_net[r] = projected_net.get(r, 0) - amt * cnt
-        state["production_clamp_absorbed_remaining"] = clamp_absorbed
-
-        new_assignments, job_log, _ = assign_goal_jobs(
-            state, goal_data, idle_pops, projected_net, None, prices
-        )
-        if new_assignments:
-            existing_jobs = dict(new_nation.get("jobs", {}))
-            for jk, cnt in new_assignments.items():
-                existing_jobs[jk] = existing_jobs.get(jk, 0) + cnt
-            new_nation["jobs"] = existing_jobs
-            for entry in job_log:
-                log_lines.append(f"{nation_name}: post-trade {entry}")
-    except Exception as e:
-        log_lines.append(f"{nation_name}: post-trade job re-eval error: {e}")
-
-    return True
 
 AI_MATCH_MAX_DELAY = 1  # "single turn of trade distance": delay ≤ 1
 
@@ -5182,9 +5092,11 @@ def _run_ai_market_matching(old_nations, new_nations, log_lines):
     """
     Core matching logic for AI market matching.
 
-    Mutates new_nations in place.  Returns a set of nation indices (into
-    new_nations) that received buy-order resources so the caller can run
-    post-trade district purchase for them.
+    Mutates new_nations in place. Returns (buyers_who_received,
+    sellers_who_sold) — two sets of nation indices (into new_nations) — so
+    the caller can run a post-trade AI decision pass for either side: a
+    buyer gained resources, a seller gained money, and either could now
+    afford something it couldn't before.
 
     Both old_nations and new_nations must be parallel lists of the same
     length and in the same order.
@@ -5195,6 +5107,7 @@ def _run_ai_market_matching(old_nations, new_nations, log_lines):
     )
 
     buyers_who_received = set()
+    sellers_who_sold     = set()
     old_nation_by_idx   = {i: n for i, n in enumerate(old_nations)}
 
     # --- Step 1: Collect all AI buy and sell orders ---
@@ -5222,7 +5135,7 @@ def _run_ai_market_matching(old_nations, new_nations, log_lines):
                 sell_orders.append(entry)
 
     if not buy_orders or not sell_orders:
-        return buyers_who_received
+        return buyers_who_received, sellers_who_sold
 
     # --- Step 2: Precompute trade distances (one Dijkstra per buyer nation) ---
     buyer_names      = list({b["nation_name"] for b in buy_orders})
@@ -5307,18 +5220,20 @@ def _run_ai_market_matching(old_nations, new_nations, log_lines):
             seller["resource_desires"][sell["desire_idx"]]["quantity"] = sell["quantity"]
 
             buyers_who_received.add(buy["nation_idx"])
+            sellers_who_sold.add(sell["nation_idx"])
             log_lines.append(
                 f"{buyer_name} bought {qty}× {resource} from {seller_name} "
                 f"@ {price} (delay {delay})"
             )
 
-    return buyers_who_received
+    return buyers_who_received, sellers_who_sold
 
 
 def run_ai_market_matching_standalone(app_ctx=None):
     """
     Self-contained AI market matching: loads nation data fresh from the DB,
-    runs all matching, calls post-trade district purchase, then commits every
+    runs all matching, runs a full post-trade AI decision pass for every
+    buyer/seller (see _run_post_trade_decision_pass), then commits every
     changed nation directly via system_request_change / system_approve_change.
 
     Designed to be called from a background thread so it never blocks an HTTP
@@ -5351,37 +5266,32 @@ def run_ai_market_matching_standalone(app_ctx=None):
         log_lines = []
 
         try:
-            buyers_who_received = _run_ai_market_matching(old_nations, new_nations, log_lines)
+            buyers_who_received, sellers_who_sold = _run_ai_market_matching(old_nations, new_nations, log_lines)
         except Exception as e:
             log_lines.append(f"AI market matching error: {e}")
-            buyers_who_received = set()
+            buyers_who_received, sellers_who_sold = set(), set()
 
-        # Post-trade district purchase for each buyer that received resources.
-        for bidx in buyers_who_received:
+        # Post-trade AI decision pass for every buyer or seller — a buyer
+        # gained resources, a seller gained money, either could now afford
+        # to build/reassign jobs. recalculate=False: system_approve_change
+        # below always recalculates on save (no skip_recalculation passed),
+        # so doing it again here would be redundant.
+        for idx in buyers_who_received | sellers_who_sold:
             try:
-                old_n = old_nations[bidx] if bidx < len(old_nations) else None
-                new_n = new_nations[bidx] if bidx < len(new_nations) else None
+                old_n = old_nations[idx] if idx < len(old_nations) else None
+                new_n = new_nations[idx] if idx < len(new_nations) else None
                 if old_n is None or new_n is None:
                     continue
-                _post_trade_build_and_rejob(old_n, new_n, log_lines)
+                _run_post_trade_decision_pass(old_n, new_n, nation_schema, log_lines, recalculate=False)
             except Exception as e:
-                name = (new_nations[bidx].get("name", "?")
-                        if bidx < len(new_nations) else "?")
-                log_lines.append(f"{name}: post-trade district error: {e}")
+                name = (new_nations[idx].get("name", "?")
+                        if idx < len(new_nations) else "?")
+                log_lines.append(f"{name}: post-trade decision error: {e}")
 
         # Determine which nations actually changed and save them directly to DB.
         # Only save nations that were buyers, sellers, or had a post-trade build
         # so we don't touch untouched nation documents.
-        changed_indices = set(buyers_who_received)
-        # Also include sellers (their storage and money changed).
-        for idx, (old_n, new_n) in enumerate(zip(old_nations, new_nations)):
-            if idx in changed_indices:
-                continue
-            # Quick check: money or resource_storage changed.
-            if (new_n.get("money") != old_n.get("money") or
-                    new_n.get("resource_storage") != old_n.get("resource_storage") or
-                    new_n.get("resource_desires") != old_n.get("resource_desires")):
-                changed_indices.add(idx)
+        changed_indices = set(buyers_who_received) | set(sellers_who_sold)
 
         saved = 0
         for idx in changed_indices:
@@ -5413,15 +5323,70 @@ def run_ai_market_matching_standalone(app_ctx=None):
             ctx.pop()
 
 
-def ai_market_matching_tick(old_nations, new_nations, schema, pending_tiles=None):
+def _run_post_trade_decision_pass(old_nation, new_nation, schema, log_lines,
+                                   pending_tiles=None, world_city_coords=None,
+                                   recalculate=True):
+    """Re-run the full AI decision pipeline for one nation after trades
+    resolve, then recalculate its derived fields for real if (and only if)
+    the pass actually changed jobs/districts/cities — a trade alone
+    (storage/money changing) doesn't affect resource_production/
+    consumption, so nations that traded but had nothing new to do with the
+    proceeds skip the ~8s/nation calculate_all_fields cost.
+
+    recalculate: set False when the caller's own save path already
+    recalculates unconditionally (run_ai_market_matching_standalone's
+    system_approve_change call doesn't pass skip_recalculation, so it
+    always recomputes on save) — avoids doing that work twice. The
+    tick-integrated path needs it here instead, since its commit phase
+    always uses already_calculated=True and would otherwise skip
+    recalculation entirely for a nation this pass changed.
+
+    Mutates new_nation in place. Appends to log_lines rather than
+    returning, matching this module's other post-trade helpers."""
+    jobs_before = dict(new_nation.get("jobs") or {})
+    districts_before = list(new_nation.get("districts") or [])
+    cities_before = list(new_nation.get("cities") or [])
+
+    log_lines.append(_run_ai_decision_pass(
+        old_nation, new_nation, schema, pending_tiles=pending_tiles,
+        world_city_coords=world_city_coords, pass_label="AI decision (post-trade)",
+    ).rstrip("\n"))
+
+    if not recalculate:
+        return
+
+    changed = (
+        new_nation.get("jobs") != jobs_before
+        or new_nation.get("districts") != districts_before
+        or new_nation.get("cities") != cities_before
+    )
+    if changed:
+        from calculations.field_calculations import calculate_all_fields
+        new_nation.update(calculate_all_fields(new_nation, schema, "nation"))
+
+
+def ai_market_matching_tick(old_nations, new_nations, schema, pending_tiles=None, world_city_coords=None):
     """
     Tick-system entry point for AI market matching.  Operates on the
     already-loaded old_nations / new_nations lists provided by the tick
     infrastructure (changes are persisted by the tick's batch save loop).
 
-    pending_tiles: forwarded to _post_trade_build_and_rejob so any post-trade
-    district claim is deferred to the tick's commit phase — see
-    _queue_tile_write.
+    After trades resolve, every nation that bought OR sold something gets a
+    full second AI decision pass (_run_post_trade_decision_pass) — a buyer
+    gained resources, a seller gained money, and either could now afford to
+    build/reassign jobs it couldn't before. This is deliberately a full
+    second decision round, not just a check against the one district
+    already planned pre-trade — see _run_ai_decision_pass's docstring.
+
+    pending_tiles: forwarded to the post-trade decision pass so any
+    resulting district/city claim is deferred to the tick's commit phase —
+    see _queue_tile_write.
+
+    world_city_coords: forwarded to the post-trade decision pass — the same
+    set tick_helpers.tick()'s "AI Decision Tick" dispatch built and mutated
+    in place for the pre-trade pass, so a post-trade city still respects
+    the minimum distance rule against cities placed earlier this same tick
+    (which aren't in the database yet — see _run_ai_decision_pass).
 
     For standalone / async use outside the tick system call
     run_ai_market_matching_standalone() instead — it loads its own data and
@@ -5430,22 +5395,25 @@ def ai_market_matching_tick(old_nations, new_nations, schema, pending_tiles=None
     """
     log_lines = []
     try:
-        buyers_who_received = _run_ai_market_matching(old_nations, new_nations, log_lines)
+        buyers_who_received, sellers_who_sold = _run_ai_market_matching(old_nations, new_nations, log_lines)
     except Exception as e:
         log_lines.append(f"AI market matching error: {e}")
-        buyers_who_received = set()
+        buyers_who_received, sellers_who_sold = set(), set()
 
     old_nation_by_idx = {i: n for i, n in enumerate(old_nations)}
-    for bidx in buyers_who_received:
+    for idx in buyers_who_received | sellers_who_sold:
         try:
-            old_n = old_nation_by_idx.get(bidx)
-            new_n = new_nations[bidx] if bidx < len(new_nations) else None
+            old_n = old_nation_by_idx.get(idx)
+            new_n = new_nations[idx] if idx < len(new_nations) else None
             if old_n is None or new_n is None:
                 continue
-            _post_trade_build_and_rejob(old_n, new_n, log_lines, pending_tiles=pending_tiles)
+            _run_post_trade_decision_pass(
+                old_n, new_n, schema, log_lines,
+                pending_tiles=pending_tiles, world_city_coords=world_city_coords,
+            )
         except Exception as e:
-            name = (new_nations[bidx].get("name", "?")
-                    if bidx < len(new_nations) else "?")
-            log_lines.append(f"{name}: post-trade district error: {e}")
+            name = (new_nations[idx].get("name", "?")
+                    if idx < len(new_nations) else "?")
+            log_lines.append(f"{name}: post-trade decision error: {e}")
 
     return "\n".join(log_lines) + "\n" if log_lines else ""

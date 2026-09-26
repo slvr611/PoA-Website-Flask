@@ -429,6 +429,71 @@ class TestDiseaseSpreadTick:
         assert "has spread" not in result
         assert test_db["pops"].count_documents({"diseases": str(disease["_id"])}) == 5
 
+    def test_external_spread_records_a_disease_spread_event(self, patch_disease_mongo, test_db, flask_app):
+        """Regression test for the bug found live in production: "Vampirism
+        has spread from The United Valley to Taika" (Taika a Player nation,
+        The United Valley not) appeared in full_tick_summary but never in
+        player_tick_summary, because whether a disease-spread tick result
+        landed in player_tick_summary depended only on the SOURCE nation's
+        temperament — the tick loop had no way to know the spread's
+        DESTINATION was a player nation. Fixed by having
+        nation_disease_spread_tick append a {"from_id", "to_id",
+        "to_temperament"} entry to an optional disease_spread_events list
+        (mirroring pop_flee_tick's flee_events) whenever it spreads
+        externally, so tick()'s player_tick_summary attribution can check
+        the destination's temperament too — see
+        _DISEASE_SPREAD_EVENT_AWARE_TICK_FUNCTIONS."""
+        import helpers.tick_helpers as th
+        disease = _make_disease(infectivity="Low")  # 10% + 2%/pop
+        test_db["diseases"].insert_one(disease)
+        source_id = ObjectId()
+        _seed_pops(test_db, source_id, 2, disease_id=disease["_id"])
+        _seed_pops(test_db, source_id, 18)
+        old_nation = {"_id": source_id, "name": "TheUnitedValley", "pop_count": 20, "temperament": "Curious"}
+        new_nation = dict(old_nation)
+
+        target_id = test_db["nations"].insert_one(
+            {"name": "Taika", "pop_count": 5, "temperament": "Player"}
+        ).inserted_id
+        _seed_pops(test_db, target_id, 5)
+
+        disease_spread_events = []
+        # 1st roll (0.05) <= chance (0.14): attempt a spread this tick.
+        # 2nd roll (0.9) is attempt_dual_spread's internal-vs-external coin
+        # flip: 0.9 is NOT < 0.5, so internal_first=False and "external" is
+        # tried first in the ("external", "internal") order.
+        with patch("helpers.tick_helpers.mongo", patch_disease_mongo), \
+             patch("helpers.tick_helpers.random.random", side_effect=[0.05, 0.9]), \
+             patch("helpers.hex_map_helpers.get_nations_within_distance", return_value=["Taika"]):
+            result = th.nation_disease_spread_tick(
+                old_nation, new_nation, {}, disease_spread_events=disease_spread_events,
+            )
+
+        assert "has spread from TheUnitedValley to Taika" in result
+        assert test_db["pops"].count_documents(
+            {"nation": str(target_id), "diseases": str(disease["_id"])}) == 1
+        assert disease_spread_events == [{
+            "from_id": str(source_id), "to_id": str(target_id), "to_temperament": "Player",
+        }]
+
+    def test_disease_spread_events_defaults_to_none_and_is_optional(self, patch_disease_mongo, test_db, flask_app):
+        """Every existing caller (scripts, other tests) calls
+        nation_disease_spread_tick with just (old_nation, new_nation, schema)
+        — the new parameter must default safely and never be required."""
+        import helpers.tick_helpers as th
+        disease = _make_disease(infectivity="Low")
+        test_db["diseases"].insert_one(disease)
+        nation_id = ObjectId()
+        _seed_pops(test_db, nation_id, 2, disease_id=disease["_id"])
+        _seed_pops(test_db, nation_id, 18)
+        old_nation = {"_id": nation_id, "name": "Testland", "pop_count": 20}
+        new_nation = dict(old_nation)
+
+        with patch("helpers.tick_helpers.random.random", return_value=0.05):
+            result = th.nation_disease_spread_tick(old_nation, new_nation, {})
+
+        assert "has spread" in result
+
     def test_no_spread_roll_when_stage_halts(self, patch_disease_mongo, test_db, flask_app):
         import helpers.tick_helpers as th
         disease = _make_disease(stages=[{

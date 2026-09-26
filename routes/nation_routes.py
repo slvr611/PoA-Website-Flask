@@ -359,6 +359,7 @@ def nation_item(item_ref):
 
     pending_nation = None
     pending_breakdowns = None
+    phase_start = perf_counter()
     try:
         pending_changes = list(mongo.db.changes.find({
             "target": nation["_id"],
@@ -367,17 +368,51 @@ def nation_item(item_ref):
             "target_collection": "nations"
         }).sort("time_requested", 1))
         if pending_changes:
-            merged = deepcopy(nation)
-            for change in pending_changes:
-                merged = deep_merge(merged, change["after_requested_data"])
-            pending_values, pending_breakdowns = calculate_all_fields(
-                merged, schema, "nation", return_breakdowns=True
+            # This preview used to run a full, completely uncached
+            # calculate_all_fields on EVERY page view whenever any pending
+            # change existed — measured live at ~24s for a nation with two
+            # pending changes, on top of everything else the page already
+            # does (the nation's OWN breakdowns are cached; this preview
+            # never was). Cached the same way, keyed by a signature of
+            # (the nation's own last-calculated state + exactly which
+            # pending changes exist and when each was last modified) so an
+            # edited/added/withdrawn change — or a real recalculation of
+            # the nation itself — still invalidates it correctly, but an
+            # unchanged repeat view doesn't pay the cost again.
+            import hashlib
+            _bd_fingerprint = hashlib.md5(
+                json.dumps(nation.get("breakdowns", {}), sort_keys=True, default=str).encode()
+            ).hexdigest()
+            _pending_fingerprint = "|".join(
+                f"{c['_id']}:{c.get('last_modified_time')}" for c in pending_changes
             )
-            pending_nation = {**merged, **pending_values}
-            if not isinstance(pending_nation.get("jobs"), dict):
-                pending_nation["jobs"] = nation.get("jobs", {})
+            signature = f"{_bd_fingerprint}:{_pending_fingerprint}"
+
+            cached_preview = nation.get("_pending_preview_cache") or {}
+            if cached_preview.get("signature") == signature:
+                pending_nation = cached_preview.get("pending_nation")
+                pending_breakdowns = cached_preview.get("pending_breakdowns")
+            else:
+                merged = deepcopy(nation)
+                for change in pending_changes:
+                    merged = deep_merge(merged, change["after_requested_data"])
+                pending_values, pending_breakdowns = calculate_all_fields(
+                    merged, schema, "nation", return_breakdowns=True
+                )
+                pending_nation = {**merged, **pending_values}
+                if not isinstance(pending_nation.get("jobs"), dict):
+                    pending_nation["jobs"] = nation.get("jobs", {})
+                mongo.db.nations.update_one(
+                    {"_id": nation["_id"]},
+                    {"$set": {"_pending_preview_cache": {
+                        "signature": signature,
+                        "pending_nation": pending_nation,
+                        "pending_breakdowns": pending_breakdowns,
+                    }}}
+                )
     except Exception as e:
         current_app.logger.warning("Failed to compute pending nation state: %s", e)
+    timings["pending_preview_ms"] = round((perf_counter() - phase_start) * 1000, 2)
 
     # Build def lookup for DB-driven districts — batched into a single $in
     # query instead of one find_one per unique def_key (was N separate
