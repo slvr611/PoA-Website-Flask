@@ -394,12 +394,23 @@ def nation_item(item_ref):
                 pending_breakdowns = cached_preview.get("pending_breakdowns")
             else:
                 merged = deepcopy(nation)
+                # The live nation doc can itself carry a stale
+                # _pending_preview_cache from a previous computation — strip
+                # it before embedding a NEW cache built from `merged`, or
+                # every rebuild nests one level deeper inside its own
+                # pending_nation (_pending_preview_cache.pending_nation.
+                # _pending_preview_cache.pending_nation...) until it hits
+                # MongoDB's 50-level BSON nesting limit and every future
+                # write to that nation document fails outright (see the
+                # 2026-09-29 "Archonate of Vyssafia" tick-commit failure).
+                merged.pop("_pending_preview_cache", None)
                 for change in pending_changes:
                     merged = deep_merge(merged, change["after_requested_data"])
                 pending_values, pending_breakdowns = calculate_all_fields(
                     merged, schema, "nation", return_breakdowns=True
                 )
                 pending_nation = {**merged, **pending_values}
+                pending_nation.pop("_pending_preview_cache", None)
                 if not isinstance(pending_nation.get("jobs"), dict):
                     pending_nation["jobs"] = nation.get("jobs", {})
                 mongo.db.nations.update_one(

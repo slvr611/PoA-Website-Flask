@@ -152,6 +152,46 @@ class TestPendingPreviewCache:
             "and trigger a fresh calculate_all_fields call"
         )
 
+    def test_rebuilding_the_cache_does_not_nest_the_previous_cache_inside_itself(
+        self, vyssafia_like_nation, test_db, flask_app, monkeypatch
+    ):
+        """Regression for the 2026-09-29 production incident: a stale
+        _pending_preview_cache left on the nation document from a PRIOR
+        computation was never stripped before being folded into the NEW
+        pending_nation, so every cache rebuild nested one level deeper
+        (_pending_preview_cache.pending_nation._pending_preview_cache.
+        pending_nation...). "Archonate of Vyssafia" reached exactly 50
+        levels — MongoDB's hard BSON nesting limit — which made every
+        subsequent write to that document fail outright, including the
+        tick's own change-audit snapshot (system_approve_change's
+        before_implemented_data), aborting the tick mid-commit."""
+        nation = vyssafia_like_nation
+        # Simulate a nation that already has a stale cache sitting on it
+        # from a previous, now-invalidated pending-change signature.
+        test_db["nations"].update_one(
+            {"_id": nation["_id"]},
+            {"$set": {"_pending_preview_cache": {
+                "signature": "stale-signature-does-not-match",
+                "pending_nation": {**nation, "money": 999},
+                "pending_breakdowns": {},
+            }}},
+        )
+        test_db["changes"].insert_one(_pending_change(nation["_id"], {"money": 500}))
+
+        monkeypatch.setattr(nr, "mongo", type("M", (), {"db": test_db})())
+
+        with flask_app.test_request_context("/nations/item/Testland"):
+            g.user = None
+            nr.nation_item("Testland")
+
+        stored = test_db["nations"].find_one({"_id": nation["_id"]})
+        new_cache = stored.get("_pending_preview_cache") or {}
+        assert "_pending_preview_cache" not in new_cache.get("pending_nation", {}), (
+            "the rebuilt cache's pending_nation still embeds the previous "
+            "_pending_preview_cache — this nests one level deeper on every "
+            "rebuild and will eventually hit MongoDB's 50-level BSON limit"
+        )
+
     def test_no_pending_changes_skips_the_preview_entirely(
         self, vyssafia_like_nation, test_db, flask_app, monkeypatch
     ):
