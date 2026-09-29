@@ -1800,3 +1800,271 @@ class TestCityChangePropagationIntegration:
 
         tile = db_with_players["hex_map_tiles"].find_one({"q": 0, "r": 0})
         assert tile["city"]["name"] == "OldTown"
+
+
+# ============================================================================
+# Section 4 — Change-record storage-size mitigation
+#
+# Regression tests for the 2026-09-29 "database out of storage" incident:
+# the `changes` collection reached ~479MB (94% of the Atlas M0 512MB quota)
+# almost entirely because every approved change permanently snapshotted a
+# FULL target document — including breakdowns/modifiers/technologies/etc,
+# which calculate_all_fields recomputes from scratch on every single
+# insert/update/revert regardless of what was stored. Two independent fixes:
+# _strip_recalculable_fields removes schema "calculated" fields (plus
+# breakdowns/visibility_modifiers/_pending_preview_cache) from every
+# snapshot at the point it's written, and system_approve_change's Update
+# branch now stores only the changed keys (a diff) as before_implemented_data
+# instead of the entire live document.
+# ============================================================================
+
+class TestStripRecalculableFields:
+    """helpers.change_helpers._strip_recalculable_fields"""
+
+    def test_strips_schema_calculated_field(self, monkeypatch):
+        fake_schema = {"properties": {"gold": {"calculated": True}, "name": {}}}
+        monkeypatch.setattr(ch, "category_data", {"nations": {"schema": fake_schema}})
+
+        result = ch._strip_recalculable_fields("nations", {"gold": 500, "name": "Testland"})
+        assert result == {"name": "Testland"}
+
+    def test_leaves_non_calculated_fields_untouched(self, monkeypatch):
+        fake_schema = {"properties": {"gold": {"calculated": True}, "name": {}}}
+        monkeypatch.setattr(ch, "category_data", {"nations": {"schema": fake_schema}})
+
+        result = ch._strip_recalculable_fields("nations", {"name": "Testland", "founded_year": 100})
+        assert result == {"name": "Testland", "founded_year": 100}
+
+    def test_strips_breakdowns_visibility_modifiers_and_pending_preview_cache(self, monkeypatch):
+        monkeypatch.setattr(ch, "category_data", {"nations": {"schema": {"properties": {}}}})
+        data = {
+            "name": "Testland",
+            "breakdowns": {"prestige_gain": [{"label": "x", "value": 1}]},
+            "visibility_modifiers": {"tier": 1},
+            "_pending_preview_cache": {"signature": "stale"},
+        }
+        result = ch._strip_recalculable_fields("nations", data)
+        assert result == {"name": "Testland"}
+
+    def test_non_dict_input_returned_unchanged(self, monkeypatch):
+        monkeypatch.setattr(ch, "category_data", {"nations": {"schema": {"properties": {}}}})
+        assert ch._strip_recalculable_fields("nations", None) is None
+
+    def test_unregistered_data_type_still_strips_hardcoded_extras(self, monkeypatch):
+        # data_type absent from category_data entirely — schema lookup must
+        # fall back to {} rather than raising, and the hardcoded extras
+        # (breakdowns etc.) still get stripped regardless of schema.
+        monkeypatch.setattr(ch, "category_data", {})
+        result = ch._strip_recalculable_fields("units", {"a": 1, "breakdowns": {}})
+        assert result == {"a": 1}
+
+    def test_does_not_mutate_the_input_dict(self, monkeypatch):
+        fake_schema = {"properties": {"gold": {"calculated": True}}}
+        monkeypatch.setattr(ch, "category_data", {"nations": {"schema": fake_schema}})
+        data = {"gold": 500, "name": "Testland"}
+        ch._strip_recalculable_fields("nations", data)
+        assert data == {"gold": 500, "name": "Testland"}
+
+
+class TestRequestChangeStripsCalculatedFields:
+    """request_change / system_request_change must strip calculated fields
+    from before/after data before diffing — otherwise a diff computed
+    between two fully-calculated tick snapshots keeps every recalculated
+    field (breakdowns, modifiers, ...) that merely changed because the tick
+    recomputed it, not because it was part of the actual edit."""
+
+    @pytest.fixture
+    def category_data_with_calculated_breakdowns(self, test_db):
+        fake_schema = {"properties": {"breakdowns": {"calculated": True}, "name": {}}}
+        return {
+            "nations": {
+                "pluralName": "Nations", "singularName": "Nation",
+                "database": test_db["nations"], "schema": fake_schema,
+            },
+            "players": {
+                "pluralName": "Players", "singularName": "Player",
+                "database": test_db["players"], "schema": {"properties": {}},
+            },
+            "changes": {"database": test_db["changes"]},
+        }
+
+    def test_request_change_excludes_calculated_field_from_diff(
+        self, db_with_players, mock_mongo, category_data_with_calculated_breakdowns, flask_app
+    ):
+        nation_id = db_with_players["nations"].insert_one({"name": "N"}).inserted_id
+        with patch("helpers.change_helpers.mongo", mock_mongo), \
+             patch("helpers.change_helpers.category_data", category_data_with_calculated_breakdowns):
+            with flask_app.test_request_context("/"):
+                from flask import g
+                g.user = {"id": _REGULAR_DISCORD_ID}
+                change_id = ch.request_change(
+                    "nations", nation_id, "Update",
+                    {"name": "Old", "breakdowns": {"prestige_gain": [{"value": 1}]}},
+                    {"name": "New", "breakdowns": {"prestige_gain": [{"value": 99}]}},
+                    "reason",
+                )
+
+        change = db_with_players["changes"].find_one({"_id": change_id})
+        assert "breakdowns" not in change["before_requested_data"]
+        assert "breakdowns" not in change["after_requested_data"]
+        assert change["before_requested_data"] == {"name": "Old"}
+        assert change["after_requested_data"] == {"name": "New"}
+
+    def test_system_request_change_excludes_calculated_field_from_diff(
+        self, db_with_players, mock_mongo, category_data_with_calculated_breakdowns
+    ):
+        nation_id = db_with_players["nations"].insert_one({"name": "N"}).inserted_id
+        with patch("helpers.change_helpers.mongo", mock_mongo), \
+             patch("helpers.change_helpers.category_data", category_data_with_calculated_breakdowns):
+            change_id = ch.system_request_change(
+                "nations", nation_id, "Update",
+                {"name": "Old", "breakdowns": {"x": []}},
+                {"name": "New", "breakdowns": {"x": [1, 2, 3]}},
+                "system reason",
+            )
+
+        change = db_with_players["changes"].find_one({"_id": change_id})
+        assert "breakdowns" not in change["before_requested_data"]
+        assert "breakdowns" not in change["after_requested_data"]
+
+
+class TestSystemApproveChangeSnapshotIsADiff:
+    """system_approve_change's Update branch used to store the ENTIRE
+    target document (fetched fresh at commit time) as before_implemented_data
+    instead of a diff — this was the dominant contributor to the changes
+    collection's storage bloat. It must now snapshot only the keys the
+    change actually touches; a Remove still needs the full document since
+    there's no "after" to diff against (revert_change reinserts it whole)."""
+
+    def test_update_before_snapshot_only_contains_changed_keys(self, db_with_players, patch_helpers):
+        nation_id = db_with_players["nations"].insert_one({
+            "name": "SysNation", "gold": 10, "unrelated_large_field": "x" * 500,
+        }).inserted_id
+        change_id = _insert_pending_change(
+            db_with_players, "Update", nation_id,
+            before={"name": "SysNation"},
+            after={"name": "Renamed"},
+        )
+        assert ch.system_approve_change(change_id) is True
+
+        change = db_with_players["changes"].find_one({"_id": change_id})
+        assert change["before_implemented_data"] == {"name": "SysNation"}
+        assert "unrelated_large_field" not in change["before_implemented_data"]
+        assert "gold" not in change["before_implemented_data"]
+
+    def test_update_before_snapshot_reflects_current_value_not_stale_request_time_value(
+        self, db_with_players, patch_helpers
+    ):
+        # If the live document drifted after the change was requested (e.g.
+        # a same-tick change already touched this field), the snapshot must
+        # reflect the CURRENT pre-merge value, not whatever before_requested_data
+        # captured at request time.
+        nation_id = db_with_players["nations"].insert_one({
+            "name": "SysNation", "gold": 10,
+        }).inserted_id
+        change_id = _insert_pending_change(
+            db_with_players, "Update", nation_id,
+            before={"gold": 10},   # captured at request time
+            after={"gold": 20},
+        )
+        db_with_players["nations"].update_one({"_id": nation_id}, {"$set": {"gold": 15}})  # drifted
+
+        assert ch.system_approve_change(change_id) is True
+
+        change = db_with_players["changes"].find_one({"_id": change_id})
+        assert change["before_implemented_data"] == {"gold": 15}
+
+    def test_remove_still_stores_the_full_document(self, db_with_players, patch_helpers):
+        nation_id = db_with_players["nations"].insert_one({
+            "name": "ToDelete", "gold": 42, "description": "full doc needed for revert",
+        }).inserted_id
+        change_id = _insert_pending_change(
+            db_with_players, "Remove", nation_id,
+            before={"name": "ToDelete"}, after={"name": None},
+        )
+        assert ch.system_approve_change(change_id) is True
+
+        change = db_with_players["changes"].find_one({"_id": change_id})
+        assert change["before_implemented_data"]["gold"] == 42
+        assert change["before_implemented_data"]["description"] == "full doc needed for revert"
+
+    def test_revert_still_restores_correctly_with_diff_based_snapshot(
+        self, db_with_players, nation_id, patch_helpers, flask_app
+    ):
+        # The whole point of the diff-based snapshot is that revert_change's
+        # deep_merge(existing, before_implemented_data) still works with a
+        # partial dict — this is an end-to-end check that approving via the
+        # new diff-based path, then reverting, actually restores the field.
+        db_with_players["nations"].update_one({"_id": nation_id}, {"$set": {"name": "SysNation"}})
+        change_id = _insert_pending_change(
+            db_with_players, "Update", nation_id,
+            before={"name": "SysNation"}, after={"name": "Renamed"},
+        )
+        assert ch.system_approve_change(change_id) is True
+        assert db_with_players["nations"].find_one({"_id": nation_id})["name"] == "Renamed"
+
+        with flask_app.test_request_context("/"):
+            from flask import g
+            g.user = {"id": _ADMIN_DISCORD_ID}
+            assert ch.revert_change(change_id) is True
+
+        assert db_with_players["nations"].find_one({"_id": nation_id})["name"] == "SysNation"
+
+
+class TestAddChangeStripsCalculatedFieldsFromStoredSnapshot:
+    """The Add branches of approve_change / system_approve_change /
+    force_approve_change / system_force_approve_change all call
+    _calculate_and_attach_fields on after_data before inserting, which adds
+    breakdowns/etc. back onto that same dict. The actual inserted document
+    needs those fields; the change record's after_implemented_data copy
+    must not carry them."""
+
+    def _fake_calculate(self, data_type, obj):
+        obj["breakdowns"] = {"prestige_gain": [{"label": "x", "value": 1}]}
+        return obj
+
+    def test_system_approve_change_add_strips_recalculated_fields_from_stored_copy(
+        self, db_with_players, mock_mongo, fake_category_data
+    ):
+        with patch("helpers.change_helpers.mongo", mock_mongo), \
+             patch("helpers.change_helpers.category_data", fake_category_data), \
+             patch("helpers.change_helpers._calculate_and_attach_fields", side_effect=self._fake_calculate), \
+             patch("helpers.change_helpers.propagate_updates", return_value=None):
+
+            change_id = _insert_pending_change(
+                db_with_players, "Add", target_id=None,
+                before={}, after={"name": "NewNation"},
+            )
+            result = ch.system_approve_change(change_id)
+
+        assert result is True
+        inserted = db_with_players["nations"].find_one({"name": "NewNation"})
+        assert inserted is not None
+        assert "breakdowns" in inserted  # the real inserted document does have it
+
+        change = db_with_players["changes"].find_one({"_id": change_id})
+        assert "breakdowns" not in change["after_implemented_data"]  # the audit copy does not
+
+    def test_approve_change_add_strips_recalculated_fields_from_stored_copy(
+        self, db_with_players, mock_mongo, fake_category_data, flask_app
+    ):
+        with patch("helpers.change_helpers.mongo", mock_mongo), \
+             patch("helpers.change_helpers.category_data", fake_category_data), \
+             patch("helpers.change_helpers._calculate_and_attach_fields", side_effect=self._fake_calculate), \
+             patch("helpers.change_helpers.propagate_updates", return_value=None):
+
+            change_id = _insert_pending_change(
+                db_with_players, "Add", target_id=None,
+                before={}, after={"name": "AdminAddedNation"},
+            )
+            with flask_app.test_request_context("/"):
+                from flask import g
+                g.user = {"id": _ADMIN_DISCORD_ID}
+                result = ch.approve_change(change_id)
+
+        assert result is True
+        inserted = db_with_players["nations"].find_one({"name": "AdminAddedNation"})
+        assert "breakdowns" in inserted
+
+        change = db_with_players["changes"].find_one({"_id": change_id})
+        assert "breakdowns" not in change["after_implemented_data"]

@@ -300,6 +300,34 @@ def _calculate_and_attach_fields(data_type, target):
     target.pop("_calc_cache", None)
     return target
 
+
+def _strip_recalculable_fields(data_type, data):
+    """Remove schema "calculated" fields plus the always-recomputed extras
+    (breakdowns, visibility_modifiers, _pending_preview_cache) from a
+    change-record snapshot before it's persisted.
+
+    These are pure derived output of _calculate_and_attach_fields /
+    calculate_all_fields — every insert, update, and revert recomputes them
+    from scratch regardless of what a change record stored, so a snapshot
+    that includes them is storing data that will never actually be read
+    back. For nations in particular this is the dominant contributor to
+    change-record size: a single "Tick Update" can otherwise carry a
+    ~35KB breakdowns dict plus modifiers/technologies/etc. that changed
+    only because they're recalculated every tick, not because they're
+    part of the actual edit."""
+    if not isinstance(data, dict):
+        return data
+    schema = category_data.get(data_type, {}).get("schema", {})
+    schema_properties = schema.get("properties", {})
+    cleaned = {
+        k: v for k, v in data.items()
+        if not (isinstance(schema_properties.get(k), dict) and schema_properties[k].get("calculated"))
+    }
+    for extra in ("breakdowns", "visibility_modifiers", "_pending_preview_cache"):
+        cleaned.pop(extra, None)
+    return cleaned
+
+
 def request_change(data_type, item_id, change_type, before_data, after_data, reason):
     requester = mongo.db.players.find_one({"id": g.user.get("id", None)})["_id"]
     if requester is None:
@@ -323,6 +351,14 @@ def request_change(data_type, item_id, change_type, before_data, after_data, rea
     after_data.pop("reason", None)
     before_data.pop("_id", None)
     after_data.pop("_id", None)
+
+    # Calculated fields (breakdowns, modifiers, technologies, etc.) get
+    # recomputed from scratch on every approve/revert regardless of what's
+    # stored here — see _strip_recalculable_fields's docstring. Stripping
+    # them before the diff is computed keeps them out of both the stored
+    # snapshot AND differential_data.
+    before_data = _strip_recalculable_fields(data_type, before_data)
+    after_data = _strip_recalculable_fields(data_type, after_data)
 
     # Rename item_id → _id in form-submitted data (WTForms cannot register
     # field names starting with '_', so the hidden field is named item_id).
@@ -381,6 +417,10 @@ def system_request_change(data_type, item_id, change_type, before_data, after_da
         after_data["_id"] = item_id
     else:
         after_data.pop("_id", None)
+
+    # See the matching comment in request_change() / _strip_recalculable_fields.
+    before_data = _strip_recalculable_fields(data_type, before_data)
+    after_data = _strip_recalculable_fields(data_type, after_data)
 
     _reconcile_item_ids(before_data, after_data)
     _ensure_item_ids(after_data)
@@ -569,7 +609,7 @@ def approve_change(change_id):
             "approver": approver["_id"],
             "session_number": session_number,
             "before_implemented_data": {},
-            "after_implemented_data": after_data
+            "after_implemented_data": _strip_recalculable_fields(change["target_collection"], after_data)
         }})
 
         _dispatch_propagate_updates(
@@ -705,7 +745,11 @@ def system_approve_change(change_id, session=None, skip_recalculation=False, ski
             "approver": approver["_id"],
             "session_number": session_number,
             "before_implemented_data": {},
-            "after_implemented_data": after_data
+            # after_data was just recalculated above — strip the derived
+            # fields back out of the *stored* copy (the actual insert above
+            # already happened with them intact; only the audit record
+            # shouldn't carry data that recalculates on its own).
+            "after_implemented_data": _strip_recalculable_fields(change["target_collection"], after_data)
         }}, session=session)
 
         _dispatch_propagate_updates(
@@ -757,8 +801,25 @@ def system_approve_change(change_id, session=None, skip_recalculation=False, ski
                 if change["target_collection"] == "nations":
                     _handle_nation_rename(change["target"], existing.get("name", ""), merged.get("name", ""), session=session)
                     _handle_city_changes(existing.get("cities", []), merged.get("cities", []), session=session)
+
+                # A diff, not the whole document: only the keys this change
+                # actually touches (after_data's keys, already stripped of
+                # calculated fields at request time), sourced from `existing`
+                # (the fresh pre-merge document) so revert_change's
+                # deep_merge(existing, before_implemented_data) restores
+                # exactly what was there right before this approval. Storing
+                # the full `target` document here (breakdowns, modifiers,
+                # technologies, everything) was the dominant contributor to
+                # the changes collection's size — see archive_old_changes.py.
+                before_snapshot = _strip_recalculable_fields(
+                    change["target_collection"],
+                    {k: existing.get(k) for k in after_data.keys()},
+                )
             else:
                 target_collection.delete_one({"_id": change["target"]}, session=session)
+                # A delete has no "after" to diff against — the full
+                # document is the only way to restore it on revert.
+                before_snapshot = target
 
             changes_collection.update_one({"_id": change_id}, {"$set": {
                 "status": "Approved",
@@ -766,7 +827,7 @@ def system_approve_change(change_id, session=None, skip_recalculation=False, ski
                 "last_modified_time": now,
                 "approver": approver["_id"],
                 "session_number": session_number,
-                "before_implemented_data": target,
+                "before_implemented_data": before_snapshot,
                 "after_implemented_data": after_data
             }}, session=session)
 
@@ -862,7 +923,7 @@ def force_approve_change(change_id):
         "approver": approver["_id"],
         "session_number": session_number,
         "before_implemented_data": before_data,
-        "after_implemented_data": after_data
+        "after_implemented_data": _strip_recalculable_fields(change["target_collection"], after_data),
     }})
     _dispatch_propagate_updates(
         changed_data_type=change["target_collection"],
@@ -934,7 +995,7 @@ def system_force_approve_change(change_id):
         "approver": approver["_id"],
         "session_number": session_number,
         "before_implemented_data": before_data,
-        "after_implemented_data": after_data
+        "after_implemented_data": _strip_recalculable_fields(change["target_collection"], after_data),
     }})
     _dispatch_propagate_updates(
         changed_data_type=change["target_collection"],

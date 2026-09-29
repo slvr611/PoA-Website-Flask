@@ -1,4 +1,4 @@
-"""Manual script to archive changes older than MONTHS_TO_KEEP months.
+"""Manual script to archive changes older than DAYS_TO_KEEP days.
 
 Usage:
     python scripts/archive_old_changes.py
@@ -6,8 +6,11 @@ Usage:
 Connects to MongoDB via the MONGO_URI env var (loaded from .env), exports
 non-pending changes in streaming batches to S3, then deletes them.
 
-Dates in this collection are stored as ISO strings (e.g. "2025-10-09 09:30:00"),
-so MongoDB-side filtering uses string comparison (ISO format sorts correctly).
+The collection has a mixed date-field schema left over from a past migration:
+time_implemented/last_modified_time are stored as real BSON dates on some
+documents and as ISO strings (e.g. "2025-10-09 09:30:00") on others. MongoDB's
+$lt only matches within the same BSON type, so the cutoff filter below checks
+both a datetime cutoff and an equivalent ISO-string cutoff for each field.
 """
 
 import os
@@ -24,7 +27,7 @@ from bson import json_util
 import boto3
 
 # ── Configurable ──────────────────────────────────────────────────────────────
-MONTHS_TO_KEEP = 3   # archive changes older than this
+DAYS_TO_KEEP = 30    # archive changes older than this
 BATCH_SIZE = 500     # docs per S3 file
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -67,28 +70,34 @@ def main():
         print(f"ERROR: {s3_err}")
         sys.exit(1)
 
-    # Cutoff as an ISO string (dates in the collection are stored as strings)
-    cutoff_str = (
-        datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=MONTHS_TO_KEEP * 30)
-    ).strftime('%Y-%m-%d')
+    cutoff_dt = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=DAYS_TO_KEEP)
+    cutoff_str = cutoff_dt.strftime('%Y-%m-%d %H:%M:%S')
 
-    print(f"Archiving non-pending changes with time_implemented < {cutoff_str} ...")
+    print(f"Archiving non-pending changes older than {cutoff_dt.date()} ({DAYS_TO_KEEP} days) ...")
+
+    def _lt_cutoff(field):
+        # MongoDB's comparison operators compare ACROSS BSON types using a
+        # fixed type-order (strings sort below dates), so a bare
+        # {"$lt": cutoff_dt} would match every string-typed value
+        # unconditionally regardless of its actual date — not just old ones.
+        # $type scopes each branch to its own representation.
+        return {"$or": [
+            {field: {"$type": "date", "$lt": cutoff_dt}},
+            {field: {"$type": "string", "$lt": cutoff_str}},
+        ]}
 
     # Build the filter — approved changes use time_implemented; others use last_modified_time
     query = {
         "status": {"$ne": "Pending"},
         "$or": [
-            {"time_implemented": {"$lt": cutoff_str}},
-            {
-                "time_implemented": {"$exists": False},
-                "last_modified_time": {"$lt": cutoff_str},
-            },
+            {"$and": [{"time_implemented": {"$exists": True}}, _lt_cutoff("time_implemented")]},
+            {"$and": [{"time_implemented": {"$exists": False}}, _lt_cutoff("last_modified_time")]},
         ],
     }
 
     total = db.changes.count_documents(query)
     if total == 0:
-        print(f"No changes older than {MONTHS_TO_KEEP} months. Nothing to do.")
+        print(f"No changes older than {DAYS_TO_KEEP} days. Nothing to do.")
         return
 
     print(f"Found {total} changes to archive.")
@@ -109,20 +118,21 @@ def main():
         upload_bytes_to_s3(s3_client, s3_bucket, key, data)
         result = db.changes.delete_many({"_id": {"$in": batch_ids}})
         deleted_total += result.deleted_count
-        print(f"  Batch {batch_num}: archived {len(batch_docs)} → s3://{s3_bucket}/{key}, deleted {result.deleted_count}")
+        print(f"  Batch {batch_num}: archived {len(batch_docs)} -> s3://{s3_bucket}/{key}, deleted {result.deleted_count}")
         batch_ids = []
         batch_docs = []
 
-    cursor = db.changes.find(query, no_cursor_timeout=True).batch_size(BATCH_SIZE)
-    try:
-        for doc in cursor:
-            batch_docs.append(doc)
-            batch_ids.append(doc["_id"])
-            if len(batch_docs) >= BATCH_SIZE:
-                flush_batch()
-        flush_batch()  # remaining
-    finally:
-        cursor.close()
+    # Atlas's free (M0) tier disallows no_cursor_timeout cursors, so a single
+    # long-lived cursor spanning every S3 upload isn't an option. Instead,
+    # fetch the (small) list of matching _ids up front, then re-query by
+    # _id for each batch — each query is short-lived and independent, so
+    # slow S3 uploads between batches can't time out a cursor.
+    all_ids = [d["_id"] for d in db.changes.find(query, {"_id": 1})]
+    for i in range(0, len(all_ids), BATCH_SIZE):
+        id_batch = all_ids[i:i + BATCH_SIZE]
+        batch_docs = list(db.changes.find({"_id": {"$in": id_batch}}))
+        batch_ids = [d["_id"] for d in batch_docs]
+        flush_batch()
 
     print(f"\nDone. Archived and deleted {deleted_total}/{total} changes.")
     print(f"Remaining in collection: {db.changes.count_documents({})}")
