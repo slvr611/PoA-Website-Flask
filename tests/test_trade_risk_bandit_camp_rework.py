@@ -124,6 +124,153 @@ class TestComputeBanditCampSpawnChance:
         # 0.20 base - 0.01*1*1 = 0.19, well above the floor — untouched.
         assert round(result, 10) == 0.19
 
+    def test_imperial_council_market_head_reduces_per_unit(self, test_db):
+        """Regression for a real bug: Imperial Council's nations.json
+        government_type._modifiers entry ({"modifier_type": "bandit_camp_
+        spawn_chance", "scope": "nation_market", "scaling": "per_x_units"})
+        was previously typed "trade_risk" and scoped to a "nation_market"
+        that didn't even exist in scope_definitions.json — a completely
+        inert modifier, since compute_trade_risk deliberately ignores all
+        modifiers now. Fixed by retargeting it to bandit_camp_spawn_chance
+        and adding a dedicated resolver (get_bandit_camp_spawn_chance_unit_
+        contributions) that reads the market HEAD nation's own government_
+        type law, the same way LawAdapter.collect_for_character resolves
+        nation_ruling_characters-scoped law modifiers."""
+        head_id = ObjectId()
+        test_db.nations.insert_one({
+            "_id": head_id, "government_type": "Imperial Council",
+            "land_units": {"Infantry": 5}, "naval_units": {},
+            "naval_unit_count": 0, "land_unit_count": 0, "resource_storage": {},
+        })
+        real_mongo, _ = _patched_db(test_db)
+        original_db = real_mongo.db
+        real_mongo.db = test_db
+        try:
+            result = cf.compute_bandit_camp_spawn_chance(
+                "bandit_camp_spawn_chance", {"market_head": str(head_id)}, 0.20, {}, {},
+            )
+        finally:
+            real_mongo.db = original_db
+        # 0.20 base - 0.02 * (5 units / 1) = 0.10.
+        assert round(result, 10) == 0.10
+
+    def test_non_imperial_council_head_unaffected(self, test_db):
+        head_id = ObjectId()
+        test_db.nations.insert_one({
+            "_id": head_id, "government_type": "Iron-Fisted Dictatorship",
+            "land_units": {"Infantry": 5}, "naval_units": {},
+            "naval_unit_count": 0, "land_unit_count": 0, "resource_storage": {},
+        })
+        real_mongo, _ = _patched_db(test_db)
+        original_db = real_mongo.db
+        real_mongo.db = test_db
+        try:
+            result = cf.compute_bandit_camp_spawn_chance(
+                "bandit_camp_spawn_chance", {"market_head": str(head_id)}, 0.20, {}, {},
+            )
+        finally:
+            real_mongo.db = original_db
+        assert round(result, 10) == 0.20
+
+
+class TestGetBanditCampSpawnChanceUnitContributionsBreakdown:
+    """Covers the shared helper feeding both compute_bandit_camp_spawn_chance
+    and the market's bandit_camp_spawn_chance breakdown ledger."""
+
+    def test_no_market_head_returns_empty(self, test_db):
+        real_mongo, _ = _patched_db(test_db)
+        original_db = real_mongo.db
+        real_mongo.db = test_db
+        try:
+            total, entries = cf.get_bandit_camp_spawn_chance_unit_contributions({}, {})
+        finally:
+            real_mongo.db = original_db
+        assert total == 0.0
+        assert entries == []
+
+    def test_imperial_council_entry_labelled_and_matches_total(self, test_db):
+        head_id = ObjectId()
+        test_db.nations.insert_one({
+            "_id": head_id, "government_type": "Imperial Council",
+            "land_units": {"Infantry": 5}, "naval_units": {},
+            "naval_unit_count": 0, "land_unit_count": 0, "resource_storage": {},
+        })
+        real_mongo, _ = _patched_db(test_db)
+        original_db = real_mongo.db
+        real_mongo.db = test_db
+        try:
+            total, entries = cf.get_bandit_camp_spawn_chance_unit_contributions(
+                {"market_head": str(head_id)}, {},
+            )
+        finally:
+            real_mongo.db = original_db
+        assert round(total, 10) == -0.10
+        assert entries == [{"label": "Imperial Council (Market Head)", "value": -0.10}]
+
+    def test_market_type_and_government_contributions_combine(self, test_db):
+        head_id = ObjectId()
+        test_db.nations.insert_one({
+            "_id": head_id, "government_type": "Imperial Council",
+            "land_units": {"Infantry": 5}, "naval_units": {"Frigate": 2},
+            "naval_unit_count": 2, "land_unit_count": 5, "resource_storage": {},
+        })
+        real_mongo, _ = _patched_db(test_db)
+        original_db = real_mongo.db
+        real_mongo.db = test_db
+        try:
+            total, entries = cf.get_bandit_camp_spawn_chance_unit_contributions(
+                {"market_head": str(head_id)},
+                {"bandit_camp_spawn_chance_per_owner_naval_unit": -0.01, "market_tier_multiplier": 1},
+            )
+        finally:
+            real_mongo.db = original_db
+        labels = {e["label"] for e in entries}
+        assert labels == {"Owner Naval Units", "Imperial Council (Market Head)"}
+        assert round(total, 10) == round(sum(e["value"] for e in entries), 10)
+
+
+class TestBanditCampSpawnChanceBreakdownEndToEnd:
+    def test_market_breakdown_shows_imperial_council_line_and_matches_total(self, test_db):
+        import calculations.field_calculations as fc_mod
+        from app_core import category_data
+
+        head_id = ObjectId()
+        test_db.nations.insert_one({
+            "_id": head_id, "name": "Testland", "government_type": "Imperial Council",
+            "land_units": {"Infantry": 5}, "naval_units": {},
+            "naval_unit_count": 0, "land_unit_count": 0, "resource_storage": {},
+        })
+        market_id = ObjectId()
+        test_db.markets.insert_one({
+            "_id": market_id, "name": "TestMarket", "market_head": str(head_id),
+            "market_type": "Illicit", "tariff_stance": "None", "tier": "I",
+            "resource_storage": {},
+        })
+        test_db.market_links.insert_one({
+            "member": str(head_id), "market": str(market_id), "market_safety_stance": "Ignore",
+        })
+
+        real_mongo, _ = _patched_db(test_db)
+        original_db = real_mongo.db
+        real_mongo.db = test_db
+        try:
+            market_doc = test_db.markets.find_one({"_id": market_id})
+            schema = category_data["markets"]["schema"]
+            calculated, breakdowns = fc_mod.calculate_all_fields(
+                dict(market_doc), schema, "market", return_breakdowns=True,
+            )
+        finally:
+            real_mongo.db = original_db
+
+        bd = breakdowns["bandit_camp_spawn_chance"]
+        entries_by_label = {e["label"]: e["value"] for e in bd}
+        # Base 5 + Illicit law 15 + member's "Ignore" stance 1 - Imperial
+        # Council's per-unit reduction 10 (0.02 * 5 land units) = 11.
+        assert entries_by_label["Imperial Council (Market Head)"] == -10.0
+        assert round(entries_by_label["Total"], 10) == round(calculated["bandit_camp_spawn_chance"] * 100, 10)
+        non_total = sum(v for k, v in entries_by_label.items() if k not in ("Total", "Unfloored Total", "Minimum Guarantee"))
+        assert round(non_total, 10) == round(entries_by_label["Total"], 10)
+
 
 class TestIsDeliveringRespectsRaidedSessions:
     def test_raided_session_does_not_deliver(self):

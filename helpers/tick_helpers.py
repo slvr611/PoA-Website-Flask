@@ -302,17 +302,6 @@ def _merge_pending_by_entity(items):
             order.append(key)
         else:
             existing = merged_by_id[key]
-            # Temporary diagnostic (2026-09-16 stuck/failing-tick investigation):
-            # print every same-tick multi-queue collision so it's visible which
-            # functions queued competing changes to the same entity, in what
-            # order, before the merge combines them.
-            print(
-                f"_merge_pending_by_entity: merging another change onto "
-                f"{item['data_type']} #{key} — existing reason: {existing['reason']!r}, "
-                f"incoming reason: {item['reason']!r}, "
-                f"existing already_calculated={existing['already_calculated']}, "
-                f"incoming already_calculated={item['already_calculated']}"
-            )
             existing["after_data"] = _merge_after_data(
                 existing["before_data"], existing["after_data"], item["after_data"]
             )

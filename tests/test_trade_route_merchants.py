@@ -107,7 +107,7 @@ class TestPartyPositionSetForMerchants:
 
         # Falls back to NationA's city tiles (both of them — no specific city set)
         assert positions == {(0, 0), (10, 0)}
-        assert home == "NationA"
+        assert home == {"NationA"}
 
     def test_merchant_with_current_city_uses_only_that_tile(self, test_db):
         _insert_basic_map(test_db)
@@ -122,7 +122,7 @@ class TestPartyPositionSetForMerchants:
             positions, home = _party_position_set("merchant", "Traders Inc", tile_map, set())
 
         assert positions == {(0, 0)}
-        assert home == "NationA"
+        assert home == {"NationA"}
 
     def test_current_city_id_pointing_at_nothing_falls_back(self, test_db):
         """A stale/incorrect current_city_id that doesn't match any city tile
@@ -144,7 +144,12 @@ class TestPartyPositionSetForMerchants:
     def test_additional_trade_city_modifier_adds_to_primary_city(self, test_db):
         """A merchant based primarily in cityA1, with an additional_trade_city
         modifier pointing at cityB1 (a DIFFERENT nation's city) — reach should
-        be the union of both, not just the primary."""
+        be the union of both, not just the primary. home_nations must include
+        BOTH nations' territory as freely traversable — see the 2026-09-28
+        "Orchid Island Trading Company" bug report: an additional city stuck
+        at NationB-only-not-freely-traversable meant the merchant couldn't
+        route through NationB's own land to reach a third trade partner,
+        silently falling back to whatever the primary city alone could reach."""
         _insert_basic_map(test_db)
         nation_a_id = test_db["nations"].find_one({"name": "NationA"})["_id"]
         test_db["merchants"].insert_one({
@@ -158,7 +163,7 @@ class TestPartyPositionSetForMerchants:
             positions, home = _party_position_set("merchant", "Traders Inc", tile_map, set())
 
         assert positions == {(0, 0), (2, 0)}
-        assert home == "NationA"  # only the primary home nation, not NationB
+        assert home == {"NationA", "NationB"}
 
     def test_additional_trade_city_alone_with_no_primary_city_still_works(self, test_db):
         """No current_city_id set at all, but an additional_trade_city
@@ -244,6 +249,45 @@ class TestGetRoadPathDistanceWithMerchants:
             )
         assert connected is True
         assert dist == 0  # the additional city IS NationB's city
+
+    def test_additional_city_grants_free_traversal_through_that_nations_own_land(self, test_db):
+        """Regression for the 2026-09-28 "Orchid Island Trading Company"
+        report: a merchant with an additional trade city in NationB could
+        use that city as an endpoint, but couldn't route THROUGH NationB's
+        own plain (road-less) territory to reach a THIRD party beyond it —
+        the free-traversal bonus only covered the merchant's primary home
+        nation. Map: NationA(0,0) --road-- NationB(2,0) --plain,no road--
+        NationC(4,0). A merchant based in NationA with an additional city at
+        NationB's must be able to walk across NationB's own land the same
+        way NationB itself could, to reach NationC."""
+        _insert_basic_map(test_db)
+        test_db["hex_map_tiles"].insert_many([
+            {"q": 3, "r": 0, "owner": "NationB", "terrain": "plains"},
+            {"q": 4, "r": 0, "owner": "NationC", "terrain": "plains",
+             "city": {"id": "cityC1", "name": "Gamma", "type": "generic"}, "capital": True},
+        ])
+        test_db["nations"].insert_one({"name": "NationC", "trade_speed": 7, "overall_total_modifiers": {}})
+        nation_a_id = test_db["nations"].find_one({"name": "NationA"})["_id"]
+        test_db["merchants"].insert_one({
+            "name": "Orchid Island Trading Company", "location": str(nation_a_id),
+            "current_city_id": "cityA2",  # the isolated NationA city — no road anywhere
+            "modifiers": [{"modifier_type": "additional_trade_city", "city": "cityB1", "value": 1}],
+        })
+
+        with _patch_mongo(test_db):
+            dist, connected = get_road_path_distance(
+                "Orchid Island Trading Company", "NationC",
+                party_a_type="merchant", party_b_type="nation",
+            )
+            nation_dist, _ = get_road_path_distance("NationB", "NationC")
+
+        # The exact number depends on plains' real speed_cost (json-data/
+        # terrains.json) — what matters here is `connected is True` at all:
+        # under the pre-fix behavior this was unreachable (False/None),
+        # since NationB's own plain (3,0) tile wasn't freely traversable for
+        # a merchant whose home nation is NationA.
+        assert connected is True
+        assert dist == nation_dist
 
     def test_merchant_with_no_city_behaves_like_its_home_nation(self, test_db):
         _insert_basic_map(test_db)

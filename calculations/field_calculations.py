@@ -6,7 +6,7 @@ from time import perf_counter
 from app_core import mongo, json_data, category_data
 from calculations.compute_functions import (
     compute_pop_count, compute_field, get_bandit_camp_income_contributions,
-    BANDIT_CAMP_SPAWN_CHANCE_FLOOR,
+    get_bandit_camp_spawn_chance_unit_contributions, BANDIT_CAMP_SPAWN_CHANCE_FLOOR,
 )
 from calculations.scaling_methods import get_scaling_multiplier
 from bson.objectid import ObjectId
@@ -5122,12 +5122,30 @@ def compute_nation_breakdowns(
             if _total_entry:
                 _sbd.insert(_sbd.index(_total_entry), {"label": "Uncapped Total", "value": _raw_sum})
 
+    # bandit_camp_spawn_chance: inject the market-head-dependent per-unit
+    # contributions (Maritime/Militant/Luxury per-owner-unit rates, and any
+    # nation_market-scoped government-type modifier like Imperial Council's
+    # per-unit reduction) before the Total — these depend on the market
+    # head nation's own live unit/resource data, which the generic
+    # per-field contribution sum above can't see (it only sums modifiers
+    # actually keyed "bandit_camp_spawn_chance"; these live under
+    # differently-named per-unit rate keys). Shared with the real value via
+    # get_bandit_camp_spawn_chance_unit_contributions so the ledger can't
+    # silently omit a bonus that's actually baked into the total.
+    _bcsc_bd = breakdowns.get("bandit_camp_spawn_chance")
+    if _bcsc_bd:
+        _, _bcsc_unit_entries = get_bandit_camp_spawn_chance_unit_contributions(target, overall_total_modifiers)
+        if _bcsc_unit_entries:
+            _bcsc_total_idx = next((i for i, e in enumerate(_bcsc_bd) if e["label"] == "Total"), len(_bcsc_bd))
+            for _e in _bcsc_unit_entries:
+                _bcsc_bd.insert(_bcsc_total_idx, {"label": _e["label"], "value": round(_e["value"] * 100, 4)})
+                _bcsc_total_idx += 1
+
     # bandit_camp_spawn_chance: never below BANDIT_CAMP_SPAWN_CHANCE_FLOOR
     # (5%) — mirrors the stability cap pattern above, just floored instead
     # of capped: show the true (negative-modifier-reduced) raw sum as
     # "Unfloored Total" whenever it would otherwise have dropped below the
     # guaranteed minimum, so the floor's effect is visible, not silent.
-    _bcsc_bd = breakdowns.get("bandit_camp_spawn_chance")
     if _bcsc_bd:
         _floor_pct = round(BANDIT_CAMP_SPAWN_CHANCE_FLOOR * 100, 2)
         _bcsc_entries = [e for e in _bcsc_bd if e["label"] != "Total"]
@@ -5175,9 +5193,9 @@ def compute_nation_breakdowns(
             {"overlord": _pg_target_id}, {"compliance": 1, "_id": 0}
         ))
         _pg_loyal = sum(1 for v in _pg_vassals if v.get("compliance") == "Loyal")
-        _pg_disloyal = sum(2 for v in _pg_vassals if v.get("compliance") in ("Rebellious", "Defiant"))
+        _pg_disloyal = sum(3 for v in _pg_vassals if v.get("compliance") in ("Rebellious", "Defiant"))
         if _pg_disloyal:
-            pg_bd.append({"label": "Disloyal Vassals", "value": -min(_pg_disloyal, 10)})
+            pg_bd.append({"label": "Disloyal Vassals", "value": -min(_pg_disloyal, 15)})
         if _pg_loyal:
             pg_bd.append({"label": "Loyal Vassals", "value": min(_pg_loyal, 3)})
         _pg_rulers = list(category_data["characters"]["database"].find(

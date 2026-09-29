@@ -3,6 +3,7 @@ from app_core import category_data, json_data
 from bson.objectid import ObjectId
 import copy
 from bisect import bisect_right
+from calculations.scaling_methods import get_scaling_multiplier
 
 def compute_field(field, target, base_value, field_schema, overall_total_modifiers):
     compute_func = CUSTOM_COMPUTE_FUNCTIONS.get(field, compute_field_default)
@@ -47,13 +48,13 @@ def compute_prestige_gain(field, target, base_value, field_schema, overall_total
         if vassal.get("compliance", "") == "Loyal":
             loyal_vassal_prestige_gain += 1
         elif vassal.get("compliance", "") == "Rebellious":
-            disloyal_vassal_prestige_loss += 2
+            disloyal_vassal_prestige_loss += 3
         elif vassal.get("compliance", "") == "Defiant":
-            disloyal_vassal_prestige_loss += 2
-    
+            disloyal_vassal_prestige_loss += 3
+
     #print(f"Disloyal Vassal Prestige Loss: {disloyal_vassal_prestige_loss}")
     #print(f"Loyal Vassal Prestige Gain: {loyal_vassal_prestige_gain}")
-    value -= min(disloyal_vassal_prestige_loss, 10)
+    value -= min(disloyal_vassal_prestige_loss, 15)
     value += min(loyal_vassal_prestige_gain, 3)
 
     artifacts = []
@@ -828,47 +829,108 @@ def compute_trade_risk(field, target, base_value, field_schema, overall_total_mo
 BANDIT_CAMP_SPAWN_CHANCE_FLOOR = 0.05
 
 
-def compute_bandit_camp_spawn_chance(field, target, base_value, field_schema, overall_total_modifiers):
-    """Chance a new bandit camp spawns in this market's trade network each
-    session (rolled by tick_helpers.bandit_camp_spawn_tick). Base 5%, moved
-    by market type (Illicit raises it; Luxury/Maritime/Militant lower it
-    per owner luxury/naval/land unit — the same per-unit market-head lookup
-    compute_trade_risk used to do) and by member protection stances
-    (market_links.json's market_safety_stance laws) — but never below
-    BANDIT_CAMP_SPAWN_CHANCE_FLOOR (5%), regardless of how much
-    Luxury/Maritime/Militant/protection-stance reduction stacks up. Every
-    market carries at least a baseline risk."""
-    value = base_value + overall_total_modifiers.get(field, 0)
+def get_bandit_camp_spawn_chance_unit_contributions(target, overall_total_modifiers):
+    """Return (total_bonus, [{"label", "value"}, ...]) for every contribution
+    to a market's bandit_camp_spawn_chance that depends on the market HEAD
+    nation's own live data rather than a flat rate: the Maritime/Militant/
+    Luxury market-type per-owner-unit/luxury rates (markets.json), and any
+    government-type law modifier scoped "nation_market" that the head's own
+    government_type grants (e.g. Imperial Council's per-unit trade-security
+    reduction — nations.json government_type.laws). overall_total_modifiers
+    only carries flat per-unit RATES, not the actual unit/resource counts to
+    multiply them by, so this has to go fetch the head nation itself.
+
+    Shared by compute_bandit_camp_spawn_chance (the real value) and
+    compute_nation_breakdowns (the displayed ledger) so they can't drift
+    apart, the same reason get_bandit_camp_income_contributions exists for
+    money_income."""
+    entries = []
+    total = 0.0
 
     per_naval  = overall_total_modifiers.get("bandit_camp_spawn_chance_per_owner_naval_unit", 0)
     per_land   = overall_total_modifiers.get("bandit_camp_spawn_chance_per_owner_land_unit",  0)
     per_luxury = overall_total_modifiers.get("bandit_camp_spawn_chance_per_owner_luxury",     0)
 
-    if per_naval or per_land or per_luxury:
-        tier_mult = max(1, int(overall_total_modifiers.get("market_tier_multiplier", 1)))
-        head_id = target.get("market_head", "")
-        if head_id:
-            from app_core import mongo as _mongo
-            try:
-                head = _mongo.db.nations.find_one(
-                    {"_id": ObjectId(head_id)},
-                    {"naval_unit_count": 1, "land_unit_count": 1, "resource_storage": 1},
-                )
-                if head:
-                    if per_naval:
-                        value += per_naval * tier_mult * head.get("naval_unit_count", 0)
-                    if per_land:
-                        value += per_land * tier_mult * head.get("land_unit_count", 0)
-                    if per_luxury:
-                        luxury_keys = {r["key"] for r in json_data.get("luxury_resources", [])}
-                        storage = head.get("resource_storage", {})
-                        luxury_count = sum(
-                            v for k, v in storage.items()
-                            if k in luxury_keys and isinstance(v, (int, float)) and v > 0
-                        )
-                        value += per_luxury * luxury_count
-            except Exception:
-                pass
+    head_id = target.get("market_head", "")
+    if not head_id:
+        return 0.0, []
+
+    from app_core import mongo as _mongo
+    try:
+        head = _mongo.db.nations.find_one(
+            {"_id": ObjectId(head_id)},
+            {"naval_unit_count": 1, "land_unit_count": 1, "resource_storage": 1,
+             "government_type": 1, "land_units": 1, "naval_units": 1},
+        )
+    except Exception:
+        head = None
+    if not head:
+        return 0.0, []
+
+    tier_mult = max(1, int(overall_total_modifiers.get("market_tier_multiplier", 1)))
+
+    if per_naval:
+        count = head.get("naval_unit_count", 0)
+        v = per_naval * tier_mult * count
+        if v:
+            entries.append({"label": "Owner Naval Units", "value": v})
+            total += v
+    if per_land:
+        count = head.get("land_unit_count", 0)
+        v = per_land * tier_mult * count
+        if v:
+            entries.append({"label": "Owner Land Units", "value": v})
+            total += v
+    if per_luxury:
+        luxury_keys = {r["key"] for r in json_data.get("luxury_resources", [])}
+        storage = head.get("resource_storage", {}) or {}
+        luxury_count = sum(
+            v for k, v in storage.items()
+            if k in luxury_keys and isinstance(v, (int, float)) and v > 0
+        )
+        v = per_luxury * luxury_count
+        if v:
+            entries.append({"label": "Owner Luxury Resources", "value": v})
+            total += v
+
+    gov_type = head.get("government_type", "")
+    if gov_type:
+        nations_schema = category_data.get("nations", {}).get("schema", {})
+        gov_law = nations_schema.get("properties", {}).get("government_type", {}).get("laws", {}).get(gov_type, {})
+        if gov_law.get("_modifiers"):
+            from calculations.source_adapters import _resolve_modifier_type
+            for mod in gov_law["_modifiers"]:
+                if mod.get("scope") != "nation_market":
+                    continue
+                if _resolve_modifier_type(mod) != "bandit_camp_spawn_chance":
+                    continue
+                value = mod.get("value", 0)
+                scaling = mod.get("scaling", "flat")
+                if scaling and scaling != "flat":
+                    scaling_x = float(mod.get("scaling_x") or 1)
+                    scaling_extra = mod.get("scaling_extra") or ""
+                    value *= get_scaling_multiplier(scaling, head, scaling_x=scaling_x, scaling_extra=scaling_extra)
+                if value:
+                    entries.append({"label": f"{gov_type} (Market Head)", "value": value})
+                    total += value
+
+    return total, entries
+
+
+def compute_bandit_camp_spawn_chance(field, target, base_value, field_schema, overall_total_modifiers):
+    """Chance a new bandit camp spawns in this market's trade network each
+    session (rolled by tick_helpers.bandit_camp_spawn_tick). Base 5%, moved
+    by market type (Illicit raises it; Luxury/Maritime/Militant lower it
+    per owner luxury/naval/land unit) and by member protection stances
+    (market_links.json's market_safety_stance laws), plus any nation_market-
+    scoped government-type law modifier the market head's nation grants
+    (e.g. Imperial Council — see get_bandit_camp_spawn_chance_unit_contributions)
+    — but never below BANDIT_CAMP_SPAWN_CHANCE_FLOOR (5%), regardless of how
+    much reduction stacks up. Every market carries at least a baseline risk."""
+    value = base_value + overall_total_modifiers.get(field, 0)
+
+    unit_bonus, _ = get_bandit_camp_spawn_chance_unit_contributions(target, overall_total_modifiers)
+    value += unit_bonus
 
     return max(BANDIT_CAMP_SPAWN_CHANCE_FLOOR, min(1.0, value))
 

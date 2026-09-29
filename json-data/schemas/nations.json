@@ -1039,7 +1039,7 @@
           "Imperial Council": {
             "city_slots": 6,
             "_modifiers": [
-              { "modifier_type": "trade_risk", "value": -0.02, "scope": "nation_market", "scaling": "per_x_units", "scaling_x": 1 },
+              { "modifier_type": "bandit_camp_spawn_chance", "value": -0.02, "scope": "nation_market", "scaling": "per_x_units", "scaling_x": 1 },
               { "modifier_type": "trade_slots", "value": 1, "scope": "nation_self", "scaling": "per_x_units", "scaling_x": 2 },
               { "modifier_type": "trade_speed", "value": 1, "scope": "nation_self", "scaling": "per_x_units", "scaling_x": 2 }
             ]
@@ -1483,7 +1483,7 @@
         "default": "Pragmatic",
         "laws": {
           "Puritanical": {
-            "karma": 2,
+            "karma": 4,
             "stability_gain_chance": 0.25,
             "replace_researcher_research_with_karma": 10
           },

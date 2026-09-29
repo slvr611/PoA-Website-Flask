@@ -158,10 +158,10 @@ def _additional_trade_city_ids(merchant):
 
 
 def _party_position_set(party_type, party_name, tile_map, trade_wonder_ids):
-    """Return (position_set, home_nation_name) for a trade party.
+    """Return (position_set, home_nations_set) for a trade party.
 
-    Nations: their owned city tiles (fallback: all owned tiles); home_nation_name
-    is just their own name.
+    Nations: their owned city tiles (fallback: all owned tiles); home_nations_set
+    is just {their own name}.
 
     Merchants: the tile at current_city_id if set and it actually resolves to
     a city, UNIONED with every city granted by an "additional_trade_city"
@@ -169,17 +169,23 @@ def _party_position_set(party_type, party_name, tile_map, trade_wonder_ids):
     any nation, not just the merchant's home one). If current_city_id isn't
     set/valid and there are no additional cities either, falls back to
     behaving like a plain member of the home nation (location) — same
-    city-or-all-owned-tiles logic a nation gets. home_nation_name is always
-    the merchant's home nation (used so a merchant's home territory stays
-    freely traversable, the same benefit a nation's own owned tiles get —
-    note this bonus applies only to the primary home nation, not to whatever
-    nations own the merchant's additional cities), or None if unresolvable.
+    city-or-all-owned-tiles logic a nation gets. home_nations_set is the
+    merchant's own home nation PLUS the owner of every additional city it
+    resolved a position for — each one's whole territory is freely
+    traversable, the same benefit a nation's own owned tiles get, not just
+    the primary home nation's (see the 2026-09-28 "Orchid Island Trading
+    Company" report: a merchant's additional city in another nation could be
+    used as a start/end point, but couldn't route THROUGH that nation's own
+    plain, road-less land to reach a third party — its reach was silently
+    capped at whatever roads happened to touch that one tile). Empty set if
+    unresolvable.
     """
     if party_type == "merchant":
         merchant = mongo.db.merchants.find_one(
             {"name": party_name}, {"current_city_id": 1, "location": 1, "modifiers": 1}
         )
         home_nation = _merchant_home_nation_name(merchant)
+        home_nations = {home_nation} if home_nation else set()
 
         positions = set()
         primary_pos = _city_position_by_id(tile_map, (merchant or {}).get("current_city_id"))
@@ -189,17 +195,20 @@ def _party_position_set(party_type, party_name, tile_map, trade_wonder_ids):
             extra_pos = _city_position_by_id(tile_map, extra_city_id)
             if extra_pos is not None:
                 positions.add(extra_pos)
+                extra_owner = tile_map[extra_pos].get("owner")
+                if extra_owner:
+                    home_nations.add(extra_owner)
 
         if positions:
-            return positions, home_nation
+            return positions, home_nations
         # No valid specific city at all — behave like a regular member of the home nation.
         if not home_nation:
-            return set(), None
+            return set(), set()
         party_type, party_name = "nation", home_nation
 
     cities = {pos for pos, t in tile_map.items() if t.get("owner") == party_name and _is_trade_city(t, trade_wonder_ids)}
     positions = cities or {pos for pos, t in tile_map.items() if t.get("owner") == party_name}
-    return positions, party_name
+    return positions, {party_name}
 
 
 def _dijkstra_from_parties(source_type, source_name, target_parties, tiles_raw, portal_map, move_costs, trade_wonder_ids=None):
@@ -209,8 +218,10 @@ def _dijkstra_from_parties(source_type, source_name, target_parties, tiles_raw, 
 
     target_parties: list of (party_type, party_name) tuples.
     Traversable: road tiles, portal tiles, city tiles, and any tile owned by
-    the source's or a target's home nation (a merchant's home nation grants
-    the same free-traversal benefit its own owned tiles would).
+    one of the source's or a target's home nations (a merchant's home nation
+    AND every nation owning one of its additional trade cities each grant
+    the same free-traversal benefit a nation's own owned tiles would — see
+    _party_position_set).
 
     Returns {(party_type, party_name): cost} for each reachable target.
     """
@@ -219,19 +230,16 @@ def _dijkstra_from_parties(source_type, source_name, target_parties, tiles_raw, 
 
     tile_map = {(t["q"], t["r"]): t for t in tiles_raw}
 
-    src_pos, src_home = _party_position_set(source_type, source_name, tile_map, trade_wonder_ids)
+    src_pos, src_homes = _party_position_set(source_type, source_name, tile_map, trade_wonder_ids)
     if not src_pos:
         return {}
 
     tgt_positions = {}
-    home_nations = set()
-    if src_home:
-        home_nations.add(src_home)
+    home_nations = set(src_homes)
     for party in target_parties:
-        positions, home = _party_position_set(party[0], party[1], tile_map, trade_wonder_ids)
+        positions, homes = _party_position_set(party[0], party[1], tile_map, trade_wonder_ids)
         tgt_positions[party] = positions
-        if home:
-            home_nations.add(home)
+        home_nations |= homes
 
     traversable = {
         pos for pos, t in tile_map.items()
@@ -302,18 +310,32 @@ def _dijkstra_from_cities(source_nation, target_nations, tiles_raw, portal_map, 
 def _trade_tile_load_names(parties):
     """Expand a list of (party_type, party_name) into every nation name whose
     owned tiles _load_trade_tiles needs to fetch — each nation party's own
-    name, plus each merchant party's home nation (so its home territory is
-    available for the free-traversal bonus _party_position_set grants it).
+    name, plus each merchant party's home nation AND the owner of each of its
+    "additional_trade_city" cities (so every nation the merchant is actually
+    based in gets its full territory loaded, not just the primary home one —
+    see _party_position_set for the matching free-traversal fix this feeds).
     City/route/portal/wonder tiles are always fetched unconditionally by
     _load_trade_tiles regardless of this list, so a merchant's own specific
-    city tile is covered either way."""
+    city tiles are covered either way — this only controls whether the REST
+    of an additional city's nation (plain, road-less tiles) is walkable.
+
+    A merchant's additional-city owner is resolved via a small, targeted
+    hex_map_tiles lookup here (before the main tile_map exists yet) rather
+    than deferred to _party_position_set, since that function only sees
+    whatever _load_trade_tiles already fetched."""
     names = set()
     for party_type, party_name in parties:
         if party_type == "merchant":
-            merchant = mongo.db.merchants.find_one({"name": party_name}, {"location": 1})
+            merchant = mongo.db.merchants.find_one({"name": party_name}, {"location": 1, "modifiers": 1})
             home = _merchant_home_nation_name(merchant)
             if home:
                 names.add(home)
+            for extra_city_id in _additional_trade_city_ids(merchant):
+                extra_tile = mongo.db.hex_map_tiles.find_one(
+                    {"city.id": extra_city_id}, {"owner": 1}
+                )
+                if extra_tile and extra_tile.get("owner"):
+                    names.add(extra_tile["owner"])
         else:
             names.add(party_name)
     return list(names)

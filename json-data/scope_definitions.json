@@ -27,6 +27,13 @@
         "target_type": "nation",
         "resolution": {"type": "forward_link", "collection": "nations", "link_field": "overlord"}
     },
+    "nation_market": {
+        "name": "Market (as Head)",
+        "description": "The market this nation currently heads, if any — see get_bandit_camp_spawn_chance_unit_contributions, the dedicated resolver for this scope (law-embedded _modifiers with a cross-entity scope need their own resolver, the same way nation_ruling_characters is resolved by LawAdapter.collect_for_character rather than the generic external_calculation_requirements pathway)",
+        "source_type": "nation",
+        "target_type": "market",
+        "resolution": {"type": "reverse_link", "collection": "markets", "link_field": "market_head"}
+    },
     "character_self": {
         "name": "Character (Self)",
         "description": "The character itself",
