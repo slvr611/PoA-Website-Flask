@@ -624,7 +624,8 @@ def item_archived_changes(data_type, item_ref, page=1):
             "target_collection": data_type,
             "target": target_query
         },
-        query_dict
+        query_dict,
+        allow_disk_use=True,
     ).sort([("last_modified_time", DESCENDING), ("time_requested", DESCENDING)])
      .skip(skip).limit(items_per_page))
 
