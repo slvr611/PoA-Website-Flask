@@ -23,11 +23,29 @@ os.chdir(_project_root)
 # Provide dummy values for every env var that app_core or Flask-Discord reads
 # at import time.  The values are never used for real network connections in
 # tests, but they must be present to avoid KeyError / None-config errors.
-os.environ.setdefault("MONGO_URI", "mongodb://localhost:27017/poa_test")
+#
+# CRITICAL: app_core.py calls load_dotenv(override=True) at module import
+# time — if the real .env is ever loadable (true for every normal dev/CI
+# checkout), that call OVERWRITES the setdefault() below with the real
+# production MONGO_URI the moment anything first imports app_core, and
+# every test that doesn't perfectly patch every `mongo` reference it
+# touches then silently reads/writes the REAL production database. This
+# was caught live: two tests in test_tick_atomicity.py called
+# _run_tick_guarded without patching helpers.tick_helpers.mongo, and every
+# pytest run was flipping the production revert-warning banner on and
+# writing to the production tick_status document. Neutralizing
+# dotenv.load_dotenv here (the same technique scripts/run_local_tick.py
+# already uses for its own safety) makes app_core's load_dotenv() call a
+# no-op, so the setdefault() below actually sticks for the rest of the
+# process. Must happen before anything could possibly import app_core.
+os.environ["MONGO_URI"] = "mongodb://localhost:27017/poa_test"
 os.environ.setdefault("SECRET_KEY", "test-secret-key")
 os.environ.setdefault("DISCORD_CLIENT_ID", "test-client-id")
 os.environ.setdefault("DISCORD_CLIENT_SECRET", "test-client-secret")
 os.environ.setdefault("DISCORD_REDIRECT_URI", "http://localhost/callback")
+
+import dotenv
+dotenv.load_dotenv = lambda *a, **kw: False
 
 # ---------------------------------------------------------------------------
 # Regular imports (after path/env are ready)
@@ -36,6 +54,11 @@ import pytest
 import mongomock
 from unittest.mock import MagicMock
 from bson import ObjectId
+
+
+def _looks_local(uri):
+    from urllib.parse import urlparse
+    return (urlparse(uri).hostname or "").lower() in ("localhost", "127.0.0.1", "::1")
 
 
 # ---------------------------------------------------------------------------
@@ -49,7 +72,22 @@ def flask_app():
     Session-scoped so app_core is only imported once — importing it triggers
     schema JSON loading and index creation, which are expensive side effects.
     """
-    from app_core import app
+    from app_core import app, mongo
+
+    # Last-resort safety net: even with dotenv neutralized above, verify the
+    # connection app_core actually ended up with isn't production before any
+    # test can run against it. See the MONGO_URI comment above this fixture's
+    # module for why this matters — a single test forgetting to patch
+    # `mongo` would otherwise read/write the real site's database.
+    effective_uri = app.config.get("MONGO_URI") or os.environ.get("MONGO_URI", "")
+    if not _looks_local(effective_uri):
+        pytest.exit(
+            f"SAFETY ABORT: the test suite's MongoClient is not pointed at a "
+            f"local database (MONGO_URI={effective_uri!r}, db={mongo.db.name!r}). "
+            f"Refusing to run any test against what might be production.",
+            returncode=1,
+        )
+
     app.config["TESTING"] = True
     return app
 

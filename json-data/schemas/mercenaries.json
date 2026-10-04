@@ -73,7 +73,7 @@
         "description": "The nation's general approach to land based warfare",
         "enum": [
           "Standard",
-          "Nomadic",
+          "Horde",
           "Shock",
           "Volley",
           "Safeguard",
@@ -82,9 +82,7 @@
         ],
         "laws": {
           "Standard": {},
-          "Nomadic": {
-            "land_unit_speed": 1
-          },
+          "Horde": {},
           "Shock": {
             "first_session_land_attack": 2,
             "after_first_session_land_defense": -4

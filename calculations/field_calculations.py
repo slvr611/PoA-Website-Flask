@@ -1729,10 +1729,14 @@ def check_job_requirements(target, job_details, overall_total_modifiers, region_
                 if overall_total_modifiers.get(modifier, 0) <= 0:
                     meets_requirements = False
         elif requirement == "wonder":
-            for wonder in value:
+            for wonder_name in value:
                 wonderdb = category_data["wonders"]["database"]
-                wonder = wonderdb.find_one({"name": wonder})
-                if str(target.get("_id", "")) != wonder.get("owner_nation", ""):
+                wonder_doc = wonderdb.find_one({"name": wonder_name})
+                # A wonder nobody has built yet can't be owned by anyone —
+                # that's an unmet requirement, not a crash (find_one()
+                # returning None is the normal case for any wonder that
+                # simply hasn't been constructed yet by any nation).
+                if not wonder_doc or str(target.get("_id", "")) != wonder_doc.get("owner_nation", ""):
                     meets_requirements = False
         elif requirement == "empire":
             if target.get("empire", False) != value:

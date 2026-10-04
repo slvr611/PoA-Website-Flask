@@ -671,7 +671,14 @@ class IndividualTechDict(Form):
         if item:
             self.investing.data = item.get("investing", 0)
             base_cost = json_data.get("tech", {}).get(name, {}).get("cost", 0)
-            stored_cost = item.get("cost", base_cost)
+            # item.get("cost", base_cost) only falls back when the key is
+            # ABSENT — a stored `cost: None` (e.g. a "Cost Manually Set"
+            # submission with an empty cost field, which _update_tech_costs
+            # then permanently exempts from recalculation) still comes back
+            # as None and crashes the max() comparison below.
+            stored_cost = item.get("cost")
+            if stored_cost is None:
+                stored_cost = base_cost
             if base_cost > 0:
                 stored_cost = max(stored_cost, (base_cost + 1) // 2)
             self.cost.data = stored_cost
@@ -1475,7 +1482,7 @@ class NationForm(BaseSchemaForm):
         
         return form
     
-    def populate_linked_fields(self, schema, dropdown_options, nation=None):
+    def populate_linked_fields(self, schema, dropdown_options, item=None):
         """Populates all linked fields with their options"""
         from time import perf_counter as _pc
         from flask import current_app as _app
@@ -1538,8 +1545,8 @@ class NationForm(BaseSchemaForm):
         _t4 = _pc()
 
         nation_researched = set()
-        if nation:
-            nation_researched = {k for k, v in nation.get("technologies", {}).items() if v.get("researched")}
+        if item:
+            nation_researched = {k for k, v in item.get("technologies", {}).items() if v.get("researched")}
         city_choices = [("", "Empty Slot")]
         cities = json_data.get("cities", {})
         for city_key, city_data in cities.items():

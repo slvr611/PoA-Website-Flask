@@ -103,3 +103,107 @@ class TestUpdateTechCostsFloor:
         with _patched():
             _update_tech_costs(nation)  # must not raise
         assert nation["technologies"] == "not_a_dict"
+
+
+class TestValidateTechCostsRejectsBlankManualCost:
+    """Regression for the 2026-10-03 "Jinying" incident: a 'Cost Manually
+    Set' tech submitted with an empty cost field saves cost=None — and
+    _update_tech_costs skips recalculating any cost_manually_set=True tech
+    forever, so that None can never self-heal. It later crashed every load
+    of the nation edit page (forms.py's IndividualTechDict.load_form_from_item
+    doing max(None, int)). _validate_tech_costs must reject this at submit
+    time instead of silently letting it through."""
+
+    def test_blank_cost_with_manually_set_is_rejected(self):
+        import importlib
+        nr = importlib.import_module("routes.nation_routes")
+        with patch("routes.nation_routes.json_data", {"tech": {
+            "mortar_masonry": {"cost": 9, "display_name": "Mortar Masonry"},
+        }}):
+            valid, error = nr._validate_tech_costs({
+                "technologies": {
+                    "mortar_masonry": {"cost": None, "cost_manually_set": True},
+                }
+            })
+        assert valid is False
+        assert "Mortar Masonry" in error
+        assert "Cost Manually Set" in error
+
+    def test_blank_cost_without_manually_set_still_allowed(self):
+        """Auto-managed techs get recomputed unconditionally by
+        _update_tech_costs regardless of what's submitted, so a None here
+        is harmless and must stay allowed (unchanged pre-existing behavior)."""
+        import importlib
+        nr = importlib.import_module("routes.nation_routes")
+        with patch("routes.nation_routes.json_data", {"tech": {
+            "mortar_masonry": {"cost": 9, "display_name": "Mortar Masonry"},
+        }}):
+            valid, error = nr._validate_tech_costs({
+                "technologies": {
+                    "mortar_masonry": {"cost": None, "cost_manually_set": False},
+                }
+            })
+        assert valid is True
+
+    def test_valid_manually_set_cost_still_allowed(self):
+        import importlib
+        nr = importlib.import_module("routes.nation_routes")
+        with patch("routes.nation_routes.json_data", {"tech": {
+            "mortar_masonry": {"cost": 9, "display_name": "Mortar Masonry"},
+        }}):
+            valid, error = nr._validate_tech_costs({
+                "technologies": {
+                    "mortar_masonry": {"cost": 8, "cost_manually_set": True},
+                }
+            })
+        assert valid is True
+
+
+class TestIndividualTechDictLoadFormFromItemHandlesNullCost:
+    """forms.py's IndividualTechDict.load_form_from_item crashed with
+    TypeError: '>' not supported between instances of 'int' and 'NoneType'
+    when a stored tech had cost=None (see TestValidateTechCostsRejectsBlankManualCost
+    above for how that gets saved) — item.get("cost", base_cost) only falls
+    back to base_cost when the key is ABSENT, not when it's present with a
+    None value."""
+
+    def test_null_cost_falls_back_to_base_cost_instead_of_crashing(self):
+        from forms import IndividualTechDict
+        with patch("forms.json_data", {"tech": {
+            "mortar_masonry": {"cost": 9},
+        }}):
+            field = IndividualTechDict()
+            field.load_form_from_item(
+                "mortar_masonry",
+                {"cost": None, "cost_manually_set": True, "researched": False},
+                schema={},
+            )
+        assert field.cost.data == 9  # falls back to base_cost, not a crash
+
+    def test_normal_stored_cost_is_unaffected(self):
+        from forms import IndividualTechDict
+        with patch("forms.json_data", {"tech": {
+            "mortar_masonry": {"cost": 9},
+        }}):
+            field = IndividualTechDict()
+            field.load_form_from_item(
+                "mortar_masonry",
+                {"cost": 12, "cost_manually_set": True, "researched": False},
+                schema={},
+            )
+        assert field.cost.data == 12
+
+    def test_missing_cost_key_still_falls_back_to_base_cost(self):
+        """The original item.get("cost", base_cost) behavior for a fully
+        absent key must be preserved."""
+        from forms import IndividualTechDict
+        with patch("forms.json_data", {"tech": {
+            "mortar_masonry": {"cost": 9},
+        }}):
+            field = IndividualTechDict()
+            field.load_form_from_item(
+                "mortar_masonry",
+                {"researched": False},
+                schema={},
+            )
+        assert field.cost.data == 9

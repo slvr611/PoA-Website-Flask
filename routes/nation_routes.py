@@ -147,6 +147,17 @@ def _validate_tech_costs(form_data):
             continue
         submitted_cost = tech_data.get("cost")
         if submitted_cost is None:
+            # A manually-set cost left blank saves as a permanent None —
+            # _update_tech_costs (helpers/change_helpers.py) skips
+            # recalculating any tech with cost_manually_set=True, so unlike
+            # an auto-managed tech (which gets a real value recomputed next
+            # pass regardless of what's submitted here), this can never
+            # self-heal and crashes the edit form on every future load.
+            if tech_data.get("cost_manually_set"):
+                display_name = tech_json.get(tech_id, {}).get("display_name", tech_id)
+                errors.append(
+                    f"'{display_name}' has 'Cost Manually Set' checked but no cost was entered."
+                )
             continue
         base_cost = tech_json.get(tech_id, {}).get("cost", 0)
         if base_cost <= 0:
@@ -695,7 +706,7 @@ def _render_nation_edit(item_ref, form=None):
         form.concessions.data = json.dumps(nation.get("concessions", {}))
     _r4 = perf_counter()
 
-    form.populate_linked_fields(schema, dropdown_options, nation=nation)
+    form.populate_linked_fields(schema, dropdown_options, item=nation)
     _r5 = perf_counter()
 
     def _opts(collection):

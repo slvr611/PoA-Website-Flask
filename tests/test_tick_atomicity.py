@@ -831,7 +831,14 @@ class TestRunTickGuardedReportsPartialFailureAccurately:
         def fake_target(form_data):
             raise th.TickPartialCommitError(OperationFailure("boom", code=251), chunks_committed=3, items_committed=42)
 
-        with patch("helpers.tick_helpers.give_tick_summary", side_effect=lambda p, f: summaries.update(full=f)):
+        # _run_tick_guarded also writes tick_status/global_modifiers
+        # (heartbeat + revert-warning) via the module-level `mongo` — must
+        # be patched to the isolated mongomock db, not the real connection
+        # (see the MONGO_URI safety-net comment in conftest.py: this exact
+        # omission was caught live writing to the production database on
+        # every pytest run).
+        with patch("helpers.tick_helpers.mongo", mock_mongo), \
+             patch("helpers.tick_helpers.give_tick_summary", side_effect=lambda p, f: summaries.update(full=f)):
             th._run_tick_guarded(fake_target, {}, "Tick")
 
         assert "FAILED partway through committing" in summaries["full"]
@@ -846,7 +853,8 @@ class TestRunTickGuardedReportsPartialFailureAccurately:
         def fake_target(form_data):
             raise OperationFailure("boom", code=251)
 
-        with patch("helpers.tick_helpers.give_tick_summary", side_effect=lambda p, f: summaries.update(full=f)):
+        with patch("helpers.tick_helpers.mongo", mock_mongo), \
+             patch("helpers.tick_helpers.give_tick_summary", side_effect=lambda p, f: summaries.update(full=f)):
             th._run_tick_guarded(fake_target, {}, "Tick")
 
         assert "FAILED and was fully rolled back" in summaries["full"]
