@@ -665,12 +665,17 @@ def compute_resource_production(field, target, base_value, field_schema, overall
 
     # Luxury resources: 1 per active node (built, or any node for nomadic nations),
     # plus any direct "{key}_production" modifier (e.g. merchant districts, which
-    # have no map nodes and so can only ever grant luxury resources this way).
+    # have no map nodes and so can only ever grant luxury resources this way),
+    # plus "luxury_resource_production" — a category-wide bonus applying to
+    # every luxury resource at once (the luxury equivalent of the plain
+    # "resource_production" modifier general/unique resources already get
+    # above; luxury resources are computed separately so they never saw it).
+    luxury_production_bonus = overall_total_modifiers.get("luxury_resource_production", 0)
     for resource in json_data["luxury_resources"]:
         key = resource["key"]
         node_production = overall_total_modifiers.get(key + "_nodes", 0)
-        direct_production = overall_total_modifiers.get(key + "_production", 0)
-        production_dict[key] = node_production + direct_production
+        direct_production = overall_total_modifiers.get(key + "_production", 0) + luxury_production_bonus
+        production_dict[key] = max(node_production + direct_production, 0)
 
     # Trade route imports
     nation_name = target.get("name", "")
@@ -723,8 +728,17 @@ def compute_resource_consumption(field, target, base_value, field_schema, overal
                 consumption_dict[r_to] = consumption_dict.get(r_to, 0) + consumption_dict.get(r_from, 0) * ratio
                 consumption_dict[r_from] = 0
 
+    # Luxury resources have no consumption by default — nothing eats them
+    # each session — but "{key}_consumption" (a specific luxury resource)
+    # and "luxury_resource_consumption" (a category-wide bonus applying to
+    # every luxury resource at once, the luxury equivalent of the plain
+    # "resource_consumption" modifier general/unique resources already get
+    # above) can now make a nation actually consume them.
+    luxury_consumption_bonus = overall_total_modifiers.get("luxury_resource_consumption", 0)
     for resource in json_data["luxury_resources"]:
-        consumption_dict[resource["key"]] = 0
+        key = resource["key"]
+        specific_luxury_consumption = overall_total_modifiers.get(key + "_consumption", 0) + luxury_consumption_bonus
+        consumption_dict[key] = max(specific_luxury_consumption, 0)
 
     # Trade route exports
     nation_name = target.get("name", "")

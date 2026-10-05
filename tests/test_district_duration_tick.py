@@ -111,3 +111,39 @@ class TestCounterIncrement:
         counter = next(m for m in new_nation["modifiers"] if m["field"] == "district_sessions_sawmill")
         assert counter["value"] == 1
         assert "session count -> 1 (new)" in result
+
+    def test_blank_field_counter_increments_instead_of_duplicating(self):
+        """Regression for the 2026-10-04 "Dyeak" incident: district_session_count's
+        field is a template resolved only at aggregation time (see
+        json-data/modifier_types.json), so every real stored counter has
+        field: '' or field: None — never the literal "district_sessions_X"
+        string. Matching on `field == field_key` alone never found the
+        existing counter, so every tick appended a brand new duplicate
+        stuck at value=1 instead of incrementing it (Dyeak accumulated 18
+        duplicate library counters and 3 duplicate workshop counters this
+        way). Must match by modifier_type + district_key instead."""
+        district = {"def_key": "library"}
+        modifiers = [{
+            "field": "", "value": 7, "duration": -1, "source": "District: Library",
+            "modifier_type": "district_session_count", "district_key": "library",
+        }]
+        old_nation = _nation(modifiers, districts=[district])
+        new_nation = _nation([dict(m) for m in modifiers], districts=[district])
+
+        fake_def = {
+            "display_name": "Library",
+            "modifiers": [{"modifier_type": "duration_scaling"}],
+        }
+        fake_modifier_types = {"duration_scaling": {"is_district_duration": True}}
+
+        with patch("calculations.field_calculations._resolve_def", return_value=fake_def), \
+             patch.object(th, "json_data", {"modifier_types": fake_modifier_types}):
+            result = th.district_duration_tick(old_nation, new_nation, {})
+
+        session_counters = [
+            m for m in new_nation["modifiers"]
+            if m.get("modifier_type") == "district_session_count" and m.get("district_key") == "library"
+        ]
+        assert len(session_counters) == 1, "a duplicate counter was created instead of incrementing the existing one"
+        assert session_counters[0]["value"] == 8
+        assert "session count -> 8" in result

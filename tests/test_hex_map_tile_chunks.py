@@ -143,6 +143,118 @@ class TestNotifyTileChanged:
         chunk = test_db["hex_map_tile_chunks"].find_one({"_id": hmh._chunk_id(1, 1)})
         assert chunk["tiles"][0]["q"] == 1
 
+    def test_marks_chunk_synced_to_the_version_it_just_bumped(self, test_db):
+        """Regression for the 2026-10-04 investigation: chunk_synced_version
+        used to only ever advance inside rebuild_tile_chunks()'s full scan,
+        so it permanently lagged tile_version by however many single-tile
+        writes had happened since the last rebuild. That made the very next
+        full-map read after ANY notify_tile_changed() call see a version
+        mismatch and pay a full ~11,500-document rebuild regardless of the
+        chunk mirror already being correct — defeating the entire point of
+        syncing per-tile. Measured live as the dominant cost (~12s of ~22s)
+        of approving a nation change, enough to time out Heroku requests."""
+        tile = _insert_tile(test_db, 1, 1, terrain="plains")
+        with _patch_mongo(test_db):
+            hmh.notify_tile_changed(tile["_id"])
+
+        config = test_db["global_modifiers"].find_one({"name": "hex_map_config"})
+        assert config["tile_version"] == config["chunk_synced_version"] == 1
+
+    def test_fast_path_taken_on_the_very_next_read_after_a_single_tile_write(self, test_db):
+        """End-to-end: after notify_tile_changed, get_all_tiles_from_chunks
+        must NOT call rebuild_tile_chunks() at all."""
+        tile = _insert_tile(test_db, 1, 1, terrain="plains")
+        with _patch_mongo(test_db):
+            hmh.rebuild_tile_chunks()
+            test_db["hex_map_tiles"].update_one({"_id": tile["_id"]}, {"$set": {"terrain": "forest"}})
+            hmh.notify_tile_changed(tile["_id"])
+
+            calls = []
+            original = hmh.rebuild_tile_chunks
+            hmh.rebuild_tile_chunks = lambda: (calls.append(1), original())[1]
+            try:
+                tiles = hmh.get_all_tiles_from_chunks()
+            finally:
+                hmh.rebuild_tile_chunks = original
+
+        assert calls == []
+        assert tiles[0]["terrain"] == "forest"
+
+    def test_by_coord_variant_also_marks_chunk_synced(self, test_db):
+        _insert_tile(test_db, 2, 2, terrain="plains")
+        with _patch_mongo(test_db):
+            hmh.notify_tile_changed_by_coord(2, 2)
+
+        config = test_db["global_modifiers"].find_one({"name": "hex_map_config"})
+        assert config["tile_version"] == config["chunk_synced_version"] == 1
+
+    def test_concurrent_version_bump_leaves_chunk_synced_version_stale(self, test_db):
+        """If some other write bumps tile_version in between this call's own
+        bump and its mark-synced step, _mark_chunk_synced's filtered update
+        must no-op rather than falsely claiming the mirror caught up to a
+        version it never actually reached."""
+        tile = _insert_tile(test_db, 1, 1, terrain="plains")
+        with _patch_mongo(test_db):
+            version = hmh.bump_tile_version()
+            hmh._sync_tile_chunk(tile["_id"])
+            _bump_version(test_db)  # a concurrent, unrelated bump
+            hmh._mark_chunk_synced(version)  # stale by now — must not apply
+
+        config = test_db["global_modifiers"].find_one({"name": "hex_map_config"})
+        assert config["tile_version"] == 2
+        assert config.get("chunk_synced_version") != 2
+
+
+class TestProcessCachePatchedBySingleTileWrites:
+    """_patch_process_tile_cache keeps the process-level full-tile-list
+    cache warm across individual tile writes — without it, every single
+    tile write (far more frequent in practice than full map reads) would
+    force the next full-map read to pay the real aggregate-fetch cost all
+    over again even with chunk_synced_version correctly tracked."""
+
+    def test_warm_cache_reflects_an_update_without_rereading_mongo(self, test_db):
+        tile = _insert_tile(test_db, 0, 0, terrain="plains", owner="Testland")
+        with _patch_mongo(test_db):
+            first = hmh.get_all_tiles_from_chunks()
+            assert first[0]["owner"] == "Testland"
+
+            test_db["hex_map_tiles"].update_one({"_id": tile["_id"]}, {"$set": {"owner": "Newland"}})
+            hmh.notify_tile_changed(tile["_id"])
+
+            # Corrupt the Mongo-side chunk mirror directly — if the cache
+            # weren't patched and this fell back to a real read, it would
+            # see this value instead of the true update.
+            test_db["hex_map_tile_chunks"].update_many({}, {"$set": {"tiles.0.owner": "SHOULD_NOT_APPEAR"}})
+
+            second = hmh.get_all_tiles_from_chunks()
+
+        assert second[0]["owner"] == "Newland"
+
+    def test_new_tile_is_appended_to_the_warm_cache(self, test_db):
+        _insert_tile(test_db, 0, 0, terrain="plains")
+        with _patch_mongo(test_db):
+            first = hmh.get_all_tiles_from_chunks()
+            assert len(first) == 1
+
+            new_tile = _insert_tile(test_db, 5, 5, terrain="forest")
+            hmh.notify_tile_changed(new_tile["_id"])
+
+            test_db["hex_map_tile_chunks"].delete_many({})  # prove no refetch happens
+            second = hmh.get_all_tiles_from_chunks()
+
+        assert len(second) == 2
+        assert {(t["q"], t["r"]) for t in second} == {(0, 0), (5, 5)}
+
+    def test_does_not_patch_an_unpopulated_cache(self, test_db):
+        """Nothing has read the full tile list yet this process — patching
+        must be a no-op, not an error."""
+        tile = _insert_tile(test_db, 0, 0, terrain="plains")
+        with _patch_mongo(test_db):
+            hmh.notify_tile_changed(tile["_id"])  # cache not built yet — must not raise
+            tiles = hmh.get_all_tiles_from_chunks()
+
+        assert len(tiles) == 1
+
 
 class TestGetAllTilesFromChunks:
     def test_fast_path_used_when_version_matches(self, test_db):

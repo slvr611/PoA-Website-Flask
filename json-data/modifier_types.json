@@ -415,6 +415,20 @@
         ],
         "applicable_to": ["nation", "merchant"]
     },
+    "luxury_resource_production": {
+        "name": "Luxury Resource Production",
+        "description": "Applies to the production of every luxury resource at once, on top of any resource-specific production modifier (e.g. a modifier directly on '{resource}_production'). Unlike the plain 'Resource Production' modifier, which only affects general/unique resources, luxury resources are calculated separately and need this dedicated category-wide modifier.",
+        "value_format": "number",
+        "field_template": "luxury_resource_production",
+        "applicable_to": ["nation"]
+    },
+    "luxury_resource_consumption": {
+        "name": "Luxury Resource Consumption",
+        "description": "Applies to the consumption of every luxury resource at once, on top of any resource-specific consumption modifier. Luxury resources have no consumption by default (nothing reduces them each session) — this is the only way to make a nation's luxury resources actually get consumed.",
+        "value_format": "number",
+        "field_template": "luxury_resource_consumption",
+        "applicable_to": ["nation"]
+    },
     "resource_storage_capacity": {
         "name": "Resource Storage Capacity",
         "value_format": "number",

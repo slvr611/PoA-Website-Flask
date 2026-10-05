@@ -3747,7 +3747,24 @@ def district_duration_tick(old_nation, new_nation, schema):
         source = f"District: {display_name}"
         found = False
         for m in modifiers:
-            if m.get("field") == field_key:
+            # "district_session_count" uses a field_template
+            # ("district_sessions_{district_key}") resolved only at
+            # aggregation time (field_calculations.py's sum_modifier_totals)
+            # — the stored modifier's own "field" is always blank/None, so
+            # m.get("field") == field_key never matched. Every tick fell
+            # through to the "not found" branch below and appended a brand
+            # new duplicate instead of incrementing the existing one (see
+            # the 2026-10-04 "Dyeak" incident: 18 duplicate library counters
+            # and 3 duplicate workshop counters, every one stuck at
+            # value=1). Match by modifier_type + district_key instead,
+            # which is how these are actually identified everywhere else
+            # (the edit page, per_x_district_sessions).
+            if m.get("modifier_type") == "district_session_count" and m.get("district_key") == dk:
+                m["value"] = m.get("value", 0) + 1
+                found = True
+                result += f"{old_nation.get('name', '?')}: {display_name} session count -> {m['value']}\n"
+                break
+            elif m.get("field") == field_key:
                 m["value"] = m.get("value", 0) + 1
                 # Backfill modifier_type/district_key on legacy entries so the
                 # edit page's modifier dropdown can match them (previously blank).

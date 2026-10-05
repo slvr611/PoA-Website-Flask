@@ -909,84 +909,60 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
     target.pop("_calc_cache", None)
     return calculated_values
 
+def _select_prestige_tier(tiers, prestige):
+    """tiers is sorted ascending by min_prestige. The first and last tiers
+    are open-ended — prestige below the first tier's max still gets the
+    first tier (e.g. a collapsed empire well below 1 prestige), and
+    anything at/above the last tier's min gets the last tier regardless of
+    any theoretical upper bound — matching the original hardcoded
+    `prestige > 90` / final `else` chain this replaced."""
+    for tier in tiers[:-1]:
+        if prestige <= tier["max_prestige"]:
+            return tier
+    return tiers[-1]
+
+
 def calculate_prestige_modifiers(target, schema_properties):
+    """Reads the tier table from json-data/prestige_tiers.json — see that
+    file to rebalance karma/stability/strength/pop-capacity/territory by
+    prestige range without touching this function.
+
+    Note: each tier also carries a "build_cost_reduction_pct" value (the
+    design calls for reducing district/city/wall/wonder costs at high
+    prestige), but nothing in the codebase currently applies a cost
+    modifier to any of those build costs at all — they're deducted as flat,
+    unmodified amounts in several different route handlers. That value is
+    intentionally NOT turned into a modifier key here: doing so would
+    silently look like a working effect (visible in a nation's modifier
+    breakdown) while doing nothing, exactly the same dead-modifier bug
+    already found and fixed elsewhere (district_session_count,
+    hunter_food_production_from_dock_or_farm). Wiring it up for real means
+    auditing every build/purchase call site, which is its own task.
+    """
     prestige = int(target.get("prestige", 50))
     gov_type = target.get("government_type", "Unknown")
     nomadic = schema_properties.get("government_type", {}).get("laws", {}).get(gov_type, {}).get("nomadic", 0)
 
+    tiers = json_data.get("prestige_tiers", [])
+    if not tiers:
+        return {}
+    tier = _select_prestige_tier(tiers, prestige)
+
     prestige_modifiers = {}
-    if prestige > 90:
-        prestige_modifiers["karma"] = 6
-        prestige_modifiers["stability_gain_chance"] = 0.25
-        prestige_modifiers["strength"] = 2
-        prestige_modifiers["effective_pop_capacity"] = 6
-        if nomadic > 0:
-            prestige_modifiers["effective_territory"] = 25
-        else:
-            prestige_modifiers["effective_territory"] = 50
-    elif prestige > 80:
-        prestige_modifiers["karma"] = 4
-        prestige_modifiers["stability_gain_chance"] = 0.20
-        prestige_modifiers["strength"] = 2
-        prestige_modifiers["effective_pop_capacity"] = 5
-        if nomadic > 0:
-            prestige_modifiers["effective_territory"] = 20
-        else:
-            prestige_modifiers["effective_territory"] = 45
-    elif prestige > 70:
-        prestige_modifiers["karma"] = 2
-        prestige_modifiers["stability_gain_chance"] = 0.15
-        prestige_modifiers["strength"] = 1
-        prestige_modifiers["effective_pop_capacity"] = 4
-        if nomadic > 0:
-            prestige_modifiers["effective_territory"] = 15
-        else:
-            prestige_modifiers["effective_territory"] = 40
-    elif prestige > 60:
-        prestige_modifiers["stability_gain_chance"] = 0.10
-        prestige_modifiers["strength"] = 1
-        prestige_modifiers["effective_pop_capacity"] = 3
-        if nomadic > 0:
-            prestige_modifiers["effective_territory"] = 12
-        else:
-            prestige_modifiers["effective_territory"] = 35
-    elif prestige > 40:
-        prestige_modifiers["stability_gain_chance"] = 0.05
-        prestige_modifiers["effective_pop_capacity"] = 2
-        if nomadic > 0:
-            prestige_modifiers["effective_territory"] = 10
-        else:
-            prestige_modifiers["effective_territory"] = 30
-    elif prestige > 30:
-        prestige_modifiers["karma"] = -2
-        prestige_modifiers["stability_loss_chance"] = 0.10
-        prestige_modifiers["strength"] = -1
-        if nomadic > 0:
-            prestige_modifiers["effective_territory"] = 8
-        else:
-            prestige_modifiers["effective_territory"] = 25
-    elif prestige > 20:
-        prestige_modifiers["karma"] = -4
-        prestige_modifiers["stability_loss_chance"] = 0.15
-        prestige_modifiers["strength"] = -1
-        if nomadic > 0:
-            prestige_modifiers["effective_territory"] = 5
-        else:
-            prestige_modifiers["effective_territory"] = 15
-    elif prestige > 10:
-        prestige_modifiers["karma"] = -6
-        prestige_modifiers["stability_loss_chance"] = 0.20
-        prestige_modifiers["strength"] = -2
-        prestige_modifiers["effective_pop_capacity"] = -1
-        if nomadic > 0:
-            prestige_modifiers["effective_territory"] = 3
-        else:
-            prestige_modifiers["effective_territory"] = 10
-    else:
-        prestige_modifiers["karma"] = -8
-        prestige_modifiers["stability_loss_chance"] = 0.25
-        prestige_modifiers["strength"] = -3
-        prestige_modifiers["effective_pop_capacity"] = -2
+    if tier.get("karma"):
+        prestige_modifiers["karma"] = tier["karma"]
+    if tier.get("stability_gain_chance"):
+        prestige_modifiers["stability_gain_chance"] = tier["stability_gain_chance"]
+    if tier.get("stability_loss_chance"):
+        prestige_modifiers["stability_loss_chance"] = tier["stability_loss_chance"]
+    if tier.get("strength"):
+        prestige_modifiers["strength"] = tier["strength"]
+    if tier.get("effective_pop_capacity"):
+        prestige_modifiers["effective_pop_capacity"] = tier["effective_pop_capacity"]
+
+    territory = tier.get("effective_territory_nomadic") if nomadic > 0 else tier.get("effective_territory")
+    if territory:
+        prestige_modifiers["effective_territory"] = territory
 
     return prestige_modifiers
 

@@ -1133,8 +1133,20 @@
             "stone_consumption": 1,
             "food_consumption": -4,
             "hunter_food_production": 1,
-            "hunter_food_production_from_dock_or_farm": 1,
-            "stability_gain_chance": 0.5
+            "stability_gain_chance": 0.5,
+            "_modifiers": [
+              {
+                "modifier_type": "job_resource_production",
+                "job": "hunter",
+                "resource": "food",
+                "value": 1,
+                "scope": "nation_self",
+                "condition_scaling": "per_x_specific_districts",
+                "condition_scaling_extra": "farm,dock",
+                "condition_operator": ">=",
+                "condition_value": 1
+              }
+            ]
           }
         }
       },

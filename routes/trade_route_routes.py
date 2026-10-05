@@ -270,28 +270,36 @@ def accept_trade_route(route_id):
         flash("You do not have permission to accept this trade route.", "danger")
         return redirect(request.referrer or url_for("base_routes.index"))
 
-    # Slot check for acceptor
+    # Slot check for acceptor — each direction's check only runs when THIS
+    # route actually asks for that direction's slots (mirrors
+    # propose_trade_route's checks above, which already gate import/export
+    # independently). Without this, a route that only uses import slots
+    # (e.g. new_export cost of 0) still got checked against the acceptor's
+    # TOTAL export usage, which can already be over cap from other,
+    # unrelated routes — incorrectly blocking acceptance of a route that
+    # doesn't touch export capacity at all (see the "Khanya doesn't have
+    # enough export slots" report for an import-only route).
     resources_a_to_b = route.get("resources_a_to_b", [])
     resources_b_to_a = route.get("resources_b_to_a", [])
-    if resources_b_to_a or resources_a_to_b:
+    if resources_a_to_b or resources_b_to_a:
         from helpers.trade_route_helpers import _nations_share_market, _slot_cost_for_direction
         na, nb = route["nation_a"], route["nation_b"]
         capacity = 4 if _nations_share_market(na, nb) else 2
-        _, import_used = count_route_slots(acceptor)
-        export_used, _ = count_route_slots(acceptor)
+        export_used, import_used = count_route_slots(acceptor)
         acceptor_doc = _resolve_party_doc(acceptor_type, acceptor, {"import_slots": 1, "export_slots": 1})
         import_cap = (acceptor_doc or {}).get("import_slots", 3)
         export_cap = (acceptor_doc or {}).get("export_slots", 3)
 
-        new_import = _slot_cost_for_direction(resources_a_to_b, capacity)
-        new_export = _slot_cost_for_direction(resources_b_to_a, capacity)
-
-        if import_used + new_import > import_cap:
-            flash(f"{acceptor} does not have enough import slots.", "danger")
-            return redirect(request.referrer or url_for("base_routes.index"))
-        if export_used + new_export > export_cap:
-            flash(f"{acceptor} does not have enough export slots.", "danger")
-            return redirect(request.referrer or url_for("base_routes.index"))
+        if resources_a_to_b:
+            new_import = _slot_cost_for_direction(resources_a_to_b, capacity)
+            if import_used + new_import > import_cap:
+                flash(f"{acceptor} does not have enough import slots.", "danger")
+                return redirect(request.referrer or url_for("base_routes.index"))
+        if resources_b_to_a:
+            new_export = _slot_cost_for_direction(resources_b_to_a, capacity)
+            if export_used + new_export > export_cap:
+                flash(f"{acceptor} does not have enough export slots.", "danger")
+                return redirect(request.referrer or url_for("base_routes.index"))
 
     current_session = _current_session()
     mongo.db.trade_routes.update_one(

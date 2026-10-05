@@ -87,6 +87,12 @@
         "default_x": 1,
         "has_dropdown": "district_category"
     },
+    "per_x_specific_districts": {
+        "name": "Per X Districts (Specific List)",
+        "description": "Multiplied by the count of districts matching any def_key in a comma-separated list (e.g. 'farm,dock') divided by X, floored. Use for an OR condition across a few named districts, when the category they'd share with each other is too broad.",
+        "has_x": true,
+        "default_x": 1
+    },
     "per_x_administration": {
         "name": "Per X Administration",
         "description": "Multiplied by the nation's administration value divided by X, floored.",

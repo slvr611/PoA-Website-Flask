@@ -143,20 +143,29 @@ def per_x_sessions_with_library(target, scaling_x=1, scaling_extra="", context=N
 def per_x_district_sessions(target, scaling_x=1, scaling_extra="", context=None):
     """Count sessions a district (by def_key) has been active.
 
-    Reads from nation modifiers with field 'district_sessions_{def_key}'.
-    Also checks for modifiers with modifier_type 'district_duration' whose
-    source contains the district name (legacy/manual format).
-    scaling_extra = the district def_key to look up.
+    Reads from nation modifiers with modifier_type 'district_session_count'
+    and a matching district_key. Also checks for modifiers with
+    modifier_type 'district_duration' whose source contains the district
+    name (legacy/manual format). scaling_extra = the district def_key to
+    look up.
+
+    district_session_count's field is a template ("district_sessions_
+    {district_key}", see json-data/modifier_types.json) resolved only at
+    aggregation time — the stored modifier's own "field" is always blank,
+    so the old `m.get("field") == field_key` check here never matched any
+    real stored modifier, and this always returned 0 regardless of how
+    many sessions had actually accumulated (see the 2026-10-04 "Dyeak"
+    incident, where the tick-side counter had the same field/modifier_type
+    mismatch — fixed in helpers/tick_helpers.py's district_duration_tick).
     """
     if not scaling_extra:
         return 0
-    field_key = f"district_sessions_{scaling_extra}"
     modifiers = target.get("modifiers", []) or []
     sessions = 0
     for m in modifiers:
         if not isinstance(m, dict):
             continue
-        if m.get("field") == field_key:
+        if m.get("modifier_type") == "district_session_count" and m.get("district_key") == scaling_extra:
             try:
                 sessions = max(sessions, int(m.get("value", 0)))
             except (TypeError, ValueError):
@@ -195,6 +204,29 @@ def per_x_district_category(target, scaling_x=1, scaling_extra="", context=None)
     count = sum(
         1 for d in districts
         if isinstance(d, dict) and key_to_cat.get(d.get("def_key") or d.get("type", "")) == scaling_extra
+    )
+    divisor = float(scaling_x) if scaling_x else 1
+    return int(count / divisor)
+
+
+def per_x_specific_districts(target, scaling_x=1, scaling_extra="", context=None):
+    """Count districts matching ANY def_key in a comma-separated list
+    (scaling_extra, e.g. "farm,dock"), divided by X, floored.
+
+    For an OR condition across a small named set of specific districts —
+    per_x_district_category matches by a district's whole category instead,
+    which can be too broad (e.g. "farm" and "dock" both share the "food"
+    category along with Pasture/Granary/Fishery/Mills, which a condition
+    meant only for "has access to farmers or fishermen" must not match)."""
+    if not scaling_extra:
+        return 0
+    wanted = {k.strip() for k in scaling_extra.split(",") if k.strip()}
+    if not wanted:
+        return 0
+    districts = target.get("districts", []) or []
+    count = sum(
+        1 for d in districts
+        if isinstance(d, dict) and (d.get("def_key") or d.get("type", "")) in wanted
     )
     divisor = float(scaling_x) if scaling_x else 1
     return int(count / divisor)
@@ -546,6 +578,7 @@ SCALING_METHODS = {
     "per_x_district_sessions": per_x_district_sessions,
     "per_x_terrain_tiles": per_x_terrain_tiles,
     "per_x_district_category": per_x_district_category,
+    "per_x_specific_districts": per_x_specific_districts,
     "per_x_administration": per_x_administration,
     "per_x%_stability_gain_chance": per_x_pct_stability_gain_chance,
     "per_x_land_unit_slots": per_x_land_unit_slots,

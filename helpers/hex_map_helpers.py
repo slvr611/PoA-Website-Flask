@@ -221,7 +221,13 @@ def rebuild_tile_chunks():
 def _upsert_tile_into_chunk(tile):
     """Shared by _sync_tile_chunk/_sync_tile_chunk_by_coord: upsert one
     already-fetched tile dict into its chunk's tiles array, replacing any
-    existing entry for that (q, r)."""
+    existing entry for that (q, r).
+
+    Does NOT patch the process-level tile cache itself — that must happen
+    only after _mark_chunk_synced has run (see notify_tile_changed), or
+    _patch_process_tile_cache's own freshness check would always see
+    chunk_synced_version still lagging tile_version and skip the patch
+    every time."""
     cid = _chunk_id(tile["q"], tile["r"])
     result = mongo.db.hex_map_tile_chunks.update_one(
         {"_id": cid, "tiles.q": tile["q"], "tiles.r": tile["r"]},
@@ -237,15 +243,76 @@ def _upsert_tile_into_chunk(tile):
         )
 
 
+def _patch_process_tile_cache(tile):
+    """Keep the process-level full-tile-list cache (see its definition
+    below) warm across a single/few-tile write instead of invalidating it
+    outright.
+
+    bump_tile_version() changing `tile_version` is the ONLY signal
+    get_all_tiles_from_chunks uses to decide whether its cached tile list
+    is still fresh — so without this, the very next full-map read after
+    ANY tile write (a district build, a city move, an AI decision, a tick
+    committing hundreds of them) would see a version mismatch and pay the
+    full ~several-second aggregate fetch again, even though only one or a
+    few tiles actually changed. That measured live as the dominant cost of
+    approving a nation change (~12s of a ~22s total) — frequent enough
+    during active play/tick activity to cause Heroku request timeouts.
+
+    Only applies when a cache is already populated for this `mongo`
+    connection — if nothing has read the full tile list yet this process,
+    there's nothing to patch, and the first real read will build it fresh
+    anyway. A fresh, authoritative tile_version read here (cheap — one
+    small document) rather than a local increment-by-one keeps this
+    correct even if other writes (bulk ops relying on self-heal, or a
+    concurrent request) bumped the version by more than 1 in between.
+    """
+    mongo_id = id(mongo)
+    with _process_tile_cache_lock:
+        if _process_tile_cache["mongo_id"] != mongo_id or _process_tile_cache["tiles"] is None:
+            return
+        cached_tiles = _process_tile_cache["tiles"]
+
+    config = mongo.db.global_modifiers.find_one(
+        {"name": _HEX_MAP_CONFIG_NAME}, {"tile_version": 1, "chunk_synced_version": 1}
+    ) or {}
+    current_version = config.get("tile_version", 0)
+    if config.get("chunk_synced_version") != current_version:
+        # Some other write bumped the version without going through the
+        # single-tile sync path (e.g. a bulk op mid-flight) — the mirror
+        # itself may now be stale too, so let the next real read self-heal
+        # via rebuild_tile_chunks() instead of patching against unknown state.
+        return
+
+    # _process_tile_cache stores tiles exactly as get_all_tiles_from_chunks
+    # reads them from the chunk mirror (raw, uncoerced) — _coerce_tile only
+    # ever gets applied on top, lazily, by get_all_tiles(). Store the same
+    # shape here so a patched entry can't look different from every other
+    # entry already in the list.
+    patched = dict(tile)
+    with _process_tile_cache_lock:
+        if _process_tile_cache["tiles"] is not cached_tiles:
+            return  # a full rebuild replaced the list while we were reading Mongo above
+        for i, t in enumerate(cached_tiles):
+            if t.get("q") == patched.get("q") and t.get("r") == patched.get("r"):
+                cached_tiles[i] = patched
+                break
+        else:
+            cached_tiles.append(patched)
+        _process_tile_cache["version"] = current_version
+
+
 def _sync_tile_chunk(tile_id):
     """Re-fetch one tile by its _id and upsert it into its chunk's tiles
     array, so a single-tile write keeps the chunk mirror warm without a
     full rebuild. Re-fetches rather than diffing so it's correct regardless
-    of which fields changed."""
+    of which fields changed. Returns the synced tile dict (or None if it
+    no longer exists), for notify_tile_changed to also patch the
+    process-level cache with."""
     tile = mongo.db.hex_map_tiles.find_one({"_id": tile_id}, _MAP_TILE_PROJECTION)
     if not tile or "q" not in tile or "r" not in tile:
-        return
+        return None
     _upsert_tile_into_chunk(tile)
+    return tile
 
 
 def _sync_tile_chunk_by_coord(q, r):
@@ -255,21 +322,44 @@ def _sync_tile_chunk_by_coord(q, r):
         {"q": {"$in": [q, float(q)]}, "r": {"$in": [r, float(r)]}}, _MAP_TILE_PROJECTION
     )
     if not tile:
-        return
+        return None
     _upsert_tile_into_chunk(tile)
+    return tile
 
 
 def notify_tile_changed(tile_id):
     """Convenience wrapper for write call sites that need both: bump the
-    frontend's map-cache version and keep the tile-chunk mirror in sync."""
-    bump_tile_version()
-    _sync_tile_chunk(tile_id)
+    frontend's map-cache version and keep the tile-chunk mirror in sync.
+
+    Also marks the mirror caught up to the version it just bumped to (see
+    _mark_chunk_synced) BEFORE patching the process-level cache — in that
+    order, since _patch_process_tile_cache's own freshness check requires
+    chunk_synced_version to already match. Without _mark_chunk_synced,
+    chunk_synced_version only ever advances inside a full
+    rebuild_tile_chunks() scan, so the very next full-map read after ANY
+    single-tile write (the common case — a district build, a city move)
+    would see a version mismatch and pay a full ~11,500-document rebuild
+    regardless of the chunk mirror already being correctly updated above.
+    Measured live contributing to a ~12s "admin range" cost on every
+    nation-change approval, enough to time out Heroku requests (see the
+    2026-10-04 investigation).
+    """
+    version = bump_tile_version()
+    tile = _sync_tile_chunk(tile_id)
+    if version is not None:
+        _mark_chunk_synced(version)
+        if tile is not None:
+            _patch_process_tile_cache(tile)
 
 
 def notify_tile_changed_by_coord(q, r):
     """Same as notify_tile_changed, for call sites keying off (q, r)."""
-    bump_tile_version()
-    _sync_tile_chunk_by_coord(q, r)
+    version = bump_tile_version()
+    tile = _sync_tile_chunk_by_coord(q, r)
+    if version is not None:
+        _mark_chunk_synced(version)
+        if tile is not None:
+            _patch_process_tile_cache(tile)
 
 
 
@@ -378,12 +468,43 @@ def bump_tile_version():
     a write that doesn't also call notify_tile_changed/_sync_tile_chunk
     directly still keeps the chunk mirror eventually correct: the next
     full-map read sees a version mismatch and self-heals via a full rebuild.
+
+    Returns the new tile_version (or None on failure), so a caller that
+    does follow up with a single-tile sync (notify_tile_changed) can mark
+    the mirror caught up to this exact version — see _mark_chunk_synced.
     """
     try:
-        mongo.db.global_modifiers.update_one(
+        from pymongo import ReturnDocument
+        doc = mongo.db.global_modifiers.find_one_and_update(
             {"name": _HEX_MAP_CONFIG_NAME},
             {"$inc": {"tile_version": 1}},
             upsert=True,
+            return_document=ReturnDocument.AFTER,
+            projection={"tile_version": 1},
+        )
+        return doc.get("tile_version") if doc else None
+    except Exception:
+        return None
+
+
+def _mark_chunk_synced(version):
+    """Advance chunk_synced_version to `version`, but only if tile_version
+    is STILL exactly `version` at the moment of the write.
+
+    Without this guard, a plain `$set: {chunk_synced_version: version}`
+    would be a bug under concurrent writes: if another tile write bumped
+    tile_version again in between this call's own bump_tile_version() and
+    this update running, blindly marking `version` as synced would falsely
+    claim the mirror is caught up to a version it never actually reached
+    (that other write's own tile hasn't necessarily been chunk-synced yet
+    at all). The filter makes this a no-op in that case instead — leaving
+    chunk_synced_version stale, which correctly costs one self-heal rebuild
+    on the next full-map read rather than silently serving stale data.
+    """
+    try:
+        mongo.db.global_modifiers.update_one(
+            {"name": _HEX_MAP_CONFIG_NAME, "tile_version": version},
+            {"$set": {"chunk_synced_version": version}},
         )
     except Exception:
         pass
