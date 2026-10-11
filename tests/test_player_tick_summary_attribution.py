@@ -235,6 +235,47 @@ class TestDispatchInjectsDiseaseSpreadEvents:
         assert disease_spread_events == []
 
 
+class TestNationStabilityTickIsNoLongerExcludedFromThePlayerSummary:
+    """Regression for the 2026-10-06 report: "Nation Stability Tick" was
+    listed in _EXCLUDED_FROM_PLAYER_SUMMARY_TICK_LABELS (deliberately, per
+    its own comment — deemed "too routine" when written), which made the
+    tick-loop attribution check at the top of this file's module docstring
+    skip it unconditionally, even for a player nation's own stability
+    gain/loss. The tick function itself (nation_stability_tick) was always
+    computing and returning the right text — see
+    test_stability_gain_chance_pct_scaling.py / test_resource_windfall_loss.py
+    for its own correctness — only the result text never reached
+    player_tick_summary. Removed at the user's explicit request."""
+
+    def test_stability_tick_label_is_not_excluded(self):
+        assert "Nation Stability Tick" not in th._EXCLUDED_FROM_PLAYER_SUMMARY_TICK_LABELS
+
+    def test_exclusion_set_is_currently_empty(self):
+        """Pins the current state precisely — if this fails because
+        something new was intentionally added to the exclusion set, update
+        this test rather than treating the failure as a sign of a
+        regression in the stability-tick fix above."""
+        assert th._EXCLUDED_FROM_PLAYER_SUMMARY_TICK_LABELS == set()
+
+    def test_stability_tick_result_reaches_player_summary_in_the_attribution_check(self):
+        """Mirrors the exact tick-loop check at the player_tick_summary
+        attribution site (see the module docstring's other end-to-end
+        tests for why this file mirrors it instead of running the full
+        tick())."""
+        tick_function_label = "Nation Stability Tick"
+        old_nation = {"temperament": "Player", "name": "Testland"}
+        result = "Testland has gained 1 level(s) of stability due to stability_gain_chance.\n"
+
+        if tick_function_label in th._EXCLUDED_FROM_PLAYER_SUMMARY_TICK_LABELS:
+            included = False
+        elif old_nation.get("temperament", "None") == "Player":
+            included = True
+        else:
+            included = False
+
+        assert included is True
+
+
 class TestDiseaseSpreadEventPlayerAttributionEndToEnd:
     """Confirms the actual tick-loop check (mirrored here rather than
     running the full tick()) correctly flags a disease spread landing on a

@@ -495,9 +495,14 @@ def _commit_pending_changes(pending):
 # Tick functions whose results are never useful in the player-facing digest
 # even for a player nation — too routine/frequent to be worth surfacing
 # there (still recorded in the full tick summary).
-_EXCLUDED_FROM_PLAYER_SUMMARY_TICK_LABELS = {
-    "Nation Stability Tick",
-}
+#
+# "Nation Stability Tick" was excluded here under that reasoning, but
+# stability gain/loss is exactly the kind of thing a player wants to see
+# explained (and the civil-war roll adjust_stability can trigger on a
+# stability loss) — removed at the user's request (2026-10-06); the tick
+# function itself was always running correctly, only its result text never
+# reached player_tick_summary.
+_EXCLUDED_FROM_PLAYER_SUMMARY_TICK_LABELS = set()
 
 
 def _org_leader_has_real_player(org_id_str, character_db):

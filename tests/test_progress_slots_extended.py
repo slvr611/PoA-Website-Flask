@@ -8,8 +8,11 @@ made applicable to the three new entity types, with the corresponding self
 scopes (character_self/merchant_self/mercenary_self) and, for characters,
 artifact_owner already in scope_definitions.json.
 """
+from contextlib import contextmanager
+
 import mongomock
 from bson import ObjectId
+from wtforms.validators import ValidationError
 
 from app_core import mongo as real_mongo, category_data
 from calculations.field_calculations import calculate_all_fields
@@ -111,6 +114,87 @@ class TestProgressSlotsModifierApplicableToNewEntityTypes:
         }
         calc = _calc("mercenaries", "mercenary", mercenary)
         assert calc.get("1_progress_slots") == 4  # 3 base + 1
+
+
+class TestValidateProgressQuestsPerTierForNonNationEntities:
+    """Regression tests for the reported bug: BaseSchemaForm.validate_progress_quests's
+    non-nation branch only ever tallied quests literally assigned to
+    "1_progress_slot" and compared that count against a hardcoded 3 — ignoring
+    tiers 0/2/3/4 entirely and rejecting a merchant/mercenary/character whose
+    progress_slots modifiers legitimately granted MORE than 3 tier-1 slots.
+    The fix makes this branch do the same per-tier slot_usage-vs-available_count
+    comparison the (already correct) nation branch does, sourcing "available"
+    from the entity's real calculated 0-4_progress_slots fields via a DB lookup
+    (since those are "calculated": true fields and never present on form data).
+    """
+
+    def _quest(self, slot, qid="q"):
+        return {
+            "_id": qid, "quest_name": "Quest", "slot": slot,
+            "current_progress": 0, "required_progress": 10,
+        }
+
+    @contextmanager
+    def _form_for(self, flask_app, data_type, name, quests, db_fields):
+        from forms import form_generator
+        schema = category_data[data_type]["schema"]
+        item = {"_id": ObjectId(), "name": name, "modifiers": [], "progress_quests": quests}
+
+        db = mongomock.MongoClient()["test"][data_type]
+        db.insert_one({"name": name, **db_fields})
+        original_db = category_data[data_type]["database"]
+        category_data[data_type]["database"] = db
+        try:
+            with flask_app.test_request_context(f"/{data_type}/edit/{name}"):
+                yield form_generator.get_form(data_type, schema, item=item)
+        finally:
+            category_data[data_type]["database"] = original_db
+
+    def test_merchant_with_modifier_granting_5_tier_1_slots_allows_4_quests(self, flask_app):
+        """Previously rejected outright: 4 > hardcoded cap of 3, even though
+        this merchant's progress_slots modifier legitimately grants 5."""
+        with self._form_for(
+            flask_app, "merchants", "Merchant A",
+            [self._quest("1_progress_slot", f"q{i}") for i in range(4)],
+            {"1_progress_slots": 5},
+        ) as form:
+            form.validate_progress_quests(None)  # must not raise
+
+    def test_merchant_base_3_slots_rejects_a_4th_tier_1_quest(self, flask_app):
+        """Baseline (no slot-granting modifier) must still correctly cap at
+        the entity's real available count (3), with an accurate message."""
+        with self._form_for(
+            flask_app, "merchants", "Merchant B",
+            [self._quest("1_progress_slot", f"q{i}") for i in range(4)],
+            {"1_progress_slots": 3},
+        ) as form:
+            try:
+                form.validate_progress_quests(None)
+                assert False, "expected ValidationError"
+            except ValidationError as e:
+                assert "Available: 3, Used: 4" in str(e)
+
+    def test_mercenary_tier_2_overuse_is_now_caught(self, flask_app):
+        """Previously tiers 2-4 were never validated at all — only the
+        literal string "1_progress_slot" was ever tallied."""
+        with self._form_for(
+            flask_app, "mercenaries", "Mercenary A",
+            [self._quest("2_progress_slot", "q1"), self._quest("2_progress_slot", "q2")],
+            {"1_progress_slots": 3, "2_progress_slots": 1},
+        ) as form:
+            try:
+                form.validate_progress_quests(None)
+                assert False, "expected ValidationError"
+            except ValidationError as e:
+                assert "Available: 1, Used: 2" in str(e)
+
+    def test_character_tier_2_within_limit_passes(self, flask_app):
+        with self._form_for(
+            flask_app, "characters", "Character A",
+            [self._quest("1_progress_slot", "q1"), self._quest("2_progress_slot", "q2")],
+            {"1_progress_slots": 3, "2_progress_slots": 1},
+        ) as form:
+            form.validate_progress_quests(None)  # must not raise
 
 
 class TestArtifactGrantsProgressSlotsToOwningCharacter:

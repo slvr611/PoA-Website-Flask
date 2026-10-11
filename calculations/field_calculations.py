@@ -7,6 +7,7 @@ from app_core import mongo, json_data, category_data
 from calculations.compute_functions import (
     compute_pop_count, compute_field, get_bandit_camp_income_contributions,
     get_bandit_camp_spawn_chance_unit_contributions, BANDIT_CAMP_SPAWN_CHANCE_FLOOR,
+    compute_resource_production,
 )
 from calculations.scaling_methods import get_scaling_multiplier
 from bson.objectid import ObjectId
@@ -4140,9 +4141,34 @@ def _apply_vassal_tribute_modifiers(target, overall_total_modifiers):
 
     Vassals:  food/wood/stone consumption += tribute amount.
     Overlords: food/wood/stone production += sum of all vassals' tributes.
+
+    Mercantile/Provincial transfers (luxury production / research) used to compute
+    "how much does the vassal keep" by reading target["resource_production"] — the
+    value STORED from the vassal's PREVIOUS calculation pass, not the value being
+    computed right now. Since the overlord's gain (below) in turn reads the vassal's
+    CURRENTLY STORED resource_production, and nations are recalculated in a fixed
+    (alphabetical) order every tick, this created a permanent one-session oscillation
+    that never settles: the vassal's own stored luxury production flips between its
+    full node value and 0 every single tick, and the overlord's gain flips roughly
+    out of phase with it — confirmed live 2026-10-11 ("Flaerk Collective" never
+    reliably receiving furs from its Mercantile vassal "Workshop Caretakers").
+
+    Fixed by computing the vassal's GROSS (pre-transfer) production fresh, every
+    pass, via the real compute_resource_production function (not a duplicated
+    formula — avoids drifting out of sync with it), and persisting that gross
+    snapshot on mercantile_luxury_production / provincial_research_production.
+    The overlord reads THAT snapshot instead of the already-net resource_production,
+    so both sides agree within the same pass regardless of calculation order.
     """
     # ── Vassal side (this nation pays tribute) ────────────────────────────
     overlord_id = str(target.get("overlord") or "")
+
+    # Always reset first so a nation that stops being a Mercantile/Provincial
+    # vassal (or never was one) doesn't keep a stale snapshot from a
+    # previous session lingering on its document forever.
+    target["mercantile_luxury_production"] = {}
+    target["provincial_research_production"] = 0
+
     if overlord_id:
         pop_count  = target.get("pop_count", 0)
         vassal_type = target.get("vassal_type", "None")
@@ -4152,23 +4178,32 @@ def _apply_vassal_tribute_modifiers(target, overall_total_modifiers):
                 overall_total_modifiers.get(f"{resource}_consumption", 0) + tribute
             )
         if vassal_type == "Provincial":
-            own_research = target.get("resource_production", {}).get("research", 0)
-            if own_research > 0:
+            gross_production = compute_resource_production(
+                "resource_production", target, 0, {}, overall_total_modifiers
+            )
+            gross_research = gross_production.get("research", 0)
+            target["provincial_research_production"] = gross_research
+            if gross_research > 0:
                 overall_total_modifiers["research_production"] = (
-                    overall_total_modifiers.get("research_production", 0) - own_research
+                    overall_total_modifiers.get("research_production", 0) - gross_research
                 )
         elif vassal_type == "Mercantile":
             # Full transfer, not the 50%-lossy split Provincial uses for research:
             # a Mercantile vassal's own luxury production is gained entirely by its
             # overlord instead, so it's removed from the vassal's own totals here.
-            own_production = target.get("resource_production", {})
+            gross_production = compute_resource_production(
+                "resource_production", target, 0, {}, overall_total_modifiers
+            )
+            gross_luxury = {}
             for _lux in json_data.get("luxury_resources", []):
                 _lux_key = _lux["key"]
-                own_amount = own_production.get(_lux_key, 0)
+                own_amount = gross_production.get(_lux_key, 0)
                 if own_amount > 0:
+                    gross_luxury[_lux_key] = own_amount
                     overall_total_modifiers[f"{_lux_key}_production"] = (
                         overall_total_modifiers.get(f"{_lux_key}_production", 0) - own_amount
                     )
+            target["mercantile_luxury_production"] = gross_luxury
 
     # ── Overlord side (this nation receives tribute from vassals) ─────────
     if "_id" not in target:
@@ -4177,7 +4212,7 @@ def _apply_vassal_tribute_modifiers(target, overall_total_modifiers):
     try:
         vassals = list(mongo.db.nations.find(
             {"overlord": nation_id_str},
-            {"pop_count": 1, "vassal_type": 1, "modifiers": 1, "resource_production": 1},
+            {"pop_count": 1, "vassal_type": 1, "modifiers": 1, "mercantile_luxury_production": 1},
         ))
     except Exception:
         return
@@ -4211,7 +4246,13 @@ def _apply_vassal_tribute_modifiers(target, overall_total_modifiers):
                 overall_total_modifiers.get(f"{resource}_production", 0) + v_tribute
             )
         if v_type == "Mercantile":
-            v_production = vassal.get("resource_production", {})
+            # Read the vassal's GROSS (pre-transfer) snapshot, not
+            # resource_production — that field is already net of the
+            # vassal's own transfer-out, so reading it here would read 0
+            # whenever the vassal side correctly zeroed itself, and the
+            # overlord would never actually gain anything. See this
+            # function's docstring for the full oscillation this replaces.
+            v_production = vassal.get("mercantile_luxury_production", {}) or {}
             for _lux in json_data.get("luxury_resources", []):
                 _lux_key = _lux["key"]
                 v_amount = v_production.get(_lux_key, 0)
@@ -4306,10 +4347,23 @@ def _build_computed_contributions(
         ))
 
     # ── Node production ───────────────────────────────────────────────────────
+    # Mirrors compute_resource_production's skip_nodes gate exactly (ignore_nodes,
+    # ignore_non_research_nodes, or a resource-specific ignore_{key}_nodes law —
+    # e.g. the magic_stance "Creation"/"Manifest" laws' ignore_magic_nodes) —
+    # otherwise the tooltip still shows a "Nodes" line for a resource whose
+    # actual total silently excluded it (see the 2026-10-11 Creation magic
+    # stance report: totals correct, tooltip wrong).
+    _ignore_nodes = overall_totals.get("ignore_nodes", 0)
+    _ignore_non_research_nodes = overall_totals.get("ignore_non_research_nodes", 0)
     for resource in all_res:
         key = resource["key"]
         nodes = overall_totals.get(key + "_nodes", 0)
-        if nodes:
+        skip_nodes = (
+            _ignore_nodes >= 1
+            or (_ignore_non_research_nodes >= 1 and key != "research")
+            or overall_totals.get("ignore_" + key + "_nodes", 0) >= 1
+        )
+        if nodes and not skip_nodes:
             nv = 2 + overall_totals.get("resource_node_value", 0) + overall_totals.get(key + "_node_value", 0)
             contribs.append(SourceContribution(
                 label="Nodes", source_type="node",
@@ -4778,7 +4832,7 @@ def _build_computed_contributions(
         try:
             vassals = list(mongo.db.nations.find(
                 {"overlord": nation_id_str},
-                {"name": 1, "pop_count": 1, "vassal_type": 1, "modifiers": 1, "resource_production": 1},
+                {"name": 1, "pop_count": 1, "vassal_type": 1, "modifiers": 1, "mercantile_luxury_production": 1},
             ))
         except Exception:
             vassals = []
@@ -4806,7 +4860,7 @@ def _build_computed_contributions(
             v_tribute_by_resource = _calc_tribute(v_pop, v_type, v_combined_modifiers)
             v_mods = {f"{res}_production": amt for res, amt in v_tribute_by_resource.items() if amt}
             if v_type == "Mercantile":
-                v_production = vassal.get("resource_production", {})
+                v_production = vassal.get("mercantile_luxury_production", {}) or {}
                 for _lux in json_data.get("luxury_resources", []):
                     _lux_key = _lux["key"]
                     v_amount = v_production.get(_lux_key, 0)
@@ -4833,7 +4887,11 @@ def _build_computed_contributions(
                 label=f"Tribute to {overlord_name}", source_type="computed", modifiers=mods,
             ))
         if v_vassal_type == "Provincial":
-            own_research = target.get("resource_production", {}).get("research", 0)
+            # target["provincial_research_production"] was freshly set by
+            # _apply_vassal_tribute_modifiers earlier in this same
+            # calculate_all_fields pass — not resource_production, which by
+            # this point is already net of the transfer.
+            own_research = target.get("provincial_research_production", 0)
             if own_research > 0:
                 contribs.append(SourceContribution(
                     label=f"Tribute to {overlord_name} (Provincial Research Share)",
@@ -4841,7 +4899,7 @@ def _build_computed_contributions(
                     modifiers={"research_production": -own_research},
                 ))
         elif v_vassal_type == "Mercantile":
-            own_production = target.get("resource_production", {})
+            own_production = target.get("mercantile_luxury_production", {}) or {}
             lux_mods = {}
             for _lux in json_data.get("luxury_resources", []):
                 _lux_key = _lux["key"]

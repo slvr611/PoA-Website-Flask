@@ -45,21 +45,29 @@ def _nation_move_costs(nation_doc):
 def _build_portal_map():
     """Return a dict mapping each portal tile (q,r) to its paired portal tile.
 
-    Portal tiles of the same color are paired: entering one lets you exit at the
-    other. Only portals with exactly 2 tiles of the same color form a valid pair.
+    Portal tiles are paired explicitly by a shared "pair_id" — entering one
+    lets you exit at the other. pair_id is generated once per pair when an
+    admin links two tiles together (see routes/hex_map_routes.py's
+    update_hex_map_tile), so it can't accidentally collide the way the old
+    "color" field did (color was picked independently per tile from a small
+    fixed palette, and reused on purpose for visual variety — a 3rd or 4th
+    tile sharing a color silently broke pairing for ALL of them; see the
+    2026-10-11 Taika/Bloodlight Vigil report). Still only pairs a pair_id
+    with exactly 2 tiles, as a safety net against a dangling/orphaned
+    pair_id left behind if a tile's partner was deleted.
     """
     portal_tiles = list(mongo.db.hex_map_tiles.find(
         {"portal": {"$exists": True, "$ne": None}},
         {"q": 1, "r": 1, "portal": 1, "_id": 0},
     ))
-    by_color = {}
+    by_pair_id = {}
     for t in portal_tiles:
-        color = (t.get("portal") or {}).get("color", "")
-        if color:
-            by_color.setdefault(color, []).append((t["q"], t["r"]))
+        pair_id = (t.get("portal") or {}).get("pair_id", "")
+        if pair_id:
+            by_pair_id.setdefault(pair_id, []).append((t["q"], t["r"]))
 
     portal_map = {}
-    for color, positions in by_color.items():
+    for pair_id, positions in by_pair_id.items():
         if len(positions) == 2:
             a, b = positions[0], positions[1]
             portal_map[a] = b

@@ -292,6 +292,37 @@ def market_list_for_map():
     return jsonify([{"id": str(m["_id"]), "name": m.get("name", "")} for m in markets])
 
 
+@hex_map_routes.route("/api/hex-map/portal-list")
+def portal_list_for_map():
+    """Returns every existing portal tile, for the "Link to" picker in the
+    tile edit form — including which pair_id (if any) each one currently
+    carries, so the frontend can show "already linked to (q, r)" and warn
+    before stealing a tile away from its current partner."""
+    tiles = list(mongo.db.hex_map_tiles.find(
+        {"portal": {"$exists": True, "$ne": None}},
+        {"q": 1, "r": 1, "owner": 1, "portal": 1, "_id": 0},
+    ))
+    by_pair_id = {}
+    for t in tiles:
+        pair_id = (t.get("portal") or {}).get("pair_id")
+        if pair_id:
+            by_pair_id.setdefault(pair_id, []).append((t["q"], t["r"]))
+
+    result = []
+    for t in tiles:
+        pair_id = (t.get("portal") or {}).get("pair_id")
+        partner = next(
+            (pos for pos in by_pair_id.get(pair_id, []) if pos != (t["q"], t["r"])),
+            None,
+        ) if pair_id else None
+        result.append({
+            "q": t["q"], "r": t["r"], "owner": t.get("owner", ""),
+            "pair_id": pair_id,
+            "partner": {"q": partner[0], "r": partner[1]} if partner else None,
+        })
+    return jsonify(result)
+
+
 @hex_map_routes.route("/api/hex-map/debug-colors")
 def hex_map_debug_colors():
     """Debug endpoint: shows the raw accent_color field and computed map color for every nation."""
@@ -479,6 +510,72 @@ def _sync_wonder(wonder_ref, owner_name, node_resource):
     mongo.db.wonders.update_one({"_id": wid}, {"$set": update})
 
 
+def _tile_filter(q, r):
+    """Type-flexible (q, r) match — tiles may be stored as int or float."""
+    return {"q": {"$in": [q, float(q)]}, "r": {"$in": [r, float(r)]}}
+
+
+def _resolve_portal_link(q, r, portal_field):
+    """Resolve the submitted `portal` value into the shape actually stored
+    on the tile ({"pair_id": "..."} or None), performing the matching
+    side-effect writes on any OTHER tile the pairing touches.
+
+    Replaces the old "both tiles happen to share the same color" pairing
+    (see _build_portal_map in helpers/trade_route_helpers.py) with an
+    explicit link: the admin picks the exact partner tile, and a fresh
+    pair_id is generated for that pair — no risk of a 3rd/4th tile
+    accidentally sharing an identifier and silently breaking the pairing
+    for all of them (see the 2026-10-11 Taika/Bloodlight Vigil report).
+
+    portal_field shapes accepted from the client:
+      - None                          → unlink (clear this tile's portal
+                                         AND its current partner's, if any)
+      - {"link_to": {"q": X, "r": Y}} → link this tile with (X, Y): any
+                                         existing partner on EITHER side is
+                                         cleared first, then both tiles get
+                                         a freshly generated shared pair_id
+    """
+    current_portal = (mongo.db.hex_map_tiles.find_one(_tile_filter(q, r), {"portal": 1}) or {}).get("portal")
+    old_pair_id = (current_portal or {}).get("pair_id")
+
+    def _clear_partner_of(pair_id, except_q, except_r):
+        if not pair_id:
+            return
+        mongo.db.hex_map_tiles.update_many(
+            {
+                "portal.pair_id": pair_id,
+                "$nor": [{"q": {"$in": [except_q, float(except_q)]}, "r": {"$in": [except_r, float(except_r)]}}],
+            },
+            {"$set": {"portal": None}},
+        )
+
+    if portal_field is None:
+        _clear_partner_of(old_pair_id, q, r)
+        return None
+
+    if isinstance(portal_field, dict) and "link_to" in portal_field:
+        link_to = portal_field.get("link_to") or {}
+        target_q, target_r = link_to.get("q"), link_to.get("r")
+        if target_q is None or target_r is None or (target_q == q and target_r == r):
+            return current_portal  # malformed/no-op request — leave untouched
+
+        target_portal = (mongo.db.hex_map_tiles.find_one(_tile_filter(target_q, target_r), {"portal": 1}) or {}).get("portal")
+        target_old_pair_id = (target_portal or {}).get("pair_id")
+
+        # Clear whatever either side was previously paired with — a tile
+        # can only ever have one partner at a time.
+        _clear_partner_of(old_pair_id, q, r)
+        _clear_partner_of(target_old_pair_id, target_q, target_r)
+
+        import uuid
+        new_pair_id = uuid.uuid4().hex[:8]
+        mongo.db.hex_map_tiles.update_one(_tile_filter(target_q, target_r), {"$set": {"portal": {"pair_id": new_pair_id}}})
+        return {"pair_id": new_pair_id}
+
+    # Defensive fallback for an already-resolved {"pair_id": ...} payload.
+    return portal_field
+
+
 @hex_map_routes.route("/api/hex-map/tile/<signed_int:q>/<signed_int:r>", methods=["POST"])
 def update_hex_map_tile(q, r):
     if getattr(g, "edit_access_level", 0) < 10:
@@ -534,6 +631,9 @@ def update_hex_map_tile(q, r):
     current = mongo.db.hex_map_tiles.find_one(
         {"q": {"$in": [q, float(q)]}, "r": {"$in": [r, float(r)]}}
     ) or {}
+
+    if "portal" in update:
+        update["portal"] = _resolve_portal_link(q, r, update["portal"])
 
     update["q"] = q
     update["r"] = r

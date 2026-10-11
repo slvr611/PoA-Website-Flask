@@ -839,7 +839,20 @@ def nation_edit_request(item_ref):
     if g.user and g.user.get("is_admin"):
         visibility_level = 4
 
-    form = form_generator.get_form("nations", schema, formdata=request.form)
+    # item=nation is required here, not just cosmetic: FormGenerator.get_form
+    # only pulls job_details/land_unit_details/naval_unit_details/support_
+    # unit_details from `item`, and those drive how many actual sub-fields
+    # NationForm.create_form_class builds for jobs/land_units/naval_units/
+    # support_units. Without it, those sub-forms get built with ZERO fields
+    # (job_details defaults to {}), so the real values the player's browser
+    # submitted (rendered correctly by _render_nation_edit's GET path, which
+    # DOES pass item=nation) have nothing to bind to — form.data comes back
+    # with jobs/land_units/naval_units/support_units as a genuinely empty
+    # {}, which then isn't caught by the None/"" strip-unsubmitted-fields
+    # guard below and overwrites the nation's real jobs/units on approval
+    # (see the 2026-10-11 report: a player's jobs and military units wiped
+    # by a change that never touched either field).
+    form = form_generator.get_form("nations", schema, item=nation, formdata=request.form)
 
     # Validate CSRF token only; skip WTForms field-level validation entirely.
     # Hidden SelectFields (outside the player's visibility tier) always submit ""
@@ -932,7 +945,11 @@ def nation_edit_approve(item_ref):
         visibility_level = 4
     is_partial = visibility_level < 4
 
-    form = form_generator.get_form("nations", schema, formdata=request.form)
+    # item=nation required — same job/unit-wipe bug as nation_edit_request
+    # above (missing item means job_details/land_unit_details/etc. default
+    # to {}, so jobs/land_units/naval_units/support_units get built with no
+    # sub-fields and come back as an empty {} that overwrites the real data).
+    form = form_generator.get_form("nations", schema, item=nation, formdata=request.form)
 
     # Validate CSRF only; skip WTForms field-level choice validation.
     # When visibility is filtered some SelectFields are hidden and submit "" which
@@ -1029,8 +1046,14 @@ def edit_nation_jobs(item_ref):
 def nation_edit_jobs_approve(item_ref):
     """Handle nation jobs edit approval"""
     schema, db, nation = get_data_on_item("nations", item_ref)
-    
-    form = form_generator.get_form("jobs", schema, formdata=request.form)
+
+    # item=nation required — same bug as nation_edit_request/nation_edit_
+    # approve: without it, job_details defaults to {}, JobAssignmentDict
+    # gets built with zero fields, and form.data["jobs"] comes back
+    # completely empty regardless of what was submitted. This route has no
+    # protective guard at all against an empty result, so it's the most
+    # directly broken of the three.
+    form = form_generator.get_form("jobs", schema, item=nation, formdata=request.form)
 
     if not form.validate():
         flash(f"Form validation failed: {form.errors}")

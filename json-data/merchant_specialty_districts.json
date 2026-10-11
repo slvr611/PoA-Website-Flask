@@ -5,7 +5,7 @@
 			"money": 750
 		},
 		"modifiers": {
-			"income": 40
+			"income": 160
 		},
 		"requirements": {
 			"reputation": ["Acceptable", "Great", "Flawless"]
@@ -17,7 +17,7 @@
 			"money": 750
 		},
 		"modifiers": {
-			"trade_speed": 3
+			"trade_speed": 12
 		},
 		"requirements": {
 			"reputation": ["Acceptable", "Great", "Flawless"]
@@ -29,7 +29,7 @@
 			"money": 750
 		},
 		"modifiers": {
-			"market_buy_price_reduction": 25
+			"market_buy_price_reduction": 100
 		},
 		"requirements": {
 			"reputation": ["Acceptable", "Great", "Flawless"]
@@ -41,7 +41,7 @@
 			"money": 750
 		},
 		"modifiers": {
-			"trade_slots": 1
+			"trade_slots": 4
 		},
 		"requirements": {
 			"reputation": ["Acceptable", "Great", "Flawless"]

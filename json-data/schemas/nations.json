@@ -1948,6 +1948,18 @@
         "description": "The gross resource production of the nation",
         "calculated": true
       },
+      "mercantile_luxury_production": {
+        "bsonType": "object",
+        "label": "Mercantile Luxury Production (Gross)",
+        "description": "This nation's own luxury resource production before any Mercantile vassal transfer to its overlord, recomputed fresh every calculation pass. Empty unless vassal_type is Mercantile. The overlord's own calculation reads this (not resource_production, which is already net of the transfer) so both sides agree on the transferred amount within the same pass regardless of calculation order.",
+        "default": {}
+      },
+      "provincial_research_production": {
+        "bsonType": "number",
+        "label": "Provincial Research Production (Gross)",
+        "description": "This nation's own research production before any Provincial vassal transfer to its overlord, recomputed fresh every calculation pass. 0 unless vassal_type is Provincial.",
+        "default": 0
+      },
       "resource_consumption": {
         "bsonType": "object",
         "label": "Resource Consumption",

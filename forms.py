@@ -752,31 +752,38 @@ class BaseSchemaForm(FlaskForm):
         # Check if this is a nation or another entity type
         entity_type = schema.get("title", "").lower()
         if entity_type != "nations":
-            # Non-nation entities: simple validation
+            # Non-nation entities: same per-tier validation as nations
+            # (minus centralization-law bucketing), since progress_slots
+            # modifiers can grant any of the 0-4 tiers, not just tier 1.
             available_slot_options = self.get_available_slots(nation_data, schema)
             valid_slot_values = [slot[0] for slot in available_slot_options]
-            
+
             # Update slot choices
             for quest in self.progress_quests:
                 if hasattr(quest, 'slot'):
                     quest.slot.choices = available_slot_options
-            
-            # Validate max 3 progress slots
-            progress_slot_count = 0
+
+            # Count used slots by type
+            slot_usage = {}
             for quest in self.progress_quests:
                 if hasattr(quest, 'slot') and quest.slot.data:
                     slot_type = quest.slot.data
-                    
+
                     # Check if slot type is valid
                     if slot_type not in valid_slot_values:
                         slot_name = slot_type.replace("_", " ").title()
                         raise ValidationError(f"Invalid slot type '{slot_name}' for this entity type.")
-                    
-                    if quest.slot.data == "1_progress_slot":
-                        progress_slot_count += 1
-            
-            if progress_slot_count > 3:
-                raise ValidationError("Non-nation entities can only have 3 progress slots maximum.")
+
+                    if slot_type != "no_slot" and not slot_type.endswith("_spell_slot"):
+                        slot_usage[slot_type] = slot_usage.get(slot_type, 0) + 1
+
+            slot_counts = self._get_calculated_entity_slots(nation_data, schema)
+            for slot_type, used_count in slot_usage.items():
+                slot_key = slot_type.replace("_slot", "_slots")
+                available_count = slot_counts.get(slot_key, 0)
+                if used_count > available_count:
+                    slot_name = slot_type.replace("_", " ").title()
+                    raise ValidationError(f"Too many quests assigned to {slot_name}. Available: {available_count}, Used: {used_count}")
             return
         
         # Nation-specific validation
@@ -829,6 +836,53 @@ class BaseSchemaForm(FlaskForm):
                 pass
         return nation
 
+    def _category_for_schema(self, schema):
+        """Find the category_data key (e.g. 'merchants') whose schema this is."""
+        for category, info in category_data.items():
+            if info.get("schema") is schema:
+                return category
+        return None
+
+    def _resolve_entity_for_slots(self, entity, schema):
+        """Return the DB-stored entity (merchant/mercenary/character/...)
+        when available, so slot calculations see modifier-driven
+        progress_slots fields rather than incomplete form data — mirrors
+        _resolve_nation_for_slots but for non-nation categories."""
+        entity_name = entity.get("name", "") if entity else ""
+        if entity_name:
+            try:
+                category = self._category_for_schema(schema)
+                if category:
+                    db_entity = category_data[category]["database"].find_one({"name": entity_name})
+                    if db_entity:
+                        return db_entity
+            except Exception:
+                pass
+        return entity or {}
+
+    def _get_calculated_entity_slots(self, entity, schema):
+        """Resolve a non-nation entity's actual 0-4 progress slot counts.
+        Prefers its last-saved calculated fields (DB lookup, since
+        progress_slots is a calculated field and never present on the
+        submitted form data); falls back to a fresh calculate_all_fields
+        pass, and finally the schema's base_value for a brand-new,
+        never-saved entity."""
+        resolved = self._resolve_entity_for_slots(entity, schema)
+        _slot_keys = [f"{n}_progress_slots" for n in range(5)]
+        if any(k in resolved for k in _slot_keys):
+            calculated = resolved
+        elif resolved:
+            category = self._category_for_schema(schema)
+            target_type = category_data[category]["singularName"].lower() if category else ""
+            calculated = calculate_all_fields(resolved, schema, target_type) if target_type else {}
+        else:
+            calculated = {}
+        schema_props = schema.get("properties", {})
+        return {
+            k: calculated.get(k, schema_props.get(k, {}).get("base_value", 0))
+            for k in _slot_keys
+        }
+
     def get_available_slots(self, nation, schema):
         """Get available slot options based on nation's centralization law and modifiers"""
 
@@ -838,21 +892,11 @@ class BaseSchemaForm(FlaskForm):
             # Non-nation entities (characters, merchants, mercenaries) have
             # their own flat 0-4_progress_slots calculated fields, same as
             # nations, just without the centralization-law bucketing only
-            # nations use. `nation` here is whatever the caller had on hand
-            # for this entity — the raw DB item's last-calculated fields
-            # when editing an existing one, or {} for a brand-new item not
-            # saved yet, in which case fall back to the schema's own
-            # base_value so the dropdown still reflects something sensible
-            # before the first save.
-            schema_props = schema.get("properties", {})
-            entity = nation or {}
+            # nations use.
+            slot_counts = self._get_calculated_entity_slots(nation, schema)
             available_slots = [("no_slot", "No Slot")]
             for n in range(5):
-                slot_key = f"{n}_progress_slots"
-                if slot_key in entity:
-                    slot_count = entity.get(slot_key, 0)
-                else:
-                    slot_count = schema_props.get(slot_key, {}).get("base_value", 0)
+                slot_count = slot_counts.get(f"{n}_progress_slots", 0)
                 if slot_count and slot_count > 0:
                     available_slots.append((f"{n}_progress_slot", f"{n} Progress Slot"))
             available_slots.extend([

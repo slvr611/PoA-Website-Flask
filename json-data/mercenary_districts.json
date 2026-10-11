@@ -1,6 +1,6 @@
 {
 	"tollerable_conditions": {
-		"display_name": "Tollerable Conditions",
+		"display_name": "Tolerable Conditions",
 		"cost": {
 			"money": 400
 		},
@@ -40,12 +40,22 @@
 		},
 		"modifiers": {
 			"upkeep": 50,
-			"unit_speed_first_turn": 1
+			"unit_speed_first_turn": 2
 		},
 		"size": "Small"
 	},
 	"self-esteem": {
 		"display_name": "Self-Esteem",
+		"cost": {
+			"money": 400
+		},
+		"modifiers": {
+			"upkeep": 50
+		},
+		"size": "Small"
+	},
+	"willful_recruits": {
+		"display_name": "Willful Recruits",
 		"cost": {
 			"money": 400
 		},
@@ -61,7 +71,7 @@
 		},
 		"modifiers": {
 			"upkeep": 50,
-			"ruler_artifact_slots": 9
+			"ruler_artifact_slots": 12
 		},
 		"size": "Small"
 	},
@@ -72,7 +82,7 @@
 		},
 		"modifiers": {
 			"upkeep": 75,
-			"maneuvers": 1
+			"maneuvers": 2
 		},
 		"size": "Medium"
 	},
@@ -94,7 +104,7 @@
 		},
 		"modifiers": {
 			"upkeep": 75,
-			"random_previous_era_naval_units": 2
+			"current_era_random_naval_units": 2
 		},
 		"size": "Medium"
 	},
@@ -115,9 +125,7 @@
 			"money": 600
 		},
 		"modifiers": {
-			"upkeep": 75,
-			"civilian_unit_hp": 1,
-			"civilian_unit_damage": 1
+			"upkeep": 75
 		},
 		"size": "Medium"
 	},
@@ -128,7 +136,8 @@
 		},
 		"modifiers": {
 			"upkeep": 75,
-			"leader_unit_strength": 1
+			"leader_unit_attack": 1,
+			"leader_unit_defense": 1
 		},
 		"size": "Medium"
 	},
@@ -181,8 +190,18 @@
 		},
 		"modifiers": {
 			"upkeep": 75,
-			"leader_unit_hp": 3,
+			"leader_unit_hp": 4,
 			"leader_unit_morale": 1
+		},
+		"size": "Medium"
+	},
+	"extra_tents": {
+		"display_name": "Extra Tents",
+		"cost": {
+			"money": 600
+		},
+		"modifiers": {
+			"upkeep": 75
 		},
 		"size": "Medium"
 	},
@@ -236,9 +255,7 @@
 			"money": 900
 		},
 		"modifiers": {
-			"upkeep": 100,
-			"strength_on_water": 1,
-			"naval_unit_speed": 1
+			"upkeep": 100
 		},
 		"size": "Large"
 	},
@@ -248,9 +265,7 @@
 			"money": 900
 		},
 		"modifiers": {
-			"upkeep": 100,
-			"unit_defense": 1,
-			"unit_armor_cannot_be_ignored": 1
+			"upkeep": 100
 		},
 		"size": "Large"
 	},
@@ -325,9 +340,31 @@
 		},
 		"modifiers": {
 			"upkeep": 100,
-			"ruler_artifact_slots": 15
+			"ruler_artifact_slots": 20
 		},
 		"size": "Large"
+	},
+	"legendary_weapons": {
+		"display_name": "Legendary Weapons",
+		"cost": {
+			"money": 1250
+		},
+		"modifiers": {
+			"upkeep": 150,
+			"unit_attack": 1
+		},
+		"size": "Massive"
+	},
+	"legendary_armor": {
+		"display_name": "Legendary Armor",
+		"cost": {
+			"money": 1250
+		},
+		"modifiers": {
+			"upkeep": 150,
+			"unit_defense": 1
+		},
+		"size": "Massive"
 	},
 	"well-paid_messengers": {
 		"display_name": "Well-Paid Messengers",
@@ -335,8 +372,7 @@
 			"money": 1250
 		},
 		"modifiers": {
-			"upkeep": 150,
-			"unit_speed": 1
+			"upkeep": 150
 		},
 		"size": "Massive"
 	},
@@ -346,8 +382,7 @@
 			"money": 1250
 		},
 		"modifiers": {
-			"upkeep": 150,
-			"mundane_unit_terrain_speed_cost": -1
+			"upkeep": 150
 		},
 		"size": "Massive"
 	},
@@ -390,8 +425,7 @@
 			"money": 1250
 		},
 		"modifiers": {
-			"upkeep": 150,
-			"unit_attack": 1
+			"upkeep": 150
 		},
 		"size": "Massive"
 	},

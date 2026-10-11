@@ -133,7 +133,22 @@ const PORTAL_COLORS = {
     pink:   '#e060b0',
     teal:   '#28a898',
 };
-const PORTAL_COLOR_NAMES = Object.keys(PORTAL_COLORS);
+const _PORTAL_COLOR_VALUES = Object.values(PORTAL_COLORS);
+
+// Display color is derived from pair_id — purely cosmetic now (pairing
+// itself is by explicit pair_id, not color; see helpers/trade_route_helpers.py
+// _build_portal_map and routes/hex_map_routes.py _resolve_portal_link), so
+// two unrelated pairs landing on the same color by hash coincidence is
+// harmless, unlike the old scheme where that silently broke BOTH pairs.
+function _portalColorForPairId(pairId) {
+    if (!pairId) return '#888888';
+    let hash = 0;
+    for (let i = 0; i < pairId.length; i++) {
+        hash = (hash * 31 + pairId.charCodeAt(i)) | 0;
+    }
+    const idx = Math.abs(hash) % _PORTAL_COLOR_VALUES.length;
+    return _PORTAL_COLOR_VALUES[idx];
+}
 
 // Dash patterns per route tier.
 const ROUTE_DASHES = [
@@ -282,6 +297,7 @@ class HexMapViewer {
         this._nationBuildings = {};    // name -> {cities, districts}
         this._wonderList      = null;  // [{id, name, owner_nation}]
         this._marketList      = null;  // [{id, name}]
+        this._portalList      = null;  // [{q, r, owner, pair_id, partner:{q,r}|null}]
         this._cityTypes       = [];    // [{key, name}] — loaded from config
 
         // Nation/region label caches — rebuilt when tile data changes
@@ -996,8 +1012,8 @@ class HexMapViewer {
                 nationBuckets[fill].push(x, y);
             }
 
-            if (this.layers.buildings && tile && tile.portal?.color) {
-                const portalHex = PORTAL_COLORS[tile.portal.color] || tile.portal.color;
+            if (this.layers.buildings && tile && tile.portal?.pair_id) {
+                const portalHex = _portalColorForPairId(tile.portal.pair_id);
                 if (!portalBuckets[portalHex]) portalBuckets[portalHex] = [];
                 portalBuckets[portalHex].push(x, y);
             }
@@ -2316,10 +2332,20 @@ class HexMapViewer {
         }).join('');
 
         const isCapital    = tile.capital ? 'checked' : '';
-        const curPortal    = tile.portal?.color || '';
-        const portalOpts   = PORTAL_COLOR_NAMES.map(c =>
-            `<option value="${c}"${c===curPortal?' selected':''}>${c.charAt(0).toUpperCase()+c.slice(1)}</option>`
-        ).join('');
+
+        // Resolved synchronously from the already-loaded tile map (not the
+        // async /api/hex-map/portal-list fetch) so the "Link to" field's
+        // default value is correct even if that fetch hasn't resolved yet —
+        // the fetch is only used for the datalist's autocomplete suggestions.
+        const curPortalPairId = tile.portal?.pair_id || '';
+        let curPortalPartnerCoord = '';
+        if (curPortalPairId) {
+            const selfKey = `${q},${r}`;
+            for (const [k, t] of this.tiles) {
+                if (k === selfKey) continue;
+                if (t?.portal?.pair_id === curPortalPairId) { curPortalPartnerCoord = k; break; }
+            }
+        }
         const curRouteOwner = tile.route?.owner || '';
         const curRouteTier  = tile.route?.tier  || '';
         const routeTierOpts = [1,2,3].map(t =>
@@ -2343,7 +2369,12 @@ class HexMapViewer {
       <label>Resource<select name="node_resource"><option value="">None</option>${resOpts}</select></label>
     </fieldset>
     <fieldset><legend>Portal</legend>
-      <label>Color<select name="portal_color"><option value="">None</option>${portalOpts}</select></label>
+      <label>Link to (q,r)
+        <input name="portal_link_to" type="text" value="${_esc(curPortalPartnerCoord)}"
+               placeholder="e.g. 83,11" list="portal-datalist-${q}-${r}" autocomplete="off">
+        <datalist id="portal-datalist-${q}-${r}"></datalist>
+      </label>
+      <small class="hex-portal-status"></small>
     </fieldset>
     <fieldset><legend>Route</legend>
       <label>Owner
@@ -2460,13 +2491,13 @@ class HexMapViewer {
         }
         if (!this.nationAdmin || this.nationAdmin.size === 0) return;
 
-        // Build portal map: color → [{q,r,key,terrain}] for all portal tiles on the map.
+        // Build portal map: pair_id → [{q,r,key,terrain}] for all portal tiles on the map.
         const portalMap = new Map();
         for (const [key, tile] of this.tiles) {
-            const color = tile.portal?.color;
-            if (!color) continue;
-            if (!portalMap.has(color)) portalMap.set(color, []);
-            portalMap.get(color).push({ q: tile.q, r: tile.r, key, terrain: tile.terrain || 'disconnected' });
+            const pairId = tile.portal?.pair_id;
+            if (!pairId) continue;
+            if (!portalMap.has(pairId)) portalMap.set(pairId, []);
+            portalMap.get(pairId).push({ q: tile.q, r: tile.r, key, terrain: tile.terrain || 'disconnected' });
         }
 
         // Group owned tiles by nation, tracking capital and building flags.
@@ -2543,11 +2574,11 @@ class HexMapViewer {
                         heap.push([nd, nq, nr]);
                     }
                 }
-                // Portal virtual neighbors — treat same-color portal pairs as adjacent
+                // Portal virtual neighbors — treat paired portal tiles as adjacent
                 const curTile = this.tiles.get(key);
-                const pColor  = curTile?.portal?.color;
-                if (pColor) {
-                    for (const partner of (portalMap.get(pColor) || [])) {
+                const pPairId = curTile?.portal?.pair_id;
+                if (pPairId) {
+                    for (const partner of (portalMap.get(pPairId) || [])) {
                         if (partner.key === key) continue;
                         const cost = TERRAIN_MOVE_COST[partner.terrain] ?? _TERRAIN_MOVE_IMPASSABLE;
                         if (cost >= _TERRAIN_MOVE_IMPASSABLE) continue;
@@ -2593,6 +2624,18 @@ class HexMapViewer {
         try {
             this._marketList = await (await fetch('/api/hex-map/market-list')).json();
         } catch (_) { this._marketList = []; }
+    }
+
+    // Convenience autocomplete suggestions only — NOT the source of truth
+    // for a tile's current partner (that's resolved synchronously from the
+    // already-loaded this.tiles map in _buildEditForm, so the "Link to"
+    // field's default value is correct even if this fetch hasn't resolved
+    // yet when the admin clicks Save).
+    async _ensurePortalList() {
+        if (this._portalList) return;
+        try {
+            this._portalList = await (await fetch('/api/hex-map/portal-list')).json();
+        } catch (_) { this._portalList = []; }
     }
 
     // Flat-top hex axial neighbors: the 6 directions adjacent to any (q, r).
@@ -2870,10 +2913,28 @@ class HexMapViewer {
             });
         }
 
-        // Reload city/district selects when owner changes
-        if (ownerInput) {
-            ownerInput.addEventListener('change', () => {
-                refreshBuildings(ownerInput.value.trim());
+        // Populate the portal "Link to" datalist with other known portal
+        // tiles (autocomplete suggestions only — the field's current VALUE
+        // was already set correctly, synchronously, in _buildEditForm).
+        const portalInput  = root.querySelector('[name="portal_link_to"]');
+        const portalStatus = root.querySelector('.hex-portal-status');
+        if (portalInput) {
+            if (portalStatus) {
+                portalStatus.textContent = portalInput.value
+                    ? `Currently linked to (${portalInput.value}).`
+                    : 'Not currently a portal — enter another tile\'s coordinates to link it.';
+            }
+            this._ensurePortalList().then(() => {
+                const dl = root.querySelector(`#portal-datalist-${q}-${r}`);
+                if (!dl) return;
+                const selfKey = `${q},${r}`;
+                dl.innerHTML = (this._portalList || [])
+                    .filter(p => `${p.q},${p.r}` !== selfKey)
+                    .map(p => {
+                        const status = p.partner ? `linked to ${p.partner.q},${p.partner.r}` : 'unlinked';
+                        const owner  = p.owner ? ` — ${p.owner}` : '';
+                        return `<option value="${p.q},${p.r}">${p.q},${p.r}${owner} (${status})</option>`;
+                    }).join('');
             });
         }
 
@@ -2907,9 +2968,19 @@ class HexMapViewer {
             const banditMarket = val('bandit_market');
             const bandit_camp  = (banditName && banditTier) ? { name: banditName, tier: parseInt(banditTier), market: banditMarket || '' } : null;
 
-            const capital      = root.querySelector('[name="capital"]')?.checked || false;
-            const portalColor  = val('portal_color');
-            const portal       = portalColor ? { color: portalColor } : null;
+            const capital        = root.querySelector('[name="capital"]')?.checked || false;
+            const portalLinkRaw  = val('portal_link_to');
+            if (portalLinkRaw && !/^(-?\d+)\s*,\s*(-?\d+)$/.test(portalLinkRaw)) {
+                this._showPaintError(`Portal "Link to" must be coordinates like "83,11" (got "${portalLinkRaw}").`);
+                return;
+            }
+            if (portalLinkRaw) {
+                const [, linkQStr, linkRStr] = portalLinkRaw.match(/^(-?\d+)\s*,\s*(-?\d+)$/);
+                if (parseInt(linkQStr, 10) === q && parseInt(linkRStr, 10) === r) {
+                    this._showPaintError('A portal cannot be linked to itself.');
+                    return;
+                }
+            }
             const routeOwner   = val('route_owner');
             const routeTierStr = val('route_tier');
             const route        = (routeOwner && routeTierStr) ? { owner: routeOwner, tier: parseInt(routeTierStr) } : null;
@@ -2931,7 +3002,6 @@ class HexMapViewer {
                 owner:    val('owner'),
                 node,
                 capital,
-                portal,
                 route,
             };
             // Only include building fields if they differ from the original tile,
@@ -2950,6 +3020,32 @@ class HexMapViewer {
             if (_newDistId   !== _origDist)   update.district = district;
             if (_newWonderId !== _origWonder) update.wonder = wonder;
             if (_newBanditN  !== _origBandit) update.bandit_camp = bandit_camp;
+
+            // Only include portal if the link actually changed — resolving a
+            // link touches a SECOND tile as a side effect (see
+            // routes/hex_map_routes.py's _resolve_portal_link), which the
+            // offline pending-edit/batch mode has no mechanism to record for
+            // that other tile. Re-submitting an unchanged value (e.g. just
+            // editing terrain on an already-portal tile) must not re-trigger
+            // that side effect at all.
+            const _origPortalPairId = _origTile.portal?.pair_id || null;
+            let _origPortalPartner = null;
+            if (_origPortalPairId) {
+                for (const [k, t] of this.tiles) {
+                    if (k === `${q},${r}`) continue;
+                    if (t?.portal?.pair_id === _origPortalPairId) { _origPortalPartner = k; break; }
+                }
+            }
+            if (portalLinkRaw !== _origPortalPartner) {
+                if (this._editMode) {
+                    this._showPaintError('Portal links can\'t be changed while in batch-edit mode — switch to direct edit mode for this tile.');
+                    return;
+                }
+                update.portal = portalLinkRaw ? { link_to: (() => {
+                    const [, lq, lr] = portalLinkRaw.match(/^(-?\d+)\s*,\s*(-?\d+)$/);
+                    return { q: parseInt(lq, 10), r: parseInt(lr, 10) };
+                })() } : null;
+            }
 
             const key = `${q},${r}`;
 
