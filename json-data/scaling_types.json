@@ -204,6 +204,12 @@
         "has_x": true,
         "default_x": 1
     },
+    "per_x_minority_pops": {
+        "name": "Per X Minority Pops",
+        "description": "Multiplied by the number of this nation's own pops whose culture or religion differs from the nation's primary, divided by X, floored. Counts pops, not distinct cultures/religions.",
+        "has_x": true,
+        "default_x": 1
+    },
     "per_x_vassals": {
         "name": "Per X Vassals",
         "description": "Multiplied by the number of vassals this nation has divided by X, floored. Filter by vassal type or count all.",

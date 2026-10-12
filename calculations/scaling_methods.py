@@ -388,6 +388,20 @@ def per_x_foreign_religion_pops(target, scaling_x=1, scaling_extra="", context=N
     return int(cache.get("foreign_religion_pop_count", 0) / divisor)
 
 
+def per_x_minority_pops(target, scaling_x=1, scaling_extra="", context=None):
+    """A minority pop is one of this nation's own pops whose culture OR
+    religion differs from the nation's primary — counted once per pop, not
+    once per non-primary culture and once per non-primary religion. See
+    minority_pop_count in _build_nation_calc_cache (field_calculations.py)
+    for how this differs from per_x_minority_cultures/_religions (which
+    count distinct culture/religion values, not actual pop headcount) and
+    from per_x_foreign_culture_pops/_religion_pops (which count OTHER
+    nations' pops sharing this nation's primary identity)."""
+    cache = target.get("_calc_cache", {}) or {}
+    divisor = float(scaling_x) if scaling_x else 1
+    return int(cache.get("minority_pop_count", 0) / divisor)
+
+
 def per_x_vassals(target, scaling_x=1, scaling_extra="", context=None):
     cache = target.get("_calc_cache", {}) or {}
     vassal_counts = cache.get("vassal_counts", {})
@@ -595,6 +609,7 @@ SCALING_METHODS = {
     "per_x_money_income": per_x_money_income,
     "per_x_foreign_culture_pops": per_x_foreign_culture_pops,
     "per_x_foreign_religion_pops": per_x_foreign_religion_pops,
+    "per_x_minority_pops": per_x_minority_pops,
     "per_x_vassals": per_x_vassals,
     "per_x_excess_resource": per_x_excess_resource,
     "per_x_excess_territory": per_x_excess_territory,

@@ -104,6 +104,18 @@ def _build_nation_calc_cache(target):
         except Exception:
             pass
 
+    # A minority pop is one of THIS nation's own pops whose culture OR
+    # religion differs from the nation's primary — counted once per pop
+    # (not once per culture AND once per religion), unlike
+    # foreign_culture_pop_count/foreign_religion_pop_count above (which
+    # count OTHER nations' pops sharing this nation's primary identity) or
+    # culture_count/religion_count below (which count distinct culture/
+    # religion values present, not actual pop headcount).
+    minority_pop_count = 0
+    for pop in pops:
+        if pop.get("culture", "") != primary_culture or pop.get("religion", "") != primary_religion:
+            minority_pop_count += 1
+
     vassal_counts = {}
     if nation_id_str:
         try:
@@ -245,6 +257,7 @@ def _build_nation_calc_cache(target):
         "primary_religion_pop_count": primary_religion_pop_count,
         "foreign_culture_pop_count": foreign_culture_pop_count,
         "foreign_religion_pop_count": foreign_religion_pop_count,
+        "minority_pop_count": minority_pop_count,
         "vassal_counts": vassal_counts,
         "metropolis_bonus": metropolis_bonus,
         "culture_count": culture_count,

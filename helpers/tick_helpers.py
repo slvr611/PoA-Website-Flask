@@ -767,6 +767,34 @@ def tick(form_data):
 
 
 
+    collect_region_data = False
+    for tick_function_label, tick_function in REGION_TICK_FUNCTIONS.items():
+        run_key = f"run_{tick_function_label}"
+        if run_key in form_data:
+            collect_region_data = True
+            break
+
+    if collect_region_data:
+        # Regions have no "calculated" schema fields (see json-data/schemas/
+        # regions.json) — unlike factions/merchants/mercenaries/markets above,
+        # there's nothing to recalculate before running their tick functions,
+        # so new_regions starts as a plain deep copy of old_regions.
+        region_schema, region_db = get_data_on_category("regions")
+        old_regions = with_mongo_retry(
+            lambda: list(region_db.find().sort("name", ASCENDING)),
+            description="fetch all regions",
+        )
+        new_regions = [deepcopy(region) for region in old_regions]
+
+        for tick_function_label, tick_function in REGION_TICK_FUNCTIONS.items():
+            run_key = f"run_{tick_function_label}"
+            if run_key in form_data:
+                _log_tick_step(tick_function_label)
+                for i in range(len(old_regions)):
+                    full_tick_summary += _dispatch(tick_function, pending, old_regions[i], new_regions[i], region_schema)
+
+
+
     collect_market_data = False
     for tick_function_label, tick_function in MARKET_TICK_FUNCTIONS.items():
         run_key = f"run_{tick_function_label}"
@@ -1016,6 +1044,19 @@ def tick(form_data):
                 before_data=old_factions[i],
                 after_data=new_factions[i],
                 reason="Tick Update for " + old_factions[i]["name"],
+                already_calculated=True,
+            )
+
+    if collect_region_data:
+        for i in range(len(old_regions)):
+            _queue_change(
+                pending,
+                data_type="regions",
+                item_id=old_regions[i]["_id"],
+                change_type="Update",
+                before_data=old_regions[i],
+                after_data=new_regions[i],
+                reason="Tick Update for " + old_regions[i]["name"],
                 already_calculated=True,
             )
 
@@ -4447,6 +4488,10 @@ MERCENARY_TICK_FUNCTIONS = {
 FACTION_TICK_FUNCTIONS = {
     "Faction Income Tick": faction_income_tick,
     "Faction Progress Quests Tick": progress_quests_tick,
+}
+
+REGION_TICK_FUNCTIONS = {
+    "Region Modifier Decay Tick": modifier_decay_tick,
 }
 
 MARKET_TICK_FUNCTIONS = {
