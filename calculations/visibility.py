@@ -120,10 +120,12 @@ def get_viewer_nations(g_user) -> list:
     Return every nation document the logged-in user has viewer access
     through: the ruling nation of EVERY character they have (not just
     whichever one a query happens to return first), plus any nation whose
-    `players` array lists them directly. A player can rule more than one
-    nation (multiple characters, or a character plus a direct nation link);
-    visibility should reflect whichever affiliation sees the most, so this
-    returns the full candidate list for compute_visibility/
+    `players` array lists them directly, plus — for a character ruling a
+    merchant or mercenary company instead of a nation outright — that org's
+    host/patron nation (see the org fallback below). A player can rule more
+    than one nation (multiple characters, or a character plus a direct
+    nation link); visibility should reflect whichever affiliation sees the
+    most, so this returns the full candidate list for compute_visibility/
     compute_all_visibilities to take the max across.
 
     Result is cached in Flask g for the lifetime of the request so multiple
@@ -164,24 +166,37 @@ def get_viewer_nations(g_user) -> list:
 
         nation_ids = set(org_ids)
 
-        # A character ruling a merchant company (not a nation) shouldn't
-        # leave that player with zero viewer-nation perspective — the
-        # merchant inherits its current host nation's viewpoint on
-        # everything else, same as a merchant's own page is fully visible
-        # to its leaders regardless of viewer_nations (see is_item_owner).
+        # A character ruling a merchant company or mercenary company (not a
+        # nation) shouldn't leave that player with zero viewer-nation
+        # perspective — each inherits a nation's viewpoint on everything
+        # else, same as the org's own page is fully visible to its leaders
+        # regardless of viewer_nations (see is_item_owner). A merchant
+        # inherits its current host nation (location); a mercenary company
+        # has no single host, so it inherits its patron (the nation
+        # currently employing it) when one is set — with no patron, there's
+        # no nation to inherit from, same as a merchant with no location.
         if org_ids:
             real_nation_ids = {
                 n["_id"] for n in mongo.db.nations.find({"_id": {"$in": list(org_ids)}}, {"_id": 1})
             }
-            merchant_only_ids = org_ids - real_nation_ids
-            if merchant_only_ids:
+            non_nation_ids = org_ids - real_nation_ids
+            if non_nation_ids:
                 for merchant in mongo.db.merchants.find(
-                    {"_id": {"$in": list(merchant_only_ids)}}, {"location": 1}
+                    {"_id": {"$in": list(non_nation_ids)}}, {"location": 1}
                 ):
                     loc = merchant.get("location")
                     if loc:
                         try:
                             nation_ids.add(ObjectId(str(loc)))
+                        except Exception:
+                            pass
+                for mercenary in mongo.db.mercenaries.find(
+                    {"_id": {"$in": list(non_nation_ids)}}, {"patron": 1}
+                ):
+                    patron = mercenary.get("patron")
+                    if patron:
+                        try:
+                            nation_ids.add(ObjectId(str(patron)))
                         except Exception:
                             pass
 

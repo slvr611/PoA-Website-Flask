@@ -294,6 +294,7 @@ class HexMapViewer {
         // Nation cache for owner autocomplete and buildings
         this._nationList      = null;  // [{name, color, overlord}]
         this._nationOverlords = {};   // name -> overlord name string
+        this._sessionOverlords = null;  // set by loadTiles from a historical snapshot's nation_overlords, or null when viewing live
         this._nationBuildings = {};    // name -> {cities, districts}
         this._wonderList      = null;  // [{id, name, owner_nation}]
         this._marketList      = null;  // [{id, name}]
@@ -569,18 +570,30 @@ class HexMapViewer {
             fetch('/api/capitals/default-image'),
             fetch('/api/hex-map/visibility'),
         ]);
-        const data           = await resp.json();
+        // /api/hex-map/tiles answers an unchanged ETag with a bare 304 and no
+        // body (routes/hex_map_routes.py's hex_map_tiles) — the browser's own
+        // HTTP cache usually resolves that transparently, but when it
+        // doesn't, resp.json() on the empty body throws a JSON parse error
+        // and aborts the rest of this function (including the image/render
+        // calls below). A 304 means "nothing changed since last time", so
+        // the already-loaded this.tiles/nationColors are still correct —
+        // just skip re-applying them instead of trying to parse nothing.
+        const unchanged      = resp.status === 304;
+        const data           = unchanged ? {} : await resp.json().catch(() => ({}));
         const imgMap         = await imgResp.json().catch(() => ({}));
         const wonderImgData  = await wonderImgResp.json().catch(() => ({}));
         const cityImgMap     = await cityImgResp.json().catch(() => ({}));
         const capitalImgData = await capitalImgResp.json().catch(() => ({}));
         this._visibilityMap  = await visResp.json().catch(() => ({}));
 
-        this.tiles = new Map();
-        for (const tile of (data.tiles || [])) {
-            this.tiles.set(`${tile.q},${tile.r}`, tile);
+        if (!unchanged) {
+            this.tiles = new Map();
+            for (const tile of (data.tiles || [])) {
+                this.tiles.set(`${tile.q},${tile.r}`, tile);
+            }
+            this.nationColors      = data.nation_colors || {};
+            this._sessionOverlords = data.nation_overlords || null;
         }
-        this.nationColors = data.nation_colors || {};
         this._rgbaCache   = {};
 
         // Preload district images, city type images, wonder and capital default images
@@ -604,6 +617,16 @@ class HexMapViewer {
         this._outOfRangeTiles = new Set();
         this._adminDistData   = new Map();
         this._ensureNationList().then(() => {
+            // _ensureNationList sets _nationOverlords from the LIVE
+            // nation list, but only on its first-ever fetch — on a cached
+            // call (switching between sessions after the initial load) it
+            // leaves _nationOverlords untouched. Apply the session-specific
+            // overlords (if this response had any — the plain, non-session
+            // /api/hex-map/tiles endpoint doesn't) AFTER that, unconditionally,
+            // so a historical view's vassal relationships always win
+            // regardless of _ensureNationList's cache state. null means
+            // "no session override" (viewing live) — keep the live data.
+            if (this._sessionOverlords) this._nationOverlords = this._sessionOverlords;
             this._computeNationLabels(); this._computeRegionLabels();
             this._computeAllAdminRanges();
             this.render();

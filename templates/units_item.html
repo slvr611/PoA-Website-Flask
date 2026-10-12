@@ -561,13 +561,15 @@ const MONEY_DIVISORS = {
 };
 // Cost per unit of upkeep (negative = reduces total cost)
 const UPKEEP_MULTIPLIERS = {
-  food: -3, wood: -3, stone: -3, mounts: -3, research: -3,
+  food: -1, wood: -3, stone: -3, mounts: -3, research: -3,
   magic: -4, prestige: -6
 };
 // All unique resources reduce cost at -4 per unit
 for (const key of {{ unique_resource_keys | tojson }}) {
   UPKEEP_MULTIPLIERS[key] = -4;
 }
+// Gunpowder overrides the unique-resource default above
+UPKEEP_MULTIPLIERS.gunpowder = -5;
 // District tier → point cost reduction
 const DISTRICT_TIER_DISCOUNT = { 1: -1, 2: -3, 3: -5 };
 // Build district key → tier lookup from district options

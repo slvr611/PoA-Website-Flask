@@ -120,7 +120,8 @@ def pops_bulk_edit():
             continue
 
         pop = mongo.db.pops.find_one(
-            {"_id": oid}, {"nation": 1, "race": 1, "culture": 1, "religion": 1}
+            {"_id": oid},
+            {"nation": 1, "race": 1, "culture": 1, "religion": 1, "diseases": 1, "pre_disease_race": 1},
         )
         if not pop:
             errors.append(f"Pop not found: {raw_id}")
@@ -131,11 +132,27 @@ def pops_bulk_edit():
             "race": pop.get("race", ""),
             "culture": pop.get("culture", ""),
             "religion": pop.get("religion", ""),
+            "diseases": pop.get("diseases", []),
+            "pre_disease_race": pop.get("pre_disease_race", ""),
         }
         after = dict(before)
         for field in ("nation", "race", "culture", "religion"):
             if upd.get(field):
                 after[field] = upd[field]
+
+        # Clear ALL of this pop's current diseases at once — mirrors
+        # helpers.disease_helpers.cure_pop's race-restoration side effect
+        # (if this was the pop's last remaining disease, its pre-disease
+        # race comes back) so bulk-cleared pops behave identically to a
+        # pop cured one disease at a time via the admin tool. Routed
+        # through the normal request_change/approve_change flow (unlike
+        # cure_pop's direct write) so a non-admin's request still needs
+        # admin approval, same as every other bulk-edit field here.
+        if upd.get("clear_diseases") and after["diseases"]:
+            after["diseases"] = []
+            if after["pre_disease_race"]:
+                after["race"] = after["pre_disease_race"]
+            after["pre_disease_race"] = ""
 
         if before == after:
             continue

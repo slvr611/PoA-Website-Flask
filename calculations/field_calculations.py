@@ -444,9 +444,29 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
             effective_territory_types = target.get("territory_types", {})
         # Store for use in breakdown tooltips (same data as the calculation)
         target["_calc_cache"]["effective_territory_types"] = effective_territory_types
-        territory_terrain_totals = collect_territory_terrain(effective_territory_types, all_terrain_rules)
-        for _k, _v in collect_flaming_ravager_terrain_modifiers(target, effective_territory_types).items():
-            territory_terrain_totals[_k] = territory_terrain_totals.get(_k, 0) + _v
+        # ignore_terrain is the "disable all terrain-tile production" switch —
+        # the terrain equivalent of compute_resource_production's ignore_nodes
+        # skip_nodes gate for resource nodes. Territory-terrain production
+        # (base per-tile conversion, swap_resource, multiplier, extra_resource
+        # rules, and the Flaming Ravager hazardous-terrain magic bonus) must be
+        # discarded wholesale here — not just its base term — otherwise a
+        # multiplier/extra_resource modifier would still leak production
+        # through even with the switch on. Checked across every totals dict
+        # already summed by this point (direct/law/district/tech/city/external
+        # modifiers), since the switch can be granted via any of those
+        # sources, not just a direct nation modifier.
+        _ignore_terrain_production = sum(
+            d.get("ignore_terrain", 0) for d in (
+                modifier_totals, law_totals, district_totals, external_modifiers_total,
+                tech_totals, city_totals, city_schema_totals,
+            )
+        ) >= 1
+        if _ignore_terrain_production:
+            territory_terrain_totals = {}
+        else:
+            territory_terrain_totals = collect_territory_terrain(effective_territory_types, all_terrain_rules)
+            for _k, _v in collect_flaming_ravager_terrain_modifiers(target, effective_territory_types).items():
+                territory_terrain_totals[_k] = territory_terrain_totals.get(_k, 0) + _v
         record_timing("ts_territory_terrain_ms", _sub)
 
         _sub = perf_counter()
@@ -4280,71 +4300,77 @@ def _build_computed_contributions(
     all_res = json_data.get("general_resources", []) + json_data.get("unique_resources", [])
 
     # ── Terrain production ────────────────────────────────────────────────────
-    terrain_json = json_data.get("terrains", {})
-    terrain_rules = _collect_all_terrain_rules(target)
-    _eff_tt = (target.get("_calc_cache") or {}).get("effective_territory_types") or target.get("territory_types", {})
-    for terrain, tile_count in _eff_tt.items():
-        td = terrain_json.get(terrain, {})
-        rules = [r for r in terrain_rules if r.get("terrain") == terrain]
+    # ignore_terrain disables ALL terrain-tile production (see calculate_all_fields's
+    # matching gate on territory_terrain_totals) — terrain production (base,
+    # swap_resource, multiplier, extra_resource, and the Flaming Ravager
+    # hazardous-terrain magic bonus) is skipped wholesale here too, so the
+    # tooltip never shows a Terrain line for a bonus the real total excluded.
+    if overall_totals.get("ignore_terrain", 0) < 1:
+        terrain_json = json_data.get("terrains", {})
+        terrain_rules = _collect_all_terrain_rules(target)
+        _eff_tt = (target.get("_calc_cache") or {}).get("effective_territory_types") or target.get("territory_types", {})
+        for terrain, tile_count in _eff_tt.items():
+            td = terrain_json.get(terrain, {})
+            rules = [r for r in terrain_rules if r.get("terrain") == terrain]
 
-        res_key = td.get("resource", "none")
-        for r in rules:
-            if r["rule_type"] == "swap_resource" and r.get("resource"):
-                res_key = r["resource"]
-        if res_key == "none":
-            continue
-
-        count_req = td.get("count_required", 4)
-        for r in rules:
-            if r["rule_type"] == "count_required_delta":
-                count_req += int(r.get("value", 0))
-        count_req = max(count_req, 1)
-
-        def _apply_mult(res, base):
-            m = 1.0
+            res_key = td.get("resource", "none")
             for r in rules:
-                if r["rule_type"] != "multiplier":
-                    continue
-                sr = r.get("resource")
-                if sr is None or sr == res:
-                    m *= float(r.get("value", 1.0))
-            return int(base * m)
-
-        prod = _apply_mult(res_key, tile_count // count_req)
-        if prod:
-            name = td.get("display_name", terrain.replace("_", " ").title())
-            contribs.append(SourceContribution(
-                label=f"Terrain: {name} ({tile_count} tiles)",
-                source_type="terrain",
-                modifiers={res_key + "_production": prod},
-            ))
-
-        for r in rules:
-            if r["rule_type"] != "extra_resource":
+                if r["rule_type"] == "swap_resource" and r.get("resource"):
+                    res_key = r["resource"]
+            if res_key == "none":
                 continue
-            extra_res = r.get("resource")
-            cr = int(r.get("value", 1))
-            if not extra_res or cr < 1:
-                continue
-            extra_prod = _apply_mult(extra_res, tile_count // cr)
-            if extra_prod:
+
+            count_req = td.get("count_required", 4)
+            for r in rules:
+                if r["rule_type"] == "count_required_delta":
+                    count_req += int(r.get("value", 0))
+            count_req = max(count_req, 1)
+
+            def _apply_mult(res, base):
+                m = 1.0
+                for r in rules:
+                    if r["rule_type"] != "multiplier":
+                        continue
+                    sr = r.get("resource")
+                    if sr is None or sr == res:
+                        m *= float(r.get("value", 1.0))
+                return int(base * m)
+
+            prod = _apply_mult(res_key, tile_count // count_req)
+            if prod:
                 name = td.get("display_name", terrain.replace("_", " ").title())
                 contribs.append(SourceContribution(
-                    label=f"Terrain: {name} (extra {extra_res})",
+                    label=f"Terrain: {name} ({tile_count} tiles)",
                     source_type="terrain",
-                    modifiers={extra_res + "_production": extra_prod},
+                    modifiers={res_key + "_production": prod},
                 ))
 
-    # Flaming Ravager (Frigid Caps one-off): Magic from hazardous terrain.
-    # Uses _eff_tt (same corrected terrain counts as the Terrain rows above) so
-    # the displayed value always matches what was actually added to the totals.
-    _flaming_magic_mods = collect_flaming_ravager_terrain_modifiers(target, _eff_tt)
-    if _flaming_magic_mods:
-        contribs.append(SourceContribution(
-            label="Flaming Ravager (Frigid Caps)",
-            source_type="computed",
-            modifiers=_flaming_magic_mods,
-        ))
+            for r in rules:
+                if r["rule_type"] != "extra_resource":
+                    continue
+                extra_res = r.get("resource")
+                cr = int(r.get("value", 1))
+                if not extra_res or cr < 1:
+                    continue
+                extra_prod = _apply_mult(extra_res, tile_count // cr)
+                if extra_prod:
+                    name = td.get("display_name", terrain.replace("_", " ").title())
+                    contribs.append(SourceContribution(
+                        label=f"Terrain: {name} (extra {extra_res})",
+                        source_type="terrain",
+                        modifiers={extra_res + "_production": extra_prod},
+                    ))
+
+        # Flaming Ravager (Frigid Caps one-off): Magic from hazardous terrain.
+        # Uses _eff_tt (same corrected terrain counts as the Terrain rows above) so
+        # the displayed value always matches what was actually added to the totals.
+        _flaming_magic_mods = collect_flaming_ravager_terrain_modifiers(target, _eff_tt)
+        if _flaming_magic_mods:
+            contribs.append(SourceContribution(
+                label="Flaming Ravager (Frigid Caps)",
+                source_type="computed",
+                modifiers=_flaming_magic_mods,
+            ))
 
     # ── Node production ───────────────────────────────────────────────────────
     # Mirrors compute_resource_production's skip_nodes gate exactly (ignore_nodes,

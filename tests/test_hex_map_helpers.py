@@ -158,6 +158,58 @@ class TestSnapshotCurrentMap:
         assert "session 3" in message
         assert "2" in message
 
+    def test_snapshot_includes_nation_overlords(self, patch_hex_helpers):
+        """Regression for the 2026-10-12 report: historical map views were
+        showing TODAY's vassal/overlord relationships instead of whatever
+        was true during the session being viewed, because nothing saved
+        overlords into the snapshot at all — the map just fell back to a
+        live /api/hex-map/nation-list fetch regardless of which session was
+        being displayed."""
+        db = patch_hex_helpers
+        overlord_id = db["nations"].insert_one({"name": "Overlordia"}).inserted_id
+        db["nations"].insert_one({"name": "Vassalia", "overlord": str(overlord_id)})
+        db["nations"].insert_one({"name": "Freeland"})
+        db["global_modifiers"].insert_one({"name": "hex_map_config"})
+
+        hmh.snapshot_current_map(7)
+
+        snap = db["hex_map_history"].find_one({"session": 7})
+        assert snap["nation_overlords"]["Vassalia"] == "Overlordia"
+        assert snap["nation_overlords"]["Freeland"] == ""
+        assert snap["nation_overlords"]["Overlordia"] == ""
+
+
+class TestGetNationOverlordsSnapshot:
+    def test_vassal_resolves_to_overlord_name(self, patch_hex_helpers):
+        db = patch_hex_helpers
+        overlord_id = db["nations"].insert_one({"name": "Overlordia"}).inserted_id
+        db["nations"].insert_one({"name": "Vassalia", "overlord": str(overlord_id)})
+
+        result = hmh._get_nation_overlords_snapshot()
+
+        assert result["Vassalia"] == "Overlordia"
+
+    def test_independent_nation_gets_empty_string_not_omitted(self, patch_hex_helpers):
+        """Must be present (as "") rather than absent — the frontend/route
+        merge logic that falls back to live data for a nation MISSING from
+        an older snapshot relies on "present with empty string" meaning
+        "had no overlord then", distinct from "wasn't in this snapshot"."""
+        db = patch_hex_helpers
+        db["nations"].insert_one({"name": "Freeland"})
+
+        result = hmh._get_nation_overlords_snapshot()
+
+        assert "Freeland" in result
+        assert result["Freeland"] == ""
+
+    def test_dangling_overlord_reference_resolves_to_empty_string(self, patch_hex_helpers):
+        db = patch_hex_helpers
+        db["nations"].insert_one({"name": "Orphaned", "overlord": "000000000000000000000000"})
+
+        result = hmh._get_nation_overlords_snapshot()
+
+        assert result["Orphaned"] == ""
+
 
 class TestGetSessionTiles:
     def test_returns_snapshot_tiles_for_a_historical_session(self, patch_hex_helpers):

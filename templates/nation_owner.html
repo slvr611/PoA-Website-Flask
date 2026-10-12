@@ -515,6 +515,12 @@
 								{% for opt in bulk_edit_options.religions %}<option value="{{ opt.id }}">{{ opt.name }}</option>{% endfor %}
 							</select>
 						</label>
+						<label style="display:flex;flex-direction:column;gap:3px;font-size:0.9em;align-items:flex-start;">Disease
+							<span style="display:flex;align-items:center;gap:5px;">
+								<input type="checkbox" id="bulk-clear-diseases">
+								<label for="bulk-clear-diseases" style="font-weight:normal;">Clear current disease(s)</label>
+							</span>
+						</label>
 						<label style="display:flex;flex-direction:column;gap:3px;font-size:0.9em;">Reason
 							<input type="text" id="bulk-edit-reason" class="form-control" placeholder="Optional reason" style="min-width:200px;">
 						</label>
@@ -874,9 +880,27 @@
 				<div class="font-heading" style="font-size:20px;color:var(--heading);">
 					{{ pf(nation.get("land_unit_count", 0), pn.get("land_unit_count")) }} land · {{ pf(nation.get("naval_unit_count", 0), pn.get("naval_unit_count")) }} naval · {{ pf(nation.get("support_unit_count", 0), pn.get("support_unit_count")) }} support units
 				</div>
+				{% set _funding_laws = schema.properties.military_funding.laws %}
+				{% set _army_size = _funding_laws.get(nation.get("military_funding"), {}).get("army_size", 0) %}
+				{% set _pending_funding = pn.get("military_funding") %}
+				{% set _pending_army_size = _funding_laws.get(_pending_funding, {}).get("army_size") if _pending_funding else none %}
 				<div style="font-size:13px;color:var(--text-mid);margin-top:6px;">
-					Conscription: {{ pf(nation.conscription_type, pn.get("conscription_type")) }} · Funding: {{ pf(nation.military_funding, pn.get("military_funding")) }} · Land Doctrine: {{ pf(nation.land_doctrine, pn.get("land_doctrine")) }} · Naval Doctrine: {{ pf(nation.naval_doctrine, pn.get("naval_doctrine")) }}
+					Conscription: {{ pf(nation.conscription_type, pn.get("conscription_type")) }} · Funding: {{ pf(nation.military_funding, pn.get("military_funding")) }} ({{ pf(_army_size, _pending_army_size) }} army size) · Land Doctrine: {{ pf(nation.land_doctrine, pn.get("land_doctrine")) }} · Naval Doctrine: {{ pf(nation.naval_doctrine, pn.get("naval_doctrine")) }}
 				</div>
+				<div style="font-size:13px;color:var(--text-mid);margin-top:6px;">
+					Magic Stance: {{ pf(nation.magic_stance, pn.get("magic_stance")) }} · Mercenary Stance: {{ pf(nation.mercenary_law, pn.get("mercenary_law")) }}
+					{%- if linked_objects.get("rulers") %} · Ruler Strategy: {% for ruler in linked_objects["rulers"] %}{{ ruler.name }} ({{ ruler.get("strategy", 0) }}){% if not loop.last %}, {% endif %}{% endfor %}{% endif %}
+				</div>
+				{% set _race = linked_objects.get("primary_race") %}
+				{% set _pos_trait = _race.get("positive_trait") if _race else none %}
+				{% set _neg_trait = _race.get("negative_trait") if _race else none %}
+				{% if (_pos_trait and _pos_trait != "None") or (_neg_trait and _neg_trait != "None") %}
+				<div style="font-size:13px;color:var(--text-mid);margin-top:6px;">
+					Racial Traits:
+					{%- if _pos_trait and _pos_trait != "None" %} <span{% if race_trait_is_war_relevant("positive_trait", _pos_trait) %} style="font-weight:700;color:var(--pos);" title="Affects units"{% endif %}>{{ _pos_trait }}</span>{% endif -%}
+					{%- if _neg_trait and _neg_trait != "None" %}{{ "," if _pos_trait and _pos_trait != "None" }} <span{% if race_trait_is_war_relevant("negative_trait", _neg_trait) %} style="font-weight:700;color:var(--crit);" title="Affects units"{% endif %}>{{ _neg_trait }}</span>{% endif -%}
+				</div>
+				{% endif %}
 			{% else %}
 				<p class="visibility-locked">Requires Tier {{ _mil_tier }} visibility.</p>
 			{% endif %}
@@ -951,9 +975,10 @@
 								{%- set s = unit.get("effective_stats", unit.get("base_stats", {})) -%}
 								{%- set b = unit.get("base_stats", {}) -%}
 								{%- set bd = unit.get("stat_breakdown", {}) -%}
-								<tr>
+								{%- set _unit_count = counts_dict.get(unit_key, 0) -%}
+								<tr{% if not _unit_count %} class="unit-row-zero-count" style="display:none;"{% endif %}>
 									<td>{{ unit.display_name }}{% if unit.get("is_magical") %} <span class="unit-magic-tag" title="Magical unit">✦</span>{% endif %}</td>
-									<td class="unit-stat-cell">{{ counts_dict.get(unit_key, 0) }}</td>
+									<td class="unit-stat-cell">{{ _unit_count }}</td>
 									{{ stat_cell(s, b, "attack", bd) }}
 									{{ stat_cell(s, b, "defense", bd) }}
 									{{ stat_cell(s, b, "hp", bd) }}
@@ -975,6 +1000,8 @@
 					</div>
 					{%- endmacro %}
 
+					<button type="button" id="toggle-zero-units-btn" class="btn btn-primary" style="margin-bottom:12px;">Show All Units</button>
+
 					<h3>Land Units <span class="card-count">{{ pf(nation.get("land_unit_count", 0), pn.get("land_unit_count")) }} / {{ pf(nation.get("land_unit_capacity", 0), pn.get("land_unit_capacity")) }}</span></h3>
 					{{ unit_table(nation.land_unit_details, nation.get("land_units", {})) }}
 
@@ -984,6 +1011,20 @@
 					<h3 style="margin-top:16px;">Naval Units <span class="card-count">{{ pf(nation.get("naval_unit_count", 0), pn.get("naval_unit_count")) }} / {{ pf(nation.get("naval_unit_capacity", 0), pn.get("naval_unit_capacity")) }}</span></h3>
 					{{ unit_table(nation.get("naval_unit_details", {}), nation.get("naval_units", {})) }}
 				</div>
+				<script>
+				(function() {
+					var btn = document.getElementById('toggle-zero-units-btn');
+					if (!btn) return;
+					var showingAll = false;
+					btn.addEventListener('click', function() {
+						showingAll = !showingAll;
+						document.querySelectorAll('#war-section tr.unit-row-zero-count').forEach(function(row) {
+							row.style.display = showingAll ? '' : 'none';
+						});
+						btn.textContent = showingAll ? 'Hide Unrecruited Units' : 'Show All Units';
+					});
+				})();
+				</script>
 			{% endif %}
 			{% else %}
 				<p class="visibility-locked">Requires Tier {{ _tier }} visibility.</p>
@@ -2853,6 +2894,7 @@
 				if (submitBtn) submitBtn.addEventListener('click', async function() {
 					const checked = Array.from(document.querySelectorAll('.pop-select:checked'));
 					if (!checked.length) return;
+					const clearDiseases = document.getElementById('bulk-clear-diseases')?.checked || false;
 					const updates = checked.map(cb => {
 						const row = cb.closest('tr');
 						return {
@@ -2861,6 +2903,7 @@
 							race: row.dataset.race,
 							culture: row.dataset.culture,
 							religion: row.dataset.religion,
+							clear_diseases: clearDiseases,
 						};
 					});
 					const reason = document.getElementById('bulk-edit-reason').value.trim();

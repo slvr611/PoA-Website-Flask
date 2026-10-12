@@ -769,6 +769,20 @@
         ],
         "applicable_to": ["nation"]
     },
+    "ignore_nodes": {
+        "name": "Ignore All Nodes",
+        "description": "When set, resource node production is disabled for every resource type (including research). Terrain-tile production is unaffected — see Ignore Terrain for that.",
+        "value_format": "number",
+        "field_template": "ignore_nodes",
+        "applicable_to": ["nation"]
+    },
+    "ignore_terrain": {
+        "name": "Ignore Terrain",
+        "description": "Completely disables the nation's terrain-tile production: base per-tile yield plus any swap_resource/multiplier/extra_resource/hazardous-terrain-magic modifiers to it are all set to 0, for every general/unique resource. Resource node production, luxury resources, and non-terrain production (jobs, districts, etc.) are unaffected — see Ignore All Nodes for the node equivalent.",
+        "value_format": "number",
+        "field_template": "ignore_terrain",
+        "applicable_to": ["nation"]
+    },
     "ignore_non_research_nodes": {
         "name": "Ignore Non-Research Nodes",
         "description": "When set, node production is disabled for all resource types except research nodes.",

@@ -205,7 +205,15 @@ def compute_compliance_gain_chance(field, target, base_value, field_schema, over
 def compute_compliance_loss_chance(field, target, base_value, field_schema, overall_total_modifiers):
     # Base per-compliance-level value now comes from the "compliance" law
     # (json-data/schemas/nations.json), folded into overall_total_modifiers
-    # alongside any tech/trait modifiers targeting this field.
+    # alongside any tech/trait modifiers targeting this field — including
+    # the race "Mindless" negative_trait's own +100% (nation_compliance_
+    # loss_chance: 1.0 in json-data/schemas/races.json), which is where a
+    # vassal with that trait's guaranteed-loss-every-session behavior
+    # actually comes from. Do not also special-case it here: that field
+    # already flows through the generic primary_race external_calculation_
+    # requirements pull (collect_external_requirements), so adding a second
+    # adjustment here would double-apply it for any nation whose race
+    # happens to also match some other special case.
     value = base_value + overall_total_modifiers.get(field, 0)
     value = round(max(value, 0), 2)
 

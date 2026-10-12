@@ -966,21 +966,60 @@ def _get_nation_colors_snapshot():
     }
 
 
+def _get_nation_overlords_snapshot():
+    """Return {name: overlord_name} for EVERY nation (overlord_name is ""
+    when it has none) — saved into snapshots so a historical map view shows
+    the vassal/overlord relationships as they actually were that session,
+    not whatever they are today (see the 2026-10-12 report: historical maps
+    were using live nation-list data for this, with no session awareness
+    at all).
+
+    Every nation gets an entry, not just current vassals — routes/
+    hex_map_routes.py's hex_map_tiles_session merges this with live data as
+    a fallback for nations missing from an OLDER snapshot (taken before
+    this field existed), and that merge needs to tell "no overlord back
+    then" (present with "") apart from "didn't exist in that snapshot"
+    (absent) to avoid incorrectly falling back to today's relationship."""
+    nations = list(mongo.db.nations.find({}, {"name": 1, "overlord": 1, "_id": 1}))
+
+    overlord_ids = set()
+    for n in nations:
+        ov = n.get("overlord")
+        if ov:
+            try:
+                overlord_ids.add(ObjectId(str(ov)))
+            except Exception:
+                pass
+
+    overlord_names = {}
+    if overlord_ids:
+        for on in mongo.db.nations.find({"_id": {"$in": list(overlord_ids)}}, {"name": 1}):
+            overlord_names[str(on["_id"])] = on.get("name", "")
+
+    return {
+        n["name"]: overlord_names.get(str(n.get("overlord") or ""), "")
+        for n in nations
+        if n.get("name")
+    }
+
+
 def snapshot_current_map(session_num):
     """Copies all current hex_map_tiles into hex_map_history for the given session.
 
-    Saves grid config and nation colors alongside tiles so historical views
-    render correctly even after nations are renamed or deleted.
+    Saves grid config, nation colors, and nation overlord relationships
+    alongside tiles so historical views render correctly even after
+    nations are renamed, deleted, or change/lose their vassal status.
     """
     tiles = get_all_tiles()
     cfg   = mongo.db.global_modifiers.find_one({"name": "hex_map_config"}) or {}
     doc   = {
-        "session":       session_num,
-        "tiles":         tiles,
-        "cols":          cfg.get("cols",     20),
-        "rows":          cfg.get("rows",     15),
-        "hex_size":      cfg.get("hex_size", 40),
-        "nation_colors": _get_nation_colors_snapshot(),
+        "session":          session_num,
+        "tiles":            tiles,
+        "cols":             cfg.get("cols",     20),
+        "rows":             cfg.get("rows",     15),
+        "hex_size":         cfg.get("hex_size", 40),
+        "nation_colors":    _get_nation_colors_snapshot(),
+        "nation_overlords": _get_nation_overlords_snapshot(),
     }
     existing = mongo.db.hex_map_history.find_one({"session": session_num})
     if existing:

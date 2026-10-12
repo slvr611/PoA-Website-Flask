@@ -135,7 +135,8 @@
         "collections": [
           "characters"
         ],
-        "queryTargetAttribute": "ruling_nation_org"
+        "queryTargetAttribute": "ruling_nation_org",
+        "preview": ["strategy"]
       },
       "players": {
         "bsonType": "array",
@@ -512,7 +513,8 @@
         "description": "The primary race of the nation",
         "collections": [
           "races"
-        ]
+        ],
+        "preview": ["positive_trait", "negative_trait"]
       },
       "primary_culture": {
         "bsonType": "linked_object",

@@ -243,6 +243,7 @@ json_data = {"general_resources": [
             {"key": "cocoa",           "name": "Cocoa",           "base_storage": 10, "base_price": 400, "color": "#783200"},
             {"key": "star_iron",       "name": "Star Iron",       "base_storage": 10, "base_price": 400, "color": "#9fc5e8"},
             {"key": "tea",             "name": "Tea",             "base_storage": 10, "base_price": 400, "color": "#b6d7a8"},
+            {"key": "breathreef",      "name": "Breathreef",      "base_storage": 10, "base_price": 400, "color": "#3f5fc7"},
         ],
         "slot_types": {
             "no_slot":            {"progress_per_tick": 0, "name": "No Slot"},

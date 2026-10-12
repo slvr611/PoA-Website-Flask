@@ -25,6 +25,46 @@ app.jinja_env.globals.update(check_upgrade_requirements=check_upgrade_requiremen
 # required visibility tier instead of an entire section sharing one tier.
 app.jinja_env.globals.update(nation_field_tier=nation_field_tier)
 
+# Keywords used by race_trait_is_war_relevant below to flag a trait as
+# unit/war-relevant: anything that touches units at all (combat stats,
+# civilian units, unit movement/terrain cost, mercenary units, etc.), plus
+# a few unit-wide concepts (strength, attrition) whose field keys don't
+# literally say "unit" but still affect how a nation's forces perform.
+# "range" is deliberately NOT included: no current trait key uses it for a
+# unit stat, and a naive match would wrongly flag Swift's unrelated
+# "diplomatic_range". Matched on underscore-delimited word boundaries (not
+# a bare substring search) so e.g. "unit" doesn't also match "...at_united".
+_RACE_TRAIT_WAR_KEYWORDS = (
+    "unit", "units", "attack", "defense", "morale", "damage", "retaliation",
+    "armor", "strength", "attrition",
+)
+_RACE_TRAIT_WAR_PATTERN = re.compile(
+    r"(?:^|_)(?:" + "|".join(_RACE_TRAIT_WAR_KEYWORDS) + r")(?:_|$)"
+)
+
+def race_trait_is_war_relevant(trait_type, trait_value):
+    """Whether a race's positive_trait/negative_trait value grants a modifier
+    that affects units in any way — used to highlight war-relevant traits on
+    the nation view page's military preview."""
+    if not trait_value or trait_value == "None":
+        return False
+    races_schema = category_data["races"]["schema"]
+    field_def = races_schema.get("properties", {}).get(trait_type, {})
+    law_def = field_def.get("laws", {}).get(trait_value, {})
+    if not isinstance(law_def, dict):
+        return False
+    for key in law_def:
+        if key == "_modifiers" or not isinstance(key, str):
+            continue
+        if _RACE_TRAIT_WAR_PATTERN.search(key):
+            return True
+    return False
+
+# Exposed so nation_owner.html's military preview can bold/color-highlight a
+# racial trait that affects units in any way, instead of every trait looking
+# equally important at a glance.
+app.jinja_env.globals.update(race_trait_is_war_relevant=race_trait_is_war_relevant)
+
 nation_routes = Blueprint("nation_routes", __name__)
 
 POP_PAGE_SIZE = 100

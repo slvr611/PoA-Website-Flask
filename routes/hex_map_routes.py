@@ -35,9 +35,19 @@ def _get_nation_colors():
     }
 
 
-def _get_nation_list():
-    """Returns [{name, color, overlord, admin, nomadic}] for all nations — used for autocomplete, color lookup, map labels, and admin range display."""
-    nations = list(mongo.db.nations.find({}, {"name": 1, "accent_color": 1, "overlord": 1, "administration": 1, "is_nomadic": 1, "_id": 1}))
+def _get_nation_overlords():
+    """Returns {nation_name: overlord_name} for EVERY nation (overlord_name
+    is "" when it has none) — the LIVE vassal/overlord relationships.
+
+    Every nation gets an entry, not just current vassals, so that merging
+    this with an older snapshot's saved nation_overlords (helpers/
+    hex_map_helpers.py's _get_nation_overlords_snapshot) can tell "this
+    nation had no overlord back then" (present with "") apart from "this
+    nation didn't exist in that snapshot at all" (absent) — the former must
+    NOT fall back to live data, or every nation that's since become (or
+    stopped being) a vassal would show today's relationship instead of the
+    historical one."""
+    nations = list(mongo.db.nations.find({}, {"name": 1, "overlord": 1, "_id": 1}))
 
     overlord_ids = set()
     for n in nations:
@@ -53,11 +63,23 @@ def _get_nation_list():
         for on in mongo.db.nations.find({"_id": {"$in": list(overlord_ids)}}, {"name": 1}):
             overlord_names[str(on["_id"])] = on.get("name", "")
 
+    return {
+        n["name"]: overlord_names.get(str(n.get("overlord") or ""), "")
+        for n in nations
+        if n.get("name")
+    }
+
+
+def _get_nation_list():
+    """Returns [{name, color, overlord, admin, nomadic}] for all nations — used for autocomplete, color lookup, map labels, and admin range display."""
+    nations = list(mongo.db.nations.find({}, {"name": 1, "accent_color": 1, "overlord": 1, "administration": 1, "is_nomadic": 1, "_id": 1}))
+    overlords = _get_nation_overlords()
+
     return [
         {
             "name": n["name"],
             "color": n.get("accent_color") or _name_to_color(n["name"]),
-            "overlord": overlord_names.get(str(n.get("overlord") or ""), ""),
+            "overlord": overlords.get(n["name"], ""),
             "admin": n.get("administration", 1),
             "nomadic": bool(n.get("is_nomadic", False)),
         }
@@ -372,15 +394,22 @@ def hex_map_tiles_session(session_num):
     if snapshot:
         tiles  = snapshot.get("tiles", [])
         src    = snapshot
-        # Use colors saved at snapshot time; fall back to live colors for any missing nation
-        saved  = snapshot.get("nation_colors", {})
-        live   = _get_nation_colors()
-        colors = {**live, **saved}   # saved takes precedence
+        # Use colors/overlords saved at snapshot time; fall back to live
+        # values for any nation missing from the snapshot (e.g. one created
+        # after this session, or an older snapshot taken before overlords
+        # were saved at all).
+        saved_colors    = snapshot.get("nation_colors", {})
+        live_colors     = _get_nation_colors()
+        colors          = {**live_colors, **saved_colors}   # saved takes precedence
+        saved_overlords = snapshot.get("nation_overlords", {})
+        live_overlords  = _get_nation_overlords()
+        overlords       = {**live_overlords, **saved_overlords}
     else:
-        tiles  = get_all_tiles()
-        src    = mongo.db.global_modifiers.find_one({"name": "hex_map_config"}) or {}
-        colors = _get_nation_colors()
-    resp = {"tiles": tiles, "nation_colors": colors}
+        tiles     = get_all_tiles()
+        src       = mongo.db.global_modifiers.find_one({"name": "hex_map_config"}) or {}
+        colors    = _get_nation_colors()
+        overlords = _get_nation_overlords()
+    resp = {"tiles": tiles, "nation_colors": colors, "nation_overlords": overlords}
     resp.update(_cfg_fields(src))
     return jsonify(resp)
 
