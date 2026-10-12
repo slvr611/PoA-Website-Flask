@@ -3000,7 +3000,7 @@ def pop_loss_tick(old_nation, new_nation, schema):
         result += f"{old_nation.get('name', 'Unknown')} has lost a pop.\n"
     return result
 
-def nation_disease_spread_tick(old_nation, new_nation, schema, disease_spread_events=None):
+def nation_disease_spread_tick(old_nation, new_nation, schema, disease_spread_events=None, pending=None):
     """Per-nation disease spread + stage escalation.
 
     For each disease among the nation's pops (a discovered cure does NOT stop
@@ -3024,7 +3024,11 @@ def nation_disease_spread_tick(old_nation, new_nation, schema, disease_spread_ev
     dropped from that player's summary (confirmed live: "Vampirism has
     spread from The United Valley to Taika" — Taika is a Player nation,
     The United Valley is not — appeared only in full_tick_summary, never
-    in player_tick_summary)."""
+    in player_tick_summary).
+
+    `pending`: threaded through to execute_disease_civil_war, which queues
+    the breakaway nation's creation via _queue_change instead of writing it
+    immediately — see that function's docstring."""
     from helpers.disease_helpers import (
         get_nation_infection_counts, resolve_diseases, get_infectivity_settings,
         active_stage_index, get_stage, infect_random_pops, execute_disease_civil_war,
@@ -3144,9 +3148,23 @@ def nation_disease_spread_tick(old_nation, new_nation, schema, disease_spread_ev
                                 f"now embrace their new nature.\n"
                             )
                         continue
-                    new_name, moved = execute_disease_civil_war(old_nation, disease, infected)
+                    new_name, moved, money_moved, storage_moved = execute_disease_civil_war(
+                        old_nation, disease, infected, pending=pending)
                     if new_name:
                         new_nation["stability"] = "Unsettled"
+                        # The breakaway's creation is queued (see
+                        # execute_disease_civil_war's docstring), but the
+                        # source-side money/resource deduction isn't written
+                        # there anymore — apply it to this nation's own
+                        # in-memory new_nation instead, so it rides along
+                        # with the normal end-of-nations-loop "Tick Update
+                        # for X" change every nation already gets.
+                        if money_moved or storage_moved:
+                            new_nation["money"] = old_nation.get("money", 0) - money_moved
+                            new_storage = dict(old_nation.get("resource_storage") or {})
+                            for res, moved_qty in storage_moved.items():
+                                new_storage[res] = (new_storage.get(res, 0) or 0) - moved_qty
+                            new_nation["resource_storage"] = new_storage
                         result += (
                             f"CIVIL WAR: the {disease_name} infected of {nation_name} have split off, "
                             f"forming {new_name} with {moved} pop(s).\n"
@@ -4641,6 +4659,7 @@ _PENDING_AWARE_TICK_FUNCTIONS = {
     pop_flee_tick,
     disease_cure_cross_tick,
     disease_job_death_tick,
+    nation_disease_spread_tick,
     era_relations_decay_tick,
     era_artifact_loss_tick,
     era_character_aging_tick,

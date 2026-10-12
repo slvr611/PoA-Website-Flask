@@ -158,6 +158,7 @@ def _reset_hex_map_tile_process_cache():
     hex_map_helpers._process_tile_cache["mongo_id"] = None
     hex_map_helpers._process_tile_cache["version"] = None
     hex_map_helpers._process_tile_cache["tiles"] = None
+    hex_map_helpers._process_tile_cache["index"] = None
     yield
 
 

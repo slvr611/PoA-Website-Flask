@@ -362,3 +362,81 @@ class TestGetAllTilesUsesChunkMirror:
         assert t["owner"] == "Testland"
         assert "extra_field" not in t
         assert "_id" not in t
+
+
+class TestProcessCachePatchIsConstantTime:
+    """Regression test for a reported "tick looks stuck/infinite" incident.
+
+    _patch_process_tile_cache used to find-or-append a tile by scanning the
+    ENTIRE cached tile list (O(n)) on every single call. notify_tile_changed
+    (which calls it) runs once per tile in _commit_pending_tile_writes —
+    the tick's single chokepoint for district/city/bandit-camp claims — so
+    a tick that writes W tiles against an already-warm, N-tile cache paid
+    O(W * N) comparisons, not O(W). With N ~11,500 in production and W in
+    the hundreds for a full AI Decision Tick, that's millions of redundant
+    comparisons (on top of the real DB round trips each write also makes)
+    — slow enough to look indistinguishable from a hang to an admin
+    watching the tick-status banner.
+
+    Fixed by maintaining a {(q, r): position} index alongside the cached
+    tile list, so each patch is an O(1) dict lookup instead of a linear
+    scan. These tests don't assert a specific wall-clock threshold (too
+    flaky across machines) — instead they prove the FIX's actual mechanism
+    directly: patching tile N+1 does not re-scan tiles 1..N.
+    """
+
+    def test_patching_does_not_rescan_the_whole_cached_list(self, test_db, monkeypatch):
+        for i in range(50):
+            _insert_tile(test_db, i, 0, terrain="plains")
+        with _patch_mongo(test_db):
+            hmh.get_all_tiles_from_chunks()  # populate the process-level cache + index
+
+            scan_calls = {"n": 0}
+            real_enumerate = enumerate
+
+            def _counting_enumerate(iterable, *a, **kw):
+                # Only the cached tile LIST can be this long in this test —
+                # any enumerate() over something that size means the O(n)
+                # scan path was taken instead of the O(1) index lookup.
+                materialized = list(iterable)
+                if len(materialized) >= 50:
+                    scan_calls["n"] += 1
+                return real_enumerate(materialized, *a, **kw)
+
+            monkeypatch.setattr("helpers.hex_map_helpers.enumerate", _counting_enumerate, raising=False)
+
+            tile25 = test_db["hex_map_tiles"].find_one({"q": 25, "r": 0})
+            test_db["hex_map_tiles"].update_one({"_id": tile25["_id"]}, {"$set": {"terrain": "forest"}})
+            hmh.notify_tile_changed(tile25["_id"])
+
+        assert scan_calls["n"] == 0, "patching an existing tile must not scan the whole cached list"
+
+    def test_index_stays_correct_across_many_sequential_patches(self, test_db):
+        """Correctness companion to the O(1) test above: simulates a tick
+        writing many tiles in a row (the real-world trigger) and confirms
+        the cache (served straight from the warm index, no DB re-read)
+        ends up with exactly the right, de-duplicated, fully-updated set."""
+        for i in range(30):
+            _insert_tile(test_db, i, 0, terrain="plains")
+        with _patch_mongo(test_db):
+            hmh.get_all_tiles_from_chunks()
+
+            for i in range(30):
+                tile = test_db["hex_map_tiles"].find_one({"q": i, "r": 0})
+                test_db["hex_map_tiles"].update_one(
+                    {"_id": tile["_id"]}, {"$set": {"terrain": "forest", "owner": f"Nation{i}"}}
+                )
+                hmh.notify_tile_changed(tile["_id"])
+
+            new_tile = _insert_tile(test_db, 99, 99, terrain="mountain")
+            hmh.notify_tile_changed(new_tile["_id"])
+
+            test_db["hex_map_tile_chunks"].delete_many({})  # prove no refetch happens
+            tiles = hmh.get_all_tiles_from_chunks()
+
+        assert len(tiles) == 31
+        by_coord = {(t["q"], t["r"]): t for t in tiles}
+        for i in range(30):
+            assert by_coord[(i, 0)]["terrain"] == "forest"
+            assert by_coord[(i, 0)]["owner"] == f"Nation{i}"
+        assert by_coord[(99, 99)]["terrain"] == "mountain"

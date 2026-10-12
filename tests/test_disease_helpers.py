@@ -22,7 +22,7 @@ Section 3 – Tick tests
 import random
 
 import pytest
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 from bson import ObjectId
 
 import helpers.disease_helpers as dh
@@ -311,14 +311,22 @@ class TestCollectDiseaseEffects:
 
 class TestDiseaseCivilWar:
     def _stub_change_pipeline(self, test_db):
+        """Stubs the immediate-write fallback _queue_change takes when
+        pending=None (every test here calls execute_disease_civil_war
+        directly, not through a tick's pending list) — _queue_change lives
+        in tick_helpers.py and uses ITS OWN module-level system_request_
+        change/system_approve_change imports, bound at import time, so the
+        patch target is "helpers.tick_helpers", not "helpers.change_helpers"
+        (patching the latter wouldn't affect tick_helpers.py's already-bound
+        local names)."""
         def fake_request(data_type, item_id, change_type, before_data, after_data, reason):
             test_db["nations"].insert_one(dict(after_data))
             return "change-1"
 
         return patch.multiple(
-            "helpers.change_helpers",
+            "helpers.tick_helpers",
             system_request_change=fake_request,
-            system_approve_change=lambda change_id: True,
+            system_approve_change=lambda change_id, **kw: True,
         )
 
     def test_split_moves_infected_pops_and_splits_resources(self, patch_disease_mongo, test_db, flask_app):
@@ -335,22 +343,26 @@ class TestDiseaseCivilWar:
         _seed_pops(test_db, nation_id, 6)
 
         with self._stub_change_pipeline(test_db):
-            new_name, moved = dh.execute_disease_civil_war(source, disease, 4)
+            new_name, moved, money_moved, storage_moved = dh.execute_disease_civil_war(source, disease, 4)
 
         assert new_name == "Rot Carrier Testland"
         assert moved == 4
 
+        # The source-side deduction is no longer written by this function —
+        # it's returned so the caller (nation_disease_spread_tick) can apply
+        # it to its own in-memory new_nation instead (see
+        # TestDiseaseSpreadTick.test_stage_civil_war_deducts_source_resources
+        # for that end-to-end behavior).
+        assert money_moved == 40                               # 4/10 share
+        assert storage_moved == {"food": 20}
+
         breakaway = test_db["nations"].find_one({"name": new_name})
-        assert breakaway["money"] == 40                        # 4/10 share
+        assert breakaway["money"] == 40
         assert breakaway["resource_storage"] == {"food": 20}
         assert breakaway["stability"] == "Unsettled"
         assert "districts" not in breakaway                    # holdings stay behind
         derived = test_db["races"].find_one({"name": "Rotting Human"})
         assert breakaway["primary_race"] == str(derived["_id"])
-
-        source_after = test_db["nations"].find_one({"_id": nation_id})
-        assert source_after["money"] == 60
-        assert source_after["resource_storage"]["food"] == 30
 
         # 4 pops moved; for a race-changing disease the breakaway is an
         # ACCEPTED nation — its pops keep derived races but are no longer sick.
@@ -369,7 +381,7 @@ class TestDiseaseCivilWar:
         _seed_pops(test_db, source["_id"], 6)
 
         with self._stub_change_pipeline(test_db):
-            new_name, moved = dh.execute_disease_civil_war(source, disease, 4)
+            new_name, moved, money_moved, storage_moved = dh.execute_disease_civil_war(source, disease, 4)
 
         assert moved == 4
         breakaway = test_db["nations"].find_one({"name": new_name})
@@ -385,7 +397,7 @@ class TestDiseaseCivilWar:
         test_db["nations"].insert_one(source)
 
         with self._stub_change_pipeline(test_db):
-            new_name, _ = dh.execute_disease_civil_war(source, disease, 2)
+            new_name, _, _, _ = dh.execute_disease_civil_war(source, disease, 2)
         assert new_name == "Rot Carrier Testland 2"
 
 
@@ -530,9 +542,12 @@ class TestDiseaseSpreadTick:
             test_db["nations"].insert_one(dict(after_data))
             return "change-1"
 
-        with patch.multiple("helpers.change_helpers",
+        # See TestDiseaseCivilWar._stub_change_pipeline's docstring: the
+        # pending=None fallback's system_request_change/system_approve_change
+        # are tick_helpers.py's own bound names, not helpers.change_helpers'.
+        with patch.multiple("helpers.tick_helpers",
                             system_request_change=fake_request,
-                            system_approve_change=lambda cid: True), \
+                            system_approve_change=lambda cid, **kw: True), \
              patch("helpers.tick_helpers.random.random", return_value=0.99):
             result = th.nation_disease_spread_tick(old_nation, new_nation, {})
 
@@ -549,6 +564,90 @@ class TestDiseaseSpreadTick:
         with patch("helpers.tick_helpers.random.random", return_value=0.99):
             result2 = th.nation_disease_spread_tick(old2, new2, {})
         assert "CIVIL WAR" not in result2
+
+    def test_stage_civil_war_deducts_source_resources_on_new_nation(self, patch_disease_mongo, test_db, flask_app):
+        """Covers the behavior that moved out of execute_disease_civil_war:
+        the source-side money/resource deduction is no longer written
+        directly by that function — nation_disease_spread_tick applies it
+        to its own in-memory new_nation instead, so it rides along with the
+        nation's normal end-of-tick "Tick Update for X" change."""
+        import helpers.tick_helpers as th
+        disease = _make_disease(infectivity="Extremely", stages=[{
+            "stage_name": "Majority", "threshold_pct": 50, "trigger_civil_war": True,
+        }])
+        test_db["diseases"].insert_one(disease)
+        nation_id = ObjectId()
+        _seed_pops(test_db, nation_id, 6, disease_id=disease["_id"])
+        _seed_pops(test_db, nation_id, 4)
+        old_nation = {"_id": nation_id, "name": "Testland", "pop_count": 10,
+                      "money": 100, "resource_storage": {"food": 50}}
+        test_db["nations"].insert_one(dict(old_nation))
+        new_nation = dict(old_nation)
+
+        def fake_request(data_type, item_id, change_type, before_data, after_data, reason):
+            test_db["nations"].insert_one(dict(after_data))
+            return "change-1"
+
+        with patch.multiple("helpers.tick_helpers",
+                            system_request_change=fake_request,
+                            system_approve_change=lambda cid, **kw: True), \
+             patch("helpers.tick_helpers.random.random", return_value=0.99):
+            th.nation_disease_spread_tick(old_nation, new_nation, {})
+
+        # Infected starts at 6/10, but the spread roll (checked before the
+        # stage-escalation/civil-war check, same function call) also
+        # succeeds here — 0.99 <= chance 1.0 (base 0.40 + 0.10/infected *
+        # 6 at "Extremely" infectivity, capped) — and lands internally (no
+        # other nation exists for an external target), infecting one more
+        # of the 4 healthy pops first. So the civil war actually triggers
+        # at infected=7/10 -> 70% share moved to the breakaway.
+        assert new_nation["money"] == 30
+        assert new_nation["resource_storage"]["food"] == 15
+        # The source document itself is untouched here — nation_disease_
+        # spread_tick only mutates new_nation in memory; persisting it is
+        # the nations loop's job via its own end-of-tick _queue_change.
+        source_still_in_db = test_db["nations"].find_one({"_id": nation_id})
+        assert source_still_in_db["money"] == 100
+
+    def test_civil_war_queues_the_breakaway_instead_of_writing_immediately(self, patch_disease_mongo, test_db, flask_app):
+        """The actual fix: when called with a real pending list (the normal
+        tick path), the breakaway nation must be QUEUED via _queue_change,
+        not written to the database immediately — no system_request_change/
+        system_approve_change call (and so no synchronous calculate_all_
+        fields/propagate_updates cascade) happens inside this call at all.
+        See execute_disease_civil_war's docstring for the incident this
+        fixes: that synchronous write used to be able to stall an entire
+        tick on one nation's civil war."""
+        import helpers.tick_helpers as th
+        disease = _make_disease(infectivity="Extremely", stages=[{
+            "stage_name": "Majority", "threshold_pct": 50, "trigger_civil_war": True,
+        }])
+        test_db["diseases"].insert_one(disease)
+        nation_id = ObjectId()
+        _seed_pops(test_db, nation_id, 6, disease_id=disease["_id"])
+        _seed_pops(test_db, nation_id, 4)
+        old_nation = {"_id": nation_id, "name": "Testland", "pop_count": 10,
+                      "money": 100, "resource_storage": {"food": 50}}
+        test_db["nations"].insert_one(dict(old_nation))
+        new_nation = dict(old_nation)
+
+        pending = []
+        with patch.multiple("helpers.tick_helpers",
+                            system_request_change=Mock(side_effect=AssertionError(
+                                "must not be called when pending is a real list")),
+                            system_approve_change=Mock(side_effect=AssertionError(
+                                "must not be called when pending is a real list"))), \
+             patch("helpers.tick_helpers.random.random", return_value=0.99):
+            result = th.nation_disease_spread_tick(old_nation, new_nation, {}, pending=pending)
+
+        assert "CIVIL WAR" in result
+        # Nothing written to the real nations collection yet — only queued.
+        assert test_db["nations"].count_documents({}) == 1
+        queued = [p for p in pending if p["data_type"] == "nations" and p["change_type"] == "Add"]
+        assert len(queued) == 1
+        assert queued[0]["after_data"]["name"] == "Rot Carrier Testland"
+        assert "_id" in queued[0]["after_data"]
+        assert queued[0]["item_id"] == queued[0]["after_data"]["_id"]
 
     def test_fully_infected_nation_does_not_split(self, patch_disease_mongo, test_db, flask_app):
         """A 100%-infected nation entering a civil-war stage must NOT split —
@@ -586,8 +685,8 @@ class TestDiseaseSpreadTick:
         disease = _make_disease()
         source = {"_id": ObjectId(), "name": "Testland", "pop_count": 5,
                   "money": 10, "resource_storage": {}}
-        assert dh.execute_disease_civil_war(source, disease, 5) == (None, 0)
-        assert dh.execute_disease_civil_war(source, disease, 7) == (None, 0)
+        assert dh.execute_disease_civil_war(source, disease, 5) == (None, 0, 0, {})
+        assert dh.execute_disease_civil_war(source, disease, 7) == (None, 0, 0, {})
 
 
 # ============================================================================

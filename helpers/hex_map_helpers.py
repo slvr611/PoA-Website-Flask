@@ -289,14 +289,26 @@ def _patch_process_tile_cache(tile):
     # shape here so a patched entry can't look different from every other
     # entry already in the list.
     patched = dict(tile)
+    key = (patched.get("q"), patched.get("r"))
     with _process_tile_cache_lock:
         if _process_tile_cache["tiles"] is not cached_tiles:
             return  # a full rebuild replaced the list while we were reading Mongo above
-        for i, t in enumerate(cached_tiles):
-            if t.get("q") == patched.get("q") and t.get("r") == patched.get("r"):
-                cached_tiles[i] = patched
-                break
+        # O(1) via the position index instead of scanning the whole list —
+        # see _process_tile_cache's module comment for why that scan was a
+        # real problem for a tick writing many tiles in a row. index can
+        # still be None here for a cache populated before this index existed
+        # (impossible in production — this module is reloaded fresh on every
+        # deploy — but kept defensive for tests that poke the cache dict
+        # directly); fall back to a scan only in that case.
+        index = _process_tile_cache.get("index")
+        if index is None:
+            index = {(t.get("q"), t.get("r")): i for i, t in enumerate(cached_tiles)}
+            _process_tile_cache["index"] = index
+        pos = index.get(key)
+        if pos is not None and 0 <= pos < len(cached_tiles):
+            cached_tiles[pos] = patched
         else:
+            index[key] = len(cached_tiles)
             cached_tiles.append(patched)
         _process_tile_cache["version"] = current_version
 
@@ -387,7 +399,16 @@ _process_tile_cache_lock = threading.Lock()
 # fresh mongomock databases both starting at version 0). In production
 # `mongo` is one long-lived object for the life of the process, so this
 # adds no real invalidation there.
-_process_tile_cache = {"mongo_id": None, "version": None, "tiles": None}
+# "index" is a {(q, r): position in "tiles"} map kept alongside "tiles" so
+# _patch_process_tile_cache can find/replace a single tile in O(1) instead
+# of scanning the whole (~11,500-entry) list — see that function's docstring
+# for why an O(n)-per-write scan was a real problem: a tick's tile-commit
+# loop (_commit_pending_tile_writes) calls notify_tile_changed once per
+# written tile, so a tick claiming hundreds of tiles (a full AI Decision
+# Tick placing districts/cities across every nation) turned into hundreds
+# of full-list scans — O(writes × tile_count) — slow enough to look like a
+# hung/stuck tick rather than a tick that's merely running a long time.
+_process_tile_cache = {"mongo_id": None, "version": None, "tiles": None, "index": None}
 
 
 def get_all_tiles_from_chunks():
@@ -427,6 +448,7 @@ def get_all_tiles_from_chunks():
         _process_tile_cache["mongo_id"] = mongo_id
         _process_tile_cache["version"] = current_version
         _process_tile_cache["tiles"] = tiles
+        _process_tile_cache["index"] = {(t.get("q"), t.get("r")): i for i, t in enumerate(tiles)}
     return tiles
 
 

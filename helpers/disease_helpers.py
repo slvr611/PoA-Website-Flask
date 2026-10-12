@@ -678,16 +678,36 @@ def _unique_nation_name(base_name):
     return name
 
 
-def execute_disease_civil_war(source_nation, disease, infected_count):
+def execute_disease_civil_war(source_nation, disease, infected_count, pending=None):
     """Split a nation's infected pops into a breakaway nation.
 
     The breakaway copies the source (minus exclusions), takes a money/resource
     share proportional to its pop share, and its primary race becomes the
     disease's derived race (when configured). Both sides drop to Unsettled
-    stability. Returns (new_nation_name, moved_pop_count) or (None, 0).
+    stability. Returns (new_nation_name, moved_pop_count, money_moved,
+    storage_moved) — the caller (nation_disease_spread_tick) is responsible
+    for applying money_moved/storage_moved to its own in-memory new_nation,
+    since the source-side deduction is no longer written here (see below).
+
+    `pending`: the tick's deferred-commit accumulator (see tick_helpers.py's
+    _queue_change). The breakaway nation's creation is QUEUED, not written
+    immediately — unlike every other write in this function (pops stay
+    direct, matching every other disease mechanic in this module, e.g.
+    infect_random_pops). This used to call system_request_change +
+    system_approve_change synchronously, right here, mid-compute-phase: that
+    ran a full calculate_all_fields for the new nation (~8s-class, needs a
+    hex-map tile read) plus a synchronous propagate_updates cascade,
+    completely bypassing the tick's "nothing touches the database except
+    plain reads until the single end-of-compute commit phase" invariant
+    (see tick()'s own comment). A nation stuck in a long civil-war chain
+    could stall an entire tick on this one nation while 200+ others waited
+    (see the 2026-10-12 "tick looks stuck" report). Queuing it instead
+    means it's created atomically alongside everything else, with the same
+    chunked-commit retry behavior, and a tick that fails before committing
+    never leaves an orphaned breakaway nation behind.
     """
     from copy import deepcopy
-    from helpers.change_helpers import system_request_change, system_approve_change
+    from helpers.tick_helpers import _queue_change
 
     source_id = str(source_nation["_id"])
     pop_count = max(source_nation.get("pop_count", 0), 1)
@@ -697,7 +717,7 @@ def execute_disease_civil_war(source_nation, disease, infected_count):
     # empty husk that immediately re-triggers. Callers should treat the nation
     # as having fully succumbed instead.
     if infected_count >= source_nation.get("pop_count", 0):
-        return None, 0
+        return None, 0, 0, {}
 
     base_name = f"{disease.get('job_type', disease.get('name', 'Infected'))} {source_nation.get('name', '')}".strip()
     new_name = _unique_nation_name(base_name)
@@ -736,36 +756,34 @@ def execute_disease_civil_war(source_nation, disease, infected_count):
     new_nation["money"] = money_moved
     new_nation["resource_storage"] = storage_moved
 
-    change_id = system_request_change(
+    # Generated up front (instead of letting Mongo auto-assign one at insert
+    # time) so the pops move below can reference the breakaway's id
+    # immediately — the Add itself is deferred (see _queue_change), so
+    # there's nothing to read back yet. Same pattern as tick_helpers.py's
+    # generate_ai_character.
+    new_id = ObjectId()
+    new_nation["_id"] = new_id
+
+    _queue_change(
+        pending,
         data_type="nations",
-        item_id=None,
+        item_id=new_id,
         change_type="Add",
         before_data={},
         after_data=new_nation,
         reason=f"Disease civil war: {disease.get('name', 'disease')} split from {source_nation.get('name', '')}",
     )
-    if change_id is None:
-        return None, 0
-    system_approve_change(change_id)
-
-    new_doc = mongo.db.nations.find_one({"name": new_name}, {"_id": 1})
-    if new_doc is None:
-        return None, 0
-    new_id = str(new_doc["_id"])
-
-    # Subtract the transferred money/resources from the source.
-    if money_moved or storage_moved:
-        updates = {"money": source_nation.get("money", 0) - money_moved}
-        for res, moved in storage_moved.items():
-            updates[f"resource_storage.{res}"] = (source_nation.get("resource_storage", {}).get(res, 0) or 0) - moved
-        mongo.db.nations.update_one({"_id": source_nation["_id"]}, {"$set": updates})
+    new_id_str = str(new_id)
 
     # Move the pops infected with THIS disease to the breakaway nation — any
     # other disease(s) a moved pop also carries move with it unaffected.
+    # Direct write (not deferred), matching every other pop mutation in this
+    # module (infect_random_pops, infect_pop, ...) — pops never go through
+    # the change-approval/queue system in this codebase.
     disease_id_str = str(disease.get("_id", ""))
     result = mongo.db.pops.update_many(
         {"nation": source_id, "diseases": disease_id_str},
-        {"$set": {"nation": new_id}},
+        {"$set": {"nation": new_id_str}},
     )
 
     # For race-changing diseases the breakaway is an ACCEPTED nation (its
@@ -776,8 +794,8 @@ def execute_disease_civil_war(source_nation, disease, infected_count):
     # future cure).
     if disease.get("changes_race") and disease.get("race_prefix"):
         mongo.db.pops.update_many(
-            {"nation": new_id, "diseases": disease_id_str},
+            {"nation": new_id_str, "diseases": disease_id_str},
             {"$pull": {"diseases": disease_id_str}, "$unset": {"pre_disease_race": ""}},
         )
 
-    return new_name, result.modified_count
+    return new_name, result.modified_count, money_moved, storage_moved
