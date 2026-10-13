@@ -189,16 +189,51 @@ def rebuild_tile_chunks():
     the full ~11,500-document scan once; every full-map read after that
     (until the next tile write) is a ~100-document chunk fetch instead.
 
-    Returns the tile_version the rebuild was performed at.
+    Returns the tile_version the rebuild was performed at (or can vouch for
+    — see below, not necessarily the live value at the moment this returns).
+
+    Reads tile_version both BEFORE and AFTER the scan, not just after.
+    Previously this read tile_version only once, AFTER the scan completed,
+    and unconditionally stamped chunk_synced_version to that value — but the
+    scan itself (list(hex_map_tiles.find({}))) takes several seconds against
+    ~11,500 documents, and any tile write that lands during that window
+    (a tick's own district/city placements, a direct admin edit, ...) races
+    it: the write's own notify_tile_changed() may have already correctly
+    patched that one tile into its chunk via _upsert_tile_into_chunk, but
+    this function's own per-chunk `$set: {tiles: [...]}` below replaces that
+    chunk's ENTIRE tiles array from the (possibly stale, pre-write) scan
+    result — silently clobbering the correct update with stale data, or
+    dropping a brand-new tile the scan's cursor raced past before it existed.
+    Unconditionally stamping chunk_synced_version to the post-scan version
+    then marked that wrong result as "fully synced", so get_all_tiles_from_
+    chunks never detected the mismatch and never re-healed it — the tile
+    stayed silently wrong until another write happened to touch that exact
+    coordinate again. (Confirmed live: a newly-placed district tile was
+    entirely absent from hex_map_tile_chunks despite chunk_synced_version
+    == tile_version — see the 2026-10-13 "tiles disappeared" report.)
+
+    Fix: if tile_version changed between the before/after reads, the scan
+    cannot be vouched for as a consistent snapshot of the post-scan version
+    — stamp chunk_synced_version to the PRE-scan version instead of the
+    post-scan one, so the next read still sees chunk_synced_version behind
+    the real (newer) tile_version and retries the heal, rather than trusting
+    a scan that raced with a write. This doesn't make every possible
+    interleaving airtight (the per-chunk writes just below this could still
+    themselves race a concurrent single-tile sync, a much smaller window
+    than the multi-second scan this specifically guards against), but it
+    closes the dominant, demonstrated gap.
     """
+    version_before = (mongo.db.global_modifiers.find_one(
+        {"name": _HEX_MAP_CONFIG_NAME}, {"tile_version": 1}) or {}).get("tile_version", 0)
+
     tiles = list(mongo.db.hex_map_tiles.find({}, _MAP_TILE_PROJECTION).batch_size(20000))
     by_chunk = {}
     for t in tiles:
         cid = _chunk_id(t["q"], t["r"])
         by_chunk.setdefault(cid, []).append(t)
 
-    config = mongo.db.global_modifiers.find_one({"name": _HEX_MAP_CONFIG_NAME}, {"tile_version": 1}) or {}
-    current_version = config.get("tile_version", 0)
+    version_after = (mongo.db.global_modifiers.find_one(
+        {"name": _HEX_MAP_CONFIG_NAME}, {"tile_version": 1}) or {}).get("tile_version", 0)
 
     for cid, chunk_tiles in by_chunk.items():
         mongo.db.hex_map_tile_chunks.update_one(
@@ -210,12 +245,13 @@ def rebuild_tile_chunks():
     # normalization/cleanup shrank the map) so stale chunks don't linger.
     mongo.db.hex_map_tile_chunks.delete_many({"_id": {"$nin": list(by_chunk.keys())}})
 
+    synced_version = version_before if version_before != version_after else version_after
     mongo.db.global_modifiers.update_one(
         {"name": _HEX_MAP_CONFIG_NAME},
-        {"$set": {"chunk_synced_version": current_version}},
+        {"$set": {"chunk_synced_version": synced_version}},
         upsert=True,
     )
-    return current_version
+    return synced_version
 
 
 def _upsert_tile_into_chunk(tile):

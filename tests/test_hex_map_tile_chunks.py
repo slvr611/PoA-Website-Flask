@@ -94,6 +94,62 @@ class TestRebuildTileChunks:
         chunk = test_db["hex_map_tile_chunks"].find_one({})
         assert "_id" not in chunk["tiles"][0]
 
+    def test_concurrent_write_during_scan_does_not_falsely_mark_fully_synced(self, test_db):
+        """Regression for the 2026-10-13 "tiles disappeared" report: a
+        district placed on a tile went missing from hex_map_tile_chunks
+        entirely despite chunk_synced_version == tile_version.
+
+        Root cause: the full scan (list(hex_map_tiles.find({}))) takes
+        several seconds in production — if a tile write (and its own
+        notify_tile_changed, correctly patching that one tile into its
+        chunk) lands WHILE the scan is still running, the scan's stale/
+        incomplete result can get written over that correct patch via this
+        function's own `$set: {tiles: [...]}` full-chunk replace. The old
+        code then unconditionally stamped chunk_synced_version to whatever
+        tile_version was AFTER the scan finished — falsely claiming the
+        (actually stale) rebuild was fully caught up, so the mismatch could
+        never be detected or self-healed again.
+
+        This simulates that exact race: tile_version changes between the
+        pre-scan and post-scan reads (standing in for a concurrent write
+        landing mid-scan). The fix must stamp chunk_synced_version to the
+        PRE-scan version, not the post-scan one, so the next read still
+        sees a real mismatch and retries the heal instead of trusting a
+        scan that raced with a write."""
+        _insert_tile(test_db, 0, 0, terrain="plains")
+        _bump_version(test_db)  # tile_version = 1
+
+        real_find = test_db["hex_map_tiles"].find
+
+        def _find_with_concurrent_write(*args, **kwargs):
+            # Stands in for a tile write landing while the scan is in
+            # flight — bump tile_version again right as the scan starts.
+            _bump_version(test_db)
+            return real_find(*args, **kwargs)
+
+        with _patch_mongo(test_db), \
+             patch.object(test_db["hex_map_tiles"], "find", side_effect=_find_with_concurrent_write):
+            synced_version = hmh.rebuild_tile_chunks()
+
+        config = test_db["global_modifiers"].find_one({"name": "hex_map_config"})
+        assert config["tile_version"] == 2
+        assert synced_version == 1, "must stamp the pre-scan version, not the post-scan one, when they differ"
+        assert config["chunk_synced_version"] == 1
+
+    def test_no_concurrent_write_stamps_the_matching_version_as_before(self, test_db):
+        """Companion to the race test above: when nothing changes during the
+        scan, behavior is unchanged from before this fix — synced_version
+        matches the (single, stable) live tile_version."""
+        _insert_tile(test_db, 0, 0, terrain="plains")
+        _bump_version(test_db)  # tile_version = 1
+
+        with _patch_mongo(test_db):
+            synced_version = hmh.rebuild_tile_chunks()
+
+        assert synced_version == 1
+        config = test_db["global_modifiers"].find_one({"name": "hex_map_config"})
+        assert config["chunk_synced_version"] == 1 == config["tile_version"]
+
 
 class TestSyncTileChunk:
     def test_updates_existing_tile_in_its_chunk(self, test_db):
