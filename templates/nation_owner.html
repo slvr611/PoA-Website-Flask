@@ -909,6 +909,27 @@
 		<div class="tab-panel surface-card" data-tab="military" id="war-section" style="margin:16px 28px;">
 			{% set _tier = nation_field_tier("land_units") %}
 			{% if visibility_level >= _tier %}
+			{% if active_wars %}
+				<div style="margin-bottom:16px;">
+					<h3>Active Wars <span class="card-count">{{ active_wars|length }}</span></h3>
+					<div class="table-wrapper">
+					<table class="kh-table">
+						<thead><tr><th>War</th><th>Type</th><th>Stance</th><th>Opponent(s)</th><th>Declared</th></tr></thead>
+						<tbody>
+							{% for war in active_wars %}
+							<tr>
+								<td><a href="{{ war.link }}">{{ war.name }}</a></td>
+								<td>{{ war.war_type_display }}</td>
+								<td>{{ war.own_stance }}</td>
+								<td>{% for opp in war.opponents %}{{ opp.name }} ({{ opp.stance }}){% if not loop.last %}, {% endif %}{% endfor %}</td>
+								<td>Session {{ war.session_declared }}</td>
+							</tr>
+							{% endfor %}
+						</tbody>
+					</table>
+					</div>
+				</div>
+			{% endif %}
 			{% if editable %}
 				<div class="table-wrapper">
 					{%- macro unit_edit_table(unit_details, form_units) %}

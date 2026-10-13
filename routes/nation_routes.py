@@ -275,6 +275,82 @@ def _fetch_nation_pops_page(nation_id, page, page_size, pops_schema):
     }
 
 
+def _fetch_active_wars_for_nation(nation_id_str):
+    """Active wars (session_declared <= current session <= session_ended,
+    or still ongoing) this nation is a participant in, each with the
+    opponent nation name(s) and this nation's own stance.
+
+    Deliberately NOT routed through get_linked_objects_parallel's generic
+    "wars" field — that's excluded from this page's linked_objects
+    specifically because its linkCollection resolution does one query per
+    war_link plus a separate unbatched find_one per linked war (see
+    nation_item's own comment on why wars/markets/etc. were dropped). This
+    is a small, nation-scoped query instead: one war_links lookup, one
+    batched wars fetch, one batched war_links-for-those-wars fetch, one
+    batched nations fetch for the opponents — four queries total regardless
+    of how many wars/participants are involved, same "active" definition
+    nation_war_support_tick/nation_infamy_decay_tick already use (helpers/
+    tick_helpers.py)."""
+    own_links = list(mongo.db.war_links.find({"participant": nation_id_str}))
+    if not own_links:
+        return []
+
+    global_modifiers = mongo.db.global_modifiers.find_one({"name": "global_modifiers"}, {"session_counter": 1})
+    current_session = global_modifiers.get("session_counter", 0) if global_modifiers else 0
+
+    war_ids = list({link["war"] for link in own_links if link.get("war")})
+    wars_by_id = {
+        str(w["_id"]): w
+        for w in mongo.db.wars.find({"_id": {"$in": _to_object_ids(war_ids)}})
+    }
+
+    active_war_ids = []
+    own_stance_by_war = {}
+    for link in own_links:
+        war = wars_by_id.get(link.get("war"))
+        if not war:
+            continue
+        session_declared = war.get("session_declared", 0)
+        session_ended = war.get("session_ended", None)
+        if session_declared <= current_session and (session_ended is None or session_ended >= current_session):
+            active_war_ids.append(link["war"])
+            own_stance_by_war[link["war"]] = link.get("stance", "")
+
+    if not active_war_ids:
+        return []
+
+    all_links = list(mongo.db.war_links.find({"war": {"$in": active_war_ids}}))
+    opponent_ids = {
+        link["participant"] for link in all_links
+        if link.get("participant") and link["participant"] != nation_id_str
+    }
+    opponent_names = {
+        str(n["_id"]): n.get("name", "Unknown")
+        for n in mongo.db.nations.find({"_id": {"$in": _to_object_ids(opponent_ids)}}, {"name": 1})
+    }
+
+    war_types = json_data.get("war_types", {})
+    active_wars = []
+    for war_id in active_war_ids:
+        war = wars_by_id[war_id]
+        opponents = [
+            {"name": opponent_names.get(link["participant"], "Unknown"), "stance": link.get("stance", "")}
+            for link in all_links
+            if link.get("war") == war_id and link.get("participant") != nation_id_str
+        ]
+        opponents.sort(key=lambda o: o["name"])
+        war_type_data = war_types.get(war.get("war_type", ""), {})
+        active_wars.append({
+            "name": war.get("name", "Unknown War"),
+            "war_type_display": war_type_data.get("display_name", war.get("war_type", "")),
+            "own_stance": own_stance_by_war.get(war_id, ""),
+            "opponents": opponents,
+            "session_declared": war.get("session_declared", 0),
+            "link": f"/wars/item/{war.get('name', '')}",
+        })
+    active_wars.sort(key=lambda w: w["name"])
+    return active_wars
+
 
 @nation_routes.route("/nations/item/<item_ref>")
 def nation_item(item_ref):
@@ -296,22 +372,30 @@ def nation_item(item_ref):
     timings["get_data_on_item_ms"] = round((perf_counter() - phase_start) * 1000, 2)
 
     phase_start = perf_counter()
-    # wars/markets/owned_markets/factions/hired_mercenaries are never read
-    # from linked_objects anywhere in nation_owner.html's view-mode render —
-    # confirmed by grepping the template. wars/markets were also the two
-    # most expensive fields to compute (linkCollection join-table fields do
-    # 1 query for every link PLUS a separate find_one per link's target,
-    # unbatched), so excluding all 5 removes data the page never displays.
-    # The remaining ~10 fields (region, primary_race/culture/religion,
-    # overlord, rulers, vassals, both diplomatic_relations, wonders) are all
-    # genuinely used, but each is an independent round trip to a different
-    # collection — on a real connection those sum linearly (measured
-    # ~500-700ms sequential), so they're fetched concurrently instead.
+    # markets/owned_markets/factions/hired_mercenaries are never read from
+    # linked_objects anywhere in nation_owner.html's view-mode render —
+    # confirmed by grepping the template. "wars" used to be excluded for the
+    # same reason (plus being one of the two most expensive linked_objects
+    # fields to compute — linkCollection join-table fields do 1 query for
+    # every link PLUS a separate find_one per link's target, unbatched) —
+    # now shown in the military tab via _fetch_active_wars_for_nation's own
+    # small, nation-scoped, fully-batched query instead, so it stays
+    # excluded here specifically to avoid paying for the expensive generic
+    # path too. The remaining ~10 fields (region, primary_race/culture/
+    # religion, overlord, rulers, vassals, both diplomatic_relations,
+    # wonders) are all genuinely used, but each is an independent round
+    # trip to a different collection — on a real connection those sum
+    # linearly (measured ~500-700ms sequential), so they're fetched
+    # concurrently instead.
     linked_objects = get_linked_objects_parallel(
         schema, nation,
         exclude_fields={"pops", "wars", "markets", "owned_markets", "factions", "hired_mercenaries"},
     )
     timings["get_linked_objects_ms"] = round((perf_counter() - phase_start) * 1000, 2)
+
+    phase_start = perf_counter()
+    active_wars = _fetch_active_wars_for_nation(str(nation.get("_id", "")))
+    timings["get_active_wars_ms"] = round((perf_counter() - phase_start) * 1000, 2)
 
     phase_start = perf_counter()
     pop_page = request.args.get("pop_page", default=1, type=int)
@@ -655,6 +739,7 @@ def nation_item(item_ref):
         nation_disease_rows=nation_disease_rows,
         shared_quest_rows=shared_quest_rows,
         disease_name_map=disease_name_map,
+        active_wars=active_wars,
     )
     timings["render_template_ms"] = round((perf_counter() - phase_start) * 1000, 2)
     timings["total_request_ms"] = round((perf_counter() - request_start) * 1000, 2)
@@ -805,6 +890,8 @@ def _render_nation_edit(item_ref, form=None):
     ]
     disease_name_map = {d["id"]: d["name"] for d in disease_options}
 
+    active_wars = _fetch_active_wars_for_nation(str(nation.get("_id", "")))
+
     all_players = []
     nation_players = []
     if g.user and g.user.get("is_admin"):
@@ -842,6 +929,7 @@ def _render_nation_edit(item_ref, form=None):
         disease_name_map=disease_name_map,
         all_players=all_players,
         nation_players=nation_players,
+        active_wars=active_wars,
     )
     _r10 = perf_counter()
 

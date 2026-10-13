@@ -79,11 +79,23 @@ NATION_EDIT_FIELD_TIERS = {
     "naval_doctrine": 2, "scientific_stance": 2, "mercenary_law": 2,
     "consumption_stance": 2, "succession_type": 2, "slavery_stance": 2,
     "vassal_type": 2, "justice_stance": 2,
+    # compliance/concessions deliberately tier 2, not 3 — they're the
+    # overlord-vassal relationship's own internal state, and an overlord's
+    # ENTIRE visibility into a vassal they have no other relationship with
+    # (no shared region/market/pact) comes from exactly one source: the
+    # structural overlord/vassal bonus in calculations/visibility.py's
+    # _structural_relationship_bonus, which is +2. Tier 3 made these fields
+    # silently un-editable (stripped by strip_form_data_to_tier before the
+    # change request was even built — no error, the edit just didn't take)
+    # for any overlord who didn't ALSO happen to share a region or market
+    # with that specific vassal. See the 2026-10-13 "can't request changes
+    # to a vassal's concessions/compliance" report.
+    "compliance": 2, "concessions": 2,
     # Tier 3 — districts / modifiers / tech
     "districts": 3, "cities": 3, "technologies": 3, "modifiers": 3,
     "progress_quests": 3, "shared_quests": 3, "territory_types": 3, "nodes": 3,
     "current_territory": 3, "road_usage": 3,
-    "overlord": 3, "compliance": 3, "concessions": 3,
+    "overlord": 3,
     # Tier 4 — military / resources
     "land_units": 4, "naval_units": 4, "support_units": 4,
     "resource_storage": 4, "money": 4, "jobs": 4,
