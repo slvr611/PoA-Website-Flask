@@ -17,10 +17,22 @@ also catches drift the version counter itself wouldn't otherwise notice: a
 corrupted mirror with chunk_synced_version == tile_version by coincidence,
 which is exactly what happened here).
 
+Also bumps tile_version at the end (beyond whatever rebuild_tile_chunks
+itself settles on), unconditionally. A normal self-heal only runs because
+some write already bumped tile_version, so clients' cached ETags (/api/
+hex-map/tiles is ETag'd on tile_version — see routes/hex_map_routes.py)
+are already invalidated by the time it happens. This script's repair isn't
+triggered by a write — rebuild_tile_chunks alone can leave tile_version
+completely unchanged (confirmed live: it stayed at 6779 before and after),
+so without this, every browser's cached map tiles response keeps matching
+the old ETag and a plain refresh just gets served a 304 + its stale,
+pre-repair cached copy, even though the server-side data is already fixed
+(see the 2026-10-13 "still shows the gaps after refresh" follow-up report).
+
 Run from the project root: python -m scripts.repair_tile_chunk_mirror
 """
 from app_core import mongo
-from helpers.hex_map_helpers import rebuild_tile_chunks
+from helpers.hex_map_helpers import rebuild_tile_chunks, bump_tile_version
 
 
 def main():
@@ -50,6 +62,9 @@ def main():
         if tile:
             break
     print("Tile (106,-32) in mirror now:", tile)
+
+    bumped = bump_tile_version()
+    print("Bumped tile_version to invalidate client-side ETag caches:", bumped)
 
 
 if __name__ == "__main__":
