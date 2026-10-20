@@ -140,20 +140,55 @@ def from_json_filter(value):
     except (json.JSONDecodeError, TypeError):
         return []
 
+# Shared with helpers/change_helpers.py (extract_discord_links), which persists
+# the links a change's reason references onto the change document itself —
+# see request_change/system_request_change — rather than only formatting them
+# at render time the way this filter does.
+DISCORD_LINK_PATTERN = r'(https://(?:ptb\.|canary\.)?discord\.com/channels/\d+/\d+/\d+)'
+
+
+def extract_discord_links(text):
+    """Return every Discord message link found in `text`, in order of appearance."""
+    if not text:
+        return []
+    return re.findall(DISCORD_LINK_PATTERN, str(text))
+
+
 @app.template_filter('format_discord_link')
 def format_discord_link(text):
-    # Pattern for Discord message links
-    discord_pattern = r'(https://(?:ptb\.|canary\.)?discord\.com/channels/\d+/\d+/\d+)'
-    
     def replace_link(match):
         full_url = match.group(1)
         # Extract the last part of the URL (message ID) for display
         message_id = full_url.split('/')[-1]
         return f'<a href="{full_url}" target="_blank">Discord Message ({message_id})</a>'
-    
+
     # Replace Discord links with formatted HTML
-    formatted_text = re.sub(discord_pattern, replace_link, str(text))
+    formatted_text = re.sub(DISCORD_LINK_PATTERN, replace_link, str(text))
     return formatted_text
+
+
+@app.template_filter('summarize_drift_value')
+def summarize_drift_value(value, max_len=80):
+    """Render a drift-conflict's leaf "live" value (see
+    helpers/change_helpers.py's describe_check_no_other_changes_conflicts)
+    as a short, human-readable string for the change-review page's warning
+    — never the raw repr() of a whole dict/list, which can run to hundreds
+    of characters for something as small as a single list item or modifier
+    entry. Prefers a natural label (name, etc.) over a full field dump."""
+    if value is None:
+        return "None"
+    if isinstance(value, dict):
+        for key in ("name", "modifier_type", "quest_name", "source", "label"):
+            if value.get(key):
+                text = f"{{{key}: {value[key]!r}, ...}} ({len(value)} fields)"
+                break
+        else:
+            text = repr(value)
+    elif isinstance(value, (list, tuple, set)):
+        return f"[{len(value)} item{'s' if len(value) != 1 else ''}]"
+    else:
+        text = repr(value)
+    return text if len(text) <= max_len else text[:max_len - 1] + "…"
 
 category_data = {
     "nations": {"pluralName": "Nations", "singularName": "Nation", "database": mongo.db.nations},

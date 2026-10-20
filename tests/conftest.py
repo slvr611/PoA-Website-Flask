@@ -162,15 +162,55 @@ def _reset_hex_map_tile_process_cache():
     yield
 
 
+class _AutoTransactionSession:
+    """Default fake pymongo ClientSession for tests: ``with_transaction``
+    just calls the callback immediately with ``session=None``. mongomock
+    accepts ``session=None`` on every CRUD call (it's the normal default),
+    so code that threads a real session through — approve_change,
+    revert_change, run_in_transaction_with_retry — actually executes its
+    callback under test instead of silently no-op'ing against a bare
+    MagicMock (a plain ``MagicMock().with_transaction(callback)`` returns a
+    new MagicMock and never calls ``callback`` at all).
+
+    mongomock's own ``start_session()`` raises NotImplementedError, so this
+    is also why ``mock_mongo.cx`` can't just be left as an unconfigured
+    MagicMock attribute. Not a real transaction — mongomock has no
+    multi-document atomicity to simulate — so a test that specifically
+    needs retry/failure behavior still overrides ``mock_mongo.cx`` locally
+    with its own fake session class (see tests/test_tick_atomicity.py).
+    """
+    def with_transaction(self, callback):
+        return callback(None)
+
+
+class _FakeSessionContextManager:
+    def __init__(self, session):
+        self._session = session
+
+    def __enter__(self):
+        return self._session
+
+    def __exit__(self, *args):
+        return False
+
+
 @pytest.fixture
 def mock_mongo(test_db):
     """A MagicMock whose ``.db`` attribute is the mongomock test database.
 
     Patching ``helpers.change_helpers.mongo`` with this object redirects all
     database calls in that module to the isolated in-memory database.
+
+    ``.cx.start_session()`` is pre-wired to _AutoTransactionSession (see
+    above) so transactional code paths run for real under test by default;
+    a test can still override ``mock_mongo.cx`` locally for retry-specific
+    scenarios without affecting any other test.
     """
     m = MagicMock()
     m.db = test_db
+    m.cx = MagicMock(start_session=MagicMock(
+        return_value=_FakeSessionContextManager(_AutoTransactionSession())
+    ))
     return m
 
 

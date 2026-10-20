@@ -71,8 +71,11 @@
                                     <button type="submit" class="btn btn-deny">Rescind</button>
                                 </form>
                                 {% if g.user and g.user.get('is_admin') %}
-                                    <a href="/changes/item/{{ change._id }}/approve" class="btn btn-approve"
-                                       onclick="return confirm('Approve this change?');">Approve</a>
+                                    <form method="POST" action="/changes/item/{{ change._id }}/approve"
+                                          onsubmit="return confirm('Approve this change?');"
+                                          style="display:inline;">
+                                        <button type="submit" class="btn btn-approve">Approve</button>
+                                    </form>
                                 {% endif %}
                             </td>
                         </tr>

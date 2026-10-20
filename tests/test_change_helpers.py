@@ -28,7 +28,7 @@ against an isolated in-memory database and never touch real MongoDB:
 Flask's ``g`` is populated inside each test via ``flask_app.test_request_context``.
 """
 import pytest
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 from bson import ObjectId
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -2068,3 +2068,1302 @@ class TestAddChangeStripsCalculatedFieldsFromStoredSnapshot:
 
         change = db_with_players["changes"].find_one({"_id": change_id})
         assert "breakdowns" not in change["after_implemented_data"]
+
+
+# ---------------------------------------------------------------------------
+# Automation-readiness fields (target_display_name, referenced_discord_links)
+#
+# Captured from the FULL before/after data before keep_only_differences
+# reduces it to only the changed keys — a "name"-less diff (e.g. a Tick
+# Update that never touches name) must still leave a display name behind.
+# ---------------------------------------------------------------------------
+
+class TestAutomationReadinessFieldsOnRequest:
+    def test_request_change_captures_target_display_name_from_after_data(
+        self, db_with_players, patch_helpers, flask_app
+    ):
+        nation_id = db_with_players["nations"].insert_one({"name": "N"}).inserted_id
+        with flask_app.test_request_context("/"):
+            from flask import g
+            g.user = {"id": _REGULAR_DISCORD_ID}
+            change_id = ch.request_change(
+                "nations", nation_id, "Update",
+                {"name": "Old", "gold": 100}, {"name": "New", "gold": 100}, "reason",
+            )
+        change = db_with_players["changes"].find_one({"_id": change_id})
+        assert change["target_display_name"] == "New"
+
+    def test_request_change_falls_back_to_before_name_when_name_unchanged(
+        self, db_with_players, patch_helpers, flask_app
+    ):
+        # "name" isn't part of the diff at all (unchanged) — the snapshot
+        # must still come from the full before/after data, not the
+        # already-reduced before_requested_data/after_requested_data.
+        nation_id = db_with_players["nations"].insert_one({"name": "N"}).inserted_id
+        with flask_app.test_request_context("/"):
+            from flask import g
+            g.user = {"id": _REGULAR_DISCORD_ID}
+            change_id = ch.request_change(
+                "nations", nation_id, "Update",
+                {"name": "Unchanged", "gold": 100}, {"name": "Unchanged", "gold": 150}, "reason",
+            )
+        change = db_with_players["changes"].find_one({"_id": change_id})
+        assert change["target_display_name"] == "Unchanged"
+        assert "name" not in change["after_requested_data"]  # confirms it was already stripped from the diff
+
+    def test_request_change_extracts_discord_links_from_reason(
+        self, db_with_players, patch_helpers, flask_app
+    ):
+        nation_id = db_with_players["nations"].insert_one({"name": "N"}).inserted_id
+        reason = "See https://discord.com/channels/111/222/333 for context"
+        with flask_app.test_request_context("/"):
+            from flask import g
+            g.user = {"id": _REGULAR_DISCORD_ID}
+            change_id = ch.request_change(
+                "nations", nation_id, "Update", {"name": "A"}, {"name": "B"}, reason,
+            )
+        change = db_with_players["changes"].find_one({"_id": change_id})
+        assert change["referenced_discord_links"] == ["https://discord.com/channels/111/222/333"]
+
+    def test_request_change_with_no_discord_link_stores_empty_list(
+        self, db_with_players, patch_helpers, flask_app
+    ):
+        nation_id = db_with_players["nations"].insert_one({"name": "N"}).inserted_id
+        with flask_app.test_request_context("/"):
+            from flask import g
+            g.user = {"id": _REGULAR_DISCORD_ID}
+            change_id = ch.request_change(
+                "nations", nation_id, "Update", {"name": "A"}, {"name": "B"}, "plain reason",
+            )
+        change = db_with_players["changes"].find_one({"_id": change_id})
+        assert change["referenced_discord_links"] == []
+
+    def test_system_request_change_captures_automation_fields(self, db_with_players, patch_helpers):
+        nation_id = db_with_players["nations"].insert_one({"name": "N"}).inserted_id
+        change_id = ch.system_request_change(
+            "nations", nation_id, "Update",
+            {"name": "Old"}, {"name": "New"},
+            "https://discord.com/channels/1/2/3",
+        )
+        change = db_with_players["changes"].find_one({"_id": change_id})
+        assert change["target_display_name"] == "New"
+        assert change["referenced_discord_links"] == ["https://discord.com/channels/1/2/3"]
+
+
+# ---------------------------------------------------------------------------
+# describe_check_no_other_changes_conflicts / get_change_drift_conflicts
+#
+# Promoted from a print-only debug helper into structured data so the same
+# breakdown can back both the debug log and the change-review page's
+# page-load drift banner (see routes/change_routes.py's change_item).
+# ---------------------------------------------------------------------------
+
+class TestDescribeCheckNoOtherChangesConflicts:
+    def test_field_matching_after_is_reported_as_matches_after(self):
+        entries = ch.describe_check_no_other_changes_conflicts(
+            {"name": "Old"}, {"name": "New"}, {"name": "New"},
+        )
+        assert entries == [{"path": "name", "before": "Old", "after": "New", "live": "New", "verdict": "matches_after"}]
+
+    def test_field_matching_neither_is_reported_as_conflict(self):
+        entries = ch.describe_check_no_other_changes_conflicts(
+            {"name": "Old"}, {"name": "New"}, {"name": "SomethingElse"},
+        )
+        assert entries == [{"path": "name", "before": "Old", "after": "New", "live": "SomethingElse", "verdict": "conflict"}]
+
+    def test_field_matching_before_is_excluded(self):
+        entries = ch.describe_check_no_other_changes_conflicts(
+            {"name": "Old"}, {"name": "New"}, {"name": "Old"},
+        )
+        assert entries == []
+
+    def test_field_absent_from_after_data_is_skipped(self):
+        entries = ch.describe_check_no_other_changes_conflicts(
+            {"name": "Old", "extra": "x"}, {"name": "New"}, {"name": "Old", "extra": "y"},
+        )
+        assert entries == []
+
+    def test_respects_max_fields(self):
+        # Non-numeric values -- numeric drift is tolerated (matching
+        # check_no_other_changes) and so is never reported as a conflict,
+        # which would make an all-int fixture report zero entries here.
+        before = {f"k{i}": f"before{i}" for i in range(10)}
+        after = {f"k{i}": f"after{i}" for i in range(10)}
+        current = {f"k{i}": "SomethingElse" for i in range(10)}
+        entries = ch.describe_check_no_other_changes_conflicts(before, after, current, max_fields=3)
+        assert len(entries) == 3
+
+    def test_numeric_drift_is_tolerated_like_check_no_other_changes(self):
+        # Mirrors check_no_other_changes' own numeric-drift tolerance --
+        # an int/float field that drifted externally is never reported as
+        # a conflict, since approve_change wouldn't be blocked by it either.
+        entries = ch.describe_check_no_other_changes_conflicts(
+            {"gold": 10}, {"gold": 20}, {"gold": 15},
+        )
+        assert entries == []
+
+
+class TestDescribeCheckNoOtherChangesConflictsNestedDict:
+    """Leaf-granularity recursion: a conflict in one nested dict sub-key
+    ("stockpiles.wood") must not drag its untouched sibling
+    ("stockpiles.stone") into the report."""
+
+    def test_only_the_conflicting_sub_key_is_reported(self):
+        # Non-numeric values -- see TestNumericDriftIsTolerated above: a
+        # numeric before/after pair is exempt from conflict reporting
+        # entirely (matching check_no_other_changes), which would make
+        # this fixture report nothing if it used ints.
+        before = {"stockpiles": {"wood": "low", "stone": "low"}}
+        after = {"stockpiles": {"wood": "high", "stone": "high"}}
+        current = {"stockpiles": {"wood": "tampered", "stone": "low"}}   # stone untouched, still matches before
+        entries = ch.describe_check_no_other_changes_conflicts(before, after, current)
+        assert len(entries) == 1
+        assert entries[0]["path"] == "stockpiles.wood"
+        assert entries[0]["verdict"] == "conflict"
+
+    def test_both_sub_keys_fine_reports_nothing(self):
+        before = {"stockpiles": {"wood": "low", "stone": "low"}}
+        after = {"stockpiles": {"wood": "high", "stone": "high"}}
+        current = {"stockpiles": {"wood": "low", "stone": "low"}}   # matches before -- no drift
+        assert ch.describe_check_no_other_changes_conflicts(before, after, current) == []
+
+    def test_deeply_nested_dict_reports_the_full_dotted_path(self):
+        before = {"a": {"b": {"c": "old"}}}
+        after = {"a": {"b": {"c": "new"}}}
+        current = {"a": {"b": {"c": "tampered"}}}
+        entries = ch.describe_check_no_other_changes_conflicts(before, after, current)
+        assert entries == [{"path": "a.b.c", "before": "old", "after": "new", "live": "tampered", "verdict": "conflict"}]
+
+
+class TestDescribeCheckNoOtherChangesConflictsListItems:
+    """Leaf-granularity recursion into ID-keyed lists: a conflict in one
+    item must report only that item's own (small) value, not the field's
+    entire list — the fix for a huge raw-list dump in the review-page
+    warning when only one item out of many actually conflicted."""
+
+    def test_only_the_conflicting_item_is_reported(self):
+        before = {"modifiers": [{"_id": "a", "value": 1}, {"_id": "b", "value": 2}]}
+        after = {"modifiers": [{"_id": "a", "value": 9}, {"_id": "b", "value": 2}]}
+        current = {"modifiers": [{"_id": "a", "value": "tampered"}, {"_id": "b", "value": 2}]}
+        entries = ch.describe_check_no_other_changes_conflicts(before, after, current)
+        assert len(entries) == 1
+        assert entries[0]["path"] == "modifiers[id=a]"
+        assert entries[0]["live"] == {"_id": "a", "value": "tampered"}   # NOT the whole list
+
+    def test_externally_added_item_is_reported_as_conflict(self):
+        before = {"modifiers": [{"_id": "a", "value": 1}]}
+        after = {"modifiers": [{"_id": "a", "value": 1}]}
+        current = {"modifiers": [{"_id": "a", "value": 1}, {"_id": "intruder", "value": 99}]}
+        entries = ch.describe_check_no_other_changes_conflicts(before, after, current)
+        assert len(entries) == 1
+        assert entries[0]["path"] == "modifiers[id=intruder]"
+        assert entries[0]["verdict"] == "conflict"
+
+    def test_externally_removed_expected_item_is_reported_as_conflict(self):
+        before = {"modifiers": [{"_id": "a", "value": 1}]}
+        after = {"modifiers": [{"_id": "a", "value": 9}]}
+        current = {"modifiers": []}   # "a" vanished even though it should still be there
+        entries = ch.describe_check_no_other_changes_conflicts(before, after, current)
+        assert len(entries) == 1
+        assert entries[0]["path"] == "modifiers[id=a]"
+        assert entries[0]["live"] is None
+
+    def test_no_conflicts_when_all_items_match(self):
+        before = {"modifiers": [{"_id": "a", "value": 1}]}
+        after = {"modifiers": [{"_id": "a", "value": 9}]}
+        current = {"modifiers": [{"_id": "a", "value": 9}]}   # already applied
+        entries = ch.describe_check_no_other_changes_conflicts(before, after, current)
+        assert entries == [{"path": "modifiers[id=a]", "before": {"_id": "a", "value": 1},
+                             "after": {"_id": "a", "value": 9}, "live": {"_id": "a", "value": 9},
+                             "verdict": "matches_after"}]
+
+    def test_non_id_list_reports_whole_field_as_one_unit(self):
+        before = {"tags": ["a", "b"]}
+        after = {"tags": ["a", "c"]}
+        current = {"tags": ["x", "y"]}
+        entries = ch.describe_check_no_other_changes_conflicts(before, after, current)
+        assert entries == [{"path": "tags", "before": ["a", "b"], "after": ["a", "c"], "live": ["x", "y"], "verdict": "conflict"}]
+
+
+class TestSummarizeDriftValue:
+    """app_core.py's summarize_drift_value Jinja filter — keeps the
+    change-review page's drift-warning text compact instead of dumping a
+    raw dict/list repr()."""
+
+    def test_none_value(self):
+        from app_core import summarize_drift_value
+        assert summarize_drift_value(None) == "None"
+
+    def test_short_scalar_shown_as_is(self):
+        from app_core import summarize_drift_value
+        assert summarize_drift_value(42) == "42"
+        assert summarize_drift_value("short") == "'short'"
+
+    def test_list_shown_as_item_count(self):
+        from app_core import summarize_drift_value
+        assert summarize_drift_value([1, 2, 3]) == "[3 items]"
+        assert summarize_drift_value([1]) == "[1 item]"
+        assert summarize_drift_value([]) == "[0 items]"
+
+    def test_dict_with_a_natural_label_uses_it(self):
+        from app_core import summarize_drift_value
+        value = {"modifier_type": "stability_gain_chance", "scaling": "flat", "value": 0.12, "duration": -1}
+        result = summarize_drift_value(value)
+        assert "modifier_type" in result
+        assert "stability_gain_chance" in result
+        assert len(result) < 80
+
+    def test_dict_without_a_natural_label_falls_back_to_repr_truncated(self):
+        from app_core import summarize_drift_value
+        value = {"x" * 10: "y" * 200}
+        result = summarize_drift_value(value, max_len=40)
+        assert len(result) <= 40
+        assert result.endswith("…")
+
+    def test_long_scalar_is_truncated(self):
+        from app_core import summarize_drift_value
+        result = summarize_drift_value("x" * 200, max_len=50)
+        assert len(result) == 50
+        assert result.endswith("…")
+
+
+class TestGetChangeDriftConflicts:
+    def test_pending_change_with_no_drift_returns_empty(self, db_with_players, nation_id, patch_helpers):
+        change = {
+            "change_type": "Update", "status": "Pending", "target_collection": "nations",
+            "target": nation_id,
+            "before_requested_data": {"name": "TestNation"},
+            "after_requested_data": {"name": "NewName"},
+        }
+        assert ch.get_change_drift_conflicts(change) == []
+
+    def test_pending_change_with_drift_returns_conflict_entries(self, db_with_players, nation_id, patch_helpers):
+        db_with_players["nations"].update_one({"_id": nation_id}, {"$set": {"name": "ChangedExternally"}})
+        change = {
+            "change_type": "Update", "status": "Pending", "target_collection": "nations",
+            "target": nation_id,
+            "before_requested_data": {"name": "TestNation"},
+            "after_requested_data": {"name": "NewName"},
+        }
+        conflicts = ch.get_change_drift_conflicts(change)
+        assert len(conflicts) == 1
+        assert conflicts[0]["path"] == "name"
+        assert conflicts[0]["verdict"] == "conflict"
+
+    def test_approved_change_checks_before_after_swapped(self, db_with_players, nation_id, patch_helpers):
+        # An Approved change is expected to have already applied after_implemented_data;
+        # a live value that still matches before_implemented_data (not yet drifted since
+        # approval) must not be reported as a conflict.
+        db_with_players["nations"].update_one({"_id": nation_id}, {"$set": {"name": "Applied"}})
+        change = {
+            "change_type": "Update", "status": "Approved", "target_collection": "nations",
+            "target": nation_id,
+            "before_implemented_data": {"name": "Original"},
+            "after_implemented_data": {"name": "Applied"},
+        }
+        assert ch.get_change_drift_conflicts(change) == []
+
+    def test_approved_change_with_post_approval_drift_is_a_conflict(self, db_with_players, nation_id, patch_helpers):
+        db_with_players["nations"].update_one({"_id": nation_id}, {"$set": {"name": "SomeoneElseChangedThis"}})
+        change = {
+            "change_type": "Update", "status": "Approved", "target_collection": "nations",
+            "target": nation_id,
+            "before_implemented_data": {"name": "Original"},
+            "after_implemented_data": {"name": "Applied"},
+        }
+        conflicts = ch.get_change_drift_conflicts(change)
+        assert len(conflicts) == 1
+        assert conflicts[0]["verdict"] == "conflict"
+
+    def test_add_change_returns_empty(self, patch_helpers):
+        change = {"change_type": "Add", "status": "Pending", "target_collection": "nations", "target": None}
+        assert ch.get_change_drift_conflicts(change) == []
+
+    def test_hex_map_change_returns_empty(self, patch_helpers):
+        change = {"change_type": "Update", "status": "Pending", "target_collection": "hex_map", "target": "x"}
+        assert ch.get_change_drift_conflicts(change) == []
+
+    def test_missing_target_document_returns_empty(self, patch_helpers, fake_category_data):
+        change = {
+            "change_type": "Update", "status": "Pending", "target_collection": "nations",
+            "target": ObjectId(),
+            "before_requested_data": {"name": "A"}, "after_requested_data": {"name": "B"},
+        }
+        assert ch.get_change_drift_conflicts(change) == []
+
+    def test_rejected_change_returns_empty(self, db_with_players, nation_id, patch_helpers):
+        change = {
+            "change_type": "Update", "status": "Rejected", "target_collection": "nations",
+            "target": nation_id,
+        }
+        assert ch.get_change_drift_conflicts(change) == []
+
+
+# ---------------------------------------------------------------------------
+# run_in_transaction_with_retry
+#
+# Same resilience strategy as tick_helpers.py's _commit_chunk_with_retry
+# (a fresh session.with_transaction() attempt retried up to max_attempts
+# times on a PyMongoError), now shared with the interactive admin
+# approve_change/revert_change path, which had no transaction at all
+# before this. Mirrors test_tick_atomicity.py's TestCommitChunkWithRetry
+# fake-session style.
+# ---------------------------------------------------------------------------
+
+def _fake_start_session_cm(session):
+    """A MagicMock context manager whose __enter__ returns `session`, for
+    patching mongo.cx.start_session()'s `with ... as session:` usage."""
+    return MagicMock(__enter__=lambda s: session, __exit__=lambda *a: False)
+
+
+class TestRunInTransactionWithRetry:
+    def test_succeeds_on_first_attempt_without_sleeping(self):
+        class _FakeSessionAlwaysSucceeds:
+            def with_transaction(self, callback):
+                return callback(None)
+
+        fake_mongo = MagicMock()
+        fake_mongo.cx = MagicMock(start_session=MagicMock(
+            return_value=_fake_start_session_cm(_FakeSessionAlwaysSucceeds())
+        ))
+        with patch.object(ch, "mongo", fake_mongo), patch.object(ch, "sleep") as sleep_mock:
+            result = ch.run_in_transaction_with_retry(lambda s: "ok")
+
+        assert result == "ok"
+        sleep_mock.assert_not_called()
+
+    def test_retries_after_a_transient_pymongo_error_then_succeeds(self):
+        from pymongo.errors import OperationFailure
+        call_count = {"n": 0}
+
+        class _FakeSessionFailsOnce:
+            def with_transaction(self, callback):
+                call_count["n"] += 1
+                if call_count["n"] == 1:
+                    raise OperationFailure("Transaction aborted", code=251)
+                return callback(None)
+
+        fake_mongo = MagicMock()
+        fake_mongo.cx = MagicMock(start_session=MagicMock(
+            return_value=_fake_start_session_cm(_FakeSessionFailsOnce())
+        ))
+        with patch.object(ch, "mongo", fake_mongo), patch.object(ch, "sleep") as sleep_mock:
+            result = ch.run_in_transaction_with_retry(lambda s: "ok", max_attempts=3, retry_delay_seconds=10)
+
+        assert result == "ok"
+        assert call_count["n"] == 2, "must have retried exactly once before succeeding"
+        sleep_mock.assert_called_once_with(10)
+
+    def test_gives_up_after_max_attempts_and_raises(self):
+        from pymongo.errors import OperationFailure, PyMongoError
+
+        class _FakeSessionAlwaysFails:
+            def with_transaction(self, callback):
+                raise OperationFailure("Transaction aborted", code=251)
+
+        fake_mongo = MagicMock()
+        fake_mongo.cx = MagicMock(start_session=MagicMock(
+            return_value=_fake_start_session_cm(_FakeSessionAlwaysFails())
+        ))
+        with patch.object(ch, "mongo", fake_mongo), patch.object(ch, "sleep") as sleep_mock:
+            with pytest.raises(PyMongoError):
+                ch.run_in_transaction_with_retry(lambda s: "ok", max_attempts=3, retry_delay_seconds=10)
+
+        assert sleep_mock.call_count == 2
+
+    def test_non_pymongo_error_is_not_retried(self):
+        """_ChangeApprovalRejected (and anything else that isn't a
+        PyMongoError) must propagate on the very first attempt — retrying a
+        name-collision/drift rejection would just fail the same way every
+        time."""
+        class _FakeSessionRaisesRejection:
+            def with_transaction(self, callback):
+                raise ch._ChangeApprovalRejected("nope")
+
+        fake_mongo = MagicMock()
+        fake_mongo.cx = MagicMock(start_session=MagicMock(
+            return_value=_fake_start_session_cm(_FakeSessionRaisesRejection())
+        ))
+        with patch.object(ch, "mongo", fake_mongo), patch.object(ch, "sleep") as sleep_mock:
+            with pytest.raises(ch._ChangeApprovalRejected):
+                ch.run_in_transaction_with_retry(lambda s: "ok")
+
+        sleep_mock.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# revert_change's new drift check
+#
+# Previously revert_change had NO drift check at all — it blindly
+# deep_merge'd before_implemented_data onto whatever was live. Closed by
+# reusing check_no_other_changes with before/after swapped: the live target
+# is expected to match after_implemented_data (what approval wrote) unless
+# it already matches before_implemented_data (e.g. a repeated revert
+# attempt) — anything else blocks the revert instead of silently
+# clobbering an unrelated edit.
+# ---------------------------------------------------------------------------
+
+class TestRevertChangeDriftCheck:
+    def test_revert_blocked_when_target_drifted_since_approval(self, db_with_players, nation_id, patch_helpers, flask_app):
+        change_id = _insert_pending_change(
+            db_with_players, "Update", nation_id,
+            before={"name": "Original"}, after={"name": "Approved"},
+        )
+        db_with_players["changes"].update_one({"_id": change_id}, {"$set": {
+            "status": "Approved",
+            "before_implemented_data": {"name": "Original"},
+            "after_implemented_data": {"name": "Approved"},
+        }})
+        # Live name now drifted to something neither before nor after —
+        # e.g. a later legitimate edit — set directly on the live document.
+        db_with_players["nations"].update_one({"_id": nation_id}, {"$set": {"name": "SomeoneElseChangedThis"}})
+
+        with flask_app.test_request_context("/"):
+            from flask import g
+            g.user = {"id": _ADMIN_DISCORD_ID}
+            result = ch.revert_change(change_id)
+
+        assert result is False
+        nation = db_with_players["nations"].find_one({"_id": nation_id})
+        assert nation["name"] == "SomeoneElseChangedThis"   # untouched
+        change = db_with_players["changes"].find_one({"_id": change_id})
+        assert change["status"] == "Approved"   # never flipped to Reverted
+
+    def test_revert_allowed_when_target_still_matches_after_implemented(self, db_with_players, nation_id, patch_helpers, flask_app):
+        db_with_players["nations"].update_one({"_id": nation_id}, {"$set": {"name": "Approved"}})
+        change_id = _insert_pending_change(
+            db_with_players, "Update", nation_id,
+            before={"name": "Original"}, after={"name": "Approved"},
+        )
+        db_with_players["changes"].update_one({"_id": change_id}, {"$set": {
+            "status": "Approved",
+            "before_implemented_data": {"name": "Original"},
+            "after_implemented_data": {"name": "Approved"},
+        }})
+
+        with flask_app.test_request_context("/"):
+            from flask import g
+            g.user = {"id": _ADMIN_DISCORD_ID}
+            result = ch.revert_change(change_id)
+
+        assert result is True
+        assert db_with_players["nations"].find_one({"_id": nation_id})["name"] == "Original"
+
+    def test_revert_allowed_when_target_already_matches_before_implemented(self, db_with_players, nation_id, patch_helpers, flask_app):
+        # Target already matches the pre-change state (e.g. a repeated
+        # revert attempt, or something else already restored it) — must
+        # not be treated as a conflict.
+        db_with_players["nations"].update_one({"_id": nation_id}, {"$set": {"name": "Original"}})
+        change_id = _insert_pending_change(
+            db_with_players, "Update", nation_id,
+            before={"name": "Original"}, after={"name": "Approved"},
+        )
+        db_with_players["changes"].update_one({"_id": change_id}, {"$set": {
+            "status": "Approved",
+            "before_implemented_data": {"name": "Original"},
+            "after_implemented_data": {"name": "Approved"},
+        }})
+
+        with flask_app.test_request_context("/"):
+            from flask import g
+            g.user = {"id": _ADMIN_DISCORD_ID}
+            result = ch.revert_change(change_id)
+
+        assert result is True
+
+
+# ---------------------------------------------------------------------------
+# Propagation outbox
+#
+# Durable alternative to the fire-and-forget background thread
+# _dispatch_propagate_updates used to always start on the interactive admin
+# path: _enqueue_propagation writes inside the caller's transaction, and a
+# background worker (start_propagation_outbox_worker) later claims and
+# runs entries via _claim_next_outbox_entry / _process_outbox_entry.
+# ---------------------------------------------------------------------------
+
+class TestEnqueuePropagation:
+    def test_writes_a_pending_outbox_entry(self, db_with_players, patch_helpers):
+        ch._enqueue_propagation(
+            None, changed_data_type="nations", changed_object_id=ObjectId(),
+            changed_object={"name": "N"}, reason="test reason",
+        )
+        entry = db_with_players["propagation_outbox"].find_one({})
+        assert entry is not None
+        assert entry["status"] == "pending"
+        assert entry["changed_data_type"] == "nations"
+        assert entry["reason"] == "test reason"
+        assert entry["attempts"] == 0
+        assert entry["claimed_at"] is None
+
+    def test_skip_ids_stored_as_lists_not_tuples(self, db_with_players, patch_helpers):
+        ch._enqueue_propagation(
+            None, changed_data_type="nations", changed_object_id=ObjectId(),
+            changed_object={}, reason="r", skip_ids={("nations", "abc123")},
+        )
+        entry = db_with_players["propagation_outbox"].find_one({})
+        assert entry["skip_ids"] == [["nations", "abc123"]]
+
+    def test_no_skip_ids_stores_none(self, db_with_players, patch_helpers):
+        ch._enqueue_propagation(
+            None, changed_data_type="nations", changed_object_id=ObjectId(),
+            changed_object={}, reason="r",
+        )
+        entry = db_with_players["propagation_outbox"].find_one({})
+        assert entry["skip_ids"] is None
+
+
+class TestClaimNextOutboxEntry:
+    def test_claims_oldest_pending_entry_and_marks_processing(self, db_with_players, patch_helpers):
+        older = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        newer = datetime(2026, 1, 2, tzinfo=timezone.utc)
+        db_with_players["propagation_outbox"].insert_many([
+            {"status": "pending", "created_at": newer, "attempts": 0},
+            {"status": "pending", "created_at": older, "attempts": 0},
+        ])
+        claimed = ch._claim_next_outbox_entry()
+        assert claimed["created_at"].replace(tzinfo=timezone.utc) == older
+        assert claimed["attempts"] == 1
+        stored = db_with_players["propagation_outbox"].find_one({"_id": claimed["_id"]})
+        assert stored["status"] == "processing"
+        assert stored["claimed_at"] is not None
+
+    def test_returns_none_when_nothing_pending(self, db_with_players, patch_helpers):
+        db_with_players["propagation_outbox"].insert_one({"status": "done", "created_at": datetime.now(timezone.utc), "attempts": 1})
+        assert ch._claim_next_outbox_entry() is None
+
+
+class TestProcessOutboxEntry:
+    def test_success_marks_entry_done(self, db_with_players, patch_helpers):
+        entry_id = db_with_players["propagation_outbox"].insert_one({
+            "status": "processing", "changed_data_type": "nations", "changed_object_id": ObjectId(),
+            "changed_object": {}, "reason": "r", "skip_ids": None, "attempts": 1,
+        }).inserted_id
+        entry = db_with_players["propagation_outbox"].find_one({"_id": entry_id})
+
+        with patch.object(ch, "propagate_updates", return_value=None) as prop_mock:
+            ch._process_outbox_entry(entry)
+
+        prop_mock.assert_called_once()
+        stored = db_with_players["propagation_outbox"].find_one({"_id": entry_id})
+        assert stored["status"] == "done"
+        assert stored["completed_at"] is not None
+
+    def test_failure_under_max_attempts_requeues_as_pending(self, db_with_players, patch_helpers):
+        entry_id = db_with_players["propagation_outbox"].insert_one({
+            "status": "processing", "changed_data_type": "nations", "changed_object_id": ObjectId(),
+            "changed_object": {}, "reason": "r", "skip_ids": None, "attempts": 1,
+        }).inserted_id
+        entry = db_with_players["propagation_outbox"].find_one({"_id": entry_id})
+
+        with patch.object(ch, "propagate_updates", side_effect=RuntimeError("boom")):
+            ch._process_outbox_entry(entry)
+
+        stored = db_with_players["propagation_outbox"].find_one({"_id": entry_id})
+        assert stored["status"] == "pending"
+        assert "boom" in stored["error"]
+
+    def test_failure_at_max_attempts_marks_failed_permanently(self, db_with_players, patch_helpers):
+        entry_id = db_with_players["propagation_outbox"].insert_one({
+            "status": "processing", "changed_data_type": "nations", "changed_object_id": ObjectId(),
+            "changed_object": {}, "reason": "r", "skip_ids": None, "attempts": ch._OUTBOX_MAX_ATTEMPTS,
+        }).inserted_id
+        entry = db_with_players["propagation_outbox"].find_one({"_id": entry_id})
+
+        with patch.object(ch, "propagate_updates", side_effect=RuntimeError("boom")):
+            ch._process_outbox_entry(entry)
+
+        stored = db_with_players["propagation_outbox"].find_one({"_id": entry_id})
+        assert stored["status"] == "failed"
+
+    def test_skip_ids_round_trip_as_a_set_of_tuples(self, db_with_players, patch_helpers):
+        entry_id = db_with_players["propagation_outbox"].insert_one({
+            "status": "processing", "changed_data_type": "nations", "changed_object_id": ObjectId(),
+            "changed_object": {}, "reason": "r", "skip_ids": [["nations", "abc"]], "attempts": 1,
+        }).inserted_id
+        entry = db_with_players["propagation_outbox"].find_one({"_id": entry_id})
+
+        with patch.object(ch, "propagate_updates", return_value=None) as prop_mock:
+            ch._process_outbox_entry(entry)
+
+        _, kwargs = prop_mock.call_args
+        assert kwargs["skip_ids"] == {("nations", "abc")}
+
+
+class TestCountFailedPropagations:
+    def test_counts_only_failed_status(self, db_with_players, patch_helpers):
+        db_with_players["propagation_outbox"].insert_many([
+            {"status": "failed"}, {"status": "failed"}, {"status": "pending"}, {"status": "done"},
+        ])
+        assert ch.count_failed_propagations() == 2
+
+
+class TestStartPropagationOutboxWorker:
+    def test_second_call_in_same_process_is_a_no_op(self, patch_helpers):
+        ch._outbox_worker_started = False
+        try:
+            with patch.object(ch.threading, "Thread") as thread_cls:
+                ch.start_propagation_outbox_worker()
+                ch.start_propagation_outbox_worker()
+            thread_cls.assert_called_once()
+        finally:
+            ch._outbox_worker_started = False
+
+
+# ---------------------------------------------------------------------------
+# Partial approval/revert — unit addressing (_list_change_unit_paths,
+# _unit_selected) and split-on-apply (_partition_units,
+# _apply_selected_units, _spin_off_remaining_change).
+# ---------------------------------------------------------------------------
+
+class TestListChangeUnitPaths:
+    def test_whole_key_units(self):
+        before = {"money": 10, "name": "Old"}
+        after = {"money": 20, "name": "New"}
+        assert set(ch._list_change_unit_paths(before, after)) == {"money", "name"}
+
+    def test_id_keyed_list_becomes_one_unit_per_item(self):
+        before = {"districts": [{"_id": "a", "x": 1}, {"_id": "b", "x": 2}]}
+        after = {"districts": [{"_id": "a", "x": 9}, {"_id": "b", "x": 2}]}
+        paths = ch._list_change_unit_paths(before, after)
+        assert set(paths) == {"districts[id=a]", "districts[id=b]"}
+
+    def test_removed_item_still_gets_a_unit_path(self):
+        # "b" was removed -- present in before, absent from after.
+        before = {"districts": [{"_id": "a", "x": 1}, {"_id": "b", "x": 2}]}
+        after = {"districts": [{"_id": "a", "x": 1}]}
+        paths = ch._list_change_unit_paths(before, after)
+        assert set(paths) == {"districts[id=a]", "districts[id=b]"}
+
+    def test_mixed_scalar_and_list_fields(self):
+        before = {"money": 10, "districts": [{"_id": "a"}]}
+        after = {"money": 20, "districts": [{"_id": "a"}, {"_id": "b"}]}
+        paths = ch._list_change_unit_paths(before, after)
+        assert set(paths) == {"money", "districts[id=a]", "districts[id=b]"}
+
+
+class TestUnitSelected:
+    def test_exact_path_match(self):
+        assert ch._unit_selected("money", {"money"}) is True
+
+    def test_no_match(self):
+        assert ch._unit_selected("money", {"name"}) is False
+
+    def test_bare_key_selects_every_list_item_path(self):
+        assert ch._unit_selected("districts[id=a]", {"districts"}) is True
+
+
+class TestPartitionUnits:
+    def test_no_selection_selects_everything(self):
+        before, after = {"money": 10}, {"money": 20}
+        sel_b, sel_a, rem_b, rem_a = ch._partition_units(before, after, None)
+        assert (sel_b, sel_a, rem_b, rem_a) == ({"money": 10}, {"money": 20}, {}, {})
+
+    def test_whole_key_split(self):
+        before = {"money": 10, "name": "Old"}
+        after = {"money": 20, "name": "New"}
+        sel_b, sel_a, rem_b, rem_a = ch._partition_units(before, after, {"money"})
+        assert sel_b == {"money": 10}
+        assert sel_a == {"money": 20}
+        assert rem_b == {"name": "Old"}
+        assert rem_a == {"name": "New"}
+
+    def test_new_key_not_in_before_only_appears_on_selected_side(self):
+        before = {}
+        after = {"new_field": "X"}
+        sel_b, sel_a, rem_b, rem_a = ch._partition_units(before, after, {"new_field"})
+        assert sel_b == {}
+        assert sel_a == {"new_field": "X"}
+        assert rem_b == {} and rem_a == {}
+
+    def test_list_item_partial_split_update(self):
+        before = {"districts": [{"_id": "a", "x": 1}, {"_id": "b", "x": 2}]}
+        after = {"districts": [{"_id": "a", "x": 9}, {"_id": "b", "x": 8}]}
+        sel_b, sel_a, rem_b, rem_a = ch._partition_units(before, after, {"districts[id=a]"})
+        assert sel_a["districts"] == [{"_id": "a", "x": 9}]
+        assert sel_b["districts"] == [{"_id": "a", "x": 1}]
+        assert rem_a["districts"] == [{"_id": "b", "x": 8}]
+        assert rem_b["districts"] == [{"_id": "b", "x": 2}]
+
+    def test_list_item_partial_split_removal(self):
+        before = {"districts": [{"_id": "a", "x": 1}, {"_id": "b", "x": 2}]}
+        after = {"districts": [{"_id": "a", "x": 1}]}   # "b" removed
+        sel_b, sel_a, rem_b, rem_a = ch._partition_units(before, after, {"districts[id=b]"})
+        # "b"'s removal is selected -- goes to the selected side, before only.
+        assert {"_id": "b", "x": 2} in sel_b["districts"]
+        assert "districts" not in rem_b or {"_id": "b", "x": 2} not in rem_b.get("districts", [])
+
+    def test_list_item_partial_split_addition(self):
+        before = {"districts": [{"_id": "a", "x": 1}]}
+        after = {"districts": [{"_id": "a", "x": 1}, {"_id": "b", "x": 2}]}   # "b" added
+        sel_b, sel_a, rem_b, rem_a = ch._partition_units(before, after, {"districts[id=a]"})
+        # "a" unchanged (not actually in the diff -- but addressed anyway);
+        # "b" (the new item) was not selected, so it stays in remaining.
+        assert rem_a["districts"] == [{"_id": "b", "x": 2}]
+
+
+class TestApplySelectedUnits:
+    def test_no_selection_matches_plain_deep_merge(self):
+        existing = {"money": 5, "name": "Live"}
+        before = {"money": 5}
+        after = {"money": 20}
+        final, sel_b, sel_a, rem_b, rem_a = ch._apply_selected_units(existing, before, after, None)
+        assert final == ch.deep_merge(existing, after)
+        assert rem_b == {} and rem_a == {}
+
+    def test_deselected_whole_key_resets_to_live_value(self):
+        existing = {"money": 5, "name": "Live"}
+        before = {"money": 5, "name": "Old"}
+        after = {"money": 20, "name": "New"}
+        final, sel_b, sel_a, rem_b, rem_a = ch._apply_selected_units(existing, before, after, {"money"})
+        assert final["money"] == 20          # selected -- applied
+        assert final["name"] == "Live"        # deselected -- stays at live value
+        assert rem_b == {"name": "Old"}
+        assert rem_a == {"name": "New"}
+
+    def test_deselected_list_item_update_resets_to_live_value(self):
+        existing = {"districts": [{"_id": "a", "x": 100}, {"_id": "b", "x": 200}]}
+        before = {"districts": [{"_id": "a", "x": 1}, {"_id": "b", "x": 2}]}
+        after = {"districts": [{"_id": "a", "x": 9}, {"_id": "b", "x": 8}]}
+        final, sel_b, sel_a, rem_b, rem_a = ch._apply_selected_units(
+            existing, before, after, {"districts[id=a]"}
+        )
+        final_by_id = {d["_id"]: d for d in final["districts"]}
+        assert final_by_id["a"]["x"] == 9      # selected -- applied
+        assert final_by_id["b"]["x"] == 200    # deselected -- stays at LIVE value, not before or after
+        assert rem_a["districts"] == [{"_id": "b", "x": 8}]
+
+    def test_deselected_newly_added_item_is_dropped_from_final(self):
+        existing = {"districts": [{"_id": "a", "x": 1}]}
+        before = {"districts": [{"_id": "a", "x": 1}]}
+        after = {"districts": [{"_id": "a", "x": 1}, {"_id": "new", "x": 5}]}
+        final, sel_b, sel_a, rem_b, rem_a = ch._apply_selected_units(
+            existing, before, after, {"districts[id=a]"}
+        )
+        final_ids = {d["_id"] for d in final["districts"]}
+        assert "new" not in final_ids
+        assert rem_a["districts"] == [{"_id": "new", "x": 5}]
+
+    def test_deselected_removal_is_restored_from_live(self):
+        existing = {"districts": [{"_id": "a", "x": 1}, {"_id": "b", "x": 2}]}
+        before = {"districts": [{"_id": "a", "x": 1}, {"_id": "b", "x": 2}]}
+        after = {"districts": [{"_id": "a", "x": 1}]}   # "b" removed by this change
+        final, sel_b, sel_a, rem_b, rem_a = ch._apply_selected_units(
+            existing, before, after, {"districts[id=a]"}   # "b"'s removal deselected
+        )
+        final_ids = {d["_id"] for d in final["districts"]}
+        assert "b" in final_ids, "deselected removal must leave the live item in place"
+
+    def test_selected_removal_is_applied(self):
+        existing = {"districts": [{"_id": "a", "x": 1}, {"_id": "b", "x": 2}]}
+        before = {"districts": [{"_id": "a", "x": 1}, {"_id": "b", "x": 2}]}
+        after = {"districts": [{"_id": "a", "x": 1}]}
+        final, sel_b, sel_a, rem_b, rem_a = ch._apply_selected_units(
+            existing, before, after, {"districts[id=a]", "districts[id=b]"}
+        )
+        final_ids = {d["_id"] for d in final["districts"]}
+        assert "b" not in final_ids
+
+
+class TestSpinOffRemainingChange:
+    def test_inherits_requester_reason_and_time_requested(self, db_with_players, patch_helpers):
+        player_id = db_with_players["players"].find_one({"name": "RegularUser"})["_id"]
+        original_id = ObjectId()
+        requested_time = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        change = {
+            "_id": original_id, "target_collection": "nations", "target": ObjectId(),
+            "change_type": "Update", "requester": player_id, "time_requested": requested_time,
+            "request_reason": "original reason", "target_display_name": "Testland",
+            "referenced_discord_links": ["https://discord.com/channels/1/2/3"],
+        }
+        new_id = ch._spin_off_remaining_change(change, {"name": "Old"}, {"name": "New"})
+
+        spun_off = db_with_players["changes"].find_one({"_id": new_id})
+        assert spun_off["status"] == "Pending"
+        assert spun_off["split_from"] == original_id
+        assert spun_off["requester"] == player_id
+        assert spun_off["request_reason"] == "original reason"
+        assert spun_off["target_display_name"] == "Testland"
+        assert spun_off["referenced_discord_links"] == ["https://discord.com/channels/1/2/3"]
+        assert spun_off["before_requested_data"] == {"name": "Old"}
+        assert spun_off["after_requested_data"] == {"name": "New"}
+
+
+# ---------------------------------------------------------------------------
+# Partial approval/deny/revert — end-to-end through the public functions.
+# ---------------------------------------------------------------------------
+
+class TestPartialApproveChange:
+    def test_selected_field_applied_unselected_field_left_pending(
+        self, db_with_players, patch_helpers, flask_app
+    ):
+        nation_id = db_with_players["nations"].insert_one({
+            "name": "N", "money": 10, "wood": 10,
+        }).inserted_id
+        change_id = _insert_pending_change(
+            db_with_players, "Update", nation_id,
+            before={"money": 10, "wood": 10},
+            after={"money": 20, "wood": 50},
+        )
+        with flask_app.test_request_context("/"):
+            from flask import g
+            g.user = {"id": _ADMIN_DISCORD_ID}
+            result = ch.approve_change(change_id, selected_paths=["money"])
+
+        assert result is True
+        nation = db_with_players["nations"].find_one({"_id": nation_id})
+        assert nation["money"] == 20     # selected -- applied
+        assert nation["wood"] == 10      # deselected -- left untouched
+
+        original = db_with_players["changes"].find_one({"_id": change_id})
+        assert original["status"] == "Approved"
+        assert original["partial"] is True
+        assert original["before_implemented_data"] == {"money": 10}
+        assert original["after_implemented_data"] == {"money": 20}
+
+        split = db_with_players["changes"].find_one({"_id": original["split_into"]})
+        assert split is not None
+        assert split["status"] == "Pending"
+        assert split["split_from"] == change_id
+        assert split["before_requested_data"] == {"wood": 10}
+        assert split["after_requested_data"] == {"wood": 50}
+
+    def test_full_selection_behaves_like_whole_change_approval(
+        self, db_with_players, nation_id, patch_helpers, flask_app
+    ):
+        change_id = _insert_pending_change(
+            db_with_players, "Update", nation_id,
+            before={"name": "TestNation"}, after={"name": "Renamed"},
+        )
+        with flask_app.test_request_context("/"):
+            from flask import g
+            g.user = {"id": _ADMIN_DISCORD_ID}
+            result = ch.approve_change(change_id, selected_paths=["name"])
+
+        assert result is True
+        assert db_with_players["nations"].find_one({"_id": nation_id})["name"] == "Renamed"
+        change = db_with_players["changes"].find_one({"_id": change_id})
+        assert change["status"] == "Approved"
+        assert "partial" not in change or not change["partial"]
+        assert "split_into" not in change
+
+
+class TestPartialDenyChange:
+    def test_selected_field_denied_unselected_field_still_pending(
+        self, db_with_players, nation_id, patch_helpers, flask_app
+    ):
+        change_id = _insert_pending_change(
+            db_with_players, "Update", nation_id,
+            before={"money": 10, "wood": 10},
+            after={"money": 20, "wood": 50},
+        )
+        with flask_app.test_request_context("/"):
+            from flask import g
+            g.user = {"id": _ADMIN_DISCORD_ID}
+            result = ch.deny_change(change_id, selected_paths=["money"])
+
+        assert result is True
+        original = db_with_players["changes"].find_one({"_id": change_id})
+        assert original["status"] == "Rejected"
+        assert original["partial"] is True
+        assert original["before_requested_data"] == {"money": 10}
+        assert original["after_requested_data"] == {"money": 20}
+
+        split = db_with_players["changes"].find_one({"_id": original["split_into"]})
+        assert split["status"] == "Pending"
+        assert split["before_requested_data"] == {"wood": 10}
+        assert split["after_requested_data"] == {"wood": 50}
+
+
+class TestPartialRevertChange:
+    def test_selected_unit_reverted_unselected_unit_stays_applied(
+        self, db_with_players, nation_id, patch_helpers, flask_app
+    ):
+        db_with_players["nations"].update_one({"_id": nation_id}, {"$set": {
+            "name": "TestNation", "money": 20, "wood": 50,
+        }})
+        change_id = _insert_pending_change(
+            db_with_players, "Update", nation_id,
+            before={"money": 10, "wood": 10}, after={"money": 20, "wood": 50},
+        )
+        db_with_players["changes"].update_one({"_id": change_id}, {"$set": {
+            "status": "Approved",
+            "before_implemented_data": {"money": 10, "wood": 10},
+            "after_implemented_data": {"money": 20, "wood": 50},
+        }})
+
+        with flask_app.test_request_context("/"):
+            from flask import g
+            g.user = {"id": _ADMIN_DISCORD_ID}
+            result = ch.revert_change(change_id, selected_paths=["money"])
+
+        assert result is True
+        nation = db_with_players["nations"].find_one({"_id": nation_id})
+        assert nation["money"] == 10     # selected -- reverted
+        assert nation["wood"] == 50      # deselected -- stays at the approved value
+
+        change = db_with_players["changes"].find_one({"_id": change_id})
+        assert change["status"] == "Partially Reverted"
+        assert change["reverted_units"] == ["money"]
+
+    def test_partially_reverted_change_cannot_be_reverted_again(
+        self, db_with_players, nation_id, patch_helpers, flask_app
+    ):
+        db_with_players["nations"].update_one({"_id": nation_id}, {"$set": {
+            "name": "TestNation", "money": 20, "wood": 50,
+        }})
+        change_id = _insert_pending_change(
+            db_with_players, "Update", nation_id,
+            before={"money": 10, "wood": 10}, after={"money": 20, "wood": 50},
+        )
+        db_with_players["changes"].update_one({"_id": change_id}, {"$set": {
+            "status": "Approved",
+            "before_implemented_data": {"money": 10, "wood": 10},
+            "after_implemented_data": {"money": 20, "wood": 50},
+        }})
+        with flask_app.test_request_context("/"):
+            from flask import g
+            g.user = {"id": _ADMIN_DISCORD_ID}
+            assert ch.revert_change(change_id, selected_paths=["money"]) is True
+            # Second attempt: status is now "Partially Reverted", not
+            # "Approved" -- rejected by the existing status guard.
+            result = ch.revert_change(change_id, selected_paths=["wood"])
+
+        assert result is False
+        change = db_with_players["changes"].find_one({"_id": change_id})
+        assert change["status"] == "Partially Reverted"
+
+    def test_full_selection_behaves_like_whole_revert(
+        self, db_with_players, nation_id, patch_helpers, flask_app
+    ):
+        db_with_players["nations"].update_one({"_id": nation_id}, {"$set": {"name": "Renamed"}})
+        change_id = _insert_pending_change(
+            db_with_players, "Update", nation_id,
+            before={"name": "TestNation"}, after={"name": "Renamed"},
+        )
+        db_with_players["changes"].update_one({"_id": change_id}, {"$set": {
+            "status": "Approved",
+            "before_implemented_data": {"name": "TestNation"},
+            "after_implemented_data": {"name": "Renamed"},
+        }})
+        with flask_app.test_request_context("/"):
+            from flask import g
+            g.user = {"id": _ADMIN_DISCORD_ID}
+            result = ch.revert_change(change_id, selected_paths=["name"])
+
+        assert result is True
+        assert db_with_players["nations"].find_one({"_id": nation_id})["name"] == "TestNation"
+        change = db_with_players["changes"].find_one({"_id": change_id})
+        assert change["status"] == "Reverted"
+        assert "reverted_units" not in change
+
+
+class TestPartialForceApproveChange:
+    def test_selected_field_applied_rest_spun_off(self, db_with_players, patch_helpers, flask_app):
+        nation_id = db_with_players["nations"].insert_one({
+            "name": "N", "money": 10, "wood": 10,
+        }).inserted_id
+        change_id = _insert_pending_change(
+            db_with_players, "Update", nation_id,
+            before={"money": 10, "wood": 10}, after={"money": 20, "wood": 50},
+        )
+        with flask_app.test_request_context("/"):
+            from flask import g
+            g.user = {"id": _ADMIN_DISCORD_ID}
+            result = ch.force_approve_change(change_id, selected_paths=["money"])
+
+        assert result is True
+        nation = db_with_players["nations"].find_one({"_id": nation_id})
+        assert nation["money"] == 20
+        assert nation["wood"] == 10
+
+        original = db_with_players["changes"].find_one({"_id": change_id})
+        assert original["partial"] is True
+        split = db_with_players["changes"].find_one({"_id": original["split_into"]})
+        assert split["status"] == "Pending"
+        assert split["after_requested_data"] == {"wood": 50}
+
+
+# ---------------------------------------------------------------------------
+# Partial approval of a nested dict field ("stockpiles.stone" vs
+# "stockpiles.wood") — the same split-on-apply unit addressing extended to
+# recurse into nested dicts the way keep_only_differences_dict already
+# does, rather than only top-level keys and ID-keyed list items.
+# ---------------------------------------------------------------------------
+
+class TestListChangeUnitPathsNestedDict:
+    def test_nested_dict_produces_one_unit_per_sub_key(self):
+        before = {"stockpiles": {"wood": 10, "stone": 5}}
+        after = {"stockpiles": {"wood": 50, "stone": 20}}
+        paths = ch._list_change_unit_paths(before, after)
+        assert set(paths) == {"stockpiles.wood", "stockpiles.stone"}
+
+    def test_brand_new_nested_dict_is_still_addressable_by_sub_key(self):
+        before = {}
+        after = {"stockpiles": {"wood": 10, "stone": 5}}
+        paths = ch._list_change_unit_paths(before, after)
+        assert set(paths) == {"stockpiles.wood", "stockpiles.stone"}
+
+    def test_deeply_nested_dict_recurses_fully(self):
+        # _list_change_unit_paths (like _partition_units) assumes its input
+        # is already diffed -- i.e. only the keys that actually changed are
+        # present, exactly as keep_only_differences_dict already produces
+        # for before_requested_data/after_requested_data. An unchanged
+        # sub-key like "d" below would never actually be present in real
+        # stored diff data.
+        before = {"a": {"b": {"c": 1}}}
+        after = {"a": {"b": {"c": 9}}}
+        paths = ch._list_change_unit_paths(before, after)
+        assert paths == ["a.b.c"]
+
+
+class TestUnitSelectedNestedDict:
+    def test_exact_dotted_path_match(self):
+        assert ch._unit_selected("stockpiles.stone", {"stockpiles.stone"}) is True
+
+    def test_selecting_the_parent_key_selects_every_sub_key(self):
+        assert ch._unit_selected("stockpiles.stone", {"stockpiles"}) is True
+        assert ch._unit_selected("stockpiles.wood", {"stockpiles"}) is True
+
+    def test_sibling_not_selected(self):
+        assert ch._unit_selected("stockpiles.wood", {"stockpiles.stone"}) is False
+
+    def test_deep_ancestor_selects_descendant(self):
+        assert ch._unit_selected("a.b.c", {"a"}) is True
+        assert ch._unit_selected("a.b.c", {"a.b"}) is True
+        assert ch._unit_selected("a.b.c", {"a.x"}) is False
+
+
+class TestPartitionUnitsNestedDict:
+    def test_stone_selected_wood_deferred(self):
+        before = {"stockpiles": {"wood": 10, "stone": 5}}
+        after = {"stockpiles": {"wood": 50, "stone": 20}}
+        sel_b, sel_a, rem_b, rem_a = ch._partition_units(before, after, {"stockpiles.stone"})
+        assert sel_b == {"stockpiles": {"stone": 5}}
+        assert sel_a == {"stockpiles": {"stone": 20}}
+        assert rem_b == {"stockpiles": {"wood": 10}}
+        assert rem_a == {"stockpiles": {"wood": 50}}
+
+    def test_parent_key_selection_selects_whole_nested_dict(self):
+        before = {"stockpiles": {"wood": 10, "stone": 5}}
+        after = {"stockpiles": {"wood": 50, "stone": 20}}
+        sel_b, sel_a, rem_b, rem_a = ch._partition_units(before, after, {"stockpiles"})
+        assert sel_b == before
+        assert sel_a == after
+        assert rem_b == {} and rem_a == {}
+
+    def test_mixed_scalar_and_nested_dict_fields(self):
+        before = {"money": 10, "stockpiles": {"wood": 10, "stone": 5}}
+        after = {"money": 20, "stockpiles": {"wood": 50, "stone": 20}}
+        sel_b, sel_a, rem_b, rem_a = ch._partition_units(
+            before, after, {"money", "stockpiles.stone"}
+        )
+        assert sel_b == {"money": 10, "stockpiles": {"stone": 5}}
+        assert sel_a == {"money": 20, "stockpiles": {"stone": 20}}
+        assert rem_b == {"stockpiles": {"wood": 10}}
+        assert rem_a == {"stockpiles": {"wood": 50}}
+
+
+class TestApplySelectedUnitsNestedDict:
+    def test_stone_applied_wood_stays_at_live_value(self):
+        existing = {"stockpiles": {"wood": 999, "stone": 5}}
+        before = {"stockpiles": {"wood": 10, "stone": 5}}
+        after = {"stockpiles": {"wood": 50, "stone": 20}}
+        final, sel_b, sel_a, rem_b, rem_a = ch._apply_selected_units(
+            existing, before, after, {"stockpiles.stone"}
+        )
+        assert final["stockpiles"]["stone"] == 20    # selected -- applied
+        assert final["stockpiles"]["wood"] == 999    # deselected -- stays live
+        assert rem_a == {"stockpiles": {"wood": 50}}
+
+    def test_both_sub_keys_selected_matches_full_merge(self):
+        existing = {"stockpiles": {"wood": 999, "stone": 5}}
+        before = {"stockpiles": {"wood": 10, "stone": 5}}
+        after = {"stockpiles": {"wood": 50, "stone": 20}}
+        final, sel_b, sel_a, rem_b, rem_a = ch._apply_selected_units(
+            existing, before, after, {"stockpiles.wood", "stockpiles.stone"}
+        )
+        assert final == ch.deep_merge(existing, after)
+        assert rem_b == {} and rem_a == {}
+
+    def test_deselected_brand_new_nested_subkey_is_dropped(self):
+        existing = {"stockpiles": {"wood": 10}}
+        before = {"stockpiles": {"wood": 10}}
+        after = {"stockpiles": {"wood": 50, "stone": 99}}   # "stone" is brand new
+        final, sel_b, sel_a, rem_b, rem_a = ch._apply_selected_units(
+            existing, before, after, {"stockpiles.wood"}
+        )
+        assert "stone" not in final["stockpiles"]
+        assert rem_a == {"stockpiles": {"stone": 99}}
+
+
+class TestPartialApproveChangeNestedDict:
+    def test_stone_approved_wood_deferred_to_spun_off_change(
+        self, db_with_players, patch_helpers, flask_app
+    ):
+        nation_id = db_with_players["nations"].insert_one({
+            "name": "N", "stockpiles": {"wood": 10, "stone": 5},
+        }).inserted_id
+        change_id = _insert_pending_change(
+            db_with_players, "Update", nation_id,
+            before={"stockpiles": {"wood": 10, "stone": 5}},
+            after={"stockpiles": {"wood": 50, "stone": 20}},
+        )
+        with flask_app.test_request_context("/"):
+            from flask import g
+            g.user = {"id": _ADMIN_DISCORD_ID}
+            result = ch.approve_change(change_id, selected_paths=["stockpiles.stone"])
+
+        assert result is True
+        nation = db_with_players["nations"].find_one({"_id": nation_id})
+        assert nation["stockpiles"]["stone"] == 20    # selected -- applied
+        assert nation["stockpiles"]["wood"] == 10     # deselected -- untouched
+
+        original = db_with_players["changes"].find_one({"_id": change_id})
+        assert original["status"] == "Approved"
+        assert original["partial"] is True
+        assert original["after_implemented_data"] == {"stockpiles": {"stone": 20}}
+
+        split = db_with_players["changes"].find_one({"_id": original["split_into"]})
+        assert split["status"] == "Pending"
+        assert split["before_requested_data"] == {"stockpiles": {"wood": 10}}
+        assert split["after_requested_data"] == {"stockpiles": {"wood": 50}}
+
+
+# ---------------------------------------------------------------------------
+# flatten_change_units
+#
+# Like _list_change_unit_paths, but also carries each unit's value — the
+# AI reviewer (helpers/ai_review_helpers.py) needs this to show the model
+# what's actually being judged, not just the address of each unit.
+# ---------------------------------------------------------------------------
+
+class TestFlattenChangeUnits:
+    def test_whole_key_units_carry_values(self):
+        before = {"money": 10, "name": "Old"}
+        after = {"money": 20, "name": "New"}
+        units = ch.flatten_change_units(before, after)
+        by_path = {u["path"]: u for u in units}
+        assert by_path["money"] == {"path": "money", "before": 10, "after": 20}
+        assert by_path["name"] == {"path": "name", "before": "Old", "after": "New"}
+
+    def test_nested_dict_sub_keys(self):
+        before = {"stockpiles": {"wood": 10, "stone": 5}}
+        after = {"stockpiles": {"wood": 50, "stone": 20}}
+        units = ch.flatten_change_units(before, after)
+        by_path = {u["path"]: u for u in units}
+        assert by_path["stockpiles.wood"] == {"path": "stockpiles.wood", "before": 10, "after": 50}
+        assert by_path["stockpiles.stone"] == {"path": "stockpiles.stone", "before": 5, "after": 20}
+
+    def test_list_items_updated_and_added(self):
+        before = {"districts": [{"_id": "a", "x": 1}]}
+        after = {"districts": [{"_id": "a", "x": 9}, {"_id": "b", "x": 2}]}
+        units = ch.flatten_change_units(before, after)
+        by_path = {u["path"]: u for u in units}
+        assert by_path["districts[id=a]"]["before"] == {"_id": "a", "x": 1}
+        assert by_path["districts[id=a]"]["after"] == {"_id": "a", "x": 9}
+        assert by_path["districts[id=b]"]["before"] is None
+        assert by_path["districts[id=b]"]["after"] == {"_id": "b", "x": 2}
+
+    def test_list_item_removed_has_no_after_value(self):
+        # An empty after-list doesn't qualify as ID-keyed (_all_have_ids
+        # requires a non-empty list), so a surviving sibling is needed for
+        # the per-item removal path to apply rather than the whole-field one.
+        # "b" is carried through unchanged -- keep_only_differences_list's
+        # ID-based branch always stores the FULL after list, not just
+        # changed items, so every surviving item is still its own unit.
+        before = {"districts": [{"_id": "a", "x": 1}, {"_id": "b", "x": 2}]}
+        after = {"districts": [{"_id": "b", "x": 2}]}
+        units = ch.flatten_change_units(before, after)
+        by_path = {u["path"]: u for u in units}
+        assert by_path["districts[id=a]"] == {"path": "districts[id=a]", "before": {"_id": "a", "x": 1}, "after": None}
+        assert by_path["districts[id=b]"] == {"path": "districts[id=b]", "before": {"_id": "b", "x": 2}, "after": {"_id": "b", "x": 2}}
+
+    def test_empty_data_returns_empty_list(self):
+        assert ch.flatten_change_units({}, {}) == []
+
+
+# ---------------------------------------------------------------------------
+# approve_change_as
+#
+# The non-interactive approval entry point the AI reviewer uses — no
+# g.user/is_admin dependency, otherwise identical to approve_change.
+# ---------------------------------------------------------------------------
+
+class TestApproveChangeAs:
+    def test_approves_with_a_given_approver_no_flask_context(self, db_with_players, nation_id, patch_helpers):
+        approver = db_with_players["players"].find_one({"name": "AdminUser"})
+        change_id = _insert_pending_change(
+            db_with_players, "Update", nation_id,
+            before={"name": "TestNation"}, after={"name": "Renamed"},
+        )
+        approved, error = ch.approve_change_as(change_id, approver)
+
+        assert approved is True
+        assert error is None
+        assert db_with_players["nations"].find_one({"_id": nation_id})["name"] == "Renamed"
+        change = db_with_players["changes"].find_one({"_id": change_id})
+        assert change["approver"] == approver["_id"]
+        assert change["status"] == "Approved"
+
+    def test_partial_selected_paths_supported(self, db_with_players, patch_helpers):
+        approver = db_with_players["players"].find_one({"name": "AdminUser"})
+        nation_id = db_with_players["nations"].insert_one({
+            "name": "N", "money": 10, "wood": 10,
+        }).inserted_id
+        change_id = _insert_pending_change(
+            db_with_players, "Update", nation_id,
+            before={"money": 10, "wood": 10}, after={"money": 20, "wood": 50},
+        )
+        approved, error = ch.approve_change_as(change_id, approver, selected_paths=["money"])
+
+        assert approved is True
+        nation = db_with_players["nations"].find_one({"_id": nation_id})
+        assert nation["money"] == 20
+        assert nation["wood"] == 10   # deferred to a spun-off Pending change
+
+    def test_returns_false_and_message_on_rejection(self, db_with_players, nation_id, patch_helpers):
+        approver = db_with_players["players"].find_one({"name": "AdminUser"})
+        change_id = _insert_pending_change(
+            db_with_players, "Update", nation_id,
+            before={"name": "TestNation"}, after={"name": "RenamedNation"},
+        )
+        db_with_players["nations"].update_one({"_id": nation_id}, {"$set": {"name": "ChangedExternally"}})
+
+        approved, error = ch.approve_change_as(change_id, approver)
+
+        assert approved is False
+        assert error is not None
+        change = db_with_players["changes"].find_one({"_id": change_id})
+        assert change["status"] == "Pending"
+
+    def test_skips_its_own_tick_locked_check_when_session_is_provided(self, db_with_players, nation_id, patch_helpers):
+        # Providing a session means the caller already owns the
+        # transaction (and is responsible for its own is_tick_locked()
+        # check before opening it) -- confirmed here via mocking, since a
+        # real mongomock session isn't available to pass through.
+        approver = db_with_players["players"].find_one({"name": "AdminUser"})
+        change_id = _insert_pending_change(
+            db_with_players, "Update", nation_id,
+            before={"name": "TestNation"}, after={"name": "Renamed"},
+        )
+        sentinel_session = object()
+        with patch.object(ch, "is_tick_locked", return_value=True) as mock_locked, \
+             patch.object(ch, "_approve_change_in_session", return_value=True) as mock_approve:
+            approved, error = ch.approve_change_as(change_id, approver, session=sentinel_session)
+
+        mock_locked.assert_not_called()
+        mock_approve.assert_called_once_with(change_id, approver, sentinel_session, None)
+        assert approved is True
+        assert error is None
+
+    def test_tick_locked_blocks_when_no_session_provided(self, db_with_players, nation_id, patch_helpers):
+        approver = db_with_players["players"].find_one({"name": "AdminUser"})
+        change_id = _insert_pending_change(
+            db_with_players, "Update", nation_id,
+            before={"name": "TestNation"}, after={"name": "Renamed"},
+        )
+        with patch.object(ch, "is_tick_locked", return_value=True):
+            approved, error = ch.approve_change_as(change_id, approver)
+        assert approved is False
+        assert error == "tick_locked"

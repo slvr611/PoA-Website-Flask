@@ -451,21 +451,73 @@
 {# Render a single field's before/after difference.
    Handles: nested dicts, arrays (ID-aware or positional),
             linked objects, and plain scalars. #}
-{% macro render_field_change(before_value, after_value, view_access_level, field_schema=None, collection_name=None, preview_references=None) %}
+{# Shared drift-conflict controls — a checkbox that starts unchecked when
+   `field_conflicts` is non-empty, a small inline badge, and a compact
+   detail block underneath (one line per conflicting unit, via
+   app_core.py's summarize_drift_value filter so a huge list item/dict
+   never dumps its raw repr() into the page). Used by both
+   render_changes_preview (top-level fields) and render_field_change
+   (nested dict sub-keys) so the two stay visually identical. #}
+{% macro _unit_checkbox(path, selectable, form_id, field_conflicts) %}
+    {% if selectable %}
+        <label class="unit-checkbox">
+            <input type="checkbox" name="units" value="{{ path }}" {% if form_id %}form="{{ form_id }}"{% endif %} {% if not field_conflicts %}checked{% endif %}>
+        </label>
+    {% endif %}
+{% endmacro %}
+
+{% macro _unit_drift_badge(field_conflicts) %}
+    {% if field_conflicts %}
+        <span class="field-drift-badge" title="This field has changed since the data shown here was recorded.">&#9888; changed since recorded</span>
+    {% endif %}
+{% endmacro %}
+
+{% macro _unit_drift_detail(field_conflicts) %}
+    {% if field_conflicts %}
+    <div class="field-drift-detail">
+        {% for fc in field_conflicts %}
+            <div class="field-drift-detail-line">
+                {% if field_conflicts|length > 1 %}<code>{{ fc.path }}</code> —{% endif %}
+                {% if fc.verdict == "matches_after" %}
+                    live value already matches the expected update — approving this is a no-op.
+                {% else %}
+                    live value doesn't match the recorded before/after state (live: {{ fc.live|summarize_drift_value }}).
+                {% endif %}
+            </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+{% endmacro %}
+
+{% macro render_field_change(before_value, after_value, view_access_level, field_schema=None, collection_name=None, preview_references=None, selectable=false, path_prefix="", form_id=none, drift_conflicts=none) %}
     {% if field_schema and field_schema.get("view_access_level", 0) > view_access_level %}
         <span class="restricted-field">Restricted content</span>
 
     {% elif before_value is mapping and after_value is mapping %}
-        {# Nested dict — recurse into changed keys only #}
+        {# Nested dict — recurse into changed keys only. Each differing
+           sub-key is its own selectable unit (see
+           helpers/change_helpers.py's _list_change_unit_paths /
+           _partition_units, which address it as "path_prefix.dict_key") —
+           so a dict field itself gets no checkbox of its own (see
+           render_changes_preview below); only its individual sub-keys do.
+           Each sub-key also gets its OWN drift-conflict check (see
+           describe_check_no_other_changes_conflicts), independent of its
+           siblings — the fix for a sibling like "stockpiles.stone" being
+           swept into a warning that only "stockpiles.wood" earned. #}
         {% set all_keys = (before_value.keys()|list + after_value.keys()|list)|unique|list %}
         {% set ns = namespace(any=false) %}
         {% for dict_key in all_keys %}
             {% if before_value.get(dict_key) != after_value.get(dict_key) %}
                 {% set ns.any = true %}
+                {% set sub_path = (path_prefix ~ "." ~ dict_key) if path_prefix else dict_key %}
+                {% set field_conflicts = conflicts_under(drift_conflicts, sub_path) %}
                 <div class="dict-changes">
-                    <div class="dict-change-item">
+                    <div class="dict-change-item{% if field_conflicts %} field-drift-conflict{% endif %}">
+                        {{ _unit_checkbox(sub_path, selectable, form_id, field_conflicts) }}
                         <span class="dict-key">{{ dict_key }}:</span>
-                        {{ render_field_change(before_value.get(dict_key), after_value.get(dict_key), view_access_level, field_schema, collection_name, preview_references) }}
+                        {{ _unit_drift_badge(field_conflicts) }}
+                        {{ render_field_change(before_value.get(dict_key), after_value.get(dict_key), view_access_level, field_schema, collection_name, preview_references, selectable, sub_path, form_id, drift_conflicts) }}
+                        {{ _unit_drift_detail(field_conflicts) }}
                     </div>
                 </div>
             {% endif %}
@@ -522,7 +574,7 @@
 {# Render a full change preview for a document.
    Shows each changed field with its label and a diff of before vs after.
    compact=true (default for table views) hides verbose computed fields. #}
-{% macro render_changes_preview(before_data, after_data, target_schema, preview_references, view_access_level, compact=true) %}
+{% macro render_changes_preview(before_data, after_data, target_schema, preview_references, view_access_level, compact=true, selectable=false, drift_conflicts=none, form_id=none) %}
     <div class="changes-preview">
         {% if before_data is mapping and after_data is mapping %}
             {% set all_keys = (before_data.keys()|list + after_data.keys()|list)|unique|list %}
@@ -532,6 +584,17 @@
                 {% set after_value  = after_data.get(key) %}
                 {% set field_schema = target_schema.properties.get(key, {}) %}
                 {% set required_view_level = field_schema.get("view_access_level", 0) %}
+                {# A nested dict field has no unit of its own — see
+                   render_field_change's own comment — it's decomposed
+                   into one checkbox/highlight/detail per sub-key instead,
+                   so this field-level block must not duplicate them. #}
+                {% set is_nested_dict = key in before_data and key in after_data and before_value is mapping and after_value is mapping %}
+                {# All conflicts at or nested/indexed under this field (see
+                   conflicts_under). For a nested dict this would match
+                   every sub-key's conflict too, which is exactly why the
+                   highlight/detail below are suppressed for is_nested_dict
+                   — each sub-key already shows its own, independently. #}
+                {% set field_conflicts = conflicts_under(drift_conflicts, key) %}
 
                 {% if before_value != after_value or (key in before_data) != (key in after_data) %}
                     {# In compact mode, skip verbose computed fields #}
@@ -539,8 +602,23 @@
                         {% set ns.hidden = ns.hidden + 1 %}
                     {% else %}
                     {% set ns.any = true %}
-                    <div class="field-change">
-                        <div class="field-label">{{ field_schema.get("label", key) }}:</div>
+                    <div class="field-change{% if field_conflicts and not is_nested_dict %} field-drift-conflict{% endif %}">
+                        <div class="field-label">
+                            {% if selectable and not is_nested_dict %}
+                                {# A unit is addressed at field granularity here — see
+                                   helpers/change_helpers.py's _list_change_unit_paths,
+                                   which also supports a finer "field[id=...]"
+                                   per-list-item address for ID-keyed lists (not yet
+                                   exposed as its own checkbox here). When the field's
+                                   value is itself a nested dict on both sides, this
+                                   checkbox is skipped in favor of one checkbox per
+                                   differing sub-key, rendered by render_field_change's
+                                   own recursion below — see its own comment. #}
+                                {{ _unit_checkbox(key, selectable, form_id, field_conflicts) }}
+                            {% endif %}
+                            {{ field_schema.get("label", key) }}:
+                            {{ _unit_drift_badge(field_conflicts) }}
+                        </div>
                         <div class="field-value">
                             {% if required_view_level > view_access_level %}
                                 <span class="restricted-field">Restricted content</span>
@@ -594,9 +672,12 @@
                             {% else %}
                                 {# Field exists in both — render diff #}
                                 {% set collection_name = field_schema.collections[0] if field_schema.get('bsonType') == "linked_object" and field_schema.get('collections') else None %}
-                                {{ render_field_change(before_value, after_value, view_access_level, field_schema, collection_name, preview_references) }}
+                                {{ render_field_change(before_value, after_value, view_access_level, field_schema, collection_name, preview_references, selectable, key, form_id, drift_conflicts) }}
                             {% endif %}
                         </div>
+                        {% if field_conflicts and not is_nested_dict %}
+                            {{ _unit_drift_detail(field_conflicts) }}
+                        {% endif %}
                     </div>
                     {% endif %}{# end compact verbose check #}
                 {% endif %}
@@ -689,7 +770,12 @@
                     {% endif %}
                 </td>
                 <td>{{ change.change_type }}</td>
-                <td>{{ change.status }}</td>
+                <td>
+                    {{ change.status }}
+                    {% if change.get("ai_reviewed") %}
+                        <span class="ai-review-mode ai-review-mode-dry_run" title="A background AI reviewer has looked at this change — see its own page for what it decided and why.">AI-reviewed</span>
+                    {% endif %}
+                </td>
                 <td class="changes-column wrap-content">
                     {% if vis_tier is not none and vis_tier < 2 %}
                         <span style="color:#888;font-style:italic;">Details require visibility tier 2+</span>
@@ -711,7 +797,14 @@
                             {% endif %}
                         </div>
                     {% else %}
-                        {{ render_changes_preview(change.before_requested_data, change.after_requested_data, target_schemas[change.target_collection], preview_references, effective_view_level) }}
+                        {{ render_changes_preview(
+                            change.before_requested_data, change.after_requested_data,
+                            target_schemas[change.target_collection], preview_references, effective_view_level,
+                            compact=true,
+                            selectable=(show_actions and g.user.is_admin),
+                            drift_conflicts=change.get("_drift_conflicts"),
+                            form_id=("change-form-" ~ change._id) if (show_actions and g.user.is_admin) else none
+                        ) }}
                     {% endif %}
                 </td>
                 <td class="reason-column wrap-content">
@@ -748,8 +841,15 @@
                 </td>
                 {% if show_actions and g.user.is_admin %}
                 <td class="action-buttons">
-                    <a href="/changes/item/{{ change._id }}/approve" class="btn btn-approve">Approve</a>
-                    <a href="/changes/item/{{ change._id }}/deny" class="btn btn-deny">Deny</a>
+                    {# A single empty form, referenced by id from both the
+                       checkboxes rendered in the Changes cell above (via
+                       the "form" attribute — standard HTML5, lets a field
+                       belong to a form it isn't a DOM descendant of) and
+                       the buttons below, so one submit carries every
+                       checked "units" value for this row's change. #}
+                    <form method="POST" id="change-form-{{ change._id }}"></form>
+                    <button type="submit" form="change-form-{{ change._id }}" formaction="/changes/item/{{ change._id }}/approve" class="btn btn-approve">Approve</button>
+                    <button type="submit" form="change-form-{{ change._id }}" formaction="/changes/item/{{ change._id }}/deny" class="btn btn-deny">Deny</button>
                 </td>
                 {% endif %}
             </tr>

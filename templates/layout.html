@@ -182,6 +182,11 @@
 		<span>&#9888; <strong>Warning:</strong> The website may be reverted to a previous state soon. Please do not submit any change requests until this notice is removed.</span>
 	</div>
 	{% endif %}
+	{% if g.failed_propagations_count %}
+	<div class="revert-warning-banner">
+		<span>&#9888; <strong>{{ g.failed_propagations_count }}</strong> dependency-update propagation{{ "s" if g.failed_propagations_count != 1 else "" }} failed and gave up retrying — the underlying change applied, but some dependent objects may be stale.</span>
+	</div>
+	{% endif %}
     <main>
 		{% with messages = get_flashed_messages(with_categories=True) %}
 		  {% if messages %}

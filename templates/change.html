@@ -9,6 +9,7 @@
 		<h1>
 			Change #{{ item._id }}:
 		</h1>
+		<form method="POST" id="change-action-form">
 		<div class="table-wrapper">
 		<table class="info-table">
 			<tr>
@@ -97,31 +98,92 @@
 							{{ tile_count }} tile{{ 's' if tile_count != 1 else '' }} changed
 						</div>
 					{% else %}
-						{{ render_changes_preview(before_data, after_data, target_schema, linked_objects, view_access_level, compact=false) }}
+						{{ render_changes_preview(before_data, after_data, target_schema, linked_objects, view_access_level, compact=false, selectable=(item["status"] in ("Pending", "Approved") and g.user.is_admin), drift_conflicts=drift_conflicts) }}
 					{% endif %}
 				</td>
 			</tr>
 			<tr>
 				<th><strong>{{ schema.properties.request_reason.label }}:</strong></th>
-				<td>{{ item["request_reason"] }}</td>
+				<td>{{ item["request_reason"]|format_discord_link|safe }}</td>
 			</tr>
 		</table>
 		</div>
 
+		{% if drift_conflicts %}
+		<div class="drift-conflict-banner">
+			<strong>&#9888; Warning:</strong> the target has changed since this change was
+			{{ "requested" if item["status"] == "Pending" else "approved" }} —
+			see the highlighted field{{ "s" if drift_conflicts|length != 1 else "" }} above for details.
+		</div>
+		{% endif %}
+
+		{% if item.get("ai_review") %}
+		<div class="table-wrapper">
+		<table class="info-table">
+			<tr><th colspan="2"><strong>AI Review History</strong></th></tr>
+			{% for attempt in item["ai_review"] %}
+			<tr>
+				<td colspan="2">
+					<div class="ai-review-attempt">
+						<div class="ai-review-attempt-header">
+							<strong>{{ attempt.timestamp }}</strong>
+							<span class="ai-review-mode ai-review-mode-{{ attempt.mode }}">{{ 'Dry run' if attempt.mode == 'dry_run' else 'Live' }}</span>
+							{% if attempt.model %}<span class="ai-review-model">{{ attempt.model }}</span>{% endif %}
+						</div>
+						{% if attempt.error %}
+							<div class="ai-review-error">&#9888; Failed: {{ attempt.error }}</div>
+						{% elif attempt.note %}
+							<div class="ai-review-note">{{ attempt.note }}</div>
+						{% else %}
+							<ul class="ai-review-units">
+							{% for unit in attempt.units %}
+								<li class="ai-review-unit ai-review-unit-{{ unit.verdict }}">
+									<code>{{ unit.path }}</code> —
+									<strong>{{ 'Approved' if unit.verdict == 'approve' else 'Left Pending' }}</strong>:
+									{{ unit.justification }}
+									{% if unit.discord_quote %}<div class="ai-review-quote">&ldquo;{{ unit.discord_quote }}&rdquo;</div>{% endif %}
+								</li>
+							{% endfor %}
+							</ul>
+						{% endif %}
+					</div>
+				</td>
+			</tr>
+			{% endfor %}
+		</table>
+		</div>
+		{% endif %}
+
 		{% if item["status"] == "Pending" and g.user.is_admin %}
 			<div class="action-buttons">
-				<a href="{{ request.path }}/approve" class="btn btn-approve">Approve</a>
-				<a href="{{ request.path }}/force-approve" class="btn btn-approve" style="opacity:0.7;" onclick="return confirm('Force-approve this change without conflict checking?')">Force Approve</a>
-				<a href="{{ request.path }}/deny" class="btn btn-deny">Deny</a>
+				<button type="submit" formaction="{{ request.path }}/approve" class="btn btn-approve">Approve</button>
+				<button type="submit" formaction="{{ request.path }}/force-approve" class="btn btn-approve" style="opacity:0.7;" onclick="return confirm('Force-approve this change without conflict checking?')">Force Approve</button>
+				<button type="submit" formaction="{{ request.path }}/deny" class="btn btn-deny">Deny</button>
 			</div>
 		{% endif %}
 
 		{% if item["status"] == "Approved" and g.user.is_admin %}
 			<div class="action-buttons">
-				<a href="{{ request.path }}/revert" class="btn btn-deny" onclick="return confirm('Revert this change? This will restore the target to its state before the change was applied.')">Revert</a>
+				<button type="submit" formaction="{{ request.path }}/revert" class="btn btn-deny" onclick="return confirm('Revert this change? This will restore the target to its state before the change was applied.')">Revert</button>
 			</div>
 		{% endif %}
-		
+		</form>
+
+		{% if item["status"] == "Pending" and g.user.is_admin %}
+			{# A separate, standalone form — nesting it inside
+			   change-action-form above (HTML forbids nested <form>
+			   elements; browsers silently drop the inner one, leaving its
+			   button to submit to the OUTER form's target instead) sent
+			   this to the page's own GET-only URL via POST, producing a
+			   405. This action also has nothing to do with the units[]
+			   checkboxes that form carries, so it was never meant to share it. #}
+			<div class="action-buttons">
+				<form method="POST" action="{{ request.path }}/request-ai-review" style="display:inline;">
+					<button type="submit" class="btn btn-approve" style="opacity:0.6;">Request AI Review</button>
+				</form>
+			</div>
+		{% endif %}
+
 		{% if view_access_level >= 8 %}
 		<details>
 			<summary>Show Detailed Changes</summary>

@@ -2,7 +2,7 @@
   "$jsonSchema": {
     "bsonType": "object",
     "required": ["target", "target_collection", "request_reason"],
-    "preview": ["target_collection", "change_type", "status", "target", "last_modified_time", "time_requested", "time_implemented", "time_denied", "time_reverted", "requester", "approver", "denier", "reverter", "before_requested_data", "after_requested_data", "before_implemented_data", "after_implemented_data", "before_revert_data", "after_revert_data", "request_reason", "before_image", "after_image"],
+    "preview": ["target_collection", "change_type", "status", "target", "last_modified_time", "time_requested", "time_implemented", "time_denied", "time_reverted", "requester", "approver", "denier", "reverter", "before_requested_data", "after_requested_data", "before_implemented_data", "after_implemented_data", "before_revert_data", "after_revert_data", "request_reason", "before_image", "after_image", "ai_reviewed"],
     "properties": {
       "target_collection": {
         "bsonType": "string",
@@ -122,11 +122,72 @@
         "description": "The text explanation and/or link to discord message explaining why the change should take place",
         "static": true
       },
+      "target_display_name": {
+        "bsonType": "string",
+        "label": "Target Display Name",
+        "description": "A snapshot of the target's name at request time, so a change (including a not-yet-approved Add, which has no resolved target) can still be identified without a live join",
+        "static": true,
+        "hidden": true
+      },
+      "referenced_discord_links": {
+        "bsonType": "array",
+        "label": "Referenced Discord Links",
+        "description": "Discord message links extracted from request_reason at request time, for future automated or human review to follow",
+        "static": true,
+        "hidden": true
+      },
+      "partial": {
+        "bsonType": "boolean",
+        "label": "Partial",
+        "description": "True when only some of this change's units were approved/denied, with the rest spun off into the change named by split_into",
+        "hidden": true
+      },
+      "split_into": {
+        "bsonType": "linked_object",
+        "label": "Split Into",
+        "description": "The follow-up Pending change covering the units this change deferred on a partial approve/deny",
+        "noneResult": "None",
+        "collections": ["changes"],
+        "hidden": true
+      },
+      "split_from": {
+        "bsonType": "linked_object",
+        "label": "Split From",
+        "description": "The original change this one was spun off from by a partial approve/deny",
+        "noneResult": "None",
+        "collections": ["changes"],
+        "static": true,
+        "hidden": true
+      },
+      "reverted_units": {
+        "bsonType": "array",
+        "label": "Reverted Units",
+        "description": "The specific unit paths reverted, when only some of an approved change's units were reverted (status Partially Reverted)",
+        "hidden": true
+      },
+      "ai_review": {
+        "bsonType": "array",
+        "label": "AI Review History",
+        "description": "One entry per AI review attempt (see helpers/ai_review_helpers.py) -- timestamp, mode (dry_run/live), model, per-unit verdicts and justifications, and any error",
+        "hidden": true
+      },
+      "ai_reviewed": {
+        "bsonType": "boolean",
+        "label": "AI Reviewed",
+        "description": "True once at least one AI review attempt has completed (success, skip, or failure) -- prevents the background worker from repeatedly re-claiming the same change",
+        "hidden": true
+      },
+      "ai_review_claimed_at": {
+        "bsonType": "date",
+        "label": "AI Review Claimed At",
+        "description": "Set transiently while the AI review worker is actively processing this change, to prevent two workers from reviewing (and trying to approve) the same change at once -- cleared when the attempt finishes",
+        "hidden": true
+      },
       "status": {
         "bsonType": "enum",
         "label": "Status",
         "description": "The status of the change",
-        "enum": ["Pending", "Denied", "Approved", "Reverted"],
+        "enum": ["Pending", "Denied", "Approved", "Reverted", "Partially Reverted"],
         "default": "Pending"
       }
     }

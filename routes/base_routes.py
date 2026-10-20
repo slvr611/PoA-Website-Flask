@@ -114,6 +114,59 @@ def inject_tick_in_progress():
     g.tick_in_progress = _get_tick_in_progress()
 
 
+# ---------------------------------------------------------------------------
+# Failed-propagation banner — admins only (an operational concern, not a
+# player-facing one). Same process-level-cache shape as the banners above;
+# a failed propagation_outbox entry (helpers/change_helpers.py) means a
+# dependent-object recalculation cascade gave up after
+# _OUTBOX_MAX_ATTEMPTS — the approved/reverted change itself still applied
+# correctly, but something that depends on it may be stale until an admin
+# investigates (see helpers/change_helpers.py's count_failed_propagations).
+# ---------------------------------------------------------------------------
+_failed_propagations_cache: dict = {"count": 0, "ts": 0.0}
+_FAILED_PROPAGATIONS_CACHE_TTL = 30  # seconds
+
+
+def _get_failed_propagations_count() -> int:
+    now = _time_mod.time()
+    if now - _failed_propagations_cache["ts"] < _FAILED_PROPAGATIONS_CACHE_TTL:
+        return _failed_propagations_cache["count"]
+    from helpers.change_helpers import count_failed_propagations
+    count = count_failed_propagations()
+    _failed_propagations_cache.update({"count": count, "ts": now})
+    return count
+
+
+@base_routes.before_app_request
+def inject_failed_propagations():
+    g.failed_propagations_count = _get_failed_propagations_count() if (g.user and g.user.get("is_admin")) else 0
+
+
+# ---------------------------------------------------------------------------
+# AI change review settings — same cached-injector shape as the banners
+# above, for the admin tools page's status card
+# (helpers/ai_review_helpers.py's get_ai_review_settings is the source of
+# truth; this just avoids hitting the DB on every single request).
+# ---------------------------------------------------------------------------
+_ai_review_settings_cache: dict = {"enabled": True, "dry_run": True, "ts": 0.0}
+_AI_REVIEW_SETTINGS_CACHE_TTL = 30  # seconds
+
+
+def _get_ai_review_settings_cached() -> dict:
+    now = _time_mod.time()
+    if now - _ai_review_settings_cache["ts"] < _AI_REVIEW_SETTINGS_CACHE_TTL:
+        return {"enabled": _ai_review_settings_cache["enabled"], "dry_run": _ai_review_settings_cache["dry_run"]}
+    from helpers.ai_review_helpers import get_ai_review_settings
+    settings = get_ai_review_settings()
+    _ai_review_settings_cache.update({**settings, "ts": now})
+    return settings
+
+
+@base_routes.before_app_request
+def inject_ai_review_settings():
+    g.ai_review_settings = _get_ai_review_settings_cached() if (g.user and g.user.get("is_admin")) else None
+
+
 @base_routes.before_app_request
 def cache_previous_url():
     if request.endpoint != 'static':
@@ -138,6 +191,45 @@ def toggle_revert_warning():
     _revert_cache.update({"active": new_state, "ts": _time_mod.time()})
     flash(f"Revert warning {'enabled' if new_state else 'disabled'}.")
     return redirect(request.referrer or "/")
+
+
+@base_routes.route("/admin/toggle-ai-review")
+def toggle_ai_review():
+    if not (g.user and g.user.get("is_admin")):
+        abort(403)
+    from helpers.ai_review_helpers import get_ai_review_settings
+    settings = get_ai_review_settings()
+    settings["enabled"] = not settings["enabled"]
+    mongo.db.global_modifiers.update_one(
+        {"name": "global_modifiers"},
+        {"$set": {"ai_review_enabled": settings["enabled"]}},
+        upsert=True,
+    )
+    _ai_review_settings_cache.update({**settings, "ts": _time_mod.time()})
+    flash(f"AI change review {'enabled' if settings['enabled'] else 'disabled'}.")
+    return redirect(request.referrer or "/")
+
+
+@base_routes.route("/admin/toggle-ai-review-dry-run")
+def toggle_ai_review_dry_run():
+    if not (g.user and g.user.get("is_admin")):
+        abort(403)
+    from helpers.ai_review_helpers import get_ai_review_settings
+    settings = get_ai_review_settings()
+    settings["dry_run"] = not settings["dry_run"]
+    mongo.db.global_modifiers.update_one(
+        {"name": "global_modifiers"},
+        {"$set": {"ai_review_dry_run": settings["dry_run"]}},
+        upsert=True,
+    )
+    _ai_review_settings_cache.update({**settings, "ts": _time_mod.time()})
+    flash(
+        "AI change review is now "
+        + ("in dry-run mode (records verdicts, approves nothing)." if settings["dry_run"]
+           else "LIVE — it will approve sufficiently explained units.")
+    )
+    return redirect(request.referrer or "/")
+
 
 @base_routes.route("/")
 def home():

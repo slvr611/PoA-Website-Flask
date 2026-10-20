@@ -2,8 +2,10 @@ import threading
 import traceback
 import uuid
 from datetime import datetime, timezone
-from time import perf_counter
-from app_core import mongo, category_data, json_data
+from time import perf_counter, sleep
+from pymongo.errors import PyMongoError
+from pymongo import ReturnDocument
+from app_core import mongo, category_data, json_data, extract_discord_links
 from flask import g, flash, current_app, has_request_context
 from calculations.field_calculations import calculate_all_fields, purge_invalid_district_jobs
 from copy import deepcopy
@@ -352,6 +354,15 @@ def request_change(data_type, item_id, change_type, before_data, after_data, rea
     before_data.pop("_id", None)
     after_data.pop("_id", None)
 
+    # Snapshot automation-readiness fields from the FULL before/after data,
+    # before keep_only_differences reduces them to only the changed keys —
+    # a "Tick Update" that doesn't touch "name" would otherwise leave a
+    # future reader (human or AI) with no display name to anchor the change
+    # to without a live join. See the design doc's automation-readiness
+    # section: these are read-only snapshots, not yet consumed by anything.
+    target_display_name = after_data.get("name") or before_data.get("name")
+    referenced_discord_links = extract_discord_links(reason)
+
     # Calculated fields (breakdowns, modifiers, technologies, etc.) get
     # recomputed from scratch on every approve/revert regardless of what's
     # stored here — see _strip_recalculable_fields's docstring. Stripping
@@ -382,6 +393,8 @@ def request_change(data_type, item_id, change_type, before_data, after_data, rea
         "after_requested_data": after_data,
         "differential_data": differential,
         "request_reason": reason,
+        "target_display_name": target_display_name,
+        "referenced_discord_links": referenced_discord_links,
         "status": "Pending"
     }
     result = changes_collection.insert_one(change_doc)
@@ -418,6 +431,10 @@ def system_request_change(data_type, item_id, change_type, before_data, after_da
     else:
         after_data.pop("_id", None)
 
+    # See the matching comment in request_change().
+    target_display_name = after_data.get("name") or before_data.get("name")
+    referenced_discord_links = extract_discord_links(reason)
+
     # See the matching comment in request_change() / _strip_recalculable_fields.
     before_data = _strip_recalculable_fields(data_type, before_data)
     after_data = _strip_recalculable_fields(data_type, after_data)
@@ -439,6 +456,8 @@ def system_request_change(data_type, item_id, change_type, before_data, after_da
         "after_requested_data": after_data,
         "differential_data": differential,
         "request_reason": reason,
+        "target_display_name": target_display_name,
+        "referenced_discord_links": referenced_discord_links,
         "status": "Pending"
     }
     result = changes_collection.insert_one(change_doc, session=session)
@@ -547,7 +566,396 @@ def is_tick_locked():
     return bool(doc and doc.get("running"))
 
 
-def approve_change(change_id):
+# ---------------------------------------------------------------------------
+# Partial approval/revert — unit addressing and split-on-apply
+#
+# A "unit" is addressed by the exact path keep_only_differences already
+# produces: a top-level key ("money"), a dotted path into a nested dict
+# field ("stockpiles.stone" — recursing exactly as far as
+# keep_only_differences_dict already recurses when computing the diff in
+# the first place), or (for a field whose value is an ID-keyed list on
+# either side) an individual item within it ("districts[id=a1b2c3d4]"),
+# including inside a nested dict. The review page exposes both whole-key
+# and nested-dict-sub-key checkboxes (see templates/macros/pagination.html's
+# render_changes_preview/render_field_change) but not yet a checkbox per
+# list item — _list_change_unit_paths/_unit_selected already understand
+# that finer per-item addressing too, so a future UI pass can expose it
+# without touching any of this.
+# ---------------------------------------------------------------------------
+
+def _list_change_unit_paths(before_data, after_data, _prefix=""):
+    """Return the ordered list of selectable unit path strings for a
+    change's before/after data — see the module note above."""
+    paths = []
+    for key in after_data:
+        after_val = after_data.get(key)
+        before_val = before_data.get(key)
+        path = f"{_prefix}{key}"
+
+        if isinstance(after_val, dict):
+            sub_before = before_val if isinstance(before_val, dict) else {}
+            paths.extend(_list_change_unit_paths(sub_before, after_val, _prefix=f"{path}."))
+            continue
+
+        ids, seen = [], set()
+        if isinstance(after_val, list) and _all_have_ids(after_val):
+            for item in after_val:
+                if isinstance(item, dict) and item.get("_id") not in seen:
+                    ids.append(item["_id"])
+                    seen.add(item["_id"])
+        if isinstance(before_val, list) and _all_have_ids(before_val):
+            for item in before_val:
+                if isinstance(item, dict) and item.get("_id") not in seen:
+                    ids.append(item["_id"])
+                    seen.add(item["_id"])
+        if ids:
+            paths.extend(f"{path}[id={item_id}]" for item_id in ids)
+        else:
+            paths.append(path)
+    return paths
+
+
+def flatten_change_units(before_data, after_data, _prefix=""):
+    """Like _list_change_unit_paths, but also carries each unit's before/
+    after leaf value — [{"path", "before", "after"}, ...], recursing the
+    same way (nested dict sub-keys, individual ID-keyed list items). Public
+    (no leading underscore) since, unlike the other unit-addressing
+    helpers, it's meant to be used outside this module — see
+    helpers/ai_review_helpers.py, which needs each unit's actual value to
+    judge it, not just its address.
+    """
+    units = []
+    for key in after_data:
+        after_val = after_data.get(key)
+        before_val = before_data.get(key)
+        path = f"{_prefix}{key}"
+
+        if isinstance(after_val, dict):
+            sub_before = before_val if isinstance(before_val, dict) else {}
+            units.extend(flatten_change_units(sub_before, after_val, _prefix=f"{path}."))
+            continue
+
+        if isinstance(after_val, list) and _all_have_ids(after_val):
+            before_items = before_val if isinstance(before_val, list) else []
+            before_by_id = {i["_id"]: i for i in before_items if isinstance(i, dict) and "_id" in i}
+            after_by_id = {i["_id"]: i for i in after_val if isinstance(i, dict) and "_id" in i}
+            for item_id, item in after_by_id.items():
+                units.append({
+                    "path": f"{path}[id={item_id}]",
+                    "before": before_by_id.get(item_id),
+                    "after": item,
+                })
+            for item_id in sorted(set(before_by_id) - set(after_by_id), key=str):
+                units.append({
+                    "path": f"{path}[id={item_id}]",
+                    "before": before_by_id[item_id],
+                    "after": None,
+                })
+            continue
+
+        units.append({"path": path, "before": before_val, "after": after_val})
+    return units
+
+
+def _unit_selected(path, selected_paths):
+    """True if `path` (a whole-key path like "money", a dotted nested-dict
+    path like "stockpiles.stone", or a list-item path like
+    "districts[id=xxx]") is selected. Any SELECTED ANCESTOR of `path` also
+    selects it — selecting "stockpiles" selects "stockpiles.stone" and
+    "stockpiles.wood"; selecting "districts" selects every
+    "districts[id=...]" — so one checkbox on a parent unit can stand in
+    for every unit nested under it."""
+    if path in selected_paths:
+        return True
+    base = path.split("[", 1)[0]   # strip a trailing "[id=...]" list-item suffix
+    if base in selected_paths:
+        return True
+    segments = base.split(".")
+    for i in range(1, len(segments)):
+        if ".".join(segments[:i]) in selected_paths:
+            return True
+    return False
+
+
+def _partition_units(before_data, after_data, selected_paths, _prefix=""):
+    """Partition a change's before/after diff data into (selected_before,
+    selected_after, remaining_before, remaining_after) at the granularity
+    _list_change_unit_paths exposes. Pure data partition — does not look at
+    any live document — so it's safe for deny_change (which never merges
+    into a target at all) as well as being the first step
+    _apply_selected_units builds on for approve_change/revert_change.
+
+    `selected_paths` empty/None selects everything: returns
+    (before_data, after_data, {}, {}), i.e. today's whole-change behavior,
+    unchanged for every caller that doesn't pass a selection.
+    """
+    if not selected_paths:
+        return dict(before_data), dict(after_data), {}, {}
+
+    selected_before, selected_after = {}, {}
+    remaining_before, remaining_after = {}, {}
+
+    for key in after_data:
+        after_val = after_data[key]
+        before_val = before_data.get(key)
+        path = f"{_prefix}{key}"
+
+        if isinstance(after_val, dict):
+            # Nested dict — recurse; each differing sub-key is its own unit
+            # (see keep_only_differences_dict, which already only stores
+            # the differing sub-keys here in the first place).
+            sub_before = before_val if isinstance(before_val, dict) else {}
+            s_before, s_after, r_before, r_after = _partition_units(
+                sub_before, after_val, selected_paths, _prefix=f"{path}."
+            )
+            if s_before or s_after:
+                selected_before[key] = s_before
+                selected_after[key] = s_after
+            if r_before or r_after:
+                remaining_before[key] = r_before
+                remaining_after[key] = r_after
+        elif isinstance(after_val, list) and _all_have_ids(after_val):
+            before_items = before_val if isinstance(before_val, list) else []
+            before_by_id = {i["_id"]: i for i in before_items if isinstance(i, dict) and "_id" in i}
+            after_by_id = {i["_id"]: i for i in after_val if isinstance(i, dict) and "_id" in i}
+            removed_ids = set(before_by_id) - set(after_by_id)
+
+            sel_after_items, sel_before_items = [], []
+            rem_after_items, rem_before_items = [], []
+
+            # Items present in the after list (added or updated).
+            for item_id, item in after_by_id.items():
+                item_path = f"{path}[id={item_id}]"
+                after_bucket, before_bucket = (
+                    (sel_after_items, sel_before_items) if _unit_selected(item_path, selected_paths)
+                    else (rem_after_items, rem_before_items)
+                )
+                after_bucket.append(item)
+                if item_id in before_by_id:
+                    before_bucket.append(before_by_id[item_id])
+
+            # Items removed by this change (in before, absent from after).
+            for item_id in removed_ids:
+                item_path = f"{path}[id={item_id}]"
+                if _unit_selected(item_path, selected_paths):
+                    sel_before_items.append(before_by_id[item_id])
+                else:
+                    rem_before_items.append(before_by_id[item_id])
+
+            if sel_after_items or sel_before_items:
+                selected_after[key] = sel_after_items
+                selected_before[key] = sel_before_items
+            if rem_after_items or rem_before_items:
+                remaining_after[key] = rem_after_items
+                remaining_before[key] = rem_before_items
+        else:
+            if _unit_selected(path, selected_paths):
+                selected_after[key] = after_val
+                if key in before_data:
+                    selected_before[key] = before_data[key]
+            else:
+                remaining_after[key] = after_val
+                if key in before_data:
+                    remaining_before[key] = before_data[key]
+
+    return selected_before, selected_after, remaining_before, remaining_after
+
+
+def _undo_remaining_units(final, existing, remaining_before, remaining_after):
+    """Recursively reset, inside `final`, every unit present in
+    remaining_before/remaining_after back to its live (`existing`) value —
+    the "undo" half of _apply_selected_units, mirroring _partition_units'
+    own recursive structure (whole keys, nested dict sub-keys, and
+    ID-keyed list items). Mutates `final` in place.
+
+    Dict sub-keys have no "removal" case to undo, unlike list items: an
+    Update diff's keep_only_differences_dict only ever adds/changes a
+    nested dict's sub-keys, never represents one being deleted (a form
+    always submits the dict's current full set of sub-fields) — see
+    _list_change_unit_paths' module note.
+    """
+    def reset_list_items(key, items):
+        existing_list = existing.get(key) if isinstance(existing.get(key), list) else []
+        existing_by_id = {i["_id"]: i for i in existing_list if isinstance(i, dict) and "_id" in i}
+        final_list = final.get(key) if isinstance(final.get(key), list) else []
+        order = [i.get("_id") for i in final_list if isinstance(i, dict)]
+        final_by_id = {i["_id"]: i for i in final_list if isinstance(i, dict) and "_id" in i}
+        changed = False
+        for item in items:
+            item_id = item.get("_id") if isinstance(item, dict) else None
+            if item_id in existing_by_id:
+                final_by_id[item_id] = existing_by_id[item_id]
+                if item_id not in order:
+                    order.append(item_id)
+                changed = True
+            elif item_id in final_by_id:
+                # Deferring a brand-new addition that never existed live —
+                # drop it from the final result entirely.
+                final_by_id.pop(item_id, None)
+                order.remove(item_id)
+                changed = True
+        if changed:
+            final[key] = [final_by_id[i] for i in order if i in final_by_id]
+
+    for key, after_val in remaining_after.items():
+        if isinstance(after_val, dict):
+            existing_sub = existing.get(key) if isinstance(existing.get(key), dict) else {}
+            final_sub = final.get(key)
+            if not isinstance(final_sub, dict):
+                final_sub = {}
+            _undo_remaining_units(final_sub, existing_sub, remaining_before.get(key, {}), after_val)
+            final[key] = final_sub
+        elif isinstance(after_val, list):
+            reset_list_items(key, after_val)
+        else:
+            if key in existing:
+                final[key] = deepcopy(existing[key])
+            else:
+                final.pop(key, None)
+
+    # Deferred pure list-item REMOVALS (an id in remaining_before with no
+    # counterpart in remaining_after — i.e. the change deleted it, and
+    # that deletion was deselected) aren't covered by the loop above,
+    # since they never appear in remaining_after. Restore them into
+    # `final` from `existing`.
+    for key, before_items in remaining_before.items():
+        if not isinstance(before_items, list):
+            continue
+        after_val = remaining_after.get(key)
+        after_ids_for_key = {
+            i.get("_id") for i in after_val if isinstance(i, dict)
+        } if isinstance(after_val, list) else set()
+        pure_removals = [
+            i for i in before_items
+            if isinstance(i, dict) and i.get("_id") is not None and i.get("_id") not in after_ids_for_key
+        ]
+        if pure_removals:
+            reset_list_items(key, pure_removals)
+
+
+def _apply_selected_units(existing, before_data, after_data, selected_paths):
+    """Build the live target's new state with only the selected units
+    applied, against `existing` (the live target, read fresh inside the
+    caller's transaction).
+
+    Strategy: first compute the result as if the WHOLE change were applied
+    — deep_merge(existing, after_data), the exact call approve_change/
+    revert_change always made — since that's the only way to correctly
+    reconcile an ID-keyed list's full after-state against the live
+    document (deep_merge replaces such a list wholesale, which is only
+    correct when `after_data` carries the COMPLETE intended list — see
+    deep_merge's own docstring about exactly that). Then "undo" each
+    deselected (remaining) unit by resetting it back to its live value in
+    a copy of that result (see _undo_remaining_units). This never calls
+    deep_merge with a partial list, which would wholesale-replace and wipe
+    every untouched item — the exact failure mode deep_merge's own
+    comments already warn about for a different case.
+
+    Returns (final_target, selected_before, selected_after,
+    remaining_before, remaining_after). `selected_paths` empty/None
+    selects everything — `final_target` comes back identical to plain
+    deep_merge(existing, after_data), matching every caller's existing
+    whole-change behavior.
+    """
+    selected_before, selected_after, remaining_before, remaining_after = _partition_units(
+        before_data, after_data, selected_paths
+    )
+    final = deep_merge(existing, after_data)
+    if not selected_paths:
+        return final, selected_before, selected_after, remaining_before, remaining_after
+
+    _undo_remaining_units(final, existing, remaining_before, remaining_after)
+
+    return final, selected_before, selected_after, remaining_before, remaining_after
+
+
+def _spin_off_remaining_change(change, remaining_before, remaining_after, session=None):
+    """Insert a new Pending change covering exactly the units a partial
+    approval deferred, inheriting the original's requester/time_requested/
+    request_reason/automation-readiness snapshots so the deferred portion
+    keeps its full context instead of looking like a fresh, unexplained
+    request. Returns the new change's _id."""
+    differential = calculate_int_changes(remaining_before, remaining_after)
+    new_doc = {
+        "target_collection": change["target_collection"],
+        "target": change["target"],
+        "time_requested": change.get("time_requested"),
+        "last_modified_time": datetime.now(timezone.utc),
+        "requester": change.get("requester"),
+        "change_type": change["change_type"],
+        "before_requested_data": remaining_before,
+        "after_requested_data": remaining_after,
+        "differential_data": differential,
+        "request_reason": change.get("request_reason", ""),
+        "target_display_name": change.get("target_display_name"),
+        "referenced_discord_links": change.get("referenced_discord_links", []),
+        "status": "Pending",
+        "split_from": change["_id"],
+    }
+    result = mongo.db.changes.insert_one(new_doc, session=session)
+    return result.inserted_id
+
+
+class _ChangeApprovalRejected(Exception):
+    """Raised inside an approve_change/revert_change transaction callback to
+    abort cleanly with a specific user-facing reason (name collision, drift
+    conflict, infamy gate, missing data, etc.). Deliberately NOT a
+    PyMongoError, so session.with_transaction() aborts the transaction
+    immediately without retrying it — the same exemption RuntimeError gets
+    from tick_helpers.py's _commit_chunk_with_retry for a queued change
+    that fails its own validation (retrying a non-transient rejection would
+    just fail the same way every time). Caught once in approve_change/
+    revert_change themselves, outside the transaction, to flash() the
+    message exactly once regardless of how the transaction got there."""
+    def __init__(self, message):
+        self.message = message
+        super().__init__(message)
+
+
+# How many times to retry a whole approve/revert transaction attempt after
+# session.with_transaction itself already gave up (it has its own ~120s
+# internal retry budget for TransientTransactionError before raising) — and
+# how long to wait between attempts. Mirrors tick_helpers.py's
+# _CHUNK_COMMIT_MAX_ATTEMPTS/_CHUNK_COMMIT_RETRY_DELAY_SECONDS (the same
+# resilience strategy proven out there for a real 2026-09-17 production
+# transient-transaction incident), applied to the interactive admin
+# approve/revert path, which had no transaction at all before this.
+_TRANSACTION_MAX_ATTEMPTS = 3
+_TRANSACTION_RETRY_DELAY_SECONDS = 10
+
+
+def run_in_transaction_with_retry(fn, max_attempts=_TRANSACTION_MAX_ATTEMPTS,
+                                   retry_delay_seconds=_TRANSACTION_RETRY_DELAY_SECONDS):
+    """Run fn(session) inside a fresh session.with_transaction(), retrying
+    the whole attempt (a brand new session + transaction each time) up to
+    `max_attempts` times if it raises a PyMongoError. `_ChangeApprovalRejected`
+    (or any other non-PyMongoError) always propagates immediately on the
+    first attempt — see its docstring. Returns fn's return value on success.
+    """
+    last_error = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            with mongo.cx.start_session() as session:
+                return session.with_transaction(lambda s: fn(s))
+        except PyMongoError as e:
+            last_error = e
+            if attempt >= max_attempts:
+                raise
+            print(
+                f"Transaction attempt {attempt}/{max_attempts} failed with a "
+                f"Mongo error, retrying in {retry_delay_seconds}s: {e}"
+            )
+            sleep(retry_delay_seconds)
+    raise last_error
+
+
+def approve_change(change_id, selected_paths=None):
+    """`selected_paths`: optional iterable of unit paths (see
+    _list_change_unit_paths) to approve now, leaving the rest Pending in a
+    newly spun-off change — see _apply_selected_units. Empty/None approves
+    the whole change at once, exactly as before this existed; only an
+    Update change can be partially approved (Add/Remove are atomic by
+    nature — there's no live document to partially reconcile against)."""
     approver = mongo.db.players.find_one({"id": g.user.get("id", None)})
     if approver is None or not approver.get("is_admin", False):
         flash("You must be an admin to approve changes.", "error")
@@ -557,15 +965,47 @@ def approve_change(change_id):
         flash("A tick is currently running — changes can be requested but not approved until it finishes.", "error")
         return None
 
+    # The hex_map special case has its own entirely different shape (a
+    # buffer of tile writes, not a before/after document merge) and was
+    # never covered by check_no_other_changes to begin with — out of scope
+    # for the transactional rewrite below; unchanged from before.
+    change = mongo.db.changes.find_one({"_id": change_id})
+    if change is not None and change.get("target_collection") == "hex_map":
+        changes_collection = mongo.db.changes
+        now = datetime.now(timezone.utc)
+        global_modifiers = mongo.db["global_modifiers"].find_one({"name": "global_modifiers"})
+        session_number = global_modifiers.get("session_counter", 0) if global_modifiers else 0
+        return _approve_hex_map_change(change, change_id, changes_collection, approver, now, session_number)
+
+    selected_paths = set(selected_paths) if selected_paths else None
+    try:
+        return run_in_transaction_with_retry(
+            lambda session: _approve_change_in_session(change_id, approver, session, selected_paths)
+        )
+    except _ChangeApprovalRejected as e:
+        flash(e.message, "error")
+        return False
+
+
+def _approve_change_in_session(change_id, approver, session, selected_paths=None):
+    """The actual body of approve_change, run inside a real transaction via
+    run_in_transaction_with_retry — every read and write here participates
+    in that transaction, so a failure anywhere (a collision found partway
+    through, a Mongo error) rolls all of it back instead of leaving the
+    target written but the change record still Pending (or vice versa),
+    which is what could happen before this existed. Re-reads `change` and
+    the target fresh here (rather than trusting whatever approve_change's
+    caller already had) since this may run more than once if an earlier
+    attempt hit a transient Mongo error.
+    """
     changes_collection = mongo.db.changes
     now = datetime.now(timezone.utc)
-    global_modifiers = mongo.db["global_modifiers"].find_one({"name": "global_modifiers"})
+    global_modifiers = mongo.db["global_modifiers"].find_one({"name": "global_modifiers"}, session=session)
     session_number = global_modifiers.get("session_counter", 0) if global_modifiers else 0
-    change = changes_collection.find_one({"_id": change_id})
+    change = changes_collection.find_one({"_id": change_id}, session=session)
+    if change is None:
+        raise _ChangeApprovalRejected("Change not found.")
     target_collection = category_data[change["target_collection"]]["database"]
-
-    if change["target_collection"] == "hex_map":
-        return _approve_hex_map_change(change, change_id, changes_collection, approver, now, session_number)
 
     if change["change_type"] == "Add":
         after_data = change["after_requested_data"]
@@ -574,12 +1014,13 @@ def approve_change(change_id):
             member_id = after_data.get("member", "")
             if member_id:
                 try:
-                    member_nation = mongo.db.nations.find_one({"_id": ObjectId(member_id)}, {"infamy": 1})
+                    member_nation = mongo.db.nations.find_one(
+                        {"_id": ObjectId(member_id)}, {"infamy": 1}, session=session,
+                    )
                 except Exception:
                     member_nation = None
                 if member_nation and member_nation.get("infamy", 0) >= 50:
-                    flash("Cannot add nation to market: that nation has 50 or more infamy.", "error")
-                    return False
+                    raise _ChangeApprovalRejected("Cannot add nation to market: that nation has 50 or more infamy.")
 
         if change["target_collection"] == "trade_routes" and after_data.get("status") == "pending":
             # Trade routes proposed to/from an AI nation go through moderator
@@ -593,14 +1034,13 @@ def approve_change(change_id):
 
         collision = _find_name_collision(
             target_collection, change["target_collection"],
-            after_data.get("name"), era=after_data.get("era"),
+            after_data.get("name"), era=after_data.get("era"), session=session,
         )
         if collision:
-            flash(f"Cannot approve: the name '{after_data.get('name')}' is already in use.", "error")
-            return False
+            raise _ChangeApprovalRejected(f"Cannot approve: the name '{after_data.get('name')}' is already in use.")
 
         after_data = _calculate_and_attach_fields(change["target_collection"], after_data)
-        inserted_item_id = target_collection.insert_one(after_data).inserted_id
+        inserted_item_id = target_collection.insert_one(after_data, session=session).inserted_id
         changes_collection.update_one({"_id": change_id}, {"$set": {
             "target": inserted_item_id,
             "status": "Approved",
@@ -610,73 +1050,119 @@ def approve_change(change_id):
             "session_number": session_number,
             "before_implemented_data": {},
             "after_implemented_data": _strip_recalculable_fields(change["target_collection"], after_data)
-        }})
+        }}, session=session)
 
-        _dispatch_propagate_updates(
+        _enqueue_propagation(
+            session,
             changed_data_type=change["target_collection"],
             changed_object_id=inserted_item_id,
             changed_object=after_data,
-            reason=f"Dependency update from change #{change_id}"
+            reason=f"Dependency update from change #{change_id}",
         )
 
         return True
     else:
-        target = target_collection.find_one({"_id": change["target"]})
+        target = target_collection.find_one({"_id": change["target"]}, session=session)
         before_data = change["before_requested_data"]
         after_data = change["after_requested_data"]
 
-        if check_no_other_changes(before_data, after_data, target):
-            if change["change_type"] == "Update":
-                if change["target_collection"] == "mercenaries" and after_data.get("patron"):
-                    try:
-                        patron_nation = mongo.db.nations.find_one({"_id": ObjectId(after_data["patron"])}, {"infamy": 1})
-                    except Exception:
-                        patron_nation = None
-                    if patron_nation and patron_nation.get("infamy", 0) >= 50:
-                        flash("Cannot hire this mercenary company: the prospective patron nation has 50 or more infamy.", "error")
-                        return False
+        if not check_no_other_changes(before_data, after_data, target):
+            raise _ChangeApprovalRejected("Change approval failed because the target has changed since the request was made.")
 
-                existing = target_collection.find_one({"_id": change["target"]})
-                merged = deep_merge(existing, after_data)
-
-                new_name = merged.get("name")
-                if new_name and new_name != existing.get("name"):
-                    collision = _find_name_collision(
-                        target_collection, change["target_collection"], new_name,
-                        era=merged.get("era"), exclude_id=change["target"],
+        merged = None
+        split_into = None
+        implemented_before, implemented_after = before_data, after_data
+        if change["change_type"] == "Update":
+            if change["target_collection"] == "mercenaries" and after_data.get("patron"):
+                try:
+                    patron_nation = mongo.db.nations.find_one(
+                        {"_id": ObjectId(after_data["patron"])}, {"infamy": 1}, session=session,
                     )
-                    if collision:
-                        flash(f"Cannot approve: the name '{new_name}' is already in use.", "error")
-                        return False
+                except Exception:
+                    patron_nation = None
+                if patron_nation and patron_nation.get("infamy", 0) >= 50:
+                    raise _ChangeApprovalRejected("Cannot hire this mercenary company: the prospective patron nation has 50 or more infamy.")
 
-                merged = _calculate_and_attach_fields(change["target_collection"], merged)
-                target_collection.update_one({"_id": change["target"]}, {"$set": merged})
-
-                if change["target_collection"] == "nations":
-                    _handle_nation_rename(change["target"], existing.get("name", ""), merged.get("name", ""))
-                    _handle_city_changes(existing.get("cities", []), merged.get("cities", []))
-            else:
-                target_collection.delete_one({"_id": change["target"]})
-
-            changes_collection.update_one({"_id": change_id}, {"$set": {
-                "status": "Approved",
-                "time_implemented": now,
-                "last_modified_time": now,
-                "approver": approver["_id"],
-                "session_number": session_number,
-                "before_implemented_data": before_data,
-                "after_implemented_data": after_data
-            }})
-            _dispatch_propagate_updates(
-                changed_data_type=change["target_collection"],
-                changed_object_id=change["target"],
-                changed_object=merged if change["change_type"] == "Update" else {},
-                reason=f"Dependency update from change #{change_id}"
+            existing = target_collection.find_one({"_id": change["target"]}, session=session)
+            merged, selected_before, selected_after, remaining_before, remaining_after = _apply_selected_units(
+                existing, before_data, after_data, selected_paths
             )
-            return True
+            implemented_before, implemented_after = selected_before, selected_after
+
+            new_name = merged.get("name")
+            if new_name and new_name != existing.get("name"):
+                collision = _find_name_collision(
+                    target_collection, change["target_collection"], new_name,
+                    era=merged.get("era"), exclude_id=change["target"], session=session,
+                )
+                if collision:
+                    raise _ChangeApprovalRejected(f"Cannot approve: the name '{new_name}' is already in use.")
+
+            merged = _calculate_and_attach_fields(change["target_collection"], merged)
+            target_collection.update_one({"_id": change["target"]}, {"$set": merged}, session=session)
+
+            if change["target_collection"] == "nations":
+                _handle_nation_rename(change["target"], existing.get("name", ""), merged.get("name", ""), session=session)
+                _handle_city_changes(existing.get("cities", []), merged.get("cities", []), session=session)
+
+            if remaining_before or remaining_after:
+                split_into = _spin_off_remaining_change(change, remaining_before, remaining_after, session=session)
         else:
-            flash("Change approval failed because the target has changed since the request was made.", "error")
-    return False
+            target_collection.delete_one({"_id": change["target"]}, session=session)
+
+        update_fields = {
+            "status": "Approved",
+            "time_implemented": now,
+            "last_modified_time": now,
+            "approver": approver["_id"],
+            "session_number": session_number,
+            "before_implemented_data": implemented_before,
+            "after_implemented_data": implemented_after,
+        }
+        if split_into is not None:
+            update_fields["partial"] = True
+            update_fields["split_into"] = split_into
+        changes_collection.update_one({"_id": change_id}, {"$set": update_fields}, session=session)
+        _enqueue_propagation(
+            session,
+            changed_data_type=change["target_collection"],
+            changed_object_id=change["target"],
+            changed_object=merged if change["change_type"] == "Update" else {},
+            reason=f"Dependency update from change #{change_id}",
+        )
+        return True
+
+
+def approve_change_as(change_id, approver, selected_paths=None, session=None):
+    """Approve a change on behalf of a specific `approver` player document,
+    with no g.user/is_admin dependency — for a caller that already knows
+    WHO is approving without a Flask request (e.g.
+    helpers/ai_review_helpers.py's ai_approve_change). Runs through the
+    exact same transactional, partial-approval-aware path approve_change
+    itself uses (_approve_change_in_session); `selected_paths` has the
+    exact same meaning there — empty/None approves the whole change.
+
+    `session`: optional existing transaction to participate in. When
+    provided, the CALLER owns the transaction (including its own
+    is_tick_locked() check, made once before opening it — this skips its
+    own for exactly the same reason approve_change checks it only once,
+    outside its transaction, not from within) and this call simply runs
+    inside it; when omitted, this opens and retries its own transaction,
+    exactly like approve_change.
+
+    Returns (approved: bool, error: str|None) either way — never raises.
+    """
+    if session is None and is_tick_locked():
+        return False, "tick_locked"
+    try:
+        if session is not None:
+            return _approve_change_in_session(change_id, approver, session, selected_paths), None
+        return run_in_transaction_with_retry(
+            lambda s: _approve_change_in_session(change_id, approver, s, selected_paths)
+        ), None
+    except _ChangeApprovalRejected as e:
+        return False, e.message
+
 
 def system_approve_change(change_id, session=None, skip_recalculation=False, skip_propagate_ids=None):
     """`session`: optional pymongo ClientSession — pass through when
@@ -855,15 +1341,20 @@ def system_approve_change(change_id, session=None, skip_recalculation=False, ski
               f"check_no_other_changes (target was modified since the change "
               f"was requested, or before_requested_data doesn't reflect the "
               f"target's actual state).")
-        print(_describe_check_no_other_changes_failure(before_data, after_data, target))
+        print(_format_check_no_other_changes_failure_text(
+            describe_check_no_other_changes_conflicts(before_data, after_data, target)
+        ))
     return False
 
 
-def force_approve_change(change_id):
+def force_approve_change(change_id, selected_paths=None):
     """Approve a change without running check_no_other_changes.
 
     Used when a change was stranded by subsequent ticks modifying the target,
     but the intended update is still correct and should be applied.
+
+    `selected_paths`: see approve_change — same partial-approval support,
+    Update changes only.
     """
     approver = mongo.db.players.find_one({"id": g.user.get("id", None)})
     if approver is None or not approver.get("is_admin", False):
@@ -874,6 +1365,7 @@ def force_approve_change(change_id):
         flash("A tick is currently running — changes can be requested but not approved until it finishes.", "error")
         return None
 
+    selected_paths = set(selected_paths) if selected_paths else None
     changes_collection = mongo.db.changes
     now = datetime.now(timezone.utc)
     global_modifiers = mongo.db["global_modifiers"].find_one({"name": "global_modifiers"})
@@ -882,10 +1374,15 @@ def force_approve_change(change_id):
     target_collection = category_data[change["target_collection"]]["database"]
     after_data = change["after_requested_data"]
     before_data = change["before_requested_data"]
+    implemented_before, implemented_after = before_data, after_data
+    split_into = None
 
     if change["change_type"] == "Update":
         existing = target_collection.find_one({"_id": change["target"]})
-        merged = deep_merge(existing, after_data)
+        merged, selected_before, selected_after, remaining_before, remaining_after = _apply_selected_units(
+            existing, before_data, after_data, selected_paths
+        )
+        implemented_before, implemented_after = selected_before, selected_after
 
         new_name = merged.get("name")
         if new_name and new_name != existing.get("name"):
@@ -902,6 +1399,9 @@ def force_approve_change(change_id):
         if change["target_collection"] == "nations":
             _handle_nation_rename(change["target"], existing.get("name", ""), merged.get("name", ""))
             _handle_city_changes(existing.get("cities", []), merged.get("cities", []))
+
+        if remaining_before or remaining_after:
+            split_into = _spin_off_remaining_change(change, remaining_before, remaining_after)
     elif change["change_type"] == "Add":
         collision = _find_name_collision(
             target_collection, change["target_collection"],
@@ -913,18 +1413,23 @@ def force_approve_change(change_id):
 
         after_data = _calculate_and_attach_fields(change["target_collection"], after_data)
         change["target"] = target_collection.insert_one(after_data).inserted_id
+        implemented_after = after_data
     else:
         target_collection.delete_one({"_id": change["target"]})
 
-    changes_collection.update_one({"_id": change_id}, {"$set": {
+    update_fields = {
         "status": "Approved",
         "time_implemented": now,
         "last_modified_time": now,
         "approver": approver["_id"],
         "session_number": session_number,
-        "before_implemented_data": before_data,
-        "after_implemented_data": _strip_recalculable_fields(change["target_collection"], after_data),
-    }})
+        "before_implemented_data": implemented_before,
+        "after_implemented_data": _strip_recalculable_fields(change["target_collection"], implemented_after),
+    }
+    if split_into is not None:
+        update_fields["partial"] = True
+        update_fields["split_into"] = split_into
+    changes_collection.update_one({"_id": change_id}, {"$set": update_fields})
     _dispatch_propagate_updates(
         changed_data_type=change["target_collection"],
         changed_object_id=change["target"],
@@ -1006,7 +1511,14 @@ def system_force_approve_change(change_id):
     return True
 
 
-def deny_change(change_id):
+def deny_change(change_id, selected_paths=None):
+    """`selected_paths`: optional unit paths to deny now, leaving the rest
+    Pending in a newly spun-off change — the same split-on-apply pattern
+    approve_change uses, minus any target write (deny never touches the
+    target collection at all, only the change document's own status), so
+    it only applies to Update changes (Add/Remove have no "units" of their
+    own to split, matching approve_change's scoping). Empty/None denies
+    the whole change at once, exactly as before this existed."""
     denier = mongo.db.players.find_one({"id": g.user["id"]})
     if denier is None or not denier.get("is_admin", False):
         return False
@@ -1016,13 +1528,29 @@ def deny_change(change_id):
     global_modifiers = mongo.db["global_modifiers"].find_one({"name": "global_modifiers"})
     session_number = global_modifiers.get("session_counter", 0) if global_modifiers else 0
 
-    changes_collection.update_one({"_id": change_id}, {"$set": {
+    selected_paths = set(selected_paths) if selected_paths else None
+    update_fields = {
         "status": "Rejected",
         "time_rejected": now,
         "last_modified_time": now,
         "denier": denier["_id"],
-        "session_number": session_number
-    }})
+        "session_number": session_number,
+    }
+
+    if selected_paths:
+        change = changes_collection.find_one({"_id": change_id})
+        if change is not None and change.get("change_type") == "Update":
+            selected_before, selected_after, remaining_before, remaining_after = _partition_units(
+                change.get("before_requested_data", {}), change.get("after_requested_data", {}), selected_paths,
+            )
+            if remaining_before or remaining_after:
+                split_into = _spin_off_remaining_change(change, remaining_before, remaining_after)
+                update_fields["partial"] = True
+                update_fields["split_into"] = split_into
+                update_fields["before_requested_data"] = selected_before
+                update_fields["after_requested_data"] = selected_after
+
+    changes_collection.update_one({"_id": change_id}, {"$set": update_fields})
     return True
 
 def rescind_change(change_id):
@@ -1057,29 +1585,61 @@ def rescind_change(change_id):
     return True
 
 
-def revert_change(change_id):
-    """Restore a target object to its state before an approved change was applied."""
+def revert_change(change_id, selected_paths=None):
+    """Restore a target object to its state before an approved change was
+    applied.
+
+    `selected_paths`: optional unit paths to revert now, leaving the rest
+    at their currently-approved value — only an Update revert can be
+    partial (Add/Remove revert an entire document and have no "units" of
+    their own to split). Unlike partial approval/deny, there is no
+    follow-up Pending change to spin off here: the deselected units simply
+    stay applied, and this change's status becomes "Partially Reverted"
+    rather than "Reverted" so it reads correctly and is not eligible for a
+    second revert attempt (see _revert_change_in_session). Empty/None
+    reverts the whole change at once, exactly as before this existed."""
     reverter = mongo.db.players.find_one({"id": g.user.get("id", None)})
     if reverter is None or not reverter.get("is_admin", False):
         flash("You must be an admin to revert changes.", "error")
         return False
 
+    selected_paths = set(selected_paths) if selected_paths else None
+    try:
+        return run_in_transaction_with_retry(
+            lambda session: _revert_change_in_session(change_id, reverter, session, selected_paths)
+        )
+    except _ChangeApprovalRejected as e:
+        flash(e.message, "error")
+        return False
+
+
+def _revert_change_in_session(change_id, reverter, session, selected_paths=None):
+    """The actual body of revert_change, run inside a real transaction via
+    run_in_transaction_with_retry — see _approve_change_in_session's
+    docstring for why. Adds the drift check approve_change already had but
+    revert_change never did: for an Update revert, the live target is
+    expected to still match what approval wrote (after_implemented_data)
+    unless it already matches what we're about to restore (before_data,
+    e.g. a repeated revert) — anything else means something unrelated
+    touched this target since approval, and blindly deep_merge-ing
+    before_data onto it would silently clobber that. Same
+    check_no_other_changes call get_change_drift_conflicts already surfaces
+    as a page-load warning banner before this ever runs — see the design
+    doc."""
     changes_collection = mongo.db.changes
-    change = changes_collection.find_one({"_id": change_id})
+    change = changes_collection.find_one({"_id": change_id}, session=session)
     if change is None:
-        flash("Change not found.", "error")
-        return False
+        raise _ChangeApprovalRejected("Change not found.")
     if change["status"] != "Approved":
-        flash("Only approved changes can be reverted.", "error")
-        return False
+        raise _ChangeApprovalRejected("Only approved changes can be reverted.")
 
     now = datetime.now(timezone.utc)
     target_collection = category_data[change["target_collection"]]["database"]
     before_data = change.get("before_implemented_data", {})
 
     if change["change_type"] == "Add":
-        current = target_collection.find_one({"_id": change["target"]}) or {}
-        target_collection.delete_one({"_id": change["target"]})
+        current = target_collection.find_one({"_id": change["target"]}, session=session) or {}
+        target_collection.delete_one({"_id": change["target"]}, session=session)
         changes_collection.update_one({"_id": change_id}, {"$set": {
             "status": "Reverted",
             "time_reverted": now,
@@ -1087,24 +1647,23 @@ def revert_change(change_id):
             "reverter": reverter["_id"],
             "before_revert_data": current,
             "after_revert_data": {},
-        }})
-        _dispatch_propagate_updates(
+        }}, session=session)
+        _enqueue_propagation(
+            session,
             changed_data_type=change["target_collection"],
             changed_object_id=change["target"],
             changed_object={},
-            reason=f"Revert of change #{change_id}"
+            reason=f"Revert of change #{change_id}",
         )
     elif change["change_type"] == "Remove":
-        if target_collection.find_one({"_id": change["target"]}) is not None:
-            flash("Cannot revert: the target object already exists in the collection.", "error")
-            return False
+        if target_collection.find_one({"_id": change["target"]}, session=session) is not None:
+            raise _ChangeApprovalRejected("Cannot revert: the target object already exists in the collection.")
         if not before_data:
-            flash("Cannot revert: no before-data was recorded for this change.", "error")
-            return False
+            raise _ChangeApprovalRejected("Cannot revert: no before-data was recorded for this change.")
         restored = dict(before_data)
         restored["_id"] = change["target"]
         restored = _calculate_and_attach_fields(change["target_collection"], restored)
-        target_collection.insert_one(restored)
+        target_collection.insert_one(restored, session=session)
         changes_collection.update_one({"_id": change_id}, {"$set": {
             "status": "Reverted",
             "time_reverted": now,
@@ -1112,37 +1671,56 @@ def revert_change(change_id):
             "reverter": reverter["_id"],
             "before_revert_data": {},
             "after_revert_data": restored,
-        }})
-        _dispatch_propagate_updates(
+        }}, session=session)
+        _enqueue_propagation(
+            session,
             changed_data_type=change["target_collection"],
             changed_object_id=change["target"],
             changed_object=restored,
-            reason=f"Revert of change #{change_id}"
+            reason=f"Revert of change #{change_id}",
         )
     else:
-        existing = target_collection.find_one({"_id": change["target"]})
+        existing = target_collection.find_one({"_id": change["target"]}, session=session)
         if existing is None:
-            flash("Target object no longer exists.", "error")
-            return False
-        restored = deep_merge(existing, before_data)
+            raise _ChangeApprovalRejected("Target object no longer exists.")
+
+        after_implemented_data = change.get("after_implemented_data", {})
+        if not check_no_other_changes(after_implemented_data, before_data, existing):
+            raise _ChangeApprovalRejected("Cannot revert: the target has changed since this change was approved.")
+
+        # _apply_selected_units is generic about which side is "before" and
+        # which is "after" — for a revert, the live document is expected to
+        # currently reflect after_implemented_data (today's applied state)
+        # and the selected units should move to before_implemented_data
+        # (the pre-change state), so those play the "before"/"after" roles
+        # respectively here, swapped from approve_change's own call.
+        restored, _, _, remaining_before, remaining_after = _apply_selected_units(
+            existing, after_implemented_data, before_data, selected_paths
+        )
         restored = _calculate_and_attach_fields(change["target_collection"], restored)
-        target_collection.update_one({"_id": change["target"]}, {"$set": restored})
+        target_collection.update_one({"_id": change["target"]}, {"$set": restored}, session=session)
         if change["target_collection"] == "nations":
-            _handle_nation_rename(change["target"], existing.get("name", ""), restored.get("name", ""))
-            _handle_city_changes(existing.get("cities", []), restored.get("cities", []))
-        changes_collection.update_one({"_id": change_id}, {"$set": {
-            "status": "Reverted",
+            _handle_nation_rename(change["target"], existing.get("name", ""), restored.get("name", ""), session=session)
+            _handle_city_changes(existing.get("cities", []), restored.get("cities", []), session=session)
+
+        is_partial = bool(remaining_before or remaining_after)
+        update_fields = {
+            "status": "Partially Reverted" if is_partial else "Reverted",
             "time_reverted": now,
             "last_modified_time": now,
             "reverter": reverter["_id"],
             "before_revert_data": existing,
             "after_revert_data": restored,
-        }})
-        _dispatch_propagate_updates(
+        }
+        if is_partial:
+            update_fields["reverted_units"] = sorted(selected_paths)
+        changes_collection.update_one({"_id": change_id}, {"$set": update_fields}, session=session)
+        _enqueue_propagation(
+            session,
             changed_data_type=change["target_collection"],
             changed_object_id=change["target"],
             changed_object=restored,
-            reason=f"Revert of change #{change_id}"
+            reason=f"Revert of change #{change_id}",
         )
 
     return True
@@ -1312,33 +1890,154 @@ def calculate_int_changes(before_data, after_data):
             diff[key] = a_val - b_val
     return diff
 
-def _describe_check_no_other_changes_failure(before_data, after_data, current_data, max_fields=8, max_len=200):
-    """Temporary diagnostic for the "system_approve_change blocked" spam
-    seen during local tick testing (2026-09-16): reports, per top-level
-    field, whether the live document matches before_data, after_data,
-    neither, or is merely nested-different (a dict/list needing recursion
-    to see exactly what changed) — this settles whether the live document
-    was genuinely touched by something outside this change (matches
-    neither) or whether check_no_other_changes' own recursive comparison
-    is what's rejecting an otherwise-identical value.
+def describe_check_no_other_changes_conflicts(before_data, after_data, current_data, max_fields=8, _prefix=""):
+    """Structured, LEAF-granularity breakdown of why check_no_other_changes
+    rejected (before_data, after_data, current_data) — one entry per unit
+    at the same granularity partial approval addresses (see
+    _list_change_unit_paths): a whole scalar field ("money"), a nested
+    dict's sub-key ("stockpiles.stone"), or an item in an ID-keyed list
+    ("ongoing_modifiers[id=a1b2c3d4]"). For each unit where the live
+    document doesn't match before_data, reports whether it matches
+    after_data instead (an already-applied, expected update) or neither (a
+    genuine external conflict the admin needs to see).
+
+    Recursing to leaf granularity means a conflict in one sub-field (e.g.
+    a nation's "stockpiles.wood") no longer drags its untouched sibling
+    ("stockpiles.stone") into the report, and a conflicting item inside a
+    large list reports only THAT item instead of the field's entire
+    (potentially huge) list value — mirrors check_no_other_changes' own
+    recursive comparison branch-for-branch (including its numeric-drift
+    tolerance, so a value that check_no_other_changes would silently allow
+    is never reported here either) rather than independently re-deciding
+    what counts as a mismatch.
+
+    Originally a print-only, top-level-only debug helper added for the
+    "system_approve_change blocked" spam seen during local tick testing
+    (2026-09-16); promoted to structured data so the same breakdown can
+    back both the debug log (via _format_check_no_other_changes_failure_text
+    below) and the change review page's inline per-field drift warning —
+    see get_change_drift_conflicts.
     """
-    lines = []
+    entries = []
     all_keys = sorted(set(before_data.keys()) | set(after_data.keys()) | set(current_data.keys()))
-    shown = 0
     for key in all_keys:
+        if len(entries) >= max_fields:
+            break
         if key not in after_data:
             continue
         b_val, a_val, c_val = before_data.get(key), after_data.get(key), current_data.get(key)
+        path = f"{_prefix}{key}"
+
+        if isinstance(b_val, list) and isinstance(a_val, list) and isinstance(c_val, list) \
+                and _all_have_ids(b_val) and _all_have_ids(a_val):
+            b_map = {i["_id"]: i for i in b_val if isinstance(i, dict) and "_id" in i}
+            a_map = {i["_id"]: i for i in a_val if isinstance(i, dict) and "_id" in i}
+            c_map = {i["_id"]: i for i in c_val if isinstance(i, dict) and "_id" in i}
+
+            for item_id, c_item in c_map.items():
+                item_path = f"{path}[id={item_id}]"
+                if item_id not in b_map and item_id not in a_map:
+                    entries.append({"path": item_path, "before": None, "after": None, "live": c_item, "verdict": "conflict"})
+                    continue
+                b_item = b_map.get(item_id, {})
+                a_item = a_map.get(item_id, {})
+                c_proj_b = {k: c_item.get(k) for k in b_item}
+                c_proj_a = {k: c_item.get(k) for k in a_item}
+                if deep_compare(c_proj_b, b_item):
+                    continue
+                verdict = "matches_after" if deep_compare(c_proj_a, a_item) else "conflict"
+                entries.append({"path": item_path, "before": b_item, "after": a_item, "live": c_item, "verdict": verdict})
+
+            for item_id in b_map:
+                if item_id in a_map and item_id not in c_map:
+                    entries.append({
+                        "path": f"{path}[id={item_id}]", "before": b_map[item_id],
+                        "after": a_map[item_id], "live": None, "verdict": "conflict",
+                    })
+            continue
+
+        if isinstance(b_val, dict) and isinstance(a_val, dict) and isinstance(c_val, dict):
+            entries.extend(describe_check_no_other_changes_conflicts(
+                b_val, a_val, c_val, max_fields=max_fields, _prefix=f"{path}."
+            ))
+            continue
+
+        # Primitive leaf — including a list/dict that lacks stable identity
+        # on at least one side (can't address individual positions
+        # meaningfully, since e.g. an insertion shifts every later index —
+        # report the whole field as one unit, mirroring
+        # check_no_other_changes' own fallthrough for this exact case) or
+        # that mismatches type against the live document entirely.
         if c_val == b_val:
-            continue  # matches before_data — not part of the mismatch
-        if shown >= max_fields:
-            lines.append(f"  ... and more fields differ (truncated at {max_fields})")
-            break
-        shown += 1
-        verdict = "matches after_data (expected update)" if c_val == a_val else "matches NEITHER before nor after"
-        b_repr, a_repr, c_repr = (repr(v)[:max_len] for v in (b_val, a_val, c_val))
-        lines.append(f"  field '{key}': {verdict}\n    before={b_repr}\n    after ={a_repr}\n    live  ={c_repr}")
-    return "\n".join(lines) if lines else "  (no top-level field differs from before_data — mismatch is nested; see recursive check)"
+            continue
+        if c_val == a_val:
+            entries.append({"path": path, "before": b_val, "after": a_val, "live": c_val, "verdict": "matches_after"})
+            continue
+        # Tolerate numeric drift exactly like check_no_other_changes does,
+        # so a value it would silently accept is never reported here either.
+        if any(isinstance(v, (int, float)) for v in [b_val, a_val, c_val]):
+            continue
+        entries.append({"path": path, "before": b_val, "after": a_val, "live": c_val, "verdict": "conflict"})
+
+    return entries
+
+
+def _format_check_no_other_changes_failure_text(entries, max_len=200):
+    """Render describe_check_no_other_changes_conflicts' structured output
+    as the plain-text block the debug log previously printed inline."""
+    if not entries:
+        return "  (no top-level field differs from before_data — mismatch is nested; see recursive check)"
+    lines = []
+    for entry in entries:
+        verdict = "matches after_data (expected update)" if entry["verdict"] == "matches_after" else "matches NEITHER before nor after"
+        b_repr, a_repr, c_repr = (repr(entry[k])[:max_len] for k in ("before", "after", "live"))
+        lines.append(f"  field '{entry['path']}': {verdict}\n    before={b_repr}\n    after ={a_repr}\n    live  ={c_repr}")
+    return "\n".join(lines)
+
+
+def get_change_drift_conflicts(change):
+    """Structured drift report comparing a change's recorded target state
+    against the live document — the same check approve_change (Pending) or
+    a future revert (Approved) gates on, surfaced at page-load time instead
+    of only after the admin clicks a button.
+
+    For a Pending change this answers "has the target drifted since this
+    was requested". For an Approved change it answers "has the target
+    drifted since this was approved" — the same before/after-swapped use of
+    check_no_other_changes that closes revert_change's current lack of any
+    drift check (see the design doc).
+
+    Returns [] for Add changes (no live target exists to compare against
+    yet), hex_map changes (a different, tile-buffer-based shape entirely),
+    when the target no longer exists, or when nothing has drifted.
+    """
+    try:
+        change_type = change.get("change_type")
+        status = change.get("status")
+        if change_type not in ("Update", "Remove") or change.get("target_collection") == "hex_map":
+            return []
+        if status == "Pending":
+            before_data = change.get("before_requested_data", {})
+            after_data = change.get("after_requested_data", {})
+        elif status == "Approved":
+            before_data = change.get("after_implemented_data", {})
+            after_data = change.get("before_implemented_data", {})
+        else:
+            return []
+
+        target_collection = category_data.get(change.get("target_collection", ""), {}).get("database")
+        if target_collection is None or not change.get("target"):
+            return []
+        current = target_collection.find_one({"_id": change["target"]})
+        if current is None:
+            return []
+
+        if check_no_other_changes(before_data, after_data, current):
+            return []
+        return describe_check_no_other_changes_conflicts(before_data, after_data, current)
+    except Exception:
+        traceback.print_exc()
+        return []
 
 
 def check_no_other_changes(before_data, after_data, current_data):
@@ -1644,5 +2343,146 @@ def _dispatch_propagate_updates(changed_data_type, changed_object_id, changed_ob
         target=_propagate_updates_guarded,
         args=(changed_data_type, changed_object_id, changed_object, reason, skip_ids, key),
     )
+    thread.daemon = True
+    thread.start()
+
+
+# ---------------------------------------------------------------------------
+# Propagation outbox — durable alternative to _dispatch_propagate_updates'
+# fire-and-forget background thread, used only by the now-transactional
+# interactive approve_change/revert_change path (see _enqueue_propagation's
+# call sites). A daemon background thread (the cascade itself) has no
+# durability: if the process crashes or the thread raises between the
+# target being saved and the cascade finishing, the cascade is just gone —
+# nothing retries it, and nothing records that it was ever owed. Writing a
+# propagation_outbox entry INSIDE the same transaction as the target write
+# and the change-status update (see _enqueue_propagation) makes "this
+# object has a pending dependency cascade" durable and atomic with the edit
+# that caused it; a separate long-running worker thread (started once per
+# process via start_propagation_outbox_worker, same shape as the existing
+# tick-launch threads in tick_helpers.py) claims and runs entries later, on
+# its own schedule, independent of the admin's request/response cycle.
+#
+# Every OTHER caller of propagate_updates (ticks, force_approve_change,
+# system_force_approve_change, standalone scripts) is unchanged and keeps
+# using _dispatch_propagate_updates/propagate_updates directly — ticks
+# already run inside their own transaction and pay this cost synchronously
+# per commit chunk, and a script's whole process exiting before a
+# background thread finishes is exactly the kind of loss this outbox exists
+# to prevent, which argues for routing scripts through it too — but that's
+# a larger change than this revamp's stated scope (change
+# viewing/approval), so left for a future pass.
+# ---------------------------------------------------------------------------
+
+def _enqueue_propagation(session, changed_data_type, changed_object_id, changed_object, reason, skip_ids=None):
+    """Insert a propagation_outbox entry inside the caller's transaction
+    `session` — the enqueue commits (or rolls back) atomically together
+    with whatever write it accompanies. `skip_ids` (a set of
+    (data_type, str(object_id)) tuples — see propagate_updates) is stored
+    as a list of lists since BSON has no tuple/set type."""
+    mongo.db.propagation_outbox.insert_one({
+        "status": "pending",
+        "changed_data_type": changed_data_type,
+        "changed_object_id": changed_object_id,
+        "changed_object": changed_object,
+        "reason": reason,
+        "skip_ids": [list(pair) for pair in skip_ids] if skip_ids else None,
+        "created_at": datetime.now(timezone.utc),
+        "claimed_at": None,
+        "completed_at": None,
+        "error": None,
+        "attempts": 0,
+    }, session=session)
+
+
+# How often the worker polls for new outbox entries when idle, and how many
+# times it retries one entry (requeuing it as "pending" again) before
+# giving up and marking it "failed" for an admin to notice via
+# count_failed_propagations rather than retrying it forever.
+_OUTBOX_POLL_INTERVAL_SECONDS = 5
+_OUTBOX_MAX_ATTEMPTS = 3
+
+
+def _claim_next_outbox_entry():
+    """Atomically claim the oldest pending outbox entry, or None if there
+    isn't one. find_one_and_update is itself atomic, so multiple worker
+    threads/processes (e.g. this app's 3 gunicorn workers, each running its
+    own copy of this loop) never double-claim the same entry. Returns the
+    document AFTER the update (status "processing", attempts incremented)
+    so _process_outbox_entry's max-attempts check sees the current count."""
+    return mongo.db.propagation_outbox.find_one_and_update(
+        {"status": "pending"},
+        {"$set": {"status": "processing", "claimed_at": datetime.now(timezone.utc)},
+         "$inc": {"attempts": 1}},
+        sort=[("created_at", 1)],
+        return_document=ReturnDocument.AFTER,
+    )
+
+
+def _process_outbox_entry(entry):
+    """Run one claimed outbox entry's propagate_updates cascade, marking it
+    "done" on success. On failure: requeue as "pending" to retry later if
+    under _OUTBOX_MAX_ATTEMPTS, otherwise mark "failed" permanently (counted
+    by count_failed_propagations for an admin banner) — never silently
+    drops it either way."""
+    try:
+        skip_ids = {tuple(pair) for pair in entry["skip_ids"]} if entry.get("skip_ids") else None
+        propagate_updates(
+            entry["changed_data_type"], entry["changed_object_id"], entry["changed_object"],
+            entry.get("reason", "Dependency update"), skip_ids=skip_ids,
+        )
+        mongo.db.propagation_outbox.update_one(
+            {"_id": entry["_id"]},
+            {"$set": {"status": "done", "completed_at": datetime.now(timezone.utc)}},
+        )
+    except Exception as e:
+        traceback.print_exc()
+        gave_up = entry.get("attempts", 1) >= _OUTBOX_MAX_ATTEMPTS
+        mongo.db.propagation_outbox.update_one(
+            {"_id": entry["_id"]},
+            {"$set": {
+                "status": "failed" if gave_up else "pending",
+                "error": f"{type(e).__name__}: {e}",
+            }},
+        )
+
+
+def count_failed_propagations():
+    """How many outbox entries permanently gave up — surfaced as an admin
+    banner (see routes/base_routes.py) instead of silently vanishing."""
+    return mongo.db.propagation_outbox.count_documents({"status": "failed"})
+
+
+_outbox_worker_lock = threading.Lock()
+_outbox_worker_started = False
+
+
+def start_propagation_outbox_worker():
+    """Start the background thread that claims and runs propagation_outbox
+    entries. Call exactly once per process, from app.py at startup — NOT
+    from this module's own import time, so anything that imports
+    change_helpers without going through the real app (tests, one-off
+    scripts, migrations) never spawns a persistent polling thread. Safe to
+    call more than once in the same process: every call after the first is
+    a no-op."""
+    global _outbox_worker_started
+    with _outbox_worker_lock:
+        if _outbox_worker_started:
+            return
+        _outbox_worker_started = True
+
+    def _loop():
+        while True:
+            try:
+                entry = _claim_next_outbox_entry()
+                if entry is None:
+                    sleep(_OUTBOX_POLL_INTERVAL_SECONDS)
+                    continue
+                _process_outbox_entry(entry)
+            except Exception:
+                traceback.print_exc()
+                sleep(_OUTBOX_POLL_INTERVAL_SECONDS)
+
+    thread = threading.Thread(target=_loop, name="propagation-outbox-worker")
     thread.daemon = True
     thread.start()

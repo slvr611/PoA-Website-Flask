@@ -2,7 +2,11 @@ from flask import Blueprint, render_template, redirect, flash, g, request
 from helpers.auth_helpers import admin_required
 from helpers.data_helpers import get_data_on_category, get_data_on_item
 from helpers.render_helpers import get_linked_objects
-from helpers.change_helpers import approve_change, deny_change, force_approve_change, rescind_change, revert_change
+from helpers.change_helpers import (
+    approve_change, deny_change, force_approve_change, rescind_change, revert_change,
+    get_change_drift_conflicts,
+)
+from helpers.ai_review_helpers import review_change
 from app_core import category_data, mongo, app
 from pymongo import DESCENDING, ASCENDING
 from bson import ObjectId
@@ -11,6 +15,26 @@ from bson import ObjectId
 app.jinja_env.globals.update(max=max, min=min)
 
 change_routes = Blueprint("change_routes", __name__)
+
+
+def _conflicts_under(drift_conflicts, key):
+    """All drift-conflict entries (see get_change_drift_conflicts /
+    helpers.change_helpers.describe_check_no_other_changes_conflicts) whose
+    path is exactly `key` or nested/indexed under it — e.g. key="stockpiles"
+    matches "stockpiles", "stockpiles.wood", and "stockpiles[id=...]", but
+    not an unrelated sibling like "stockpiles_limit". Used by
+    templates/macros/pagination.html to decide which field-change block to
+    highlight, independent of how deep the actual conflicting unit is
+    nested inside that top-level field."""
+    if not drift_conflicts:
+        return []
+    return [
+        c for c in drift_conflicts
+        if c["path"] == key or c["path"].startswith(f"{key}.") or c["path"].startswith(f"{key}[")
+    ]
+
+
+app.jinja_env.globals.update(conflicts_under=_conflicts_under)
 
 
 # ---------------------------------------------------------------------------
@@ -31,6 +55,17 @@ def _log_change_visibility_bypass():
         source="changes",
         user=g.user,
     )
+
+def _attach_drift_conflicts(changes):
+    """Attach each change's current drift-conflict report (see
+    get_change_drift_conflicts) under "_drift_conflicts", for a
+    pending-changes list page to render inline right next to the affected
+    field (templates/macros/pagination.html's render_changes_preview) —
+    most approve/deny actions happen from these list pages, not the
+    single-change page, so the warning needs to be visible here too."""
+    for change in changes:
+        change["_drift_conflicts"] = get_change_drift_conflicts(change)
+
 
 def get_preview_references(schema, collections_to_preview):
     """Helper function to get preview references for all collections"""
@@ -117,6 +152,7 @@ def pending_change_list(page=1):
     )
     visibility_map = None if visibility_bypassed else _build_nation_visibility_map()
     pending_changes = _apply_nation_visibility(pending_changes, visibility_map)
+    _attach_drift_conflicts(pending_changes)
 
     return render_template(
         "pending_changes.html",
@@ -225,18 +261,56 @@ def change_item(item_ref):
         else:
             linked_objects["target"] = {"name": item["target"]}
 
+    drift_conflicts = get_change_drift_conflicts(item)
+
     return render_template(
         "change.html",
         title=item_ref,
         schema=schema,
         item=item,
         linked_objects=linked_objects,
-        target_schema=target_schema
+        target_schema=target_schema,
+        drift_conflicts=drift_conflicts,
     )
 
-@change_routes.route("/changes/item/<item_ref>/approve")
+@change_routes.route("/changes/item/<item_ref>/request-ai-review", methods=["POST"])
+@admin_required
+def request_ai_review_route(item_ref):
+    # Bypasses the worker's "ai_reviewed" gate (see
+    # helpers/ai_review_helpers.py's _claim_next_change_for_review) — for
+    # retrying after a Discord outage, or once more context has been
+    # posted, without waiting on a query that, by design, won't
+    # reconsider an already-reviewed change on its own.
+    try:
+        change_id = ObjectId(item_ref)
+        change = mongo.db.changes.find_one({"_id": change_id})
+        if change is None:
+            flash("Change not found.", "error")
+        else:
+            result = review_change(change)
+            if "skipped" in result:
+                flash(f"AI review skipped: {result['skipped']}", "error")
+            elif result.get("error"):
+                flash(f"AI review failed: {result['error']}", "error")
+            else:
+                approved_paths = result.get("approved_paths", [])
+                if approved_paths:
+                    flash(f"AI review approved: {', '.join(approved_paths)}", "success")
+                else:
+                    flash("AI review completed — nothing was sufficiently explained to approve.", "success")
+    except Exception as e:
+        flash(f"Error requesting AI review: {e}", "error")
+    return redirect(request.referrer or "/changes")
+
+
+@change_routes.route("/changes/item/<item_ref>/approve", methods=["POST"])
 @admin_required
 def approve_change_route(item_ref):
+    # `units` (repeated form values, from render_changes_preview's
+    # selectable checkboxes) are the subset of the change to approve now;
+    # empty/absent approves the whole change at once — see
+    # helpers/change_helpers.py's approve_change/_apply_selected_units.
+    selected_paths = request.form.getlist("units") or None
     try:
         change_id = ObjectId(item_ref)
         # approve_change returns False (without raising) when it can't approve
@@ -244,39 +318,41 @@ def approve_change_route(item_ref):
         # collision — and already flashes its own specific "error" message in
         # that case. Flashing "has been approved" unconditionally here would
         # show a false success message right alongside the real error.
-        if approve_change(change_id):
+        if approve_change(change_id, selected_paths=selected_paths):
             flash(f"Change #{item_ref} has been approved.", "success")
     except Exception as e:
         flash(f"Error approving change: {e}", "error")
 
-    return redirect("/changes")
+    return redirect(request.referrer or "/changes")
 
-@change_routes.route("/changes/item/<item_ref>/force-approve")
+@change_routes.route("/changes/item/<item_ref>/force-approve", methods=["POST"])
 @admin_required
 def force_approve_change_route(item_ref):
+    selected_paths = request.form.getlist("units") or None
     try:
         change_id = ObjectId(item_ref)
-        if force_approve_change(change_id):
+        if force_approve_change(change_id, selected_paths=selected_paths):
             flash(f"Change #{item_ref} has been force-approved.", "success")
     except Exception as e:
         flash(f"Error force-approving change: {e}", "error")
 
-    return redirect("/changes")
+    return redirect(request.referrer or "/changes")
 
 
-@change_routes.route("/changes/item/<item_ref>/deny")
+@change_routes.route("/changes/item/<item_ref>/deny", methods=["POST"])
 @admin_required
 def deny_change_route(item_ref):
+    selected_paths = request.form.getlist("units") or None
     try:
         change_id = ObjectId(item_ref)
-        if deny_change(change_id):
+        if deny_change(change_id, selected_paths=selected_paths):
             flash(f"Change #{item_ref} has been denied.", "success")
         else:
             flash(f"Could not deny change #{item_ref}.", "error")
     except Exception as e:
         flash(f"Error denying change: {e}", "error")
 
-    return redirect("/changes")
+    return redirect(request.referrer or "/changes")
 
 @change_routes.route("/changes/edit/<item_ref>")
 def change_edit(item_ref):
@@ -383,6 +459,7 @@ def data_type_pending_changes(data_type, page=1):
         _log_change_visibility_bypass()
     visibility_map = _build_nation_visibility_map()
     pending_changes = _apply_nation_visibility(pending_changes, visibility_map)
+    _attach_drift_conflicts(pending_changes)
 
     return render_template(
         "data_type_changes.html",
@@ -555,6 +632,7 @@ def item_pending_changes(data_type, item_ref, page=1):
         _log_change_visibility_bypass()
     visibility_map = None if visibility_bypassed else _build_nation_visibility_map()
     pending_changes = _apply_nation_visibility(pending_changes, visibility_map)
+    _attach_drift_conflicts(pending_changes)
 
     return render_template(
         "item_changes.html",
@@ -728,12 +806,13 @@ def my_changes(page=1):
     )
 
 
-@change_routes.route("/changes/item/<item_ref>/revert")
+@change_routes.route("/changes/item/<item_ref>/revert", methods=["POST"])
 @admin_required
 def revert_change_route(item_ref):
+    selected_paths = request.form.getlist("units") or None
     try:
         change_id = ObjectId(item_ref)
-        if revert_change(change_id):
+        if revert_change(change_id, selected_paths=selected_paths):
             flash(f"Change #{item_ref} has been reverted.", "success")
     except Exception as e:
         flash(f"Error reverting change: {e}", "error")

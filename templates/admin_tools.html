@@ -324,6 +324,26 @@
 
         <div class="admin-tool-card">
             <div class="admin-tool-card-body">
+                <h3 class="admin-tool-card-title">AI Change Review</h3>
+                <p class="admin-tool-card-desc">A background reviewer reads each Pending change's reason and any linked Discord messages, and approves whatever parts are sufficiently explained — see each change's "AI Review" section for its reasoning.</p>
+                {% if g.ai_review_settings %}
+                <p class="admin-tool-card-desc" style="color: {% if g.ai_review_settings.enabled %}#8f8{% else %}#888{% endif %};">
+                    Status: <strong>{{ 'ENABLED' if g.ai_review_settings.enabled else 'Disabled' }}</strong>
+                    — {% if g.ai_review_settings.dry_run %}<span style="color:#f90;">Dry run (records verdicts, approves nothing)</span>{% else %}<span style="color:#f55;">LIVE (will approve explained units)</span>{% endif %}
+                </p>
+                <a href="/admin/toggle-ai-review" class="btn btn-{{ 'warning' if g.ai_review_settings.enabled else 'primary' }} btn-sm">
+                    {{ 'Disable' if g.ai_review_settings.enabled else 'Enable' }}
+                </a>
+                <a href="/admin/toggle-ai-review-dry-run" class="btn btn-{{ 'warning' if not g.ai_review_settings.dry_run else 'primary' }} btn-sm"
+                   onclick="return confirm('{{ 'Go LIVE? The AI reviewer will start approving sufficiently explained units of real Pending changes.' if g.ai_review_settings.dry_run else 'Switch back to dry run? The AI reviewer will stop approving anything.' }}')">
+                    {{ 'Go Live' if g.ai_review_settings.dry_run else 'Switch to Dry Run' }}
+                </a>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="admin-tool-card">
+            <div class="admin-tool-card-body">
                 <h3 class="admin-tool-card-title">Randomize AI Laws</h3>
                 <p class="admin-tool-card-desc">Assign weighted-random laws to all AI nations, with weights driven by cultural traits and a configurable JSON file.</p>
                 <a href="/randomize_ai_laws" class="btn btn-primary btn-sm">Open</a>

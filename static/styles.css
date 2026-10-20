@@ -2998,6 +2998,140 @@ input[type="text"].map-btn:focus {
     color: var(--warn);
 }
 
+/* Short top-of-page pointer to the per-field drift highlights below (see
+   .field-drift-conflict) — used on the single-change review page
+   (templates/change.html). The pending-changes list (render_changes_table)
+   has no room for this and relies on the per-field highlight alone. */
+.drift-conflict-banner {
+    background: rgba(232,212,106,.14);
+    border: 1px solid var(--warn);
+    border-radius: var(--radius-sm);
+    color: var(--warn);
+    padding: 10px 16px;
+    margin-bottom: 1rem;
+}
+
+/* Per-field "apply this part now" checkbox on the change review page and
+   pending-changes list (render_changes_preview's selectable=true mode) —
+   see helpers/change_helpers.py's partial-approval unit addressing. */
+.unit-checkbox {
+    display: inline-block;
+    margin-right: 6px;
+}
+.unit-checkbox input[type="checkbox"] {
+    vertical-align: middle;
+}
+
+/* A unit (a whole field, a nested dict's sub-key, or — reported, not
+   individually highlighted — an item inside a list) whose live value has
+   drifted since this change's before/after data was recorded — the same
+   check_no_other_changes conflict approve_change itself gates on,
+   surfaced inline right next to the data it concerns (see
+   get_change_drift_conflicts / describe_check_no_other_changes_conflicts)
+   instead of only in a separate summary. Applied to .field-change (a
+   top-level field) or .dict-change-item (a nested dict sub-key) — kept as
+   a bare class selector, not compounded with either, so both match. Kept
+   deliberately compact: a drifted field is a secondary notice, not the
+   primary content of the row. */
+.field-drift-conflict {
+    background: rgba(232,212,106,.10);
+    border: 1px solid var(--warn);
+    border-radius: var(--radius-sm);
+    padding: 4px 8px;
+    margin: 3px 0;
+}
+.field-drift-badge {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 0 5px;
+    border-radius: 3px;
+    background: rgba(232,212,106,.16);
+    font-size: 0.72em;
+    font-weight: 600;
+    color: var(--warn);
+    white-space: nowrap;
+    vertical-align: middle;
+}
+.field-drift-detail {
+    margin-top: 4px;
+    font-size: 0.74em;
+    color: var(--warn);
+    line-height: 1.35;
+    opacity: 0.9;
+}
+.field-drift-detail-line + .field-drift-detail-line {
+    margin-top: 2px;
+}
+.field-drift-detail code {
+    font-size: 0.95em;
+    color: var(--text);
+}
+
+/* AI Review History section (templates/change.html) — one block per
+   attempt recorded by helpers/ai_review_helpers.py's review_change. */
+.ai-review-attempt {
+    padding: 6px 0;
+    font-size: 0.85rem;
+}
+.ai-review-attempt + .ai-review-attempt {
+    border-top: 1px solid #333;
+    margin-top: 6px;
+}
+.ai-review-attempt-header {
+    margin-bottom: 4px;
+    color: #aaa;
+}
+.ai-review-mode {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 0 6px;
+    border-radius: 3px;
+    font-size: 0.78em;
+    font-weight: 600;
+}
+.ai-review-mode-dry_run {
+    background: rgba(232,212,106,.16);
+    color: var(--warn);
+}
+.ai-review-mode-live {
+    background: rgba(168,216,138,.16);
+    color: var(--pos);
+}
+.ai-review-model {
+    margin-left: 6px;
+    color: #777;
+    font-size: 0.8em;
+}
+.ai-review-error {
+    color: var(--crit);
+}
+.ai-review-note {
+    color: #888;
+    font-style: italic;
+}
+.ai-review-units {
+    margin: 4px 0 0 1.1rem;
+    padding: 0;
+}
+.ai-review-unit {
+    margin-bottom: 4px;
+    line-height: 1.4;
+}
+.ai-review-unit-approve strong {
+    color: var(--pos);
+}
+.ai-review-unit-leave strong {
+    color: #888;
+}
+.ai-review-quote {
+    margin: 2px 0 0 0.5rem;
+    padding-left: 8px;
+    border-left: 2px solid #444;
+    color: #999;
+    font-style: italic;
+    font-size: 0.92em;
+}
+
 .revert-warning-banner {
     display: flex;
     align-items: center;
