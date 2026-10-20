@@ -32,7 +32,11 @@ def _insert_change(db, **overrides):
         "status": "Pending",
         "before_requested_data": {"money": 10},
         "after_requested_data": {"money": 20},
-        "request_reason": "see discord",
+        # review_change now re-extracts discord links from request_reason
+        # itself (see its own comment) rather than trusting the stored
+        # referenced_discord_links snapshot, so the reason text here must
+        # actually contain a link for that extraction to find anything.
+        "request_reason": "see discord https://discord.com/channels/1/2/3",
         "referenced_discord_links": ["https://discord.com/channels/1/2/3"],
         # Safely older than _AI_REVIEW_MIN_AGE_SECONDS by default, so tests
         # that don't care about freshness aren't tripped up by the claim
@@ -140,6 +144,19 @@ class TestBuildReviewPrompt:
         assert "player1" in prompt
         assert "This explains it." in prompt
 
+    def test_notes_image_attachment_count_per_message(self):
+        change = {"target_display_name": "Testland", "target_collection": "nations", "request_reason": "r"}
+        messages = [{
+            "url": "https://discord.com/x", "ok": True, "author": "player1", "content": "see attached",
+            "attachments": [
+                {"url": "https://cdn/1.png", "content_type": "image/png"},
+                {"url": "https://cdn/2.png", "content_type": "image/png"},
+                {"url": "https://cdn/x.pdf", "content_type": "application/pdf"},
+            ],
+        }]
+        prompt = arh.build_review_prompt(change, messages, self._units())
+        assert "2 image attachments shown below" in prompt
+
     def test_notes_failed_discord_fetch_without_treating_as_evidence(self):
         change = {"target_display_name": "Testland", "target_collection": "nations", "request_reason": "r"}
         messages = [{"url": "https://discord.com/x", "ok": False, "error": "not_found"}]
@@ -241,6 +258,26 @@ class TestCallAiReviewer:
         assert kwargs["model"] == arh.AI_REVIEW_MODEL
         assert kwargs["tools"] == [arh._REVIEW_TOOL_SCHEMA]
 
+    def test_content_is_a_text_block_when_no_images(self):
+        client = self._fake_client_returning([])
+        with patch.object(arh, "_get_anthropic_client", return_value=client):
+            arh.call_ai_reviewer({"request_reason": "r"}, [], [{"path": "money", "before": 1, "after": 2}])
+        content = client.messages.create.call_args.kwargs["messages"][0]["content"]
+        assert len(content) == 1
+        assert content[0]["type"] == "text"
+
+    def test_image_attachments_are_appended_as_image_blocks(self):
+        client = self._fake_client_returning([])
+        discord_messages = [{
+            "url": "https://discord.com/x", "ok": True, "author": "p", "content": "see attached",
+            "attachments": [{"url": "https://cdn.discordapp.com/a.png", "content_type": "image/png"}],
+        }]
+        with patch.object(arh, "_get_anthropic_client", return_value=client):
+            arh.call_ai_reviewer({"request_reason": "r"}, discord_messages, [{"path": "money", "before": 1, "after": 2}])
+        content = client.messages.create.call_args.kwargs["messages"][0]["content"]
+        assert len(content) == 2
+        assert content[1] == {"type": "image", "source": {"type": "url", "url": "https://cdn.discordapp.com/a.png"}}
+
     def test_raises_when_no_tool_use_block(self):
         response = MagicMock()
         response.content = []
@@ -249,6 +286,48 @@ class TestCallAiReviewer:
         with patch.object(arh, "_get_anthropic_client", return_value=client):
             with pytest.raises(ValueError):
                 arh.call_ai_reviewer({"request_reason": "r"}, [], [])
+
+
+class TestCollectImageBlocks:
+    def test_no_messages_returns_empty(self):
+        assert arh._collect_image_blocks([]) == []
+
+    def test_non_image_attachments_are_skipped(self):
+        messages = [{"ok": True, "attachments": [{"url": "https://cdn/x.pdf", "content_type": "application/pdf"}]}]
+        assert arh._collect_image_blocks(messages) == []
+
+    def test_image_attachment_becomes_a_url_source_block(self):
+        messages = [{"ok": True, "attachments": [{"url": "https://cdn/x.png", "content_type": "image/png"}]}]
+        assert arh._collect_image_blocks(messages) == [
+            {"type": "image", "source": {"type": "url", "url": "https://cdn/x.png"}}
+        ]
+
+    def test_failed_fetch_messages_are_skipped_entirely(self):
+        messages = [{"ok": False, "attachments": [{"url": "https://cdn/x.png", "content_type": "image/png"}]}]
+        assert arh._collect_image_blocks(messages) == []
+
+    def test_missing_content_type_is_treated_as_non_image(self):
+        messages = [{"ok": True, "attachments": [{"url": "https://cdn/x"}]}]
+        assert arh._collect_image_blocks(messages) == []
+
+    def test_multiple_messages_collected_in_order(self):
+        messages = [
+            {"ok": True, "attachments": [{"url": "https://cdn/1.png", "content_type": "image/png"}]},
+            {"ok": True, "attachments": [{"url": "https://cdn/2.png", "content_type": "image/png"}]},
+        ]
+        blocks = arh._collect_image_blocks(messages)
+        assert [b["source"]["url"] for b in blocks] == ["https://cdn/1.png", "https://cdn/2.png"]
+
+    def test_capped_at_max_images_per_review(self):
+        messages = [{
+            "ok": True,
+            "attachments": [
+                {"url": f"https://cdn/{i}.png", "content_type": "image/png"}
+                for i in range(arh._MAX_IMAGES_PER_REVIEW + 5)
+            ],
+        }]
+        blocks = arh._collect_image_blocks(messages)
+        assert len(blocks) == arh._MAX_IMAGES_PER_REVIEW
 
 
 # ---------------------------------------------------------------------------
@@ -325,9 +404,30 @@ class TestReviewChange:
         assert "ai_review" not in test_db["changes"].find_one({"_id": change["_id"]})
 
     def test_skips_change_with_no_discord_links(self, test_db, patch_ai_review):
-        change = _insert_change(test_db, referenced_discord_links=[])
+        change = _insert_change(test_db, request_reason="just a plain reason, no link", referenced_discord_links=[])
         result = arh.review_change(change)
         assert result == {"skipped": "no_discord_links"}
+        stored = test_db["changes"].find_one({"_id": change["_id"]})
+        assert stored["ai_reviewed"] is True   # so the worker never re-claims it
+
+    def test_falls_back_to_extracting_from_reason_when_snapshot_field_missing(self, test_db, patch_ai_review):
+        # The exact bug this fixes: a change requested before
+        # referenced_discord_links capture existed has no such field at
+        # all, even though its reason plainly links a message.
+        nation_id = test_db["nations"].insert_one({"name": "N", "money": 10}).inserted_id
+        change = _insert_change(
+            test_db, target=nation_id,
+            request_reason="Discount on tech, finishing it https://discord.com/channels/1/2/3",
+        )
+        del change["referenced_discord_links"]
+        test_db["changes"].update_one({"_id": change["_id"]}, {"$unset": {"referenced_discord_links": ""}})
+
+        verdicts = [{"path": "money", "verdict": "leave", "justification": "x"}]
+        with patch.object(arh, "fetch_discord_messages", return_value=[]) as mock_fetch, \
+             patch.object(arh, "call_ai_reviewer", return_value=verdicts):
+            arh.review_change(change, dry_run=True)
+
+        mock_fetch.assert_called_once_with(["https://discord.com/channels/1/2/3"])
 
     def test_skips_and_records_when_no_reviewable_units(self, test_db, patch_ai_review):
         nation_id = test_db["nations"].insert_one({"name": "N", "money": "tampered"}).inserted_id
@@ -438,8 +538,18 @@ class TestClaimNextChangeForReview:
 
     def test_does_not_claim_non_update_or_linkless_changes(self, test_db, patch_ai_review):
         _insert_change(test_db, change_type="Add")
-        _insert_change(test_db, referenced_discord_links=[])
+        _insert_change(test_db, request_reason="no link here", referenced_discord_links=[])
         assert arh._claim_next_change_for_review() is None
+
+    def test_claims_a_change_even_without_the_referenced_discord_links_snapshot(self, test_db, patch_ai_review):
+        # The claim query itself must not depend on that field either --
+        # only on request_reason, which is reliable for changes requested
+        # before referenced_discord_links capture existed too.
+        change = _insert_change(test_db)
+        del change["referenced_discord_links"]
+        test_db["changes"].update_one({"_id": change["_id"]}, {"$unset": {"referenced_discord_links": ""}})
+        claimed = arh._claim_next_change_for_review()
+        assert claimed["_id"] == change["_id"]
 
     def test_release_clears_the_claim(self, test_db, patch_ai_review):
         change = _insert_change(test_db)

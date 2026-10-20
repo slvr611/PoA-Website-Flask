@@ -116,7 +116,14 @@ def fetch_discord_message(url, bot_token=None, timeout=10):
         "content": data.get("content", ""),
         "author": (data.get("author") or {}).get("username"),
         "timestamp": data.get("timestamp"),
-        "attachments": [a["url"] for a in data.get("attachments", []) if a.get("url")],
+        # content_type (Discord's own, e.g. "image/png") carried through
+        # alongside each url so a caller can pick out image attachments —
+        # see helpers/ai_review_helpers.py's _collect_image_blocks — without
+        # guessing from the filename/extension.
+        "attachments": [
+            {"url": a["url"], "content_type": a.get("content_type")}
+            for a in data.get("attachments", []) if a.get("url")
+        ],
     }
 
 

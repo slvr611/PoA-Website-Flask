@@ -56,7 +56,10 @@ class TestFetchDiscordMessage:
             "content": "This explains the wood stockpile change.",
             "author": {"username": "someplayer"},
             "timestamp": "2026-01-01T00:00:00+00:00",
-            "attachments": [{"url": "https://cdn.discordapp.com/x.png"}, {"no_url": True}],
+            "attachments": [
+                {"url": "https://cdn.discordapp.com/x.png", "content_type": "image/png"},
+                {"no_url": True},
+            ],
         }
         with patch.object(dfh.requests, "get", return_value=_fake_response(200, body)) as mock_get:
             result = dfh.fetch_discord_message(_VALID_URL, bot_token="tok123")
@@ -70,7 +73,7 @@ class TestFetchDiscordMessage:
             "content": "This explains the wood stockpile change.",
             "author": "someplayer",
             "timestamp": "2026-01-01T00:00:00+00:00",
-            "attachments": ["https://cdn.discordapp.com/x.png"],
+            "attachments": [{"url": "https://cdn.discordapp.com/x.png", "content_type": "image/png"}],
         }
 
     def test_deleted_message_404(self):

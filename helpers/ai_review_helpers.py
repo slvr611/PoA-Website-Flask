@@ -23,7 +23,7 @@ from time import sleep
 import anthropic
 from pymongo import ReturnDocument
 
-from app_core import mongo
+from app_core import mongo, extract_discord_links
 from helpers.change_helpers import (
     flatten_change_units,
     get_change_drift_conflicts,
@@ -162,8 +162,13 @@ def build_review_prompt(change, discord_messages, candidate_units):
         lines = ["Linked Discord messages:"]
         for i, msg in enumerate(discord_messages, 1):
             if msg.get("ok"):
+                image_count = sum(
+                    1 for a in (msg.get("attachments") or [])
+                    if (a.get("content_type") or "").startswith("image/")
+                )
+                image_note = f" [{image_count} image attachment{'s' if image_count != 1 else ''} shown below]" if image_count else ""
                 lines.append(
-                    f"  [{i}] ({msg.get('url')}) by {msg.get('author') or 'unknown'}:\n"
+                    f"  [{i}] ({msg.get('url')}) by {msg.get('author') or 'unknown'}:{image_note}\n"
                     f"      {msg.get('content') or '(empty message)'}"
                 )
             else:
@@ -215,6 +220,31 @@ def _get_anthropic_client():
     return _anthropic_client
 
 
+# A runaway number of image attachments (e.g. a message with a dozen
+# screenshots) would inflate cost well beyond what reviewing one change
+# should ever take — bounded defensively, same spirit as the batch/poll
+# size bounds elsewhere in this module.
+_MAX_IMAGES_PER_REVIEW = 10
+
+
+def _collect_image_blocks(discord_messages):
+    """Image content blocks (Anthropic's URL-sourced image type — Discord's
+    CDN attachment URLs are directly fetchable, no download/base64-encode
+    needed on this end) for every image attachment across all successfully
+    fetched discord_messages, in message order, capped at
+    _MAX_IMAGES_PER_REVIEW."""
+    blocks = []
+    for msg in discord_messages:
+        if not msg.get("ok"):
+            continue
+        for attachment in (msg.get("attachments") or []):
+            if len(blocks) >= _MAX_IMAGES_PER_REVIEW:
+                return blocks
+            if (attachment.get("content_type") or "").startswith("image/"):
+                blocks.append({"type": "image", "source": {"type": "url", "url": attachment["url"]}})
+    return blocks
+
+
 def call_ai_reviewer(change, discord_messages, candidate_units):
     """Call the model for structured tool output — one verdict per
     candidate unit. Raises on any API/parsing failure, including the model
@@ -233,11 +263,13 @@ def call_ai_reviewer(change, discord_messages, candidate_units):
     """
     client = _get_anthropic_client()
     prompt = build_review_prompt(change, discord_messages, candidate_units)
+    content = [{"type": "text", "text": prompt}]
+    content.extend(_collect_image_blocks(discord_messages))
     response = client.messages.create(
         model=AI_REVIEW_MODEL,
         max_tokens=4096,
         tools=[_REVIEW_TOOL_SCHEMA],
-        messages=[{"role": "user", "content": prompt}],
+        messages=[{"role": "user", "content": content}],
     )
     for block in response.content:
         if getattr(block, "type", None) == "tool_use":
@@ -324,13 +356,23 @@ def review_change(change, dry_run=None):
     if change.get("change_type") != "Update":
         return {"skipped": "not_an_update_change"}
 
-    discord_links = change.get("referenced_discord_links") or []
-    if not discord_links:
-        return {"skipped": "no_discord_links"}
-
     if dry_run is None:
         dry_run = get_ai_review_settings()["dry_run"]
     mode = "dry_run" if dry_run else "live"
+
+    # Always re-extracted from request_reason rather than trusted from the
+    # stored referenced_discord_links snapshot — that field is only
+    # populated for changes requested after it was added (see
+    # request_change/system_request_change), so relying on it alone
+    # silently skipped every older still-Pending change, even ones whose
+    # reason plainly links a message. request_reason itself is immutable
+    # once a change is requested (there's no "edit a pending change"
+    # feature), so re-extracting from it is always correct, not just a
+    # fallback for old data.
+    discord_links = extract_discord_links(change.get("request_reason"))
+    if not discord_links:
+        _mark_reviewed_with_no_approval(change_id, mode, "no_discord_links")
+        return {"skipped": "no_discord_links"}
 
     candidate_units = get_ai_reviewable_units(change)
     if not candidate_units:
@@ -411,7 +453,17 @@ def _claim_next_change_for_review():
     app's 3 gunicorn workers, each running its own copy of this loop) never
     review — and never try to approve — the same change twice. Returns the
     document AFTER the update (claimed_at set) so the caller's own logic
-    never needs a second read."""
+    never needs a second read.
+
+    Filters on request_reason containing "discord.com" as a cheap,
+    DB-side pre-filter — not on the stored referenced_discord_links
+    snapshot, which is only populated for changes requested after that
+    capture logic shipped (see review_change's matching comment) and so
+    can't be trusted as a query filter either. request_reason itself is
+    immutable once a change is requested, so this is always accurate; the
+    precise extraction (which also rules out a false-positive substring
+    match) happens in review_change via extract_discord_links.
+    """
     cutoff = datetime.now(timezone.utc) - timedelta(seconds=_AI_REVIEW_MIN_AGE_SECONDS)
     return mongo.db.changes.find_one_and_update(
         {
@@ -419,7 +471,7 @@ def _claim_next_change_for_review():
             "change_type": "Update",
             "ai_reviewed": {"$ne": True},
             "ai_review_claimed_at": {"$exists": False},
-            "referenced_discord_links": {"$exists": True, "$ne": []},
+            "request_reason": {"$regex": "discord.com", "$options": "i"},
             "time_requested": {"$lte": cutoff},
         },
         {"$set": {"ai_review_claimed_at": datetime.now(timezone.utc)}},
