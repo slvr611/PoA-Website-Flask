@@ -178,6 +178,20 @@
                         <option value="{{ pt.key }}" {% if pt.key == ef_val %}selected{% endif %}>{{ pt.name }}</option>
                       {% endfor %}
                     </select>
+                  {% elif extra.source == 'district_categories' %}
+                    <select class="form-control" name="{{ field_name }}-{{ idx }}-{{ extra.key }}" id="{{ field_name }}-{{ idx }}-{{ extra.key }}">
+                      <option value="">-- Select Category --</option>
+                      {% for dc in all_district_categories %}
+                        <option value="{{ dc.key }}" {% if dc.key == ef_val %}selected{% endif %}>{{ dc.name }}</option>
+                      {% endfor %}
+                    </select>
+                  {% elif extra.source == 'district_tiers' %}
+                    <select class="form-control" name="{{ field_name }}-{{ idx }}-{{ extra.key }}" id="{{ field_name }}-{{ idx }}-{{ extra.key }}">
+                      <option value="">-- Select Tier --</option>
+                      {% for dt in all_district_tiers %}
+                        <option value="{{ dt.key }}" {% if dt.key == ef_val %}selected{% endif %}>{{ dt.name }}</option>
+                      {% endfor %}
+                    </select>
                   {% elif extra.source == 'tech_categories' %}
                     <select class="form-control" name="{{ field_name }}-{{ idx }}-{{ extra.key }}" id="{{ field_name }}-{{ idx }}-{{ extra.key }}">
                       <option value="">-- Select Category --</option>
@@ -210,7 +224,7 @@
                   {% endif %}
                 </div>
               {% endfor %}
-              {% for fkey in ['resource', 'resource_from', 'resource_to', 'job', 'field', 'attribute', 'unit_category', 'unit_stat', 'tier', 'tech_category', 'terrain', 'target_type', 'target_value', 'unit_name', 'district_key', 'city'] %}
+              {% for fkey in ['resource', 'resource_from', 'resource_to', 'job', 'field', 'attribute', 'unit_category', 'unit_stat', 'tier', 'tech_category', 'terrain', 'target_type', 'target_value', 'unit_name', 'district_key', 'district_category', 'city'] %}
                 {% if fkey not in used_keys %}
                   <input type="hidden" name="{{ field_name }}-{{ idx }}-{{ fkey }}" id="{{ field_name }}-{{ idx }}-{{ fkey }}" value="">
                 {% endif %}
@@ -448,6 +462,22 @@
                         <option value="{{ pt.key }}" {% if pt.key == cur %}selected{% endif %}>{{ pt.name }}</option>
                       {% endfor %}
                     </select>
+                  {% elif extra.source == 'district_categories' %}
+                    {% set cur = ef.data or '' %}
+                    <select class="form-control" name="{{ ef.name }}" id="{{ ef.id }}">
+                      <option value="">-- Select Category --</option>
+                      {% for dc in all_district_categories %}
+                        <option value="{{ dc.key }}" {% if dc.key == cur %}selected{% endif %}>{{ dc.name }}</option>
+                      {% endfor %}
+                    </select>
+                  {% elif extra.source == 'district_tiers' %}
+                    {% set cur = ef.data or '' %}
+                    <select class="form-control" name="{{ ef.name }}" id="{{ ef.id }}">
+                      <option value="">-- Select Tier --</option>
+                      {% for dt in all_district_tiers %}
+                        <option value="{{ dt.key }}" {% if dt.key == cur %}selected{% endif %}>{{ dt.name }}</option>
+                      {% endfor %}
+                    </select>
                   {% elif extra.source == 'tech_categories' %}
                     {% set cur = ef.data or '' %}
                     <select class="form-control" name="{{ ef.name }}" id="{{ ef.id }}">
@@ -485,7 +515,7 @@
                   {% endif %}
                 </div>
               {% endfor %}
-              {% for fkey in ['resource', 'resource_from', 'resource_to', 'job', 'field', 'attribute', 'unit_category', 'unit_stat', 'tier', 'tech_category', 'terrain', 'target_type', 'target_value', 'unit_name', 'district_key', 'city'] %}
+              {% for fkey in ['resource', 'resource_from', 'resource_to', 'job', 'field', 'attribute', 'unit_category', 'unit_stat', 'tier', 'tech_category', 'terrain', 'target_type', 'target_value', 'unit_name', 'district_key', 'district_category', 'city'] %}
                 {% if fkey not in used_keys %}
                 <input type="hidden" name="{{ modifier_field.form[fkey].name }}" value="">
                 {% endif %}

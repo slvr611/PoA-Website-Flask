@@ -339,6 +339,7 @@ class ModifierForm(Form):
     target_value = StringField("Target Value")
     unit_name = StringField("Unit Name")
     district_key = StringField("District Key")
+    district_category = StringField("District Category")
     city = StringField("City")
     value = FloatField("Value", default=1)
     max_value = FloatField("Max Value", validators=[Optional()])

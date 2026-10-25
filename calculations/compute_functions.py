@@ -1173,17 +1173,31 @@ def compute_death_chance(field, target, base_value, field_schema, overall_total_
     age = target.get("age", 1)
     elderly_age = target.get("elderly_age", 3)
 
-    value = round(max((age - elderly_age) * (0.2 + overall_total_modifiers.get("death_chance_per_elderly_age", 0)), 0), 2)
+    # An immortal character never accrues the AGE-based component of death
+    # chance -- found live (2026-10-25) on "Meepsi 'the Skinned God'", age 9
+    # vs. elderly_age 3: (9-3)*0.2 = 1.2, a guaranteed death roll every tick,
+    # despite carrying an immortal modifier. Before this fix, is_mortal only
+    # ever gated health_state_death_chance below, so immortality did nothing
+    # to stop death from old age specifically -- by far the dominant term
+    # for any character who lives past a handful of sessions past elderly.
+    # Scoped narrowly to the age terms: cunning-based, flat `field`
+    # modifier-driven, and minimum_death_chance contributions are untouched,
+    # since those represent other, non-aging death sources (curses, combat,
+    # etc.) immortality isn't meant to block.
+    is_mortal = not overall_total_modifiers.get("immortal", 0)
 
-    if overall_total_modifiers.get("elderly_death_start_early", 0) > 0 and age >= elderly_age:
-        value += 0.2 + overall_total_modifiers.get("death_chance_per_elderly_age", 0)
+    if is_mortal:
+        value = round(max((age - elderly_age) * (0.2 + overall_total_modifiers.get("death_chance_per_elderly_age", 0)), 0), 2)
+        if overall_total_modifiers.get("elderly_death_start_early", 0) > 0 and age >= elderly_age:
+            value += 0.2 + overall_total_modifiers.get("death_chance_per_elderly_age", 0)
+    else:
+        value = 0.0
 
     cunning = compute_stat("cunning", target, 0, {}, overall_total_modifiers)
     value += cunning * overall_total_modifiers.get("death_chance_per_cunning", 0)
 
     value += overall_total_modifiers.get(field, 0)
 
-    is_mortal = not overall_total_modifiers.get("immortal", 0)
     if not (overall_total_modifiers.get("mortal_ignore_health_state_death_chance", 0) and is_mortal):
         value += overall_total_modifiers.get("health_state_death_chance", 0)
 

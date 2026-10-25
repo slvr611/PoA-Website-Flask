@@ -17,6 +17,8 @@ from calculations.field_calculations import (
     calculate_job_details,
     sum_job_totals,
     _resolve_def,
+    get_district_support_map,
+    get_district_inactive_reason,
 )
 
 
@@ -217,6 +219,61 @@ class LawAdapter:
                 ))
         return contributions
 
+    @classmethod
+    def collect_for_nation(cls, nation: dict) -> list:
+        """Collect law _modifiers scoped to a ruling nation from each of
+        the nation's ruling characters -- the mirror of
+        collect_for_character (which pulls a NATION's law modifiers scoped
+        to its ruling characters INTO the character).
+
+        Needed because nothing else reaches this: the built-in
+        Quartermaster character subtype grants "+1 tier-0 progress slot"
+        via `{"modifier_type": "progress_slots", "tier": "0", "value": 1,
+        "scope": "character_ruling_nation"}` on character_subtype's own
+        law entry, but calculate_all_fields's generic
+        collect_external_requirements lookup for a nation's "rulers" only
+        understands a ruler's flat ad-hoc `modifiers` array and titles --
+        never a law-type enum field's embedded `_modifiers` list -- and
+        character_subtype isn't even in that lookup's requested field
+        list. Without this, the bonus (and any other character_ruling_
+        nation-scoped law modifier, e.g. future subtypes) is silently
+        dropped: it doesn't land on the character (correctly excluded,
+        see calculate_all_fields' _law_scaled self-apply guard) and never
+        reaches the nation either.
+        """
+        from app_core import mongo
+        nation_id = str(nation.get("_id", ""))
+        if not nation_id:
+            return []
+        rulers = list(mongo.db.characters.find({"ruling_nation_org": nation_id}))
+        if not rulers:
+            return []
+
+        character_schema = category_data.get("characters", {}).get("schema", {})
+        schema_properties = character_schema.get("properties", {})
+        laws_list = character_schema.get("laws", [])
+
+        contributions = []
+        for ruler in rulers:
+            ruler_name = ruler.get("name", "Unknown Ruler")
+            for law_name in laws_list:
+                current_law_list = schema_properties.get(law_name, {}).get("laws", {})
+                target_law = ruler.get(law_name, "")
+                law = current_law_list.get(target_law)
+                if not law:
+                    continue
+                mods_list = law.get("_modifiers", [])
+                if not mods_list:
+                    continue
+                mods = _db_dist_mods_to_dict(mods_list, target_type="nation")
+                if mods:
+                    contributions.append(SourceContribution(
+                        label=f"{ruler_name} ({target_law})",
+                        source_type=cls.source_type,
+                        modifiers=mods,
+                    ))
+        return contributions
+
 
 class DistrictAdapter:
     source_type = "district"
@@ -230,6 +287,14 @@ class DistrictAdapter:
         # The 'node' field on district entries is often empty/stale; tile data is correct.
         _cache = target.get("_calc_cache") or {}
         _district_node_map = _cache.get("district_node_map", {})
+
+        # A tier-2+ district whose supporting lower-tier district (same
+        # category) is gone contributes nothing at all -- no base/synergy/
+        # upgrade modifiers, no node claim, no upkeep -- see
+        # get_district_inactive_reason's docstring. Computed once per nation
+        # here rather than per-district (this runs for every district on
+        # every nation on every calculation).
+        _support_map = get_district_support_map(target)
 
         def synergy_matches(node, requirement):
             if not node:
@@ -256,6 +321,8 @@ class DistrictAdapter:
                 dd = _resolve_def(district)
                 if not dd:
                     continue
+                if get_district_inactive_reason(target, district, support_map=_support_map):
+                    continue
                 label = dd.get("display_name", district["def_key"])
                 district_id = district.get("_id", "")
                 district_node = (
@@ -265,12 +332,21 @@ class DistrictAdapter:
 
                 # Base modifiers — nation-scoped only
                 # Auto-fill scaling_extra for per_x_district_sessions scaling
-                # so the user doesn't have to manually specify the def_key.
+                # (both the value-scaling field and the separate condition-
+                # scaling field, e.g. workshop's "Per X District Sessions"
+                # conditional_unit_buff land attack/damage bonuses — found
+                # live 2026-10-25: condition_scaling_extra was never filled,
+                # so per_x_district_sessions always saw scaling_extra=="" and
+                # returned 0 regardless of actual session count, permanently
+                # failing the >=5/>=10 session threshold check) so the user
+                # doesn't have to manually specify the def_key.
                 dd_mods_list = []
                 for _m in dd.get("modifiers", []):
                     _m_copy = dict(_m)
                     if _m_copy.get("scaling") == "per_x_district_sessions" and not _m_copy.get("scaling_extra"):
                         _m_copy["scaling_extra"] = district["def_key"]
+                    if _m_copy.get("condition_scaling") == "per_x_district_sessions" and not _m_copy.get("condition_scaling_extra"):
+                        _m_copy["condition_scaling_extra"] = district["def_key"]
                     dd_mods_list.append(_m_copy)
                 mods = _db_dist_mods_to_dict(dd_mods_list, target_type="nation", target=target)
                 terrain_rules = _extract_terrain_rules_from_list(dd_mods_list, source_label=label)
@@ -302,6 +378,8 @@ class DistrictAdapter:
                                 _um_copy = dict(_um)
                                 if _um_copy.get("scaling") == "per_x_district_sessions" and not _um_copy.get("scaling_extra"):
                                     _um_copy["scaling_extra"] = district["def_key"]
+                                if _um_copy.get("condition_scaling") == "per_x_district_sessions" and not _um_copy.get("condition_scaling_extra"):
+                                    _um_copy["condition_scaling_extra"] = district["def_key"]
                                 upg_mods_list.append(_um_copy)
                             upg_mods = _db_dist_mods_to_dict(upg_mods_list, target_type="nation", target=target)
                             for k, v in upg_mods.items():
@@ -358,11 +436,14 @@ class DistrictAdapter:
             return []
 
         contributions = []
+        _support_map = get_district_support_map(nation)
         for district in nation.get("districts", []):
             if not isinstance(district, dict) or not district.get("def_key"):
                 continue
             dd = _resolve_def(district)
             if not dd:
+                continue
+            if get_district_inactive_reason(nation, district, support_map=_support_map):
                 continue
             label = dd.get("display_name", district["def_key"])
             mods = _db_dist_mods_to_dict(dd.get("modifiers", []), target_type="character")

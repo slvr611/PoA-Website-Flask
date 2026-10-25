@@ -247,6 +247,7 @@
 	const ALL_UNIT_CATEGORIES = {{ all_unit_categories | tojson | safe }};
 	const ALL_UNIT_STATS = {{ all_unit_stats | tojson | safe }};
 	const ALL_PROGRESS_TIERS = {{ all_progress_tiers | tojson | safe }};
+	const ALL_DISTRICT_TIERS = {{ all_district_tiers | tojson | safe }};
 	const ALL_TECH_CATEGORIES = {{ all_tech_categories | tojson | safe }};
 	const SCOPE_DEFINITIONS = {{ scope_definitions | tojson | safe }};
 	const ENTITY_SOURCE_TYPE = {{ entity_source_type | default("") | tojson | safe }};
@@ -325,7 +326,7 @@
 		// missing here (e.g. target_value) is left with no hidden fallback input,
 		// so a stale value from a previously-selected modifier type can leak
 		// into whatever gets submitted for the newly-selected one.
-		const ALL_EXTRA_KEYS = ['resource', 'resource_from', 'resource_to', 'job', 'field', 'attribute', 'unit_category', 'unit_stat', 'tier', 'tech_category', 'terrain', 'node_resource', 'terrain_as', 'target_type', 'target_value', 'unit_name', 'district_key', 'city'];
+		const ALL_EXTRA_KEYS = ['resource', 'resource_from', 'resource_to', 'job', 'field', 'attribute', 'unit_category', 'unit_stat', 'tier', 'tech_category', 'terrain', 'node_resource', 'terrain_as', 'target_type', 'target_value', 'unit_name', 'district_key', 'district_category', 'city'];
 		const renderedKeys = new Set();
 		let html = '';
 
@@ -392,6 +393,20 @@
 				let opts = '<option value="">-- Select Tier --</option>';
 				for (const pt of ALL_PROGRESS_TIERS) {
 					opts += `<option value="${pt.key}" ${pt.key === cur ? 'selected' : ''}>${pt.name}</option>`;
+				}
+				html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
+					<select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+			} else if (extra.source === 'district_categories') {
+				let opts = '<option value="">-- Select Category --</option>';
+				for (const dc of ALL_DISTRICT_CATEGORIES) {
+					opts += `<option value="${dc.key}" ${dc.key === cur ? 'selected' : ''}>${dc.name}</option>`;
+				}
+				html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
+					<select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;
+			} else if (extra.source === 'district_tiers') {
+				let opts = '<option value="">-- Select Tier --</option>';
+				for (const dt of ALL_DISTRICT_TIERS) {
+					opts += `<option value="${dt.key}" ${dt.key === cur ? 'selected' : ''}>${dt.name}</option>`;
 				}
 				html += `<div class="extra-field-group mt-1"><label class="small">${extra.label}:</label>
 					<select class="form-control" name="${fieldName}-${index}-${extra.key}" id="${fieldName}-${index}-${extra.key}">${opts}</select></div>`;

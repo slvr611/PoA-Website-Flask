@@ -85,6 +85,14 @@
           "factions"
         ]
       },
+      "former_ruling_nation_orgs": {
+        "bsonType": "array",
+        "label": "Former Ruling Nations/Organizations",
+        "description": "Every nation/merchant/mercenary this character has ever been recorded ruling (auto-stamped each session a tick finds them currently ruling one, never cleared even after death/succession, unlike ruling_nation_org itself). Used by the artifact succession tick to find a departed ruler's leftover artifacts and pass them to whoever rules that org now. System-managed; not meant to be edited directly.",
+        "items": {
+          "bsonType": "string"
+        }
+      },
       "region": {
         "bsonType": "linked_object",
         "label": "Region",

@@ -14,13 +14,20 @@ from pymongo import ASCENDING
 from forms import form_generator, wtform_to_json
 import json
 from time import perf_counter
-from calculations.field_calculations import calculate_all_fields, _resolve_def, check_upgrade_requirements
+from calculations.field_calculations import (
+    calculate_all_fields, _resolve_def, check_upgrade_requirements, get_district_inactive_reason,
+)
 from bson import ObjectId
 from helpers.visibility_helpers import get_item_visibility, log_visibility_bypass, strip_form_data_to_tier, nation_field_tier
 
 # Exposed so templates can hide a district upgrade toggle until its
 # requirements (e.g. a researched technology) are actually met.
 app.jinja_env.globals.update(check_upgrade_requirements=check_upgrade_requirements)
+# Exposed so district_card (templates/_district_macros.html) can show a
+# built district as inactive when its tier-chain support (a lower-tier
+# district of the same category) is missing, with a player-facing
+# explanation of what's needed to reactivate it.
+app.jinja_env.globals.update(get_district_inactive_reason=get_district_inactive_reason)
 # Exposed so nation_owner.html can gate individual fields/rows by their own
 # required visibility tier instead of an entire section sharing one tier.
 app.jinja_env.globals.update(nation_field_tier=nation_field_tier)

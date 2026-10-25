@@ -4,16 +4,20 @@ currently stationed in (merchant["location"]):
 
   - The host nation always has full (tier 4) visibility of a merchant
     stationed within it.
-  - Any other nation's visibility into the merchant shares the host
-    nation's *structural* baseline exposure to that viewer (region /
-    overlord-vassal / shared-market / diplomatic-pact bonus, plus the
-    viewer's own offensive visibility reach) — but is NOT affected by the
-    host nation's own visibility_modifiers (its own investments in secrecy
-    or reach don't automatically cover a merchant company just because it's
-    stationed there).
+  - Sharing a region with the host nation also grants a flat tier-4
+    baseline (2026-10-25 request: full insight into resource stockpiles
+    and district layout for any nation/merchant/mercenary player in the
+    same region) — a dedicated override, independent of the host's other
+    *structural* baseline exposure to that viewer (overlord-vassal /
+    shared-market / diplomatic-pact bonus, plus the viewer's own offensive
+    visibility reach, none of which this changes) — but is NOT affected by
+    the host nation's own visibility_modifiers (its own investments in
+    secrecy or reach don't automatically cover a merchant company just
+    because it's stationed there).
   - The merchant's OWN visibility_modifiers (added the same generic way a
     nation's are, via its `modifiers` array) apply instead — most notably
-    its own defensive visibility.
+    its own defensive visibility, which can still pull the final tier back
+    down even with the same-region baseline above.
 
 See calculations/visibility.py's compute_merchant_visibility.
 """
@@ -47,7 +51,7 @@ class TestComputeMerchantVisibilityHostNation:
 
 
 class TestComputeMerchantVisibilitySharesHostBaseline:
-    def test_shares_hosts_region_bonus(self, test_db):
+    def test_shares_hosts_region_grants_tier_4(self, test_db):
         viewer_id = ObjectId()
         host_id = ObjectId()
         region_id = ObjectId()
@@ -58,7 +62,7 @@ class TestComputeMerchantVisibilitySharesHostBaseline:
         merchant = {"location": str(host_id), "visibility_modifiers": []}
         with _patch_mongo(test_db):
             tier = compute_merchant_visibility(viewer_nation, merchant)
-        assert tier == 1
+        assert tier == 4
 
     def test_shares_hosts_vassal_overlord_bonus(self, test_db):
         viewer_id = ObjectId()
@@ -100,7 +104,7 @@ class TestComputeMerchantVisibilityIgnoresHostsOwnModifiers:
         merchant = {"location": str(host_id), "visibility_modifiers": []}
         with _patch_mongo(test_db):
             tier = compute_merchant_visibility(viewer_nation, merchant)
-        assert tier == 1  # region bonus only — host's -5 defensive mod ignored
+        assert tier == 4  # region bonus only — host's -5 defensive mod ignored
 
     def test_hosts_own_offensive_modifier_does_not_affect_merchant_visibility(self, test_db):
         """An offensive modifier is a viewer capability, not something that
@@ -121,6 +125,9 @@ class TestComputeMerchantVisibilityIgnoresHostsOwnModifiers:
 
 class TestComputeMerchantVisibilityUsesMerchantsOwnModifiers:
     def test_merchants_own_defensive_modifier_reduces_visibility(self, test_db):
+        """The same-region baseline is a floor the merchant itself can
+        still pull down via its own defensive investment — it isn't an
+        unconditional override."""
         viewer_id = ObjectId()
         host_id = ObjectId()
         region_id = ObjectId()
@@ -134,7 +141,7 @@ class TestComputeMerchantVisibilityUsesMerchantsOwnModifiers:
         }
         with _patch_mongo(test_db):
             tier = compute_merchant_visibility(viewer_nation, merchant)
-        assert tier == 0  # 1 (region) - 1 (merchant's own defensive) = 0
+        assert tier == 3  # 4 (region) - 1 (merchant's own defensive) = 3
 
     def test_viewers_own_offensive_modifier_still_applies(self, test_db):
         """The viewer's own spying capability is unrelated to the host

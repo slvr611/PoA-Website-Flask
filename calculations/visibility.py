@@ -535,6 +535,21 @@ def _compute_merchant_visibility_for_one(viewer_nation: dict, location_id: str, 
     bonus = _structural_relationship_bonus(viewer_nation, host)
     offensive_bonus = _offensive_visibility_bonus(viewer_nation, host)
 
+    # Sharing a region with the merchant's host nation grants full insight
+    # into its operations (resource stockpiles, district layout) regardless
+    # of any other relationship — 2026-10-25 request. A flat override to 4
+    # rather than an addition: independent of _structural_relationship_bonus's
+    # own small region contribution (shared with plain nation-to-nation
+    # visibility, which this deliberately leaves untouched at its existing
+    # +1). A target's own defensive visibility modifiers (below) can still
+    # pull the final tier back down even when this applies — same-region
+    # access is a baseline, not an override of the target's own secrecy
+    # investment.
+    viewer_region = str(viewer_nation.get("region") or "")
+    host_region = str(host.get("region") or "")
+    if viewer_region and viewer_region == host_region:
+        bonus = max(bonus, 4)
+
     # The merchant's OWN defensive visibility modifiers — not the host
     # nation's — gate how well it can be seen.
     defensive_penalty = sum(
@@ -557,13 +572,20 @@ def compute_mercenary_visibility(viewer_nations, mercenary: dict) -> int:
     ownership/location link every mercenary has), so there's no equivalent
     of "fully visible to its host". Instead:
       - Every viewer nation sharing the mercenary's region gets a flat
-        tier-1 baseline — the same same-region +1 nations already grant
-        each other via _structural_relationship_bonus, just without the
-        vassal/market/pact bonuses (a mercenary company has none of those
-        relationships), plus the viewer's own offensive visibility reach.
+        tier-4 baseline (2026-10-25 request: full insight into unit layout
+        and district layout for any nation/merchant/mercenary player in
+        the same region) — deliberately NOT the same same-region +1
+        ordinary nation-to-nation visibility grants via
+        _structural_relationship_bonus, which this leaves untouched; a
+        mercenary company has no vassal/market/pact relationships to add
+        on top regardless. Treasury stays out of reach of this entirely —
+        it's gated by its own separate, stricter admin-only check
+        (mercenaries.json's view_access_level on that field), outside this
+        0-4 tier system altogether.
       - Is otherwise gated by its OWN visibility_modifiers (added the same
         generic way a nation's/merchant's are, via its `modifiers` array),
-        most notably its own defensive visibility.
+        most notably its own defensive visibility, which can still pull the
+        final tier back down even with the same-region baseline above.
 
     Accepts either a list of nation docs or a single nation dict for
     viewer_nations, matching compute_visibility/compute_merchant_visibility.
@@ -584,7 +606,7 @@ def _compute_mercenary_visibility_for_one(viewer_nation: dict, mercenary: dict) 
     viewer_region = str(viewer_nation.get("region") or "")
     merc_region = str(mercenary.get("region") or "")
 
-    bonus = 1 if (viewer_region and viewer_region == merc_region) else 0
+    bonus = 4 if (viewer_region and viewer_region == merc_region) else 0
     offensive_bonus = _offensive_visibility_bonus(viewer_nation, mercenary)
 
     # The mercenary company's OWN defensive visibility modifiers gate how

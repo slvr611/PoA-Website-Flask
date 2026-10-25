@@ -250,12 +250,12 @@ class TestNationStabilityTickIsNoLongerExcludedFromThePlayerSummary:
     def test_stability_tick_label_is_not_excluded(self):
         assert "Nation Stability Tick" not in th._EXCLUDED_FROM_PLAYER_SUMMARY_TICK_LABELS
 
-    def test_exclusion_set_is_currently_empty(self):
-        """Pins the current state precisely — if this fails because
-        something new was intentionally added to the exclusion set, update
-        this test rather than treating the failure as a sign of a
-        regression in the stability-tick fix above."""
-        assert th._EXCLUDED_FROM_PLAYER_SUMMARY_TICK_LABELS == set()
+    def test_exclusion_set_is_currently_empty_of_the_old_entry(self):
+        """"Nation Stability Tick" specifically must stay out, regardless
+        of whatever else the set contains (see TestExcludedFromPlayerSummary
+        below for the current full membership, added 2026-10-24 at the
+        user's request for a different set of tick functions)."""
+        assert "Nation Stability Tick" not in th._EXCLUDED_FROM_PLAYER_SUMMARY_TICK_LABELS
 
     def test_stability_tick_result_reaches_player_summary_in_the_attribution_check(self):
         """Mirrors the exact tick-loop check at the player_tick_summary
@@ -274,6 +274,130 @@ class TestNationStabilityTickIsNoLongerExcludedFromThePlayerSummary:
             included = False
 
         assert included is True
+
+
+class TestExcludedFromPlayerSummary:
+    """2026-10-24 request: organization (merchant/mercenary) income, AI
+    ruler generation, nation income, and district session counts should
+    stop appearing in the player-facing digest, but keep applying (and
+    keep appearing in the full tick summary) exactly as before — only
+    their result text's reach into player_tick_summary changes.
+
+    "Nation Tech Tick" (nation research) is deliberately excluded from
+    this set — see TestNationTechTickWindfallSplit below for why it needs
+    different handling instead of a blanket label exclusion."""
+
+    def test_current_membership(self):
+        assert th._EXCLUDED_FROM_PLAYER_SUMMARY_TICK_LABELS == {
+            "Merchant Income Tick",
+            "Mercenary Upkeep Tick",
+            "AI Ensure Leader Tick",
+            "Nation Income Tick",
+            "District Duration Tick",
+        }
+
+    def test_nation_tech_tick_is_not_in_the_blanket_exclusion_set(self):
+        assert "Nation Tech Tick" not in th._EXCLUDED_FROM_PLAYER_SUMMARY_TICK_LABELS
+
+    def test_excluded_nation_label_is_skipped_even_for_a_player_nation(self):
+        """Mirrors the nation loop's attribution check: an excluded label
+        is skipped unconditionally, before the player-temperament check
+        ever runs — a player nation's own "Nation Income Tick"/"District
+        Duration Tick"/"AI Ensure Leader Tick" result must NOT reach
+        player_tick_summary."""
+        for tick_function_label in ("Nation Income Tick", "District Duration Tick", "AI Ensure Leader Tick"):
+            old_nation = {"temperament": "Player", "name": "Testland"}
+            if tick_function_label in th._EXCLUDED_FROM_PLAYER_SUMMARY_TICK_LABELS:
+                included = False
+            elif old_nation.get("temperament", "None") == "Player":
+                included = True
+            else:
+                included = False
+            assert included is False, f"{tick_function_label} should be excluded even for a Player nation"
+
+    def test_excluded_merchant_mercenary_labels_are_skipped_despite_a_real_player_leader(self):
+        """Mirrors the merchant/mercenary loops' attribution check (which
+        checks the exclusion set BEFORE _org_leader_has_real_player, see
+        tick_helpers.py) — a real player-led org's income/upkeep result
+        must still not reach player_tick_summary once excluded."""
+        for tick_function_label in ("Merchant Income Tick", "Mercenary Upkeep Tick"):
+            org_leader_has_real_player = True  # i.e. would have included it pre-fix
+            included = (
+                tick_function_label not in th._EXCLUDED_FROM_PLAYER_SUMMARY_TICK_LABELS
+                and org_leader_has_real_player
+            )
+            assert included is False, f"{tick_function_label} should be excluded despite a real player leader"
+
+    def test_unrelated_label_is_unaffected(self):
+        assert "Nation War Support Tick" not in th._EXCLUDED_FROM_PLAYER_SUMMARY_TICK_LABELS
+
+
+class TestNationTechTickWindfallSplit:
+    """nation_tech_tick now returns (full_result, windfall_result) instead
+    of a single string: the "X has researched Y" line is excluded from
+    the player summary, but a resource windfall it triggers is still
+    included there — see nation_tech_tick's own docstring and the nation
+    loop's "Nation Tech Tick" special-case in tick_helpers.py."""
+
+    def test_return_shape_is_a_two_tuple(self, test_db):
+        old_nation = {
+            "name": "Testland", "technologies": {"bronze_working": {"investing": 10, "invested": 0, "cost": 10}},
+            "resource_production": {}, "resource_consumption": {},
+        }
+        new_nation = dict(old_nation)
+        with patch("helpers.tick_helpers.json_data", {"tech": {"bronze_working": {"display_name": "Bronze Working", "cost": 10}}}):
+            full_result, windfall_result = th.nation_tech_tick(old_nation, new_nation, {})
+        assert "Testland has researched Bronze Working" in full_result
+        assert windfall_result == ""  # no resource_windfall_on_tech_researched set
+
+    def test_windfall_line_appears_in_both_full_and_windfall_results(self, test_db):
+        old_nation = {
+            "name": "Testland",
+            "technologies": {"bronze_working": {"investing": 10, "invested": 0, "cost": 10}},
+            "resource_production": {}, "resource_consumption": {},
+            "resource_windfall_on_tech_researched": 2,
+        }
+        new_nation = dict(old_nation)
+        fake_json_data = {
+            "tech": {"bronze_working": {"display_name": "Bronze Working", "cost": 10}},
+            "general_resources": [{"key": "wood", "name": "Wood"}],
+        }
+        with patch("helpers.tick_helpers.json_data", fake_json_data), \
+             patch("helpers.tick_helpers.random.choice", return_value="wood"):
+            full_result, windfall_result = th.nation_tech_tick(old_nation, new_nation, {})
+
+        assert "Testland has researched Bronze Working" in full_result
+        assert "resource windfall" in full_result
+        assert "resource windfall" in windfall_result
+        assert "has researched" not in windfall_result
+
+    def test_attribution_check_uses_windfall_result_only_for_the_player_summary(self):
+        """Mirrors the nation loop's special-case substitution: for "Nation
+        Tech Tick" specifically, player_tick_summary gets windfall_result
+        in place of the full result, while full_tick_summary always gets
+        the full result."""
+        tick_function_label = "Nation Tech Tick"
+        full_result = "Testland has researched Bronze Working.\nTestland gained 2 wood from a resource windfall (researched Bronze Working).\n"
+        windfall_result = "Testland gained 2 wood from a resource windfall (researched Bronze Working).\n"
+
+        if tick_function_label == "Nation Tech Tick":
+            result, player_result = full_result, windfall_result
+        else:
+            result = player_result = full_result
+
+        old_nation = {"temperament": "Player"}
+        if tick_function_label in th._EXCLUDED_FROM_PLAYER_SUMMARY_TICK_LABELS:
+            player_tick_summary = ""
+        elif old_nation.get("temperament", "None") == "Player":
+            player_tick_summary = player_result
+        else:
+            player_tick_summary = ""
+        full_tick_summary = result
+
+        assert "has researched" not in player_tick_summary
+        assert "resource windfall" in player_tick_summary
+        assert "has researched" in full_tick_summary
+        assert "resource windfall" in full_tick_summary
 
 
 class TestDiseaseSpreadEventPlayerAttributionEndToEnd:

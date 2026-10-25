@@ -1,6 +1,7 @@
 import math
 import copy
 import threading
+from collections import defaultdict
 from copy import deepcopy
 from time import perf_counter
 from app_core import mongo, json_data, category_data
@@ -366,11 +367,23 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
     # Store the SourceContribution objects so _build_unit_tagged_sources can reuse them
     # instead of recomputing (avoids scaling/target mismatches between the two paths).
     _district_contributions = []
+    _ruler_law_contributions = []
     if target_data_type in ("nation", "nation_jobs"):
-        from calculations.source_adapters import DistrictAdapter as _DA
+        from calculations.source_adapters import DistrictAdapter as _DA, LawAdapter as _LA
         _district_contributions = _DA.collect(target, schema, modifier_totals, law_totals, external_modifiers_total)
         for _dc in _district_contributions:
             for _k, _v in _dc.modifiers.items():
+                district_totals[_k] = district_totals.get(_k, 0) + _v
+
+        # Ruling characters' own law/subtype modifiers scoped character_ruling_nation
+        # (e.g. the built-in Quartermaster subtype's +1 progress_slots) — the
+        # mirror of the character branch's LawAdapter.collect_for_character
+        # below, which pulls a NATION's law modifiers into its ruling
+        # characters. See LawAdapter.collect_for_nation's docstring for why
+        # nothing else reaches this.
+        _ruler_law_contributions = _LA.collect_for_nation(target)
+        for _rc in _ruler_law_contributions:
+            for _k, _v in _rc.modifiers.items():
                 district_totals[_k] = district_totals.get(_k, 0) + _v
 
     record_timing("district_calculations_ms", phase_start)
@@ -412,6 +425,8 @@ def calculate_all_fields(target, schema, target_data_type, return_breakdowns=Fal
         # collect_external_requirements (line 120) did for the actual calculation.
         _sub = perf_counter()
         nation_tagged_sources = _build_unit_tagged_sources(target, schema, district_details, _district_contributions)
+        for _rc in _ruler_law_contributions:
+            nation_tagged_sources.append({"label": f"Ruling Character Law: {_rc.label}", "modifiers": dict(_rc.modifiers)})
         record_timing("ts_tagged_sources_ms", _sub)
 
         _sub = perf_counter()
@@ -2577,6 +2592,28 @@ def _apply_unit_stat_modifiers(base_stats, unit_type_str, is_support, is_magical
     breakdown = {stat: [] for stat in _UNIT_STAT_NAMES}
     prefixes = _get_unit_stat_prefixes(unit_type_str, is_support, is_magical, roles, base_name)
 
+    def _add_to_stat(current, delta):
+        """Add `delta` to a stat's current value, which is almost always a
+        plain number but can be a "{min}-{max}" range string for a unit
+        with an asymmetric range (see load_db_units' range_val) -- the only
+        stat ever formatted that way. A flat bonus bumps both ends, kept
+        in the same string shape, rather than crashing on str + float
+        (found live 2026-10-25: Range's land-unit range buff, non-
+        functional until that same fix, had never actually reached this
+        line for any variable-range unit before)."""
+        if isinstance(current, str):
+            lo_s, hi_s = current.split("-", 1) if "-" in current else (current, current)
+            try:
+                lo, hi = float(lo_s) + delta, float(hi_s) + delta
+            except ValueError:
+                return current  # not a number/range string -- leave untouched
+
+            def _fmt(x):
+                return int(x) if float(x).is_integer() else x
+
+            return f"{_fmt(lo)}-{_fmt(hi)}"
+        return (current or 0) + delta
+
     if is_support:
         bare_strength_keys = {"strength", "support_strength"}
         bare_attack_key = None
@@ -2604,7 +2641,7 @@ def _apply_unit_stat_modifiers(base_stats, unit_type_str, is_support, is_magical
 
     def _add_single(stat, val, label):
         if effective.get(stat) is not None:
-            effective[stat] = (effective[stat] or 0) + val
+            effective[stat] = _add_to_stat(effective[stat], val)
             breakdown[stat].append({"label": label, "value": val})
 
     for source in tagged_sources:
@@ -2633,7 +2670,7 @@ def _apply_unit_stat_modifiers(base_stats, unit_type_str, is_support, is_magical
                 for stat in _UNIT_STAT_NAMES:
                     if modifier == f"{prefix}_{stat}":
                         if effective.get(stat) is not None:
-                            effective[stat] = (effective[stat] or 0) + value
+                            effective[stat] = _add_to_stat(effective[stat], value)
                             breakdown[stat].append({"label": label, "value": value})
                         matched = True
                         break
@@ -3237,6 +3274,105 @@ def check_district_requirements(nation, district_def):
 
     reqs = _db_prerequisites_to_requirements(district_def.get("requirements", []))
     return _check_requirements_dict(nation, reqs)
+
+
+def get_district_support_map(nation):
+    """Set of (category, tier) pairs that have at least one ACTIVE
+    district instance on this nation -- "active" meaning present, and (for
+    tier > 1) itself supported by an active tier-(N-1) district of the same
+    category. Built bottom-up by increasing tier so each tier's check only
+    ever looks at already-resolved lower tiers -- this is what makes
+    support cascade: if a nation's tier-1 production district is lost,
+    tier-2 production districts correctly drop out of this set too (no
+    active tier-1 to point to), and any tier-3 checked against THEM
+    correctly loses support on the next pass, without walking the chain
+    recursively per-district. Legacy (type-only) districts have no
+    category/tier and never contribute.
+
+    A "district_support_override" modifier directly on the nation acts as
+    a simulated, unconditionally-active district of its chosen
+    district_category/tier -- an admin's way to bypass the chain (e.g. an
+    event or law granting a nation credit for a district it never built)
+    without editing districts at all. It's folded in as a seed alongside
+    real districts, so it participates in the same bottom-up cascade: an
+    override at tier 1 still lets a REAL tier 2 (and, through that, a real
+    tier 3) become active, exactly as if the tier 1 existed for real.
+    """
+    present = defaultdict(list)
+    for inst in nation.get("districts", []):
+        if not isinstance(inst, dict) or not inst.get("def_key"):
+            continue
+        dd = _resolve_def(inst)
+        cat, tier = dd.get("category"), dd.get("tier")
+        if cat and tier:
+            present[(cat, tier)].append(inst)
+
+    overrides = set()
+    for m in nation.get("modifiers", []) or []:
+        if not isinstance(m, dict) or m.get("modifier_type") != "district_support_override":
+            continue
+        cat = m.get("district_category", "")
+        try:
+            tier = int(m.get("tier", 0))
+        except (TypeError, ValueError):
+            continue
+        if cat and tier:
+            overrides.add((cat, tier))
+
+    active_pairs = set()
+    for cat, tier in sorted(set(present.keys()) | overrides, key=lambda ct: ct[1]):
+        if (cat, tier) in overrides or tier <= 1 or (cat, tier - 1) in active_pairs:
+            active_pairs.add((cat, tier))
+    return active_pairs
+
+
+def get_district_inactive_reason(nation, district_instance, support_map=None):
+    """"" if district_instance is fully supported, else a player-facing
+    explanation of what's missing.
+
+    Mirrors check_district_requirements' tier-chain rule (a tier-N district
+    needs a tier-(N-1) district of the same category) but evaluated
+    continuously against the nation's CURRENT districts instead of only at
+    build time -- so losing the supporting district (e.g. to territory
+    loss) is reflected immediately instead of leaving the dependent
+    district's bonuses active forever. Unlike check_district_requirements'
+    one-shot build check, this requires the tier-(N-1) district to itself
+    be ACTIVE, not merely present -- see get_district_support_map -- so a
+    broken chain two tiers down (tier-1 lost, stranding tier-2, which was
+    itself supporting a tier-3) correctly disables the tier-3 too.
+
+    `support_map`: pass a precomputed get_district_support_map(nation)
+    result when checking many districts on the same nation, to avoid
+    rebuilding it per-district (e.g. DistrictAdapter.collect, which checks
+    every district on a nation during a single field calculation).
+    """
+    if not isinstance(district_instance, dict) or not district_instance.get("def_key"):
+        return ""
+    dd = _resolve_def(district_instance)
+    tier = dd.get("tier", 1)
+    if tier <= 1:
+        return ""
+    category = dd.get("category", "")
+    if not category:
+        return ""
+    needed_tier = tier - 1
+
+    if support_map is None:
+        support_map = get_district_support_map(nation)
+    if (category, needed_tier) in support_map:
+        return ""
+
+    options = sorted(
+        d.get("display_name", d.get("key"))
+        for d in _get_cached_district_defs_by_key().values()
+        if d.get("category") == category and d.get("tier") == needed_tier
+    )
+    category_label = category.replace("_", " ").title()
+    options_label = " or ".join(options) if options else f"Tier {needed_tier} {category_label}"
+    return (
+        f"Inactive: requires an active Tier {needed_tier} {category_label} district "
+        f"({options_label}) to support this Tier {tier} district."
+    )
 
 
 def check_upgrade_requirements(nation, upgrade_def):

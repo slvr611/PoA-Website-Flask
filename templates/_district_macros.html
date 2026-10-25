@@ -2,21 +2,28 @@
 {% from '_modifier_macros.html' import modifier_section, modifier_row with context %}
 
 {#
-  district_card(dd, cur_node, cur_upgrades, editable, form_district, idx, pend_node, nation)
-    dd             – full district-def dict from district_defs_map
-    cur_node       – current node key string (empty = none)
-    cur_upgrades   – list of unlocked upgrade key strings
-    editable       – if True, render upgrade checkboxes + hidden fields
-    form_district  – WTForms DistrictDict FormField (required when editable=True)
-    idx            – district slot index used for unique element IDs (required when editable=True)
-    pend_node      – pending node value (static mode only; show diff indicator when != cur_node)
-    nation         – nation dict, used to hide not-yet-unlocked upgrades whose requirements
-                     (e.g. a researched technology) aren't met. Already-unlocked upgrades
-                     always show regardless, so a toggle is never hidden out from under it.
+  district_card(dd, cur_node, cur_upgrades, editable, form_district, idx, pend_node, nation, district_instance)
+    dd                – full district-def dict from district_defs_map
+    cur_node          – current node key string (empty = none)
+    cur_upgrades      – list of unlocked upgrade key strings
+    editable          – if True, render upgrade checkboxes + hidden fields
+    form_district     – WTForms DistrictDict FormField (required when editable=True)
+    idx               – district slot index used for unique element IDs (required when editable=True)
+    pend_node         – pending node value (static mode only; show diff indicator when != cur_node)
+    nation            – nation dict, used to hide not-yet-unlocked upgrades whose requirements
+                        (e.g. a researched technology) aren't met, and to check district_instance's
+                        own tier-chain support. Already-unlocked upgrades always show regardless,
+                        so a toggle is never hidden out from under it.
+    district_instance – the actual built district dict (needs at least def_key) this card
+                        represents, used (with nation) to show it as inactive when its
+                        supporting lower-tier district (same category) is gone. Omit when dd is
+                        just a reference definition with no specific built instance (e.g. the
+                        /districts catalog page) — no inactive check is made without it.
 #}
-{% macro district_card(dd, cur_node, cur_upgrades, editable=False, form_district=none, idx=none, pend_node=none, nation=none) %}
+{% macro district_card(dd, cur_node, cur_upgrades, editable=False, form_district=none, idx=none, pend_node=none, nation=none, district_instance=none) %}
 {% if dd %}
-<div class="dc dc--t{{ dd.get('tier', 1) }}">
+{% set inactive_reason = get_district_inactive_reason(nation, district_instance) if (nation and district_instance) else '' %}
+<div class="dc dc--t{{ dd.get('tier', 1) }}{% if inactive_reason %} dc--inactive{% endif %}">
     <header>
         <div>
             <div class="dc-title">{{ dd.get('display_name', dd.get('key', '')) }}</div>
@@ -30,6 +37,10 @@
         </div>
         <span class="dc-tier-badge">T{{ dd.get('tier', '?') }}</span>
     </header>
+
+    {% if inactive_reason %}
+    <div class="dc-inactive-banner">⚠ {{ inactive_reason }}</div>
+    {% endif %}
 
     {% if dd.get('image') %}
     <div class="dc-image-wrap"><img class="dc-image" src="{{ dd.image }}" alt="{{ dd.get('display_name','') }}"></div>

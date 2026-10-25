@@ -2,17 +2,24 @@
 Tests for mercenary company visibility, based on the region a mercenary
 company is currently stationed in (mercenary["region"]):
 
-  - Any viewer nation sharing the mercenary's region gets a flat tier-1
-    baseline — mirroring nations' own same-region +1 bonus in
-    _structural_relationship_bonus — plus the viewer's own offensive
-    visibility reach.
+  - Any viewer nation sharing the mercenary's region gets a flat tier-4
+    baseline (2026-10-25 request: full insight into unit layout and
+    district layout for any nation/mercenary/merchant player in the same
+    region) — deliberately NOT the same same-region +1 ordinary
+    nation-to-nation visibility grants via _structural_relationship_bonus,
+    which this leaves untouched — plus the viewer's own offensive
+    visibility reach. Mercenary treasury stays out of reach regardless:
+    it's gated by its own separate, stricter admin-only check
+    (mercenaries.json's view_access_level on that field), entirely outside
+    this 0-4 tier system.
   - Unlike merchants, there's no single "host nation" that always sees a
     mercenary company at full (tier 4) visibility — a mercenary's "patron"
     merely employs it, it doesn't own/contain it the way a merchant's
     location nation does.
   - The mercenary's OWN visibility_modifiers (added the same generic way a
     nation's/merchant's are, via its `modifiers` array) apply — most
-    notably its own defensive visibility.
+    notably its own defensive visibility, which can still pull the final
+    tier back down even with the same-region baseline above.
 
 See calculations/visibility.py's compute_mercenary_visibility.
 """
@@ -29,13 +36,13 @@ def _patch_mongo(test_db):
 
 
 class TestComputeMercenaryVisibilitySameRegionBaseline:
-    def test_shares_region_grants_tier_1(self, test_db):
+    def test_shares_region_grants_tier_4(self, test_db):
         region_id = ObjectId()
         viewer_nation = {"_id": ObjectId(), "region": str(region_id), "overlord": None}
         mercenary = {"region": str(region_id), "visibility_modifiers": []}
         with _patch_mongo(test_db):
             tier = compute_mercenary_visibility(viewer_nation, mercenary)
-        assert tier == 1
+        assert tier == 4
 
     def test_different_region_grants_zero(self, test_db):
         viewer_nation = {"_id": ObjectId(), "region": str(ObjectId()), "overlord": None}
@@ -58,7 +65,7 @@ class TestComputeMercenaryVisibilitySameRegionBaseline:
         mercenary = {"region": str(region_id), "visibility_modifiers": []}
         with _patch_mongo(test_db):
             tier = compute_mercenary_visibility([other_region_viewer, same_region_viewer], mercenary)
-        assert tier == 1
+        assert tier == 4
 
 
 class TestComputeMercenaryVisibilityModifiers:
@@ -71,7 +78,7 @@ class TestComputeMercenaryVisibilityModifiers:
         mercenary = {"region": str(region_id), "visibility_modifiers": []}
         with _patch_mongo(test_db):
             tier = compute_mercenary_visibility(viewer_nation, mercenary)
-        assert tier == 3  # 1 (region) + 2 (offensive)
+        assert tier == 4  # 4 (region) + 2 (offensive), clamped to the max of 4
 
     def test_offensive_modifier_alone_can_reach_a_mercenary_outside_the_region(self, test_db):
         viewer_nation = {
@@ -84,6 +91,9 @@ class TestComputeMercenaryVisibilityModifiers:
         assert tier == 2
 
     def test_mercenarys_own_defensive_modifier_reduces_visibility(self, test_db):
+        """The same-region baseline is a floor the mercenary itself can
+        still pull down via its own defensive investment — it isn't an
+        unconditional override."""
         region_id = ObjectId()
         viewer_nation = {"_id": ObjectId(), "region": str(region_id), "overlord": None}
         mercenary = {
@@ -92,7 +102,7 @@ class TestComputeMercenaryVisibilityModifiers:
         }
         with _patch_mongo(test_db):
             tier = compute_mercenary_visibility(viewer_nation, mercenary)
-        assert tier == 0  # 1 (region) - 1 (own defensive) = 0
+        assert tier == 3  # 4 (region) - 1 (own defensive) = 3
 
     def test_tier_never_goes_below_zero_or_above_four(self, test_db):
         region_id = ObjectId()

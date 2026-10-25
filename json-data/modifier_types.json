@@ -25,6 +25,17 @@
         ],
         "applicable_to": ["nation"]
     },
+    "district_support_override": {
+        "name": "District Support Override",
+        "description": "Acts as a simulated, always-active district of the given category and tier for support-chain purposes only — a real district one tier above (same category) keeps its modifiers active even without a genuine lower-tier district built (e.g. an event or law granting 'treat this nation as having an active Tier 1 Warfare district', without actually constructing one). The value field is ignored.",
+        "value_format": "number",
+        "field_template": "_district_support_override_flag",
+        "extra_fields": [
+            {"key": "district_category", "label": "District Category", "source": "district_categories"},
+            {"key": "tier", "label": "Simulated Tier", "source": "district_tiers"}
+        ],
+        "applicable_to": ["nation"]
+    },
     "administration": {
         "name": "Administration",
         "value_format": "number",

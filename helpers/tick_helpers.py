@@ -502,7 +502,44 @@ def _commit_pending_changes(pending):
 # stability loss) — removed at the user's request (2026-10-06); the tick
 # function itself was always running correctly, only its result text never
 # reached player_tick_summary.
-_EXCLUDED_FROM_PLAYER_SUMMARY_TICK_LABELS = set()
+#
+# Added at the user's request (2026-10-24): organization (merchant/
+# mercenary) income, AI ruler generation, nation income, and district
+# session counts are all routine bookkeeping a player doesn't need
+# narrated every tick. These labels are checked in both the nation loop
+# and the merchant/mercenary loops in tick() below.
+#
+# "Nation Tech Tick" is deliberately NOT listed here even though "Nation
+# research" was part of the same request — its "X has researched Y" lines
+# are excluded, but a resource windfall it triggers is still included, so
+# it needs the partial (full_result, windfall_result) handling in the
+# nation loop below instead of an all-or-nothing label exclusion.
+_EXCLUDED_FROM_PLAYER_SUMMARY_TICK_LABELS = {
+    "Merchant Income Tick",
+    "Mercenary Upkeep Tick",
+    "AI Ensure Leader Tick",
+    "Nation Income Tick",
+    "District Duration Tick",
+}
+
+
+def _org_leader_player_id(org_id_str, character_db):
+    """players._id string of the first character ruling this org
+    (merchant/mercenary/faction _id) who has a real player attached, or
+    None. See _org_leader_has_real_player's docstring for why this goes
+    through the character->ruling_nation_org chain rather than the org's
+    own (always-empty) "leaders" field.
+    """
+    if not org_id_str:
+        return None
+    try:
+        leader = character_db.find_one(
+            {"ruling_nation_org": org_id_str, "player": {"$exists": True, "$nin": [None, ""]}},
+            {"player": 1},
+        )
+    except Exception:
+        return None
+    return leader.get("player") if leader else None
 
 
 def _org_leader_has_real_player(org_id_str, character_db):
@@ -517,16 +554,46 @@ def _org_leader_has_real_player(org_id_str, character_db):
     ever reached the player summary — the same class of bug fixed for
     ownership checks in helpers/visibility_helpers.py's is_item_owner.
     """
-    if not org_id_str:
-        return False
+    return bool(_org_leader_player_id(org_id_str, character_db))
+
+
+# ---------------------------------------------------------------------------
+# Discord @mention resolution for the player-facing tick summary (2026-10-24
+# request: each line of the Discord-posted digest should ping whichever
+# real player it's relevant to, not just be included/excluded). A player's
+# Discord snowflake lives on their players document's "id" field (set from
+# the OAuth session at login — see app_core.py's DiscordOAuth2Session use),
+# never on the character/nation/org itself.
+# ---------------------------------------------------------------------------
+
+def _discord_mention_for_player_id(player_id_str, player_db):
+    """"<@discord_id> " for a players._id string, or "" if missing,
+    unresolvable, or the player has no Discord id on file."""
+    if not player_id_str:
+        return ""
     try:
-        leader = character_db.find_one(
-            {"ruling_nation_org": org_id_str, "player": {"$exists": True, "$nin": [None, ""]}},
-            {"_id": 1},
-        )
+        player = player_db.find_one({"_id": ObjectId(player_id_str)}, {"id": 1})
     except Exception:
-        return False
-    return leader is not None
+        return ""
+    discord_id = player.get("id") if player else None
+    return f"<@{discord_id}> " if discord_id else ""
+
+
+def _discord_mention_for_character(character, player_db):
+    """A character's own controlling player's mention — used for a
+    character's OWN tick events (aging, stat gains, heal/death, artifact
+    loss), regardless of what nation (if any) they happen to rule."""
+    return _discord_mention_for_player_id((character or {}).get("player"), player_db)
+
+
+def _discord_mentions_for_nation(nation, player_db):
+    """Mentions for every real player owning `nation` (nation.players is a
+    list — a nation can have more than one owner) concatenated together,
+    each already carrying its own trailing space. "" if none."""
+    return "".join(
+        _discord_mention_for_player_id(pid, player_db)
+        for pid in (nation or {}).get("players", []) or []
+    )
 
 
 def _character_tick_is_player_relevant(character, nation_db):
@@ -577,6 +644,20 @@ def tick(form_data):
         if not success:
             return message
     player_tick_summary = ""
+    # (tick_function_label, text) for every tick FUNCTION below whose
+    # player-relevant results this run were non-empty — lets
+    # give_tick_summary post the player digest to Discord as one message
+    # per tick function (e.g. "Nation Stability Tick" separate from
+    # "Nation Passive Expansion Tick") instead of one undifferentiated
+    # wall of text or one message per entity category. Each entry's text
+    # is built independently (NOT a slice of player_tick_summary) because
+    # it also carries a "<@discord_id> " prefix per line for whichever
+    # real player that line is relevant to — see
+    # _discord_mention_for_character/_discord_mentions_for_nation and
+    # give_tick_summary's call into helpers/discord_post_helpers.py.
+    # player_tick_summary itself (saved to file/S3) deliberately stays
+    # plain text with no mention codes in it.
+    player_tick_summary_sections = []
     full_tick_summary = ""
 
     # Every write this tick makes is queued here instead of being committed
@@ -626,6 +707,7 @@ def tick(form_data):
             run_key = f"run_{tick_function_label}"
             if run_key in form_data:
                 _log_tick_step(tick_function_label)
+                _fn_discord_text = ""
                 for i in range(len(old_characters)):
                     # Stasis blocks every tick function except modifier decay, so a
                     # stasis modifier's own duration still counts down and can expire.
@@ -634,7 +716,11 @@ def tick(form_data):
                     result = _dispatch(tick_function, pending, old_characters[i], new_characters[i], character_schema)
                     if _character_tick_is_player_relevant(old_characters[i], _char_nation_db):
                         player_tick_summary += result
+                        if result.strip():
+                            _fn_discord_text += _discord_mention_for_character(old_characters[i], mongo.db.players) + result
                     full_tick_summary += result
+                if _fn_discord_text.strip():
+                    player_tick_summary_sections.append((tick_function_label, _fn_discord_text))
 
 
 
@@ -661,6 +747,7 @@ def tick(form_data):
             run_key = f"run_{tick_function_label}"
             if run_key in form_data:
                 _log_tick_step(tick_function_label)
+                _fn_discord_text = ""
                 for i in range(len(old_artifacts)):
                     result = _dispatch(tick_function, pending, old_artifacts[i], new_artifacts[i], artifact_schema)
                     owner_id = old_artifacts[i].get("owner", "")
@@ -669,9 +756,13 @@ def tick(form_data):
                             owner = character_db.find_one({"_id": ObjectId(owner_id)})
                             if owner and owner.get("player"):
                                 player_tick_summary += result
+                                if result.strip():
+                                    _fn_discord_text += _discord_mention_for_character(owner, mongo.db.players) + result
                         except Exception:
                             pass
                     full_tick_summary += result
+                if _fn_discord_text.strip():
+                    player_tick_summary_sections.append((tick_function_label, _fn_discord_text))
 
 
     collect_merchant_data = False
@@ -697,11 +788,18 @@ def tick(form_data):
             run_key = f"run_{tick_function_label}"
             if run_key in form_data:
                 _log_tick_step(tick_function_label)
+                _fn_discord_text = ""
                 for i in range(len(old_merchants)):
                     result = _dispatch(tick_function, pending, old_merchants[i], new_merchants[i], merchant_schema)
-                    if _org_leader_has_real_player(str(old_merchants[i]["_id"]), character_db):
-                        player_tick_summary += result
+                    if tick_function_label not in _EXCLUDED_FROM_PLAYER_SUMMARY_TICK_LABELS:
+                        _leader_player_id = _org_leader_player_id(str(old_merchants[i]["_id"]), character_db)
+                        if _leader_player_id:
+                            player_tick_summary += result
+                            if result.strip():
+                                _fn_discord_text += _discord_mention_for_player_id(_leader_player_id, mongo.db.players) + result
                     full_tick_summary += result
+                if _fn_discord_text.strip():
+                    player_tick_summary_sections.append((tick_function_label, _fn_discord_text))
 
 
 
@@ -728,11 +826,18 @@ def tick(form_data):
             run_key = f"run_{tick_function_label}"
             if run_key in form_data:
                 _log_tick_step(tick_function_label)
+                _fn_discord_text = ""
                 for i in range(len(old_mercenaries)):
                     result = _dispatch(tick_function, pending, old_mercenaries[i], new_mercenaries[i], mercenary_schema)
-                    if _org_leader_has_real_player(str(old_mercenaries[i]["_id"]), character_db):
-                        player_tick_summary += result
+                    if tick_function_label not in _EXCLUDED_FROM_PLAYER_SUMMARY_TICK_LABELS:
+                        _leader_player_id = _org_leader_player_id(str(old_mercenaries[i]["_id"]), character_db)
+                        if _leader_player_id:
+                            player_tick_summary += result
+                            if result.strip():
+                                _fn_discord_text += _discord_mention_for_player_id(_leader_player_id, mongo.db.players) + result
                     full_tick_summary += result
+                if _fn_discord_text.strip():
+                    player_tick_summary_sections.append((tick_function_label, _fn_discord_text))
 
 
 
@@ -759,11 +864,17 @@ def tick(form_data):
             run_key = f"run_{tick_function_label}"
             if run_key in form_data:
                 _log_tick_step(tick_function_label)
+                _fn_discord_text = ""
                 for i in range(len(old_factions)):
                     result = _dispatch(tick_function, pending, old_factions[i], new_factions[i], faction_schema)
-                    if _org_leader_has_real_player(str(old_factions[i]["_id"]), character_db):
+                    _leader_player_id = _org_leader_player_id(str(old_factions[i]["_id"]), character_db)
+                    if _leader_player_id:
                         player_tick_summary += result
+                        if result.strip():
+                            _fn_discord_text += _discord_mention_for_player_id(_leader_player_id, mongo.db.players) + result
                     full_tick_summary += result
+                if _fn_discord_text.strip():
+                    player_tick_summary_sections.append((tick_function_label, _fn_discord_text))
 
 
 
@@ -890,6 +1001,7 @@ def tick(form_data):
             run_key = f"run_{tick_function_label}"
             if run_key in form_data:
                 _log_tick_step(tick_function_label)
+                _fn_discord_text = ""
                 # Pre-load district_defs into a module-level cache before the AI
                 # Decision Tick so score_buildable_districts (called up to 6× per
                 # nation × 180 nations) issues only ONE DB query instead of ~1,080.
@@ -924,40 +1036,80 @@ def tick(form_data):
                             continue
                         _flee_events_before = len(flee_events)
                         _disease_spread_events_before = len(disease_spread_events)
-                        result = _dispatch(
+                        _raw_result = _dispatch(
                             tick_function, pending, old_nations[i], new_nations[i], nation_schema,
                             pending_tiles=pending_tiles, flee_events=flee_events, world_city_coords=world_city_coords,
                             nations_by_id=old_nations_by_id, disease_spread_events=disease_spread_events,
                         )
-                        fled_to_a_player_nation = any(
-                            e.get("to_temperament") == "Player" for e in flee_events[_flee_events_before:]
-                        )
-                        disease_spread_to_a_player_nation = any(
-                            e.get("to_temperament") == "Player" for e in disease_spread_events[_disease_spread_events_before:]
-                        )
-                        if tick_function_label in _EXCLUDED_FROM_PLAYER_SUMMARY_TICK_LABELS:
-                            pass
-                        elif (
-                            old_nations[i].get("temperament", "None") == "Player"
-                            or fled_to_a_player_nation
-                            or disease_spread_to_a_player_nation
-                        ):
-                            player_tick_summary += result
-                        elif tick_function_label in VASSAL_SPECIFIC_NATION_TICK_FUNCTIONS and old_nations[i].get("overlord", "None") != "None":
-                            overlord = old_nations[i].get("overlord", "None")
-                            try:
-                                overlord = nation_db.find_one({"_id": ObjectId(overlord)})
-                                if overlord.get("temperament", "None") == "Player":
-                                    player_tick_summary += result
-                            except:
-                                pass
+                        # Nation Tech Tick returns (full_result, windfall_result) —
+                        # see its own docstring. The "X has researched Y" lines are
+                        # excluded from the player summary, but a windfall those
+                        # researches trigger is still a real event worth surfacing
+                        # there, so it's substituted in place of the full result
+                        # wherever this nation is otherwise eligible for the player
+                        # summary below — everything else keeps using the one
+                        # string every other tick function has always returned.
+                        if tick_function_label == "Nation Tech Tick":
+                            result, player_result = _raw_result
+                        else:
+                            result = player_result = _raw_result
                         full_tick_summary += result
+
+                        if tick_function_label in _EXCLUDED_FROM_PLAYER_SUMMARY_TICK_LABELS:
+                            continue
+
+                        # Which nation(s) this line is relevant to, for both the
+                        # include/exclude decision AND who to @mention — not
+                        # always the nation the dispatch call ran for: a pop/
+                        # disease event is attributed to the SOURCE nation's
+                        # dispatch call but is relevant to a player because of
+                        # the DESTINATION, and a vassal-specific event is
+                        # relevant because of the OVERLORD, not the (AI) vassal
+                        # itself. Collected (not elif'd) and deduped by _id so a
+                        # nation that qualifies for more than one reason is only
+                        # ever pinged once.
+                        _mention_nations = []
+                        _seen_mention_ids = set()
+
+                        def _queue_mention_nation(n):
+                            if not n:
+                                return
+                            nid = str(n.get("_id", ""))
+                            if nid and nid not in _seen_mention_ids:
+                                _seen_mention_ids.add(nid)
+                                _mention_nations.append(n)
+
+                        if old_nations[i].get("temperament", "None") == "Player":
+                            _queue_mention_nation(old_nations[i])
+                        for _e in flee_events[_flee_events_before:]:
+                            if _e.get("to_temperament") == "Player":
+                                _queue_mention_nation(old_nations_by_id.get(_e.get("to_id")))
+                        for _e in disease_spread_events[_disease_spread_events_before:]:
+                            if _e.get("to_temperament") == "Player":
+                                _queue_mention_nation(old_nations_by_id.get(_e.get("to_id")))
+                        if tick_function_label in VASSAL_SPECIFIC_NATION_TICK_FUNCTIONS and old_nations[i].get("overlord", "None") != "None":
+                            try:
+                                _overlord_doc = nation_db.find_one({"_id": ObjectId(old_nations[i]["overlord"])})
+                            except Exception:
+                                _overlord_doc = None
+                            if _overlord_doc and _overlord_doc.get("temperament", "None") == "Player":
+                                _queue_mention_nation(_overlord_doc)
+
+                        if _mention_nations:
+                            player_tick_summary += player_result
+                            if player_result.strip():
+                                _mention_prefix = "".join(
+                                    _discord_mentions_for_nation(n, mongo.db.players) for n in _mention_nations
+                                )
+                                _fn_discord_text += _mention_prefix + player_result
                 finally:
                     # Clear the district_defs cache and run GC after each tick
                     # function to release temporary objects and the cached defs list.
                     if is_ai_tick:
                         _clear_district_defs_cache()
                     gc.collect()
+                if _fn_discord_text.strip():
+                    player_tick_summary_sections.append((tick_function_label, _fn_discord_text))
 
         for tick_function_label, tick_function in NATION_CROSS_TICK_FUNCTIONS.items():
             if f"run_{tick_function_label}" in form_data:
@@ -1113,7 +1265,7 @@ def tick(form_data):
         full_tick_summary += region_renaissance_tick()
 
     if "run_Give Tick Summary" in form_data:
-        give_tick_summary(player_tick_summary, full_tick_summary)
+        give_tick_summary(player_tick_summary, full_tick_summary, player_tick_summary_sections)
 
     return full_tick_summary
 
@@ -1352,8 +1504,13 @@ def backup_database():
     print(f"Backup completed with {status}: {message}")
     return success, message
 
-def give_tick_summary(player_tick_summary, full_tick_summary):
-    """Save tick summary to a file and optionally email it"""
+def give_tick_summary(player_tick_summary, full_tick_summary, player_tick_summary_sections=None):
+    """Save tick summary to a file, upload it to S3, and post the
+    player-facing digest to Discord's "bot spam" channel, one message per
+    section (see tick()'s player_tick_summary_sections comment for how
+    those are captured — era_tick/the error-handling caller below don't
+    have sections to offer and simply skip the Discord post).
+    """
     print(full_tick_summary)  # Keep console logging
     
     # Create a timestamp for the filename
@@ -1387,7 +1544,21 @@ def give_tick_summary(player_tick_summary, full_tick_summary):
     if os.getenv("S3_BUCKET_NAME"):
         upload_to_s3(player_summary_path, f"tick_summaries/{player_summary_filename}")
         upload_to_s3(full_summary_path, f"tick_summaries/{full_summary_filename}")
-    
+
+    # Post the player-facing digest to Discord, section by section — never
+    # lets a Discord-side failure (missing config, rate limit, permissions)
+    # affect the tick itself, since by this point the tick has already
+    # fully committed; this is purely a notification on top of it.
+    if player_tick_summary_sections and os.getenv("DISCORD_TICK_SUMMARY_CHANNEL_ID"):
+        try:
+            from helpers.discord_post_helpers import post_tick_summary_sections
+            post_results = post_tick_summary_sections(player_tick_summary_sections)
+            failed = [r for r in post_results if not r.get("ok")]
+            if failed:
+                print(f"[give_tick_summary] {len(failed)}/{len(post_results)} Discord tick-summary messages failed: {failed}")
+        except Exception as e:
+            print(f"[give_tick_summary] Discord tick-summary post failed entirely: {e}")
+
     return full_summary_path
 
 def _in_stasis(entity):
@@ -1709,6 +1880,115 @@ def ai_ensure_leader_tick(old_nation, new_nation, schema, pending=None):
     # generate_ai_character's already_calculated docstring for why this
     # must be passed accurately rather than left at the default.
     return generate_ai_character(old_nation, schema, character_schema, pending=pending, already_calculated=True)
+
+
+# ---------------------------------------------------------------------------
+# Artifact succession — 2026-10-25 request: an artifact's "owner" field
+# tracks a single character, which permanently loses its player attribution
+# on death (character_death_tick) with no successor existing yet to hand
+# off to. generate_ai_character's own inline predecessor_artifacts transfer
+# (see its "if previous_leader:" block) only fires for the one narrow path
+# where a fully-AI org (no players at all) gets an IMMEDIATE successor the
+# moment its ruler dies -- every other case (a player's own nation/org,
+# ai_ensure_leader_tick's next-session catch-up, generate_all_ai_rulers_tick's
+# era-boundary catch-up, or a player simply getting a different character
+# assigned as the new ruler through a normal edit) leaves the dead ruler's
+# artifacts permanently stuck: nobody can ever satisfy is_item_owner's
+# "the owning character's player is you" check again.
+#
+# These three tick functions (one per org type that can have a
+# ruling_nation_org'd character) fix this uniformly, independent of
+# whether the new ruler is AI- or player-controlled -- exactly covering the
+# "AI ruler dies, newly generated AI successor should inherit their
+# artifacts" case alongside the player case, with no special-casing for
+# either:
+#
+#   1. Stamp the org's CURRENT ruling character (if any, living) into their
+#      own former_ruling_nation_orgs list (idempotent -- a no-op once
+#      already recorded).
+#   2. Find every OTHER character who ever ruled this same org
+#      (former_ruling_nation_orgs contains it) and is NOT currently ruling
+#      it (excludes an active co-ruler, if the data model ever allows one).
+#   3. Any artifacts still owned by one of those former rulers pass to the
+#      current ruler.
+#
+# Naturally covered by the exact same player_tick_summary/Discord-section
+# machinery every other nation/merchant/mercenary tick function already
+# gets -- an artifact passing to a player's new ruler shows up in their
+# digest like any other event, with no extra wiring needed here.
+# ---------------------------------------------------------------------------
+
+def _run_artifact_succession(org_id_str, org_label, pending):
+    if not org_id_str:
+        return ""
+    current_rulers = list(mongo.db.characters.find(
+        {"ruling_nation_org": org_id_str, "health_status": {"$ne": "Dead"}}
+    ).sort("name", ASCENDING))
+    if not current_rulers:
+        return ""
+    current_ruler = current_rulers[0]
+    current_ruler_id_str = str(current_ruler["_id"])
+
+    former_orgs = current_ruler.get("former_ruling_nation_orgs") or []
+    if org_id_str not in former_orgs:
+        _queue_change(
+            pending,
+            data_type="characters",
+            item_id=current_ruler["_id"],
+            change_type="Update",
+            before_data=current_ruler,
+            after_data={**current_ruler, "former_ruling_nation_orgs": former_orgs + [org_id_str]},
+            reason=f"Recorded {current_ruler.get('name', 'Unknown')} as a ruler of {org_label}",
+        )
+
+    result = ""
+    former_rulers = mongo.db.characters.find({
+        "former_ruling_nation_orgs": org_id_str,
+        "_id": {"$ne": current_ruler["_id"]},
+    })
+    for former in former_rulers:
+        if str(former.get("ruling_nation_org") or "") == org_id_str:
+            continue  # still actively ruling alongside current_ruler -- never sweep a co-ruler
+        artifacts = list(mongo.db.artifacts.find({
+            "owner": str(former["_id"]), "archived": {"$ne": True},
+        }))
+        if not artifacts:
+            continue
+        names = []
+        for artifact in artifacts:
+            _queue_change(
+                pending,
+                data_type="artifacts",
+                item_id=artifact["_id"],
+                change_type="Update",
+                before_data=artifact,
+                after_data={**artifact, "owner": current_ruler_id_str},
+                reason=(
+                    f"Artifact succession: {org_label} passed from "
+                    f"{former.get('name', 'Unknown')} to {current_ruler.get('name', 'Unknown')}"
+                ),
+            )
+            names.append(artifact.get("name", "Unknown"))
+        result += (
+            f"{', '.join(names)} passed from {former.get('name', 'Unknown')} to "
+            f"{current_ruler.get('name', 'Unknown')} as the new ruler of {org_label}.\n"
+        )
+    return result
+
+
+def nation_artifact_succession_tick(old_nation, new_nation, schema, pending=None):
+    """See the module comment above _run_artifact_succession."""
+    return _run_artifact_succession(str(old_nation.get("_id", "")), old_nation.get("name", "Unknown"), pending)
+
+
+def merchant_artifact_succession_tick(old_merchant, new_merchant, schema, pending=None):
+    """See the module comment above _run_artifact_succession."""
+    return _run_artifact_succession(str(old_merchant.get("_id", "")), old_merchant.get("name", "Unknown"), pending)
+
+
+def mercenary_artifact_succession_tick(old_mercenary, new_mercenary, schema, pending=None):
+    """See the module comment above _run_artifact_succession."""
+    return _run_artifact_succession(str(old_mercenary.get("_id", "")), old_mercenary.get("name", "Unknown"), pending)
 
 
 def character_death_tick(old_character, new_character, schema):
@@ -2399,6 +2679,16 @@ def _grant_resource_windfall(old_nation, new_nation, rolls, event_label):
 
 
 def nation_tech_tick(old_nation, new_nation, schema):
+    """Returns (full_result, windfall_only_result): the "X has researched
+    Y" lines are routine enough to leave out of the player-facing digest
+    (see _EXCLUDED_FROM_PLAYER_SUMMARY_TICK_LABELS' sibling handling for
+    "Nation Tech Tick" in tick()'s nation loop), but a resource windfall
+    triggered by that research is an actual event worth surfacing there —
+    so this function hands back the windfall lines separately rather than
+    folding everything into one string the caller can only include or
+    exclude wholesale. full_result (used for the full tick summary) is
+    unchanged either way.
+    """
     new_nation["research_production_at_tick"] = old_nation.get("resource_production", {}).get("research", 0)
     new_nation["research_consumption_at_tick"] = old_nation.get("resource_consumption", {}).get("research", 0)
     json_tech_data = json_data["tech"]
@@ -2406,6 +2696,7 @@ def nation_tech_tick(old_nation, new_nation, schema):
     techs = old_nation.get("technologies")
     new_nation["technologies"] = deepcopy(techs) if isinstance(techs, dict) else {"political_philosophy": {"researched": True}}
     result = ""
+    windfall_result = ""
     name = old_nation.get("name", "Unknown")
     for tech, value in new_nation["technologies"].items():
         if value.get("investing", 0) > 0:
@@ -2425,9 +2716,11 @@ def nation_tech_tick(old_nation, new_nation, schema):
                 base_cost = _tech_def.get("cost", 0)
                 pct = old_nation.get("resource_windfall_pct_of_tech_cost", 0)
                 windfall_rolls += round(base_cost * pct)
-                result += _grant_resource_windfall(old_nation, new_nation, windfall_rolls, f"researched {display}")
+                windfall_line = _grant_resource_windfall(old_nation, new_nation, windfall_rolls, f"researched {display}")
+                result += windfall_line
+                windfall_result += windfall_line
         new_nation["technologies"][tech] = value
-    return result
+    return result, windfall_result
 
 def update_rolling_karma(old_nation, new_nation, schema):
     event_type = old_nation.get("event_type", "Unknown")
@@ -4496,11 +4789,13 @@ ARTIFACT_TICK_FUNCTIONS = {
 MERCHANT_TICK_FUNCTIONS = {
     "Merchant Income Tick": merchant_income_tick,
     "Merchant Progress Quests Tick": progress_quests_tick,
+    "Merchant Artifact Succession Tick": merchant_artifact_succession_tick,
 }
 
 MERCENARY_TICK_FUNCTIONS = {
     "Mercenary Upkeep Tick": mercenary_upkeep_tick,
     "Mercenary Progress Quests Tick": progress_quests_tick,
+    "Mercenary Artifact Succession Tick": mercenary_artifact_succession_tick,
 }
 
 FACTION_TICK_FUNCTIONS = {
@@ -4527,6 +4822,7 @@ VASSAL_SPECIFIC_NATION_TICK_FUNCTIONS = [
 
 NATION_TICK_FUNCTIONS = {
     "AI Ensure Leader Tick": ai_ensure_leader_tick,
+    "Nation Artifact Succession Tick": nation_artifact_succession_tick,
     "Nation Isolated Diplo Stance Tick": isolated_diplo_stance_tick,
     "Nation Income Tick": nation_income_tick,
     "Nation Tech Tick": nation_tech_tick,
@@ -4664,6 +4960,9 @@ _PENDING_AWARE_TICK_FUNCTIONS = {
     era_artifact_loss_tick,
     era_character_aging_tick,
     generate_all_ai_rulers_tick,
+    nation_artifact_succession_tick,
+    merchant_artifact_succession_tick,
+    mercenary_artifact_succession_tick,
 }
 
 # Separate registry, same reasoning, for functions that queue hex_map_tiles

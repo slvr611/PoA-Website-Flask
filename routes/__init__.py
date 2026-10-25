@@ -261,6 +261,16 @@ def inject_modifier_data():
         {"key": "4", "name": "Tier 4"},
     ]
 
+    # District tiers are a separate, smaller scale from progress_tiers above
+    # (0-4, used by quest/spell slots) — districts only go up to tier 3
+    # today (see json-data's district_defs). Used by the District Support
+    # Override modifier's "Simulated Tier" dropdown.
+    all_district_tiers = [
+        {"key": "1", "name": "Tier 1"},
+        {"key": "2", "name": "Tier 2"},
+        {"key": "3", "name": "Tier 3"},
+    ]
+
     _tech_category_keys = sorted({v.get("type", "") for v in json_data.get("tech", {}).values() if v.get("type")})
     all_tech_categories = [{"key": k.lower(), "name": k} for k in _tech_category_keys]
 
@@ -286,6 +296,7 @@ def inject_modifier_data():
         "all_unit_categories": all_unit_categories,
         "all_unit_stats": all_unit_stats,
         "all_progress_tiers": all_progress_tiers,
+        "all_district_tiers": all_district_tiers,
         "all_tech_categories": all_tech_categories,
         "all_visibility_targets": all_visibility_targets,
     }
