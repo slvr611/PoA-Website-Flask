@@ -739,8 +739,83 @@ def download_tick_summary(filename):
             flash(f"Error retrieving summary from S3: {str(e)}", "error")
     else:
         flash("Summary file not found locally and S3 is not configured.", "error")
-    
+
     return redirect(url_for('admin_tool_routes.admin_tick_summaries'))
+
+# error -> human-readable reason, mirroring the enum documented on
+# helpers/discord_post_helpers.py's post_discord_message.
+_DISCORD_POST_ERROR_MESSAGES = {
+    "missing_channel": "DISCORD_TICK_SUMMARY_CHANNEL_ID is not set",
+    "missing_token": "DISCORD_BOT_TOKEN is not set",
+    "forbidden": "bot lacks access/Send Messages permission in that channel (401/403)",
+    "not_found": "channel not found (404) -- check DISCORD_TICK_SUMMARY_CHANNEL_ID",
+    "rate_limited": "rate limited by Discord",
+    "request_failed": "request to Discord failed (network error, or a non-2xx/429 status)",
+}
+
+@admin_tool_routes.route('/tick_summaries/<filename>/post_to_discord', methods=['POST'])
+@admin_required
+def post_tick_summary_to_discord(filename):
+    """Manually (re)post an already-generated tick summary to Discord --
+    for when the automatic post inside tick_helpers.give_tick_summary
+    failed or was skipped (missing/misconfigured env vars, a Discord
+    outage, rate limiting, etc.) and an admin wants to retry it without
+    re-running the whole tick. Surfaces the actual failure reason from
+    post_discord_message rather than just "it didn't post" -- this IS the
+    manual-retry/diagnose path for that silent failure.
+
+    Posts as one or more plain chunked messages (chunk_text_for_discord),
+    without give_tick_summary's per-tick-function section headers: the
+    original (tick_function_label, text) breakdown isn't preserved in the
+    saved .txt file, only the already-flattened summary text.
+    """
+    content = None
+    summary_dir = os.path.join(os.getcwd(), 'summaries')
+    file_path = os.path.join(summary_dir, filename)
+    if os.path.exists(file_path):
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+    else:
+        s3_bucket = os.getenv("S3_BUCKET_NAME")
+        aws_access_key = os.getenv("AWS_ACCESS_KEY_ID")
+        aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+        if s3_bucket and aws_access_key and aws_secret_key:
+            try:
+                import boto3
+                s3_client = boto3.client(
+                    's3',
+                    aws_access_key_id=aws_access_key,
+                    aws_secret_access_key=aws_secret_key
+                )
+                obj = s3_client.get_object(Bucket=s3_bucket, Key=f"tick_summaries/{filename}")
+                content = obj['Body'].read().decode('utf-8', errors='replace')
+            except Exception as e:
+                flash(f"Error retrieving summary from S3: {str(e)}", "error")
+                return redirect(url_for('admin_tool_routes.admin_tick_summaries'))
+        else:
+            flash("Summary file not found locally and S3 is not configured.", "error")
+            return redirect(url_for('admin_tool_routes.admin_tick_summaries'))
+
+    from helpers.discord_post_helpers import chunk_text_for_discord, post_discord_message
+
+    chunks = chunk_text_for_discord(content)
+    if not chunks:
+        flash("Summary is empty -- nothing to post.", "info")
+        return redirect(url_for('admin_tool_routes.download_tick_summary', filename=filename))
+
+    channel_id = os.getenv("DISCORD_TICK_SUMMARY_CHANNEL_ID")
+    results = [post_discord_message(channel_id, chunk) for chunk in chunks]
+    failed = [r for r in results if not r.get("ok")]
+    if failed:
+        reasons = sorted({_DISCORD_POST_ERROR_MESSAGES.get(r["error"], r["error"]) for r in failed})
+        flash(
+            f"Posted {len(results) - len(failed)}/{len(results)} message(s); {len(failed)} failed -- "
+            f"{'; '.join(reasons)}",
+            "error",
+        )
+    else:
+        flash(f"Posted {len(results)} message(s) to Discord.", "success")
+    return redirect(url_for('admin_tool_routes.download_tick_summary', filename=filename))
 
 @admin_tool_routes.route('/global_modifiers/item/global_modifiers')
 @admin_required

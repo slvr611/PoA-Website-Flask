@@ -18,11 +18,12 @@ is what to reach for when "I can't tell where the tick was when it got
 stuck" (see the ~7.5-hour stuck-tick incident this was built for).
 
 Safety: MONGO_URI is forced to --local-uri before app_core is ever
-imported, and AWS/S3/email credentials are stripped from the environment
-so nothing — including the real "Backup Database" and "Give Tick Summary"
-steps, if selected — can touch production S3, email, or the production
-database. A hard check right after import re-verifies app_core actually
-ended up pointed at a local address before anything runs.
+imported, and AWS/S3/email/Discord credentials are stripped from the
+environment so nothing — including the real "Backup Database" and "Give
+Tick Summary" steps, if selected — can touch production S3, email,
+Discord, or the production database. A hard check right after import
+re-verifies app_core actually ended up pointed at a local address before
+anything runs.
 
 Query report (on by default, see --no-query-report): a pymongo
 CommandListener counts every Mongo command issued during the run, grouped
@@ -69,9 +70,13 @@ DEFAULT_EXCLUDED_FROM_ALL = {"Backup Database"}
 # Env vars that would let a selected step reach a real external service.
 # Cleared unconditionally so choosing "Backup Database" or "Give Tick
 # Summary" (or anything else that happens to read these) is always safe.
+# DISCORD_TICK_SUMMARY_CHANNEL_ID is the one give_tick_summary actually
+# checks before posting; DISCORD_BOT_TOKEN is cleared too so post_tick_summary_sections
+# can't fall back to it even if a channel id were ever passed explicitly.
 _EXTERNAL_SERVICE_ENV_VARS = (
     "S3_BUCKET_NAME", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY",
     "EMAIL_FROM", "EMAIL_TO", "EMAIL_PASSWORD",
+    "DISCORD_BOT_TOKEN", "DISCORD_TICK_SUMMARY_CHANNEL_ID",
 )
 
 

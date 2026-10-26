@@ -7,6 +7,11 @@
     <div class="mb-3">
         <a href="{{ url_for('admin_tool_routes.admin_tick_summaries') }}" class="btn btn-secondary">Back to Summaries</a>
         <a href="{{ url_for('admin_tool_routes.download_tick_summary', filename=filename, download='true') }}" class="btn btn-primary">Download</a>
+        {% if filename.startswith('player_tick_summary_') %}
+        <form action="{{ url_for('admin_tool_routes.post_tick_summary_to_discord', filename=filename) }}" method="POST" style="display:inline;">
+            <button type="submit" class="btn btn-info" onclick="return confirm('Post this tick summary to Discord now?')">Post to Discord</button>
+        </form>
+        {% endif %}
     </div>
     
     <div class="card">

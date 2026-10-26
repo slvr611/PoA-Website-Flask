@@ -1854,6 +1854,11 @@ _UNIT_STAT_NAMES = [
     "retaliation_damage", "range", "speed", "armor",
 ]
 
+# attack/defense cap at base + this flat bonus rather than double like every
+# other stat (see _apply_unit_stat_modifiers' cap-enforcement block).
+_UNIT_STAT_FLAT_CAP_BONUS_STATS = {"attack", "defense"}
+_UNIT_STAT_FLAT_CAP_BONUS = 4
+
 def _get_unit_stat_prefixes(unit_type_str, is_support, is_magical, roles, base_name):
     """Return all modifier prefixes that apply to this unit.
 
@@ -2676,6 +2681,42 @@ def _apply_unit_stat_modifiers(base_stats, unit_type_str, is_support, is_magical
                         break
                 if matched:
                     break
+
+    # Enforce each stat's maximum: double its (unmodified) base value, except
+    # attack/defense which instead cap at base + 4 (2026-10-26 request) --
+    # e.g. 1 base speed caps at 2, 0 base armor caps at 0 (modifiers can never
+    # raise it), 0 base attack caps at 4. This is an upper bound only --
+    # modifiers remain free to push a stat below its base, same as before
+    # this existed. A "Capped" breakdown entry is recorded when the cap
+    # actually reduced the total, so the per-stat tooltip (Base + entries)
+    # still sums to the displayed value -- except for the 'range' stat's
+    # "{min}-{max}" string shape (see _add_to_stat), where a single delta
+    # can't represent two independently clamped bounds, so no breakdown
+    # entry is added there.
+    for stat in _UNIT_STAT_NAMES:
+        base_value = base_stats.get(stat)
+        current = effective.get(stat)
+        if current is None:
+            continue
+        if isinstance(current, str) or isinstance(base_value, str):
+            cur_lo_s, cur_hi_s = current.split("-", 1) if (isinstance(current, str) and "-" in current) else (current, current)
+            base_lo_s, base_hi_s = base_value.split("-", 1) if (isinstance(base_value, str) and "-" in base_value) else (base_value, base_value)
+            try:
+                cur_lo, cur_hi = float(cur_lo_s), float(cur_hi_s)
+                base_lo, base_hi = float(base_lo_s), float(base_hi_s)
+            except (TypeError, ValueError):
+                continue
+            new_lo, new_hi = min(cur_lo, base_lo * 2), min(cur_hi, base_hi * 2)
+            if (new_lo, new_hi) != (cur_lo, cur_hi):
+                def _fmt(x):
+                    return int(x) if float(x).is_integer() else x
+                effective[stat] = new_lo if new_lo == new_hi else f"{_fmt(new_lo)}-{_fmt(new_hi)}"
+            continue
+
+        cap = (base_value or 0) + _UNIT_STAT_FLAT_CAP_BONUS if stat in _UNIT_STAT_FLAT_CAP_BONUS_STATS else (base_value or 0) * 2
+        if current > cap:
+            breakdown[stat].append({"label": "Capped", "value": cap - current})
+            effective[stat] = cap
 
     stat_breakdown = {stat: entries for stat, entries in breakdown.items() if entries}
     return effective, stat_breakdown
