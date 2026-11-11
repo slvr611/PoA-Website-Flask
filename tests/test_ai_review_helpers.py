@@ -586,3 +586,71 @@ class TestStartAiReviewWorker:
             thread_cls.assert_called_once()
         finally:
             arh._ai_review_worker_started = False
+
+
+class TestRunOneWorkerCycle:
+    """Regression coverage for the 2026-11-10/11 production incident: the
+    worker tore through a backlog of newly-claimable changes with zero
+    pacing and no tick-awareness, and a nation-targeting approval's
+    ~8s-CPU-bound _calculate_and_attach_fields call, repeated back-to-back,
+    starved a concurrently running tick of CPU time on a shared-core dyno
+    badly enough that even fast, pure-Python tick logic sat for hours
+    making no visible progress."""
+
+    def test_claims_nothing_while_a_tick_is_running(self, test_db, patch_ai_review):
+        # The change exists and is otherwise perfectly claimable -- the
+        # tick lock alone must be enough to skip it entirely, BEFORE any
+        # claim/Discord-fetch/LLM-call work ever happens.
+        _insert_change(test_db)
+        with patch.object(arh, "is_tick_locked", return_value=True), \
+             patch.object(arh, "_claim_next_change_for_review") as mock_claim:
+            result, sleep_seconds = arh._run_one_worker_cycle()
+        mock_claim.assert_not_called()
+        assert result is None
+        assert sleep_seconds == arh._AI_REVIEW_POLL_INTERVAL_SECONDS
+
+    def test_claims_nothing_when_disabled(self, test_db, patch_ai_review):
+        test_db["global_modifiers"].insert_one({"name": "global_modifiers", "ai_review_enabled": False})
+        _insert_change(test_db)
+        with patch.object(arh, "_claim_next_change_for_review") as mock_claim:
+            result, sleep_seconds = arh._run_one_worker_cycle()
+        mock_claim.assert_not_called()
+        assert result is None
+        assert sleep_seconds == arh._AI_REVIEW_POLL_INTERVAL_SECONDS
+
+    def test_empty_queue_sleeps_the_long_poll_interval(self, test_db, patch_ai_review):
+        result, sleep_seconds = arh._run_one_worker_cycle()
+        assert result is None
+        assert sleep_seconds == arh._AI_REVIEW_POLL_INTERVAL_SECONDS
+
+    def test_successful_review_still_sleeps_the_short_pacing_interval(self, test_db, patch_ai_review):
+        # The core of the fix: pacing applies even when there WAS
+        # something to review, not just when the queue is empty -- a
+        # backlog must never be processed back-to-back.
+        nation_id = test_db["nations"].insert_one({"name": "N", "money": 10}).inserted_id
+        change = _insert_change(test_db, target=nation_id)
+        with patch.object(arh, "review_change", return_value={"skipped": "no_reviewable_units"}) as mock_review:
+            result, sleep_seconds = arh._run_one_worker_cycle()
+        mock_review.assert_called_once()
+        assert mock_review.call_args.args[0]["_id"] == change["_id"]
+        assert sleep_seconds == arh._AI_REVIEW_ITEM_PACING_SECONDS
+
+    def test_pacing_interval_is_short_compared_to_the_poll_interval(self):
+        # The whole point of the two separate constants: an empty queue
+        # backs off for a while, but a non-empty one keeps moving without
+        # hammering the CPU/API back-to-back.
+        assert arh._AI_REVIEW_ITEM_PACING_SECONDS < arh._AI_REVIEW_POLL_INTERVAL_SECONDS
+
+    def test_review_change_exception_is_caught_and_still_paces(self, test_db, patch_ai_review):
+        change = _insert_change(test_db)
+        with patch.object(arh, "review_change", side_effect=RuntimeError("boom")):
+            result, sleep_seconds = arh._run_one_worker_cycle()
+        assert result is None
+        assert sleep_seconds == arh._AI_REVIEW_ITEM_PACING_SECONDS
+
+    def test_claim_is_always_released_even_on_failure(self, test_db, patch_ai_review):
+        change = _insert_change(test_db)
+        with patch.object(arh, "review_change", side_effect=RuntimeError("boom")):
+            arh._run_one_worker_cycle()
+        stored = test_db["changes"].find_one({"_id": change["_id"]})
+        assert "ai_review_claimed_at" not in stored

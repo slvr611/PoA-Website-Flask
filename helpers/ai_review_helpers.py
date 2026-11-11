@@ -433,6 +433,13 @@ def review_change(change, dry_run=None):
 
 _AI_REVIEW_POLL_INTERVAL_SECONDS = 30
 
+# Paced between every reviewed item, success or failure, so a backlog is
+# never torn through back-to-back — see start_ai_review_worker's own
+# comment for the production incident this closes. A few seconds is enough
+# to yield the GIL/CPU regularly without meaningfully slowing down a real
+# backlog (a 100-item backlog costs an extra ~8 minutes total, not hours).
+_AI_REVIEW_ITEM_PACING_SECONDS = 5
+
 # An admin's own "Save" button (e.g. data_item_routes.py's
 # data_item_edit_approve) calls request_change(...) then approve_change(...)
 # as two separate, sequential writes in one request — not one atomic
@@ -488,6 +495,52 @@ _ai_review_worker_lock = threading.Lock()
 _ai_review_worker_started = False
 
 
+def _run_one_worker_cycle():
+    """One pass of the worker loop: claim-and-review at most one change
+    (or do nothing), then report how long the caller should sleep before
+    the next pass. Pulled out of start_ai_review_worker's loop so it's
+    directly unit-testable rather than only reachable through a bare
+    `while True`.
+
+    Returns the result dict from review_change (or None if nothing was
+    claimed/reviewed) and the number of seconds to sleep next.
+
+    Checks is_tick_locked() BEFORE claiming anything at all — not just
+    before approving (ai_approve_change's own is_tick_locked check, which
+    only runs after the Discord fetch + LLM call already happened) — so
+    the worker goes fully idle the instant a tick starts, rather than
+    still burning CPU and API calls on changes it can never approve
+    anyway. This closes a real production incident (2026-11-10/11): a
+    backlog of newly-claimable changes (unlocked by a fix to the
+    referenced_discord_links extraction) got processed back-to-back with
+    zero pacing, and a nation-targeting approval's
+    _calculate_and_attach_fields call (~8s of CPU-bound work, measured
+    elsewhere in this codebase) ran often enough, for long enough, to
+    starve a concurrently running tick of CPU time on a shared-core dyno
+    — a tick step doing nothing but fast, pure-Python logic sat for hours
+    making no visible progress, purely from losing the GIL to this worker
+    over and over. The pacing sleep after even a SUCCESSFUL review (not
+    just an empty queue) is the other half of that fix: a backlog is never
+    torn through back-to-back regardless of whether a tick happens to be
+    running.
+    """
+    if is_tick_locked() or not get_ai_review_settings()["enabled"]:
+        return None, _AI_REVIEW_POLL_INTERVAL_SECONDS
+
+    change = _claim_next_change_for_review()
+    if change is None:
+        return None, _AI_REVIEW_POLL_INTERVAL_SECONDS
+
+    try:
+        result = review_change(change)
+    except Exception:
+        traceback.print_exc()
+        result = None
+    finally:
+        _release_claim(change["_id"])
+    return result, _AI_REVIEW_ITEM_PACING_SECONDS
+
+
 def start_ai_review_worker():
     """Start the background thread that reviews Pending changes. Call
     exactly once per process, from app.py at startup. Safe to call more
@@ -501,22 +554,11 @@ def start_ai_review_worker():
     def _loop():
         while True:
             try:
-                if not get_ai_review_settings()["enabled"]:
-                    sleep(_AI_REVIEW_POLL_INTERVAL_SECONDS)
-                    continue
-                change = _claim_next_change_for_review()
-                if change is None:
-                    sleep(_AI_REVIEW_POLL_INTERVAL_SECONDS)
-                    continue
-                try:
-                    review_change(change)
-                except Exception:
-                    traceback.print_exc()
-                finally:
-                    _release_claim(change["_id"])
+                _, sleep_seconds = _run_one_worker_cycle()
             except Exception:
                 traceback.print_exc()
-                sleep(_AI_REVIEW_POLL_INTERVAL_SECONDS)
+                sleep_seconds = _AI_REVIEW_POLL_INTERVAL_SECONDS
+            sleep(sleep_seconds)
 
     thread = threading.Thread(target=_loop, name="ai-review-worker")
     thread.daemon = True
