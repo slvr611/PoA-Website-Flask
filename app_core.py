@@ -672,6 +672,79 @@ def send_backup_email(attachment_path, db_name, timestamp):
     except Exception as e:
         return False, f"Email failed: {str(e)}"
 
+def iter_json_array_from_binary(binary_file, chunk_size=4 * 1024 * 1024):
+    """Yield JSON objects from a binary file-like object (e.g. ZipExtFile).
+    Reads binary chunks and decodes to UTF-8 directly, avoiding TextIOWrapper overhead.
+    """
+    decoder = json.JSONDecoder()
+    buf = ''
+    pos = 0
+    in_array = False
+    eof = False
+
+    def ensure(n=1):
+        nonlocal buf, pos, eof
+        while len(buf) - pos < n and not eof:
+            raw = binary_file.read(chunk_size)
+            if not raw:
+                eof = True
+                break
+            buf += raw.decode('utf-8', errors='replace')
+
+    while True:
+        ensure(1)
+        if pos >= len(buf):
+            break
+        c = buf[pos]
+        if c.isspace():
+            pos += 1
+            continue
+        if c == '[':
+            in_array = True
+            pos += 1
+        break
+
+    if not in_array:
+        return
+
+    while True:
+        while True:
+            ensure(1)
+            if pos >= len(buf):
+                break
+            c = buf[pos]
+            if c.isspace() or c == ',':
+                pos += 1
+                continue
+            break
+
+        ensure(1)
+        if pos >= len(buf):
+            break
+        if buf[pos] == ']':
+            pos += 1
+            break
+
+        while True:
+            try:
+                obj, end = decoder.raw_decode(buf, pos)
+                yield obj
+                pos = end
+                if pos > chunk_size:
+                    buf = buf[pos:]
+                    pos = 0
+                break
+            except json.JSONDecodeError:
+                if eof:
+                    raise
+                # Must request MORE than what's already buffered past pos --
+                # ensure(chunk_size) alone no-ops once the buffer already holds
+                # a full chunk, which spins forever (no new bytes, no EOF, no
+                # progress) on any single document bigger than one chunk_size
+                # (e.g. a "changes" doc's before_data/after_data snapshot).
+                ensure((len(buf) - pos) + chunk_size)
+
+
 def restore_mongodb(backup_path=None, backup_date=None, s3_key=None, s3_bucket=None):
     """
     Restores MongoDB database from a backup.
@@ -767,73 +840,6 @@ def restore_mongodb(backup_path=None, backup_date=None, s3_key=None, s3_bucket=N
 
         client = MongoClient(mongo_uri)
         db = client[db_name]
-
-        def iter_json_array_from_binary(binary_file, chunk_size=4 * 1024 * 1024):
-            """Yield JSON objects from a binary file-like object (e.g. ZipExtFile).
-            Reads binary chunks and decodes to UTF-8 directly, avoiding TextIOWrapper overhead.
-            """
-            decoder = json.JSONDecoder()
-            buf = ''
-            pos = 0
-            in_array = False
-            eof = False
-
-            def ensure(n=1):
-                nonlocal buf, pos, eof
-                while len(buf) - pos < n and not eof:
-                    raw = binary_file.read(chunk_size)
-                    if not raw:
-                        eof = True
-                        break
-                    buf += raw.decode('utf-8', errors='replace')
-
-            while True:
-                ensure(1)
-                if pos >= len(buf):
-                    break
-                c = buf[pos]
-                if c.isspace():
-                    pos += 1
-                    continue
-                if c == '[':
-                    in_array = True
-                    pos += 1
-                break
-
-            if not in_array:
-                return
-
-            while True:
-                while True:
-                    ensure(1)
-                    if pos >= len(buf):
-                        break
-                    c = buf[pos]
-                    if c.isspace() or c == ',':
-                        pos += 1
-                        continue
-                    break
-
-                ensure(1)
-                if pos >= len(buf):
-                    break
-                if buf[pos] == ']':
-                    pos += 1
-                    break
-
-                while True:
-                    try:
-                        obj, end = decoder.raw_decode(buf, pos)
-                        yield obj
-                        pos = end
-                        if pos > 4 * 1024 * 1024:
-                            buf = buf[pos:]
-                            pos = 0
-                        break
-                    except json.JSONDecodeError:
-                        if eof:
-                            raise
-                        ensure(chunk_size)
 
         def restore_objectids(obj, _parent_key=None):
             # Only convert to ObjectId when the containing key is '_id' or ends with
