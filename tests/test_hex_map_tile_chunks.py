@@ -112,10 +112,16 @@ class TestRebuildTileChunks:
 
         This simulates that exact race: tile_version changes between the
         pre-scan and post-scan reads (standing in for a concurrent write
-        landing mid-scan). The fix must stamp chunk_synced_version to the
-        PRE-scan version, not the post-scan one, so the next read still
-        sees a real mismatch and retries the heal instead of trusting a
-        scan that raced with a write."""
+        landing mid-scan). The computed pre-scan version (1) still must
+        never get vouched for once tile_version has since moved past it —
+        2026-10-26: that unconditional stamp (even of the PRE-scan value)
+        turned out to be its own remaining race (see
+        test_final_stamp_is_guarded_against_a_later_concurrent_mark below),
+        so the final write now goes through _mark_chunk_synced's guard
+        instead, which no-ops here since tile_version is already 2, not 1.
+        Either way the required property holds: the next read must still
+        see a real mismatch and retry the heal instead of trusting a scan
+        that raced with a write."""
         _insert_tile(test_db, 0, 0, terrain="plains")
         _bump_version(test_db)  # tile_version = 1
 
@@ -133,8 +139,51 @@ class TestRebuildTileChunks:
 
         config = test_db["global_modifiers"].find_one({"name": "hex_map_config"})
         assert config["tile_version"] == 2
-        assert synced_version == 1, "must stamp the pre-scan version, not the post-scan one, when they differ"
-        assert config["chunk_synced_version"] == 1
+        assert synced_version == 1, "still computes/returns the pre-scan version"
+        assert config.get("chunk_synced_version") != 2, "must never claim caught up to the live version"
+
+    def test_final_stamp_is_guarded_against_a_later_concurrent_mark(self, test_db):
+        """2026-10-26: confirmed live again (q=104, r=-34 and others served
+        blank/no-data for multiple ticks) — the ORIGINAL fix above still
+        unconditionally stamped chunk_synced_version to the pre-scan
+        version at the very end, via a plain $set. That write itself could
+        land after a concurrent single-tile sync's own GUARDED
+        _mark_chunk_synced call for a LATER version already correctly
+        matched tile_version — and since whichever write lands last simply
+        wins a plain $set, this rebuild's stale, unconditional stamp could
+        overwrite that correct, newer value with its own older one,
+        reintroducing a mismatch where there no longer should be one (or,
+        depending on timing, falsely erase evidence that something is
+        still wrong). The final stamp must instead be guarded the same way
+        (_mark_chunk_synced), so it only ever applies when tile_version is
+        still exactly what this rebuild computed, never clobbering a
+        legitimately newer state."""
+        _insert_tile(test_db, 0, 0, terrain="plains")
+        _bump_version(test_db)  # tile_version = 1
+
+        real_find_one = test_db["global_modifiers"].find_one
+        calls = {"n": 0}
+
+        def _find_one_with_later_concurrent_mark(*args, **kwargs):
+            # The 1st call is rebuild_tile_chunks' own version_before read,
+            # the 2nd is its version_after read (right after the scan,
+            # before the per-chunk writes and final stamp below) — inject
+            # the "concurrent write" exactly there, the narrow window this
+            # test targets.
+            calls["n"] += 1
+            result = real_find_one(*args, **kwargs)
+            if calls["n"] == 2:
+                hmh.bump_tile_version()  # tile_version -> 2
+                hmh._mark_chunk_synced(2)
+            return result
+
+        with _patch_mongo(test_db), \
+             patch.object(test_db["global_modifiers"], "find_one", side_effect=_find_one_with_later_concurrent_mark):
+            hmh.rebuild_tile_chunks()
+
+        config = test_db["global_modifiers"].find_one({"name": "hex_map_config"})
+        assert config["tile_version"] == 2
+        assert config["chunk_synced_version"] == 2, "the later, correct mark must survive this rebuild's own stamp"
 
     def test_no_concurrent_write_stamps_the_matching_version_as_before(self, test_db):
         """Companion to the race test above: when nothing changes during the

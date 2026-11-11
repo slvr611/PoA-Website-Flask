@@ -992,6 +992,7 @@
 								<th>Range</th>
 								<th>Speed</th>
 								<th>Armor</th>
+								<th>Strength</th>
 								<th>Upkeep</th>
 							</tr>
 						</thead>
@@ -1013,6 +1014,7 @@
 									{{ stat_cell(s, b, "range", bd) }}
 									{{ stat_cell(s, b, "speed", bd) }}
 									{{ stat_cell(s, b, "armor", bd) }}
+									<td class="unit-stat-cell" title="Combat power from stats alone (no cost/upkeep) -- same per-stat weights as the unit creator">{{ calculate_unit_strength(s, unit.get("melee", False), unit.get("cavalry", False), unit.get("ranged", False), unit.get("is_support", False)) }}</td>
 									<td>
 										{% for resource, cost in unit.get("upkeep", {}).items() %}
 											{{ resource }}: {{ cost }}<br>

@@ -753,6 +753,37 @@ _DISCORD_POST_ERROR_MESSAGES = {
     "request_failed": "request to Discord failed (network error, or a non-2xx/429 status)",
 }
 
+def _read_tick_summary_file(filename):
+    """Read a tick-summary-related file's raw text, local disk first then
+    S3 (same lookup order/prefix as admin_tick_summaries' listing).
+    Returns (content, error) -- content is None, with a human-readable
+    error, if the file isn't found anywhere. Shared by
+    post_tick_summary_to_discord for both the required player-summary .txt
+    and its optional sections .json sidecar."""
+    summary_dir = os.path.join(os.getcwd(), 'summaries')
+    file_path = os.path.join(summary_dir, filename)
+    if os.path.exists(file_path):
+        with open(file_path, 'r', encoding='utf-8') as f:
+            return f.read(), None
+
+    s3_bucket = os.getenv("S3_BUCKET_NAME")
+    aws_access_key = os.getenv("AWS_ACCESS_KEY_ID")
+    aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+    if s3_bucket and aws_access_key and aws_secret_key:
+        try:
+            import boto3
+            s3_client = boto3.client(
+                's3',
+                aws_access_key_id=aws_access_key,
+                aws_secret_access_key=aws_secret_key
+            )
+            obj = s3_client.get_object(Bucket=s3_bucket, Key=f"tick_summaries/{filename}")
+            return obj['Body'].read().decode('utf-8', errors='replace'), None
+        except Exception as e:
+            return None, f"Error retrieving {filename} from S3: {str(e)}"
+
+    return None, "Summary file not found locally and S3 is not configured."
+
 @admin_tool_routes.route('/tick_summaries/<filename>/post_to_discord', methods=['POST'])
 @admin_required
 def post_tick_summary_to_discord(filename):
@@ -764,47 +795,42 @@ def post_tick_summary_to_discord(filename):
     post_discord_message rather than just "it didn't post" -- this IS the
     manual-retry/diagnose path for that silent failure.
 
-    Posts as one or more plain chunked messages (chunk_text_for_discord),
-    without give_tick_summary's per-tick-function section headers: the
-    original (tick_function_label, text) breakdown isn't preserved in the
-    saved .txt file, only the already-flattened summary text.
+    Reposts identically to the automatic path (one message per
+    tick-function section, each with its "<@discord_id> " mentions intact)
+    whenever this summary's tick_summary_sections_<timestamp>.json sidecar
+    is available (see give_tick_summary) -- every tick run from here on
+    saves one. Only falls back to one undifferentiated, mention-less
+    chunked dump of the flat player_tick_summary text for older summaries
+    saved before that sidecar existed, or ones that never had sections to
+    begin with (era tick).
     """
-    content = None
-    summary_dir = os.path.join(os.getcwd(), 'summaries')
-    file_path = os.path.join(summary_dir, filename)
-    if os.path.exists(file_path):
-        with open(file_path, 'r', encoding='utf-8') as f:
-            content = f.read()
+    content, error = _read_tick_summary_file(filename)
+    if content is None:
+        flash(error, "error")
+        return redirect(url_for('admin_tool_routes.admin_tick_summaries'))
+
+    from helpers.discord_post_helpers import chunk_text_for_discord, post_discord_message, post_tick_summary_sections
+
+    sections_filename = filename.replace("player_tick_summary_", "tick_summary_sections_").replace(".txt", ".json")
+    sections_content, _ = _read_tick_summary_file(sections_filename)
+    sections = None
+    if sections_content:
+        try:
+            import json
+            sections = json.loads(sections_content)
+        except ValueError:
+            sections = None
+
+    if sections:
+        results = post_tick_summary_sections(sections)
     else:
-        s3_bucket = os.getenv("S3_BUCKET_NAME")
-        aws_access_key = os.getenv("AWS_ACCESS_KEY_ID")
-        aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
-        if s3_bucket and aws_access_key and aws_secret_key:
-            try:
-                import boto3
-                s3_client = boto3.client(
-                    's3',
-                    aws_access_key_id=aws_access_key,
-                    aws_secret_access_key=aws_secret_key
-                )
-                obj = s3_client.get_object(Bucket=s3_bucket, Key=f"tick_summaries/{filename}")
-                content = obj['Body'].read().decode('utf-8', errors='replace')
-            except Exception as e:
-                flash(f"Error retrieving summary from S3: {str(e)}", "error")
-                return redirect(url_for('admin_tool_routes.admin_tick_summaries'))
-        else:
-            flash("Summary file not found locally and S3 is not configured.", "error")
-            return redirect(url_for('admin_tool_routes.admin_tick_summaries'))
+        chunks = chunk_text_for_discord(content)
+        if not chunks:
+            flash("Summary is empty -- nothing to post.", "info")
+            return redirect(url_for('admin_tool_routes.download_tick_summary', filename=filename))
+        channel_id = os.getenv("DISCORD_TICK_SUMMARY_CHANNEL_ID")
+        results = [post_discord_message(channel_id, chunk) for chunk in chunks]
 
-    from helpers.discord_post_helpers import chunk_text_for_discord, post_discord_message
-
-    chunks = chunk_text_for_discord(content)
-    if not chunks:
-        flash("Summary is empty -- nothing to post.", "info")
-        return redirect(url_for('admin_tool_routes.download_tick_summary', filename=filename))
-
-    channel_id = os.getenv("DISCORD_TICK_SUMMARY_CHANNEL_ID")
-    results = [post_discord_message(channel_id, chunk) for chunk in chunks]
     failed = [r for r in results if not r.get("ok")]
     if failed:
         reasons = sorted({_DISCORD_POST_ERROR_MESSAGES.get(r["error"], r["error"]) for r in failed})
@@ -813,8 +839,10 @@ def post_tick_summary_to_discord(filename):
             f"{'; '.join(reasons)}",
             "error",
         )
+    elif sections:
+        flash(f"Posted {len(results)} message(s) to Discord (sectioned, with mentions).", "success")
     else:
-        flash(f"Posted {len(results)} message(s) to Discord.", "success")
+        flash(f"Posted {len(results)} message(s) to Discord (no section/mention data available for this summary).", "success")
     return redirect(url_for('admin_tool_routes.download_tick_summary', filename=filename))
 
 @admin_tool_routes.route('/global_modifiers/item/global_modifiers')

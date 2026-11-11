@@ -1510,6 +1510,15 @@ def give_tick_summary(player_tick_summary, full_tick_summary, player_tick_summar
     section (see tick()'s player_tick_summary_sections comment for how
     those are captured — era_tick/the error-handling caller below don't
     have sections to offer and simply skip the Discord post).
+
+    Also saves player_tick_summary_sections itself as a JSON sidecar file
+    (tick_summary_sections_<timestamp>.json) alongside the two .txt files
+    when present — the per-tick-function split and "<@discord_id> "
+    mentions only exist on this sections list, never on the flat
+    player_tick_summary text, so this is what lets
+    routes/admin_tool_routes.py's post_tick_summary_to_discord later
+    reproduce an identical (sectioned, pinging) manual post instead of
+    falling back to one undifferentiated, mention-less chunk dump.
     """
     print(full_tick_summary)  # Keep console logging
     
@@ -1538,12 +1547,22 @@ def give_tick_summary(player_tick_summary, full_tick_summary, player_tick_summar
 
     with open(full_summary_path, 'w', encoding='utf-8') as f:
         f.write(full_tick_summary)
-    
-    
+
+    sections_filename = None
+    sections_path = None
+    if player_tick_summary_sections:
+        import json
+        sections_filename = f"tick_summary_sections_{timestamp}.json"
+        sections_path = os.path.join(summary_dir, sections_filename)
+        with open(sections_path, 'w', encoding='utf-8') as f:
+            json.dump(list(player_tick_summary_sections), f)
+
     # If S3 is configured, upload the summary
     if os.getenv("S3_BUCKET_NAME"):
         upload_to_s3(player_summary_path, f"tick_summaries/{player_summary_filename}")
         upload_to_s3(full_summary_path, f"tick_summaries/{full_summary_filename}")
+        if sections_path:
+            upload_to_s3(sections_path, f"tick_summaries/{sections_filename}")
 
     # Post the player-facing digest to Discord, section by section — never
     # lets a Discord-side failure (missing config, rate limit, permissions)

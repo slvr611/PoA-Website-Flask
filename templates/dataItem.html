@@ -208,6 +208,44 @@
 	{% endwith %}
 	{% endif %}
 
+	{% if data_type == "pops" and g.user and g.user.is_admin %}
+	<div class="table-wrapper" style="margin-top:12px;">
+		<button type="button" id="pop-flee-btn" class="btn btn-danger" data-pop-id="{{ item._id }}">Force Flee</button>
+		<span id="pop-flee-status" style="margin-left:8px;"></span>
+	</div>
+	<script>
+		(function() {
+			const btn = document.getElementById('pop-flee-btn');
+			if (!btn) return;
+			btn.addEventListener('click', function() {
+				if (!confirm('Force this pop to flee its nation now?')) return;
+				const status = document.getElementById('pop-flee-status');
+				btn.disabled = true;
+				status.textContent = 'Fleeing…';
+				fetch('/pops/flee_pop', {
+					method: 'POST',
+					headers: {'Content-Type': 'application/json'},
+					body: JSON.stringify({pop_id: btn.dataset.popId}),
+				})
+					.then(r => r.json())
+					.then(data => {
+						if (data.success) {
+							status.textContent = 'Fled to ' + data.destination + '. Reloading…';
+							setTimeout(() => location.reload(), 1000);
+						} else {
+							status.textContent = 'Error: ' + data.error;
+							btn.disabled = false;
+						}
+					})
+					.catch(err => {
+						status.textContent = 'Error: ' + err.message;
+						btn.disabled = false;
+					});
+			});
+		})();
+	</script>
+	{% endif %}
+
 	{% if data_type == "pops" and g.user and g.user.is_admin and pop_diseases %}
 	<div class="table-wrapper">
 		<table class="info-table">

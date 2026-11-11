@@ -236,7 +236,10 @@ def pops_bulk_delete():
 @pops_routes.route("/pops/flee_pop", methods=["POST"])
 @admin_required
 def pops_flee_pop():
-    """Move a single pop to a random non-Closed nation in the same region."""
+    """Move a single pop to a random non-Closed nation in the same region
+    (or the region's Forced Flee Destination override, if one is set) --
+    an admin-triggered, on-demand equivalent of what pop_flee_tick does to
+    a random excess pop over a normal tick, scoped to one specific pop."""
     data = request.get_json() or {}
     raw_id = data.get("pop_id", "")
     try:
@@ -264,22 +267,34 @@ def pops_flee_pop():
     if not region_id:
         return jsonify({"error": "Nation has no region"}), 400
 
-    try:
-        candidates = list(mongo.db.nations.find(
-            {
-                "region": region_id,
-                "_id": {"$ne": nation["_id"]},
-                "citizenship_stance": {"$ne": "Closed"},
-            },
-            {"_id": 1, "name": 1},
-        ))
-    except Exception:
-        return jsonify({"error": "Could not search for destination nations"}), 500
+    # Same destination-selection rules pop_flee_tick uses over a normal
+    # tick (see helpers/tick_helpers.py) -- a region's Forced Flee
+    # Destination modifier is a hard override, bypassing the Closed-
+    # citizenship check entirely, rather than just a preference within the
+    # normal candidate pool.
+    from helpers.tick_helpers import _forced_flee_destination_for_region
+    destination = _forced_flee_destination_for_region(region_id)
+    if destination and destination["_id"] == nation["_id"]:
+        destination = None  # a nation can't force its own overcrowded pops to flee to itself
 
-    if not candidates:
-        return jsonify({"error": "No eligible destination nations in this region"}), 400
+    if not destination:
+        try:
+            candidates = list(mongo.db.nations.find(
+                {
+                    "region": region_id,
+                    "_id": {"$ne": nation["_id"]},
+                    "citizenship_stance": {"$ne": "Closed"},
+                },
+                {"_id": 1, "name": 1},
+            ))
+        except Exception:
+            return jsonify({"error": "Could not search for destination nations"}), 500
 
-    destination = random.choice(candidates)
+        if not candidates:
+            return jsonify({"error": "No eligible destination nations in this region"}), 400
+
+        destination = random.choice(candidates)
+
     old_pop_data = {k: v for k, v in pop.items() if k != "_id"}
     new_pop_data = dict(old_pop_data)
     new_pop_data["nation"] = str(destination["_id"])

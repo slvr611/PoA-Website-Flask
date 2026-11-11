@@ -2722,6 +2722,70 @@ def _apply_unit_stat_modifiers(base_stats, unit_type_str, is_support, is_magical
     return effective, stat_breakdown
 
 
+def calculate_unit_strength(stats, melee=False, cavalry=False, ranged=False, is_support=False):
+    """Score a unit's raw combat power from its stats alone, ignoring cost,
+    upkeep, traits and district requirements entirely -- using the exact
+    per-stat point weights from the unit creator's point-cost formula
+    (templates/units_item.html's calculateCost), so a unit's power score
+    always lines up with how "expensive" its stats would be to build.
+
+    `stats` is normally a unit's effective_stats (post nation-buff), so
+    buffs like land_attack/land_strength that raise a stat raise this score
+    too; pass base_stats instead for an unbuffed figure (e.g. mercenaries,
+    which have no per-nation buff pipeline of their own).
+
+    Attack/defense are deliberately excluded: the unit creator's formula
+    never prices them (base is always 0 -- only nation buffs ever raise
+    them), so there is no per-point weight here to reuse for them.
+    """
+    is_infantry = melee and not cavalry and not is_support
+
+    def _numeric(stat):
+        val = stats.get(stat)
+        return val if isinstance(val, (int, float)) else None
+
+    strength = 0
+
+    hp = _numeric("hp")
+    if hp is not None:
+        strength += max(0, hp - 1 - (2 if is_infantry else 0))
+
+    morale = _numeric("morale")
+    if morale is not None:
+        strength += (morale - 1) * 2
+
+    damage = _numeric("damage")
+    if damage is not None:
+        strength += damage * 3
+
+    retaliation_damage = _numeric("retaliation_damage")
+    if retaliation_damage is not None:
+        strength += retaliation_damage * 2
+
+    speed = _numeric("speed")
+    if speed is not None:
+        strength += max(0, (speed - (1 if cavalry else 0)) * 2)
+
+    armor = _numeric("armor")
+    if armor is not None:
+        strength += armor * 4
+
+    rng = stats.get("range")
+    if rng is not None:
+        if isinstance(rng, str) and "-" in rng:
+            lo_s, hi_s = rng.split("-", 1)
+        else:
+            lo_s = hi_s = rng
+        try:
+            lo, hi = float(lo_s), float(hi_s)
+        except (TypeError, ValueError):
+            lo = hi = None
+        if lo is not None:
+            strength += (hi - lo) * 2 + max(0, hi - 1 - (1 if ranged else 0)) * 4
+
+    return int(strength) if float(strength).is_integer() else strength
+
+
 def load_db_units(unit_type=None):
     """Load units from MongoDB and return them in the JSON calculation-compatible format.
     unit_type: 'land' or 'naval' (lowercase) to filter by type, or None for all.

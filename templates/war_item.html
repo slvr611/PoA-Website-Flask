@@ -507,14 +507,14 @@ function removeParticipantRow(btn) {
 
             {% if entry.unit_types %}
             <details class="war-details">
-                <summary>Units ({{ entry.unit_types | length }} type{{ 's' if entry.unit_types | length != 1 }})</summary>
+                <summary>Units ({{ entry.unit_types | length }} type{{ 's' if entry.unit_types | length != 1 }}) &mdash; Total Strength: {{ entry.total_strength }}</summary>
                 <div class="war-units-scroll">
                     <table class="info-table war-units-table">
                         <thead>
                             <tr>
                                 <th>Unit</th><th>Cnt</th><th>ATK</th><th>DEF</th>
                                 <th>HP</th><th>DMG</th><th>ARM</th><th>RNG</th>
-                                <th>Source</th><th>Modifiers</th>
+                                <th>Strength</th><th>Source</th><th>Modifiers</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -528,6 +528,7 @@ function removeParticipantRow(btn) {
                                 <td>{{ ut.baseDamage }}</td>
                                 <td>{{ ut.baseArmor }}</td>
                                 <td>{{ ut.baseRange }}</td>
+                                <td title="Combat power from stats alone (no cost/upkeep) -- same per-stat weights as the unit creator">{{ ut.strength }}</td>
                                 <td>{% if ut.get("mercenaryName") %}<em>{{ ut.mercenaryName }}</em>{% else %}Nation{% endif %}</td>
                                 <td>
                                     {% if ut.modifiers %}

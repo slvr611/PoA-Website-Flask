@@ -79,3 +79,57 @@ class TestPostTickSummaryToDiscord:
                 atr.post_tick_summary_to_discord.__wrapped__("does_not_exist.txt")
             messages = get_flashed_messages(with_categories=True)
         assert any("not found locally and S3 is not configured" in m for _, m in messages)
+
+
+class TestPostTickSummaryToDiscordWithSectionsSidecar:
+    """When give_tick_summary's tick_summary_sections_<timestamp>.json
+    sidecar is present (every tick run from 2026-10-26 on saves one -- see
+    tick_helpers.py), the manual post must reproduce the automatic path
+    exactly: one message per tick-function section, mentions intact --
+    not the plain mention-less chunk dump used as a fallback."""
+
+    def _run_with_sidecar(self, flask_app, tmp_path, sections):
+        import json
+        filename = "player_tick_summary_20261026_000010.txt"
+        sections_filename = "tick_summary_sections_20261026_000010.json"
+        summaries_dir = tmp_path / "summaries"
+        summaries_dir.mkdir()
+        (summaries_dir / filename).write_text("flattened, no mentions here", encoding="utf-8")
+        (summaries_dir / sections_filename).write_text(json.dumps(sections), encoding="utf-8")
+        from flask import get_flashed_messages
+        with flask_app.test_request_context(f"/tick_summaries/{filename}/post_to_discord", method="POST"):
+            with patch("os.getcwd", return_value=str(tmp_path)):
+                atr.post_tick_summary_to_discord.__wrapped__(filename)
+            return get_flashed_messages(with_categories=True)
+
+    def test_uses_sections_sidecar_when_present(self, flask_app, tmp_path):
+        sections = [
+            ["Nation Stability Tick", "<@111> Taika: stability rose.\n"],
+            ["Character Aging Tick", "<@222> Aesoh grew a year older.\n"],
+        ]
+        with patch.dict(os.environ, {"DISCORD_TICK_SUMMARY_CHANNEL_ID": "123", "DISCORD_BOT_TOKEN": "tok"}), \
+             patch("helpers.discord_post_helpers.post_discord_message", return_value={"ok": True}) as mock_post:
+            messages = self._run_with_sidecar(flask_app, tmp_path, sections)
+
+        assert mock_post.call_count == 2
+        first_content = mock_post.call_args_list[0].args[1]
+        assert first_content.startswith("**Nation Stability Tick**\n")
+        assert "<@111>" in first_content
+        second_content = mock_post.call_args_list[1].args[1]
+        assert second_content.startswith("**Character Aging Tick**\n")
+        assert "<@222>" in second_content
+        assert any("sectioned, with mentions" in m for _, m in messages)
+
+    def test_falls_back_to_plain_chunks_when_sidecar_is_malformed(self, flask_app, tmp_path):
+        filename = "player_tick_summary_20261026_000011.txt"
+        sections_filename = "tick_summary_sections_20261026_000011.json"
+        summaries_dir = tmp_path / "summaries"
+        summaries_dir.mkdir()
+        (summaries_dir / filename).write_text("Plain flattened text", encoding="utf-8")
+        (summaries_dir / sections_filename).write_text("not valid json {{{", encoding="utf-8")
+        with patch.dict(os.environ, {"DISCORD_TICK_SUMMARY_CHANNEL_ID": "123", "DISCORD_BOT_TOKEN": "tok"}), \
+             patch("helpers.discord_post_helpers.post_discord_message", return_value={"ok": True}) as mock_post, \
+             flask_app.test_request_context(f"/tick_summaries/{filename}/post_to_discord", method="POST"), \
+             patch("os.getcwd", return_value=str(tmp_path)):
+            atr.post_tick_summary_to_discord.__wrapped__(filename)
+        mock_post.assert_called_once_with("123", "Plain flattened text")

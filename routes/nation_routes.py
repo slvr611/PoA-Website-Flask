@@ -16,6 +16,7 @@ import json
 from time import perf_counter
 from calculations.field_calculations import (
     calculate_all_fields, _resolve_def, check_upgrade_requirements, get_district_inactive_reason,
+    calculate_unit_strength,
 )
 from bson import ObjectId
 from helpers.visibility_helpers import get_item_visibility, log_visibility_bypass, strip_form_data_to_tier, nation_field_tier
@@ -71,6 +72,10 @@ def race_trait_is_war_relevant(trait_type, trait_value):
 # racial trait that affects units in any way, instead of every trait looking
 # equally important at a glance.
 app.jinja_env.globals.update(race_trait_is_war_relevant=race_trait_is_war_relevant)
+# Exposed so nation_owner.html's unit tables can show each unit's combat
+# power score (computed from its live, nation-buffed effective_stats) without
+# this needing to be cached onto the nation document itself.
+app.jinja_env.globals.update(calculate_unit_strength=calculate_unit_strength)
 
 nation_routes = Blueprint("nation_routes", __name__)
 

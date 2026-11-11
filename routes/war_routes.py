@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, request, redirect, flash, jsonify,
 from app_core import mongo, category_data, json_data
 from helpers.auth_helpers import admin_required
 from helpers.hex_map_helpers import get_all_tiles
+from calculations.field_calculations import calculate_unit_strength
 from bson import ObjectId
 from pymongo import ASCENDING
 
@@ -451,6 +452,10 @@ def _unit_types_for_nation(nation, nation_id_str):
 
             base_stats = details.get("base_stats", {})
             stat_breakdown = details.get("stat_breakdown", {})
+            is_melee = bool(unit_doc.get("melee", False)) if unit_doc else False
+            is_ranged = bool(unit_doc.get("ranged", False)) if unit_doc else False
+            is_cavalry = bool(unit_doc.get("cavalry", False)) if unit_doc else False
+            is_support = bool(details.get("is_support", False))
 
             unit_types.append({
                 "nationId":  nation_id_str,
@@ -458,10 +463,10 @@ def _unit_types_for_nation(nation, nation_id_str):
                 "sourceId":  source_id,
                 "iconUrl":   _make_absolute_url(unit_doc.get("image") or "") if unit_doc else "",
                 "isMagical": bool(details.get("is_magical", False)),
-                "isMelee":   bool(unit_doc.get("melee",   False)) if unit_doc else False,
-                "isRanged":  bool(unit_doc.get("ranged",  False)) if unit_doc else False,
-                "isCavalry": bool(unit_doc.get("cavalry", False)) if unit_doc else False,
-                "isSupport": bool(unit_doc.get("support", False)) if unit_doc else False,
+                "isMelee":   is_melee,
+                "isRanged":  is_ranged,
+                "isCavalry": is_cavalry,
+                "isSupport": is_support,
                 "baseAttack":  int(base_stats.get("attack")  or 0),
                 "baseDefense": int(base_stats.get("defense") or 0),
                 "baseHp":      int(base_stats.get("hp")      or 0),
@@ -470,6 +475,14 @@ def _unit_types_for_nation(nation, nation_id_str):
                 "baseRange":   _coerce_unit_range(base_stats.get("range")),
                 "count":       int(count),
                 "modifiers":   _stat_breakdown_to_modifiers(stat_breakdown),
+                # Combat power from stats alone (cost/upkeep/traits excluded),
+                # computed from effective_stats so nation-level buffs (e.g.
+                # land_unit_hp_mult, a tech's +armor) raise it the same way
+                # they raise the stats themselves. See calculate_unit_strength.
+                "strength": calculate_unit_strength(
+                    details.get("effective_stats", base_stats),
+                    melee=is_melee, cavalry=is_cavalry, ranged=is_ranged, is_support=is_support,
+                ),
             })
 
     # Patron mercenaries
@@ -494,8 +507,11 @@ def _unit_types_for_nation(nation, nation_id_str):
                     "_id": 1, "image": 1,
                     "melee": 1, "ranged": 1, "cavalry": 1, "support": 1,
                     "attack": 1, "defense": 1, "hp": 1, "damage": 1,
-                    "armor": 1, "maximum_range": 1, "has_attack": 1, "has_defense": 1,
-                    "has_hp": 1, "has_damage": 1, "has_armor": 1, "has_range": 1,
+                    "armor": 1, "maximum_range": 1, "minimum_range": 1,
+                    "morale": 1, "retaliation_damage": 1, "speed": 1,
+                    "has_attack": 1, "has_defense": 1, "has_hp": 1, "has_damage": 1,
+                    "has_armor": 1, "has_range": 1, "has_morale": 1,
+                    "has_retaliation_damage": 1, "has_speed": 1,
                 })
                 if not unit_doc:
                     continue
@@ -510,6 +526,11 @@ def _unit_types_for_nation(nation, nation_id_str):
                     continue
                 seen.add(key)
 
+                is_melee = bool(unit_doc.get("melee", False))
+                is_ranged = bool(unit_doc.get("ranged", False))
+                is_cavalry = bool(unit_doc.get("cavalry", False))
+                is_support = bool(unit_doc.get("support", False))
+
                 if details.get("base_stats"):
                     base_stats = details["base_stats"]
                     stat_breakdown = details.get("stat_breakdown", {})
@@ -520,6 +541,7 @@ def _unit_types_for_nation(nation, nation_id_str):
                     base_armor = int(base_stats.get("armor") or 0)
                     base_range = _coerce_unit_range(base_stats.get("range"))
                     modifiers = _stat_breakdown_to_modifiers(stat_breakdown)
+                    strength_stats = details.get("effective_stats", base_stats)
                 else:
                     base_attack = int(unit_doc.get("attack") or 0) if unit_doc.get("has_attack", True) else 0
                     base_defense = int(unit_doc.get("defense") or 0) if unit_doc.get("has_defense", True) else 0
@@ -528,6 +550,25 @@ def _unit_types_for_nation(nation, nation_id_str):
                     base_armor = int(unit_doc.get("armor") or 0) if unit_doc.get("has_armor") else 0
                     base_range = int(unit_doc.get("maximum_range") or 1) if unit_doc.get("has_range") else 1
                     modifiers = []
+                    # No nation-buff pipeline runs for mercenaries (see
+                    # calculate_values's target_data_type branches), so this
+                    # is always an unbuffed, base-stat-only strength figure --
+                    # pulled straight from the unit doc rather than merc_details'
+                    # (currently always-empty) base_stats/effective_stats.
+                    strength_stats = {
+                        "hp":          base_hp if unit_doc.get("has_hp") else None,
+                        "morale":      unit_doc.get("morale") if unit_doc.get("has_morale") else None,
+                        "damage":      base_damage if unit_doc.get("has_damage") else None,
+                        "retaliation_damage": unit_doc.get("retaliation_damage") if unit_doc.get("has_retaliation_damage") else None,
+                        "speed":       unit_doc.get("speed") if unit_doc.get("has_speed") else None,
+                        "armor":       base_armor if unit_doc.get("has_armor") else None,
+                        "range":       (
+                            f"{unit_doc.get('minimum_range')}-{unit_doc.get('maximum_range')}"
+                            if unit_doc.get("has_range") and unit_doc.get("minimum_range") is not None
+                               and unit_doc.get("minimum_range") != unit_doc.get("maximum_range")
+                            else base_range if unit_doc.get("has_range") else None
+                        ),
+                    }
 
                 unit_types.append({
                     "nationId":  nation_id_str,
@@ -535,10 +576,14 @@ def _unit_types_for_nation(nation, nation_id_str):
                     "sourceId":  source_id,
                     "iconUrl":   _make_absolute_url(unit_doc.get("image") or ""),
                     "isMagical": bool(details.get("is_magical", False)),
-                    "isMelee":   bool(unit_doc.get("melee",   False)),
-                    "isRanged":  bool(unit_doc.get("ranged",  False)),
-                    "isCavalry": bool(unit_doc.get("cavalry", False)),
-                    "isSupport": bool(unit_doc.get("support", False)),
+                    "isMelee":   is_melee,
+                    "isRanged":  is_ranged,
+                    "isCavalry": is_cavalry,
+                    "isSupport": is_support,
+                    "strength":  calculate_unit_strength(
+                        strength_stats, melee=is_melee, cavalry=is_cavalry,
+                        ranged=is_ranged, is_support=is_support,
+                    ),
                     "baseAttack":  base_attack,
                     "baseDefense": base_defense,
                     "baseHp":      base_hp,
@@ -956,6 +1001,7 @@ def war_item(item_ref):
         )
 
         unit_types = _unit_types_for_nation(nation, nation_id_str)
+        total_strength = sum(ut.get("strength", 0) * ut.get("count", 0) for ut in unit_types)
 
         discord_id, is_player = _nation_discord_info(nation_id_str)
 
@@ -964,6 +1010,7 @@ def war_item(item_ref):
             "nation_id": nation_id_str,
             "rulers": rulers,
             "unit_types": unit_types,
+            "total_strength": total_strength,
             "link": f"/nations/item/{nation.get('name', nation_id_str)}",
             "role": role or ("primary" if is_primary else ""),
             "is_primary": is_primary,

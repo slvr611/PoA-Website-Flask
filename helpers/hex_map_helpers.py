@@ -217,11 +217,21 @@ def rebuild_tile_chunks():
     — stamp chunk_synced_version to the PRE-scan version instead of the
     post-scan one, so the next read still sees chunk_synced_version behind
     the real (newer) tile_version and retries the heal, rather than trusting
-    a scan that raced with a write. This doesn't make every possible
-    interleaving airtight (the per-chunk writes just below this could still
-    themselves race a concurrent single-tile sync, a much smaller window
-    than the multi-second scan this specifically guards against), but it
-    closes the dominant, demonstrated gap.
+    a scan that raced with a write.
+
+    That still left one narrower window open — a write landing between the
+    version_after read and the final chunk_synced_version write (the
+    per-chunk writes just below this run for every one of the ~100 chunks,
+    not instantaneous) could still race a concurrent single-tile sync and
+    get silently marked as caught-up to a version whose data this rebuild
+    never actually captured. Confirmed live again 2026-10-26 (q=104, r=-34
+    and others served as empty/no-data tiles across multiple ticks before
+    self-healing). The final write now goes through _mark_chunk_synced's
+    same guard (only applies if tile_version is still exactly
+    `synced_version` at that moment) instead of an unconditional $set, so a
+    race in that window leaves chunk_synced_version mismatched — costing
+    one more self-heal rebuild on the next read — rather than ever
+    vouching for a result that might not be correct.
     """
     version_before = (mongo.db.global_modifiers.find_one(
         {"name": _HEX_MAP_CONFIG_NAME}, {"tile_version": 1}) or {}).get("tile_version", 0)
@@ -246,11 +256,42 @@ def rebuild_tile_chunks():
     mongo.db.hex_map_tile_chunks.delete_many({"_id": {"$nin": list(by_chunk.keys())}})
 
     synced_version = version_before if version_before != version_after else version_after
+    # Guarded the same way a single-tile sync is (_mark_chunk_synced), not
+    # the plain unconditional $set this used to be. The before/after check
+    # above only protects against a write landing DURING the scan itself —
+    # a write landing in the much smaller window between the version_after
+    # read and this final statement (e.g. a tick's own notify_tile_changed
+    # for a tile in a chunk this loop just finished rewriting from the
+    # scan's now-stale snapshot) is exactly the "not airtight" gap this
+    # function's docstring already calls out. Without this guard, stamping
+    # chunk_synced_version unconditionally here could win a race against
+    # that write's own guarded _mark_chunk_synced call (whichever lands
+    # last wins the plain $set), falsely marking the mirror caught up to a
+    # version whose data this rebuild never actually captured — silently
+    # re-introducing the exact "marked synced but never self-heals" failure
+    # mode db7524a2 fixed the dominant case of (confirmed live again
+    # 2026-10-26: q=104, r=-34 and others served as empty/no-data tiles for
+    # multiple ticks). Only actually stamping it when tile_version still
+    # equals `synced_version` at this exact moment means a race here simply
+    # leaves chunk_synced_version mismatched, costing one more self-heal
+    # rebuild on the next read instead of silently trusting this one.
+    #
+    # _mark_chunk_synced has no upsert (by design — an upsert keyed only on
+    # "name" plus a guard on "tile_version" could otherwise create a
+    # duplicate hex_map_config document if another process's write won the
+    # very first-ever insert race; there's no unique index on "name" to
+    # prevent that). So on a true bootstrap — nothing has ever called
+    # bump_tile_version() before, document doesn't exist yet at all — the
+    # guard would just silently never match anything, forever, and this
+    # mirror would never get marked synced. $setOnInsert first guarantees
+    # the document exists (a no-op if it already does, the ordinary case),
+    # then the guarded call does the real synced-version write.
     mongo.db.global_modifiers.update_one(
         {"name": _HEX_MAP_CONFIG_NAME},
-        {"$set": {"chunk_synced_version": synced_version}},
+        {"$setOnInsert": {"tile_version": synced_version, "chunk_synced_version": synced_version}},
         upsert=True,
     )
+    _mark_chunk_synced(synced_version)
     return synced_version
 
 
