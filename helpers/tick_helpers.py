@@ -470,19 +470,36 @@ def _commit_pending_changes(pending):
         # currently committing — see _commit_one_batch's docstring for why.
         skip_propagate_ids = {(item["data_type"], str(item["item_id"])) for item in pending}
 
+        # The compute phase above logs a step via _log_tick_step for every
+        # tick function it runs, but nothing between the last of those calls
+        # and here ever logs another one — so without this, a hang anywhere
+        # in the commit phase (chunked transactions below) shows up on
+        # tick_status as a stale, misleading "stuck on <last compute step>"
+        # heartbeat, even though that step actually finished fine. Logged as
+        # its own step, with per-chunk item progress, to close that blind spot.
+        _log_tick_step("Committing Changes")
+        all_chunks = [
+            (dt, chunk)
+            for dt in order
+            for chunk in _chunked(_merge_pending_by_entity(by_type[dt]), _COMMIT_CHUNK_SIZE)
+        ]
+        total_chunks = len(all_chunks)
+
         chunks_committed = 0
         items_committed = 0
-        for dt in order:
-            merged_items = _merge_pending_by_entity(by_type[dt])
-            for chunk in _chunked(merged_items, _COMMIT_CHUNK_SIZE):
-                try:
-                    _commit_chunk_with_retry(chunk, skip_propagate_ids)
-                except Exception as e:
-                    if chunks_committed:
-                        raise TickPartialCommitError(e, chunks_committed, items_committed) from e
-                    raise
-                chunks_committed += 1
-                items_committed += len(chunk)
+        for chunk_index, (dt, chunk) in enumerate(all_chunks):
+            _log_tick_item_progress(
+                chunk_index + 1, total_chunks, f"{dt} ({len(chunk)} items)",
+                force=(chunk_index == 0 or chunk_index == total_chunks - 1),
+            )
+            try:
+                _commit_chunk_with_retry(chunk, skip_propagate_ids)
+            except Exception as e:
+                if chunks_committed:
+                    raise TickPartialCommitError(e, chunks_committed, items_committed) from e
+                raise
+            chunks_committed += 1
+            items_committed += len(chunk)
 
     global_modifiers = mongo.db["global_modifiers"].find_one({"name": "global_modifiers"})
     return global_modifiers.get("session_counter", 0) if global_modifiers else 0

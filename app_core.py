@@ -65,6 +65,20 @@ mongo = PyMongo(
     socketTimeoutMS=180000,
     connectTimeoutMS=20000,
     serverSelectionTimeoutMS=30000,
+    # Same class of bug as the socketTimeoutMS fix above, one layer up the
+    # stack: pymongo's own default for waitQueueTimeoutMS is None —
+    # unbounded. If every pooled connection is ever simultaneously checked
+    # out (concurrent request threads + the propagation outbox worker + the
+    # AI review worker, all able to run at once against this one process-
+    # wide client), a thread that then needs a connection — e.g. the tick's
+    # commit phase, which has no socket open yet when it calls
+    # start_session() — blocks forever waiting for one to free up: no
+    # exception, no retry, and (since this happens well after the last
+    # _log_tick_step call in the commit phase) a tick_status heartbeat stuck
+    # forever on whatever step last logged before the commit phase started.
+    # Bounded here so pool exhaustion raises a catchable WaitQueueTimeoutError
+    # instead of hanging indefinitely with no diagnostic trail.
+    waitQueueTimeoutMS=60000,
 )
 discord = DiscordOAuth2Session(app)
 
