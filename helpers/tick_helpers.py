@@ -1267,21 +1267,46 @@ def tick(form_data):
     # committed individually (its own system_request_change/system_approve_change
     # call), so every entity's change-history page shows the same one
     # "Tick Update for X" record it always has.
+    # Safety-net copy of the tick summary, saved (locally, and to S3 when
+    # configured) BEFORE the commit/archive/Discord-posting tail below —
+    # see _save_tick_summary_files's docstring for why: without this, a
+    # hang anywhere in that tail loses the summary forever, since it would
+    # otherwise only ever exist as local variables in the hung thread.
+    # Reuses the exact same file/S3 layout give_tick_summary's own save
+    # produces at the end, so an admin can manually (re)post this snapshot
+    # via the existing /tick_summaries/<filename>/post_to_discord route
+    # even if "Give Tick Summary" itself never runs this session.
+    try:
+        _save_tick_summary_files(player_tick_summary, full_tick_summary, player_tick_summary_sections)
+    except Exception as e:
+        print(f"[tick] pre-commit tick-summary safety snapshot failed: {e}")
+
     current_session = _commit_pending_changes(pending)
+
+    _log_tick_step("Committing Tile Writes")
     _commit_pending_tile_writes(pending_tiles)
 
+    # Everything from here to the end of tick() previously ran with no
+    # heartbeat step of its own, so a hang anywhere in it (notably
+    # archive_old_changes's S3 upload — a network call with no bounded
+    # deadline until the matching app_core.upload_to_s3 fix) looked
+    # identical to a tick stuck on "Committing Changes" forever.
+    _log_tick_step("Archiving Old Changes")
     archive_message = archive_old_changes(current_session)
     full_tick_summary += f"\n\nArchival: {archive_message}"
 
     if "run_Snapshot Hex Map" in form_data:
+        _log_tick_step("Snapshotting Hex Map")
         from helpers.hex_map_helpers import snapshot_current_map
         snap_message = snapshot_current_map(current_session)
         full_tick_summary += f"\n\n{snap_message}"
 
     if "run_Region Renaissance Check" in form_data:
+        _log_tick_step("Region Renaissance Check")
         full_tick_summary += region_renaissance_tick()
 
     if "run_Give Tick Summary" in form_data:
+        _log_tick_step("Giving Tick Summary")
         give_tick_summary(player_tick_summary, full_tick_summary, player_tick_summary_sections)
 
     return full_tick_summary
@@ -1521,12 +1546,17 @@ def backup_database():
     print(f"Backup completed with {status}: {message}")
     return success, message
 
-def give_tick_summary(player_tick_summary, full_tick_summary, player_tick_summary_sections=None):
-    """Save tick summary to a file, upload it to S3, and post the
-    player-facing digest to Discord's "bot spam" channel, one message per
-    section (see tick()'s player_tick_summary_sections comment for how
-    those are captured — era_tick/the error-handling caller below don't
-    have sections to offer and simply skip the Discord post).
+def _save_tick_summary_files(player_tick_summary, full_tick_summary, player_tick_summary_sections=None):
+    """Save tick summary to a file and (when configured) upload it to S3.
+    Extracted from give_tick_summary so the same save can also run as a
+    pre-commit safety snapshot (see tick()'s call just before "── Commit
+    phase ──") — give_tick_summary itself only runs as the very last step
+    of a tick, so without an earlier copy, any hang in between (commit,
+    tile writes, archiving, snapshotting) loses the summary forever: it
+    only ever existed as local variables in the hung thread, and Heroku's
+    filesystem is ephemeral, so even restarting the dyno to clear the hang
+    wipes the "summaries" directory too — only something already uploaded
+    to S3 before that point survives.
 
     Also saves player_tick_summary_sections itself as a JSON sidecar file
     (tick_summary_sections_<timestamp>.json) alongside the two .txt files
@@ -1536,20 +1566,21 @@ def give_tick_summary(player_tick_summary, full_tick_summary, player_tick_summar
     routes/admin_tool_routes.py's post_tick_summary_to_discord later
     reproduce an identical (sectioned, pinging) manual post instead of
     falling back to one undifferentiated, mention-less chunk dump.
+
+    Returns (player_summary_path, full_summary_path, sections_path) —
+    sections_path is None when there were no sections to save.
     """
-    print(full_tick_summary)  # Keep console logging
-    
     # Create a timestamp for the filename
     timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-    
+
     # Create summaries directory if it doesn't exist
     summary_dir = os.path.join(os.getcwd(), 'summaries')
     os.makedirs(summary_dir, exist_ok=True)
-    
+
     # Save to file
     player_summary_filename = f"player_tick_summary_{timestamp}.txt"
     player_summary_path = os.path.join(summary_dir, player_summary_filename)
-    
+
     # Explicit encoding: without it, open() defaults to the OS's preferred
     # locale encoding, which on Windows is a legacy codepage (cp1252 etc.)
     # that can't represent every character a nation/character/culture name
@@ -1580,6 +1611,26 @@ def give_tick_summary(player_tick_summary, full_tick_summary, player_tick_summar
         upload_to_s3(full_summary_path, f"tick_summaries/{full_summary_filename}")
         if sections_path:
             upload_to_s3(sections_path, f"tick_summaries/{sections_filename}")
+
+    return player_summary_path, full_summary_path, sections_path
+
+
+def give_tick_summary(player_tick_summary, full_tick_summary, player_tick_summary_sections=None):
+    """Save tick summary to a file, upload it to S3, and post the
+    player-facing digest to Discord's "bot spam" channel, one message per
+    section (see tick()'s player_tick_summary_sections comment for how
+    those are captured — era_tick/the error-handling caller below don't
+    have sections to offer and simply skip the Discord post).
+
+    See _save_tick_summary_files for the save step itself — this also runs
+    earlier, as a pre-commit safety snapshot (see tick()); this call is
+    what actually posts to Discord.
+    """
+    print(full_tick_summary)  # Keep console logging
+
+    player_summary_path, full_summary_path, sections_path = _save_tick_summary_files(
+        player_tick_summary, full_tick_summary, player_tick_summary_sections
+    )
 
     # Post the player-facing digest to Discord, section by section — never
     # lets a Discord-side failure (missing config, rate limit, permissions)
@@ -5181,11 +5232,13 @@ def era_tick(form_data):
     current_session = _commit_pending_changes(pending)
 
     if "run_Snapshot Hex Map" in form_data:
+        _log_tick_step("Snapshotting Hex Map")
         from helpers.hex_map_helpers import snapshot_current_map
         snap_message = snapshot_current_map(current_session)
         full_tick_summary += f"\n\n{snap_message}"
 
     if "run_Era Give Tick Summary" in form_data:
+        _log_tick_step("Giving Tick Summary")
         give_tick_summary(full_tick_summary, full_tick_summary)
 
     return full_tick_summary

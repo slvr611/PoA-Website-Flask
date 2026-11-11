@@ -447,23 +447,37 @@ def upload_bytes_to_s3(file_bytes, s3_key, content_type="image/jpeg"):
 def upload_to_s3(file_path, s3_key):
     """Upload a file to S3 bucket"""
     try:
-        
+
         # S3 configuration
         s3_bucket = os.getenv("S3_BUCKET_NAME")
         aws_access_key = os.getenv("AWS_ACCESS_KEY_ID")
         aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
-        
+
         if not s3_bucket or not aws_access_key or not aws_secret_key:
             print("S3 upload skipped: missing S3 configuration.")
             return False, "S3 configuration missing"
-        
-        # Create S3 client
+
+        # Explicit, bounded timeouts/retries — without them boto3 falls back
+        # to its own defaults, and upload_file's multipart TransferManager
+        # can then wait on a stuck part with no overall deadline. This is
+        # called unconditionally from archive_old_changes at the end of
+        # every tick, with no heartbeat step of its own, so an unbounded
+        # hang here looks identical to a tick stuck on whatever step was
+        # last logged before it — same bug class as this file's MongoClient
+        # timeouts above, and the same retries/timeout values already used
+        # for the S3 download path elsewhere in this file.
+        from botocore.config import Config as BotoConfig
         s3_client = boto3.client(
             's3',
             aws_access_key_id=aws_access_key,
-            aws_secret_access_key=aws_secret_key
+            aws_secret_access_key=aws_secret_key,
+            config=BotoConfig(
+                retries={'max_attempts': 8, 'mode': 'standard'},
+                connect_timeout=30,
+                read_timeout=300,
+            )
         )
-        
+
         # Upload file
         s3_client.upload_file(file_path, s3_bucket, s3_key)
         
